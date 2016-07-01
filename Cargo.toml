@@ -1,0 +1,12 @@
+[package]
+name = "request"
+version = "0.1.0"
+authors = ["Sean McArthur <sean.monstar@gmail.com>"]
+license = "MIT/Apache-2.0"
+
+[dependencies]
+hyper = {git = "https://github.com/hyperium/hyper"}
+log = "0.3"
+
+[dev-dependencies]
+env_logger = "0.3"
