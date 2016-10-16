@@ -3,7 +3,8 @@ use std::io::{self, Read};
 use hyper::{Method, StatusCode, HttpVersion, Url};
 use hyper::header::Headers;
 
-use super::sync;
+use ::body::Body;
+use ::sync;
 
 pub struct Client {
     inner: sync::Client,
@@ -42,20 +43,31 @@ pub struct RequestBuilder<'a> {
     version: HttpVersion,
     headers: Headers,
 
-    body: Option<()>,
+    body: Option<Body>,
 }
 
 impl<'a> RequestBuilder<'a> {
-    pub fn body(mut self, body: ()) -> RequestBuilder<'a> {
-        self.body = Some(body);
+
+    pub fn header<H: ::header::Header>(mut self, header: H) -> RequestBuilder<'a> {
+        self.headers.set(header);
         self
     }
 
-    pub fn send(mut self) -> Result<Response, String> {
-        self.headers.set(::hyper::header::ContentLength(0));
+    pub fn headers(mut self, headers: ::header::Headers) -> RequestBuilder<'a> {
+        self.headers.extend(headers.iter());
+        self
+    }
+
+    pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder<'a> {
+        self.body = Some(body.into());
+        self
+    }
+
+    pub fn send(mut self) -> ::Result<Response> {
+        self.headers.set(::header::ContentLength(0));
         let req = try!(self.client.inner.request(self.method, self.url, self.version, self.headers));
 
-        let res = try!(req.end().map_err(|e| format!("RequestError: end: {}", e)));
+        let res = try!(req.end());
         Ok(Response {
             inner: res
         })

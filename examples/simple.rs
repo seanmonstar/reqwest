@@ -4,7 +4,9 @@ extern crate env_logger;
 fn main() {
     env_logger::init().unwrap();
 
-    let mut res = request::get("https://rust-lang.org").unwrap();
+    println!("GET https://www.rust-lang.org");
+
+    let mut res = request::get("https://www.rust-lang.org").unwrap();
 
     println!("Status: {}", res.status());
     println!("Headers:\n{}", res.headers());

@@ -18,7 +18,7 @@ impl Client {
         }
     }
 
-    pub fn request(&self, method: Method, url: Url, version: HttpVersion, headers: Headers) -> Result<Request, String> {
+    pub fn request(&self, method: Method, url: Url, version: HttpVersion, headers: Headers) -> ::Result<Request> {
         let (ctrl_tx, ctrl_rx) = mpsc::channel();
         let (res_tx, res_rx) = mpsc::channel();
         let (action_tx, rx) = mpsc::channel();
@@ -26,7 +26,7 @@ impl Client {
 
         let timeout = Duration::from_secs(10);
 
-        try!(self.inner.request(url, SynchronousHandler {
+        self.inner.request(url, SynchronousHandler {
             read_timeout: timeout,
             write_timeout: timeout,
 
@@ -37,29 +37,32 @@ impl Client {
             reading: None,
             writing: None,
             request: Some((method, version, headers)),
-        }).map_err(|e| format!("RequestError: {}", e)));
+        }).ok().expect("client dropped early");
+
+        // connecting
+        let ctrl = try!(ctrl_rx.recv().expect("ctrl_rx dropped early"));
 
         Ok(Request {
             res_rx: res_rx,
             tx: action_tx,
             rx: action_rx,
-            ctrl: try!(ctrl_rx.recv().map_err(|e| format!("RequestError: waiting for Control: {}", e))),
+            ctrl: ctrl,
         })
     }
 }
 
 pub struct Request {
-    res_rx: mpsc::Receiver<hyper::client::Response>,
+    res_rx: mpsc::Receiver<::hyper::Result<hyper::client::Response>>,
     tx: mpsc::Sender<Action>,
     rx: mpsc::Receiver<io::Result<usize>>,
     ctrl: hyper::Control,
 }
 
 impl Request {
-    pub fn end(self) -> Result<Response, String> {
+    pub fn end(self) -> ::Result<Response> {
         trace!("Request.end");
         self.ctrl.ready(Next::read()).unwrap();
-        let res = try!(self.res_rx.recv().map_err(|e| format!("RequestError: end = {}", e)));
+        let res = try!(self.res_rx.recv().expect("res_tx dropped early"));
         Ok(Response {
             status: res.status().clone(),
             headers: res.headers().clone(),
@@ -108,8 +111,8 @@ struct SynchronousHandler {
     read_timeout: Duration,
     write_timeout: Duration,
 
-    ctrl_tx: mpsc::Sender<Control>,
-    res_tx: mpsc::Sender<hyper::client::Response>,
+    ctrl_tx: mpsc::Sender<::hyper::Result<Control>>,
+    res_tx: mpsc::Sender<::hyper::Result<hyper::client::Response>>,
     tx: mpsc::Sender<io::Result<usize>>,
     rx: mpsc::Receiver<Action>,
     reading: Option<(*mut u8, usize)>,
@@ -189,7 +192,7 @@ impl hyper::client::Handler<hyper::client::DefaultTransport> for SynchronousHand
 
     fn on_response(&mut self, res: hyper::client::Response) -> Next {
         trace!("on_response {:?}", res);
-        if let Err(_) = self.res_tx.send(res) {
+        if let Err(_) = self.res_tx.send(Ok(res)) {
             return Next::end();
         }
         self.next()
@@ -206,15 +209,20 @@ impl hyper::client::Handler<hyper::client::DefaultTransport> for SynchronousHand
         self.next()
     }
 
+    fn on_error(&mut self, err: ::hyper::Error) -> Next {
+        debug!("on_error {:?}", err);
+        let _ = self.ctrl_tx.send(Err(err));
+        Next::remove()
+    }
+
     fn on_control(&mut self, ctrl: Control) {
-        self.ctrl_tx.send(ctrl).unwrap();
+        let _ = self.ctrl_tx.send(Ok(ctrl));
     }
 }
 
 enum Action {
     Read(*mut u8, usize),
     Write(*const u8, usize),
-    //Request(Method, RequestUri, HttpVersion, Headers),
 }
 
 unsafe impl Send for Action {}
@@ -228,6 +236,8 @@ mod tests {
 
     #[test]
     fn test_get() {
+        extern crate env_logger;
+        env_logger::init().unwrap();
         let server = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = server.local_addr().unwrap();
         thread::spawn(move || {
