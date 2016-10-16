@@ -1,6 +1,9 @@
 [package]
 name = "reqwest"
 version = "0.0.0"
+description = "higher level HTTP client library"
+repository = "https://github.com/seanmonstar/reqwest"
+documentation = "https://docs.rs/reqwest"
 authors = ["Sean McArthur <sean.monstar@gmail.com>"]
 license = "MIT/Apache-2.0"
 
