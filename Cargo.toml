@@ -1,11 +1,11 @@
 [package]
-name = "request"
-version = "0.1.0"
+name = "reqwest"
+version = "0.0.0"
 authors = ["Sean McArthur <sean.monstar@gmail.com>"]
 license = "MIT/Apache-2.0"
 
 [dependencies]
-hyper = {git = "https://github.com/hyperium/hyper"}
+hyper = { version = "0.9" }#, default-features = false }
 log = "0.3"
 
 [dev-dependencies]

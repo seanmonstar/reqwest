@@ -1,4 +1,4 @@
-extern crate request;
+extern crate reqwest;
 extern crate env_logger;
 
 fn main() {
@@ -6,7 +6,7 @@ fn main() {
 
     println!("GET https://www.rust-lang.org");
 
-    let mut res = request::get("https://www.rust-lang.org").unwrap();
+    let mut res = reqwest::get("http://www.rust-lang.org").unwrap();
 
     println!("Status: {}", res.status());
     println!("Headers:\n{}", res.headers());

@@ -1,19 +1,21 @@
 use std::io::{self, Read};
 
-use hyper::{Method, StatusCode, HttpVersion, Url};
 use hyper::header::Headers;
+use hyper::method::Method;
+use hyper::status::StatusCode;
+use hyper::version::HttpVersion;
+use hyper::{Url};
 
 use ::body::Body;
-use ::sync;
 
 pub struct Client {
-    inner: sync::Client,
+    inner: ::hyper::Client,
 }
 
 impl Client {
     pub fn new() -> Client {
         Client {
-            inner: sync::Client::new(),
+            inner: ::hyper::Client::new(),
         }
     }
 
@@ -48,7 +50,7 @@ pub struct RequestBuilder<'a> {
 
 impl<'a> RequestBuilder<'a> {
 
-    pub fn header<H: ::header::Header>(mut self, header: H) -> RequestBuilder<'a> {
+    pub fn header<H: ::header::Header + ::header::HeaderFormat>(mut self, header: H) -> RequestBuilder<'a> {
         self.headers.set(header);
         self
     }
@@ -64,10 +66,12 @@ impl<'a> RequestBuilder<'a> {
     }
 
     pub fn send(mut self) -> ::Result<Response> {
-        self.headers.set(::header::ContentLength(0));
-        let req = try!(self.client.inner.request(self.method, self.url, self.version, self.headers));
+        let req = self.client.inner.request(self.method, self.url)
+            .headers(self.headers);
 
-        let res = try!(req.end());
+        //TODO: body
+
+        let res = try!(req.send());
         Ok(Response {
             inner: res
         })
@@ -75,7 +79,7 @@ impl<'a> RequestBuilder<'a> {
 }
 
 pub struct Response {
-    inner: sync::Response,
+    inner: ::hyper::client::Response,
 }
 
 impl Response {
