@@ -2,14 +2,27 @@
 name = "reqwest"
 version = "0.0.0"
 description = "higher level HTTP client library"
+keywords = ["http", "request", "client"]
 repository = "https://github.com/seanmonstar/reqwest"
 documentation = "https://docs.rs/reqwest"
 authors = ["Sean McArthur <sean.monstar@gmail.com>"]
 license = "MIT/Apache-2.0"
 
 [dependencies]
-hyper = { version = "0.9" }#, default-features = false }
+hyper = { version = "0.9" , default-features = false }
+serde = "0.8"
+serde_json = "0.8"
 log = "0.3"
+
+[dependencies.native-tls]
+git = "https://github.com/sfackler/rust-native-tls"
+optional = true
+
+[features]
+default = ["openssl"]
+openssl = ["hyper/ssl"]
+tls = ["native-tls"]
 
 [dev-dependencies]
 env_logger = "0.3"
+serde_derive = "0.8"
