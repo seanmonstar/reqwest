@@ -22,22 +22,30 @@
 //!
 //! ## Making a GET request
 //!
+//! For a single request, you can use the `get` shortcut method.
+//!
+//!
 //! ```no_run
 //! let resp = reqwest::get("https://www.rust-lang.org").unwrap();
 //! assert!(resp.status().is_success());
 //! ```
+//!
+//! If you plan to perform multiple requests, it is best to create a [`Client`][client]
+//! and reuse it, taking advantage of keep-alive connection pooling.
 extern crate hyper;
 
 #[macro_use] extern crate log;
 #[cfg(feature = "tls")] extern crate native_tls;
 extern crate serde;
 extern crate serde_json;
+extern crate url;
 
 pub use hyper::header;
 pub use hyper::method::Method;
 pub use hyper::status::StatusCode;
 pub use hyper::version::HttpVersion;
 pub use hyper::Url;
+pub use url::ParseError as UrlError;
 
 pub use self::client::{Client, Response};
 pub use self::error::{Error, Result};
@@ -50,6 +58,6 @@ mod error;
 
 /// Shortcut method to quickly make a `GET` request.
 pub fn get(url: &str) -> ::Result<Response> {
-    let client = Client::new();
+    let client = try!(Client::new());
     client.get(url).send()
 }

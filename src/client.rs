@@ -1,6 +1,7 @@
 use std::io::{self, Read};
 
-use hyper::header::{Headers, ContentType, UserAgent};
+use hyper::client::IntoUrl;
+use hyper::header::{Headers, ContentType, Location, Referer, UserAgent};
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
@@ -26,28 +27,35 @@ pub struct Client {
 
 impl Client {
     /// Constructs a new `Client`.
-    pub fn new() -> Client {
-        Client {
-            inner: new_hyper_client()
-        }
+    pub fn new() -> ::Result<Client> {
+        let mut client = try!(new_hyper_client());
+        client.set_redirect_policy(::hyper::client::RedirectPolicy::FollowNone);
+        Ok(Client {
+            inner: client
+        })
     }
 
     /// Convenience method to make a `GET` request to a URL.
-    pub fn get(&self, url: &str) -> RequestBuilder {
-        self.request(Method::Get, Url::parse(url).unwrap())
+    pub fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        self.request(Method::Get, url)
     }
 
     /// Convenience method to make a `POST` request to a URL.
-    pub fn post(&self, url: &str) -> RequestBuilder {
-        self.request(Method::Post, Url::parse(url).unwrap())
+    pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        self.request(Method::Post, url)
+    }
+
+    /// Convenience method to make a `HEAD` request to a URL.
+    pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        self.request(Method::Head, url)
     }
 
     /// Start building a `Request` with the `Method` and `Url`.
     ///
     /// Returns a `RequestBuilder`, which will allow setting headers and
     /// request body before sending.
-    pub fn request(&self, method: Method, url: Url) -> RequestBuilder {
-        debug!("request {:?} \"{}\"", method, url);
+    pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
+        let url = url.into_url();
         RequestBuilder {
             client: self,
             method: method,
@@ -61,19 +69,19 @@ impl Client {
 }
 
 #[cfg(not(feature = "tls"))]
-fn new_hyper_client() -> ::hyper::Client {
-    ::hyper::Client::new()
+fn new_hyper_client() -> ::Result<::hyper::Client> {
+    Ok(::hyper::Client::new())
 }
 
 #[cfg(feature = "tls")]
-fn new_hyper_client() -> ::hyper::Client {
+fn new_hyper_client() -> ::Result<::hyper::Client> {
     use tls::TlsClient;
-    ::hyper::Client::with_connector(
+    Ok(::hyper::Client::with_connector(
         ::hyper::client::Pool::with_connector(
             Default::default(),
-            ::hyper::net::HttpsConnector::new(TlsClient::new().unwrap())
+            ::hyper::net::HttpsConnector::new(try!(TlsClient::new()))
         )
-    )
+    ))
 }
 
 
@@ -82,7 +90,7 @@ pub struct RequestBuilder<'a> {
     client: &'a Client,
 
     method: Method,
-    url: Url,
+    url: Result<Url, ::UrlError>,
     _version: HttpVersion,
     headers: Headers,
 
@@ -91,6 +99,15 @@ pub struct RequestBuilder<'a> {
 
 impl<'a> RequestBuilder<'a> {
     /// Add a `Header` to this Request.
+    ///
+    /// ```no_run
+    /// use reqwest::header::UserAgent;
+    /// let client = reqwest::Client::new().expect("client failed to construct");
+    ///
+    /// let res = client.get("https://www.rust-lang.org")
+    ///     .header(UserAgent("foo".to_string()))
+    ///     .send();
+    /// ```
     pub fn header<H: ::header::Header + ::header::HeaderFormat>(mut self, header: H) -> RequestBuilder<'a> {
         self.headers.set(header);
         self
@@ -109,6 +126,20 @@ impl<'a> RequestBuilder<'a> {
         self
     }
 
+    /// Send a JSON body.
+    ///
+    /// Sets the body to the JSON serialization of the passed value, and
+    /// also sets the `Content-Type: application/json` header.
+    ///
+    /// ```no_run
+    /// # use std::collections::HashMap;
+    /// let mut map = HashMap::new();
+    /// map.insert("lang", "rust");
+    ///
+    /// let res = reqwest::post("http://www.rust-lang.org")
+    ///     .json(map)
+    ///     .send();
+    /// ```
     pub fn json<T: Serialize>(mut self, json: T) -> RequestBuilder<'a> {
         let body = serde_json::to_vec(&json).expect("serde to_vec cannot fail");
         self.headers.set(ContentType::json());
@@ -122,18 +153,79 @@ impl<'a> RequestBuilder<'a> {
             self.headers.set(UserAgent(DEFAULT_USER_AGENT.to_owned()));
         }
 
-        let mut req = self.client.inner.request(self.method, self.url)
-            .headers(self.headers);
+        let client = self.client;
+        let mut method = self.method;
+        let mut url = try!(self.url);
+        let mut headers = self.headers;
+        let mut body = self.body;
 
-        if let Some(ref b) = self.body {
-            let body = body::as_hyper_body(b);
-            req = req.body(body);
+        let mut redirect_count = 0;
+
+        loop {
+            let res = {
+                debug!("request {:?} \"{}\"", method, url);
+                let mut req = client.inner.request(method.clone(), url.clone())
+                    .headers(headers.clone());
+
+                if let Some(ref b) = body {
+                    let body = body::as_hyper_body(&b);
+                    req = req.body(body);
+                }
+
+                try!(req.send())
+            };
+            body.take();
+
+            match res.status {
+                StatusCode::MovedPermanently |
+                StatusCode::Found => {
+
+                    //TODO: turn this into self.redirect_policy.check()
+                    if redirect_count > 10 {
+                        return Err(::Error::TooManyRedirects);
+                    }
+                    redirect_count += 1;
+
+                    method = match method {
+                        Method::Post | Method::Put => Method::Get,
+                        m => m
+                    };
+
+                    headers.set(Referer(url.to_string()));
+
+                    let loc = {
+                        let loc = res.headers.get::<Location>().map(|loc| url.join(loc));
+                        if let Some(loc) = loc {
+                            loc
+                        } else {
+                            return Ok(Response {
+                                inner: res
+                            });
+                        }
+                    };
+
+                    url = match loc {
+                        Ok(u) => u,
+                        Err(e) => {
+                            debug!("Location header had invalid URI: {:?}", e);
+                            return Ok(Response {
+                                inner: res
+                            })
+                        }
+                    };
+
+                    debug!("redirecting to '{}'", url);
+
+                    //TODO: removeSensitiveHeaders(&mut headers, &url);
+
+                },
+                _ => {
+                    return Ok(Response {
+                        inner: res
+                    });
+                }
+            }
         }
-
-        let res = try!(req.send());
-        Ok(Response {
-            inner: res
-        })
     }
 }
 
