@@ -47,8 +47,9 @@ pub use hyper::version::HttpVersion;
 pub use hyper::Url;
 pub use url::ParseError as UrlError;
 
-pub use self::client::{Client, Response};
+pub use self::client::{Client, Response, RequestBuilder};
 pub use self::error::{Error, Result};
+pub use self::body::Body;
 
 mod body;
 mod client;
