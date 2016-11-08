@@ -13,6 +13,7 @@ hyper = { version = "0.9" , default-features = false }
 log = "0.3"
 serde = "0.8"
 serde_json = "0.8"
+serde_urlencoded = "0.3"
 url = "1.0"
 
 [dependencies.native-tls]

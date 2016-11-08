@@ -9,6 +9,7 @@ use hyper::{Url};
 
 use serde::Serialize;
 use serde_json;
+use serde_urlencoded;
 
 use ::body::{self, Body};
 
@@ -94,7 +95,7 @@ pub struct RequestBuilder<'a> {
     _version: HttpVersion,
     headers: Headers,
 
-    body: Option<Body>,
+    body: Option<::Result<Body>>,
 }
 
 impl<'a> RequestBuilder<'a> {
@@ -122,7 +123,30 @@ impl<'a> RequestBuilder<'a> {
 
     /// Set the request body.
     pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder<'a> {
-        self.body = Some(body.into());
+        self.body = Some(Ok(body.into()));
+        self
+    }
+
+    /// Send a form body.
+    ///
+    /// Sets the body to the url encoded serialization of the passed value,
+    /// and also sets the `Content-Type: application/www-form-url-encoded`
+    /// header.
+    ///
+    /// ```no_run
+    /// # use std::collections::HashMap;
+    /// let mut params = HashMap::new();
+    /// params.insert("lang", "rust");
+    ///
+    /// let client = reqwest::Client::new().unwrap();
+    /// let res = client.post("http://httpbin.org")
+    ///     .form(&params)
+    ///     .send();
+    /// ```
+    pub fn form<T: Serialize>(mut self, form: &T) -> RequestBuilder<'a> {
+        let body = serde_urlencoded::to_string(form).map_err(::Error::from);
+        self.headers.set(ContentType::form_url_encoded());
+        self.body = Some(body.map(|b| b.into()));
         self
     }
 
@@ -136,14 +160,15 @@ impl<'a> RequestBuilder<'a> {
     /// let mut map = HashMap::new();
     /// map.insert("lang", "rust");
     ///
-    /// let res = reqwest::post("http://www.rust-lang.org")
-    ///     .json(map)
+    /// let client = reqwest::Client::new().unwrap();
+    /// let res = client.post("http://httpbin.org")
+    ///     .json(&map)
     ///     .send();
     /// ```
-    pub fn json<T: Serialize>(mut self, json: T) -> RequestBuilder<'a> {
-        let body = serde_json::to_vec(&json).expect("serde to_vec cannot fail");
+    pub fn json<T: Serialize>(mut self, json: &T) -> RequestBuilder<'a> {
+        let body = serde_json::to_vec(json).expect("serde to_vec cannot fail");
         self.headers.set(ContentType::json());
-        self.body = Some(body.into());
+        self.body = Some(Ok(body.into()));
         self
     }
 
@@ -157,7 +182,10 @@ impl<'a> RequestBuilder<'a> {
         let mut method = self.method;
         let mut url = try!(self.url);
         let mut headers = self.headers;
-        let mut body = self.body;
+        let mut body = match self.body {
+            Some(b) => Some(try!(b)),
+            None => None,
+        };
 
         let mut redirect_count = 0;
 
