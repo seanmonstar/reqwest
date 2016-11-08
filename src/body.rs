@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::fs::File;
 
 /// Body type for a request.
 pub struct Body {
@@ -60,19 +61,33 @@ impl<'a> From<&'a str> for Body {
     }
 }
 
+impl From<File> for Body {
+    #[inline]
+    fn from(f: File) -> Body {
+        let len = f.metadata().map(|m| m.len()).ok();
+        Body {
+            reader: Kind::Reader(Box::new(f), len),
+        }
+    }
+}
 
 
 // Wraps a `std::io::Write`.
 //pub struct Pipe(Kind);
 
 
-pub fn as_hyper_body<'a>(body: &'a Body) -> ::hyper::client::Body<'a> {
+pub fn as_hyper_body<'a>(body: &'a mut Body) -> ::hyper::client::Body<'a> {
     match body.reader {
         Kind::Bytes(ref bytes) => {
             let len = bytes.len();
             ::hyper::client::Body::BufBody(bytes, len)
-        },
-        Kind::Reader(..) => unimplemented!()
+        }
+        Kind::Reader(ref mut reader, len_opt) => {
+            match len_opt {
+                Some(len) => ::hyper::client::Body::SizedBody(reader, len),
+                None => ::hyper::client::Body::ChunkedBody(reader),
+            }
+        }
     }
 }
 
