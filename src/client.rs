@@ -206,7 +206,8 @@ impl<'a> RequestBuilder<'a> {
 
             match res.status {
                 StatusCode::MovedPermanently |
-                StatusCode::Found => {
+                StatusCode::Found |
+                StatusCode::SeeOther => {
 
                     //TODO: turn this into self.redirect_policy.check()
                     if redirect_count > 10 {
