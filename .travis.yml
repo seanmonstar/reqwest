@@ -1,0 +1,20 @@
+language: rust
+rust:
+  - stable
+  - beta
+  - nightly
+
+sudo: false
+
+cache:
+  apt: true
+  directories:
+    - target/debug/deps
+    - target/debug/build
+
+script:
+  - cargo build --verbose
+  - cargo test --verbose
+
+notifications:
+  email: false
