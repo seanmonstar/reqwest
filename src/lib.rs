@@ -91,12 +91,13 @@
 extern crate hyper;
 
 #[macro_use] extern crate log;
-#[cfg(feature = "tls")] extern crate native_tls;
+extern crate native_tls;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_urlencoded;
 extern crate url;
 
+pub use hyper::client::IntoUrl;
 pub use hyper::header;
 pub use hyper::method::Method;
 pub use hyper::status::StatusCode;
@@ -111,11 +112,11 @@ pub use self::body::Body;
 mod body;
 mod client;
 mod error;
+mod tls;
 
-#[cfg(feature = "tls")] mod tls;
 
 /// Shortcut method to quickly make a `GET` request.
-pub fn get(url: &str) -> ::Result<Response> {
+pub fn get<T: IntoUrl>(url: T) -> ::Result<Response> {
     let client = try!(Client::new());
     client.get(url).send()
 }

@@ -69,12 +69,6 @@ impl Client {
     }
 }
 
-#[cfg(not(feature = "tls"))]
-fn new_hyper_client() -> ::Result<::hyper::Client> {
-    Ok(::hyper::Client::new())
-}
-
-#[cfg(feature = "tls")]
 fn new_hyper_client() -> ::Result<::hyper::Client> {
     use tls::TlsClient;
     Ok(::hyper::Client::with_connector(
