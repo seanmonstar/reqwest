@@ -11,19 +11,11 @@ license = "MIT/Apache-2.0"
 [dependencies]
 hyper = { version = "0.9" , default-features = false }
 log = "0.3"
+native-tls = {git="https://github.com/sfackler/rust-native-tls"} #"0.1"
 serde = "0.8"
 serde_json = "0.8"
 serde_urlencoded = "0.3"
-url = "1.0"
-
-[dependencies.native-tls]
-git = "https://github.com/sfackler/rust-native-tls"
-optional = true
-
-[features]
-default = ["openssl"]
-openssl = ["hyper/ssl"]
-tls = ["native-tls"]
+url = "1.2"
 
 [dev-dependencies]
 env_logger = "0.3"
