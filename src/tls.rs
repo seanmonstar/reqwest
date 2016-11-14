@@ -1,6 +1,7 @@
 use std::io::{self, Read, Write};
 use std::net::SocketAddr;
 use std::time::Duration;
+use std::fmt;
 
 use hyper::net::{SslClient, HttpStream, NetworkStream};
 use native_tls::{TlsConnector, TlsStream as NativeTlsStream, HandshakeError};
@@ -34,6 +35,13 @@ impl SslClient for TlsClient {
     }
 }
 
+impl fmt::Debug for TlsClient {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("TlsClient").field(&"_").finish()
+    }
+}
+
+#[derive(Debug)]
 pub struct TlsStream(NativeTlsStream<HttpStream>);
 
 impl Read for TlsStream {

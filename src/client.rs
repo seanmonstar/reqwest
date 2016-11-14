@@ -22,6 +22,7 @@ static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", e
 ///
 /// The `Client` holds a connection pool internally, so it is advised that
 /// you create one and reuse it.
+#[derive(Debug)]
 pub struct Client {
     inner: ::hyper::Client,
 }
@@ -81,6 +82,7 @@ fn new_hyper_client() -> ::Result<::hyper::Client> {
 
 
 /// A builder to construct the properties of a `Request`.
+#[derive(Debug)]
 pub struct RequestBuilder<'a> {
     client: &'a Client,
 
@@ -253,6 +255,7 @@ impl<'a> RequestBuilder<'a> {
 }
 
 /// A Response to a submitted `Request`.
+#[derive(Debug)]
 pub struct Response {
     inner: ::hyper::client::Response,
 }
