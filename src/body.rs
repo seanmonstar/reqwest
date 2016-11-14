@@ -1,7 +1,9 @@
 use std::io::Read;
 use std::fs::File;
+use std::fmt;
 
 /// Body type for a request.
+#[derive(Debug)]
 pub struct Body {
     reader: Kind,
 }
@@ -67,6 +69,15 @@ impl From<File> for Body {
         let len = f.metadata().map(|m| m.len()).ok();
         Body {
             reader: Kind::Reader(Box::new(f), len),
+        }
+    }
+}
+
+impl fmt::Debug for Kind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &Kind::Reader(_, ref v) => f.debug_tuple("Kind::Reader").field(&"_").field(v).finish(),
+            &Kind::Bytes(ref v) => f.debug_tuple("Kind::Bytes").field(v).finish(),
         }
     }
 }
