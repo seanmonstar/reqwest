@@ -68,5 +68,11 @@ impl From<::serde_urlencoded::ser::Error> for Error {
     }
 }
 
+impl From<::serde_json::Error> for Error {
+    fn from(err: ::serde_json::Error) -> Error {
+        Error::Serialize(Box::new(err))
+    }
+}
+
 /// A `Result` alias where the `Err` case is `reqwest::Error`.
 pub type Result<T> = ::std::result::Result<T, Error>;

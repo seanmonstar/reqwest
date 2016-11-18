@@ -7,7 +7,7 @@ use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
 use hyper::{Url};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json;
 use serde_urlencoded;
 
@@ -274,6 +274,11 @@ impl Response {
     /// Get the `HttpVersion`.
     pub fn version(&self) -> &HttpVersion {
         &self.inner.version
+    }
+
+    /// Try and deserialize the response body as JSON.
+    pub fn json<T: Deserialize>(&mut self) -> ::Result<T> {
+        serde_json::from_reader(self).map_err(::Error::from)
     }
 }
 
