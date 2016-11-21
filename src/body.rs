@@ -1,5 +1,4 @@
-use std::io::{Cursor, Read};
-use std::io;
+use std::io::Read;
 use std::fs::File;
 use std::fmt;
 
@@ -28,37 +27,23 @@ impl Body {
     */
 }
 
-impl Read for Body {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.reader.read(buf)
-    }
+// useful for tests, but not publicly exposed
+#[cfg(test)]
+pub fn read_to_string(mut body: Body) -> ::std::io::Result<String> {
+    let mut s = String::new();
+    match body.reader {
+        Kind::Reader(ref mut reader, _) => {
+            reader.read_to_string(&mut s)
+        }
+        Kind::Bytes(ref mut bytes) => {
+            (&**bytes).read_to_string(&mut s)
+        }
+    }.map(|_| s)
 }
 
 enum Kind {
     Reader(Box<Read>, Option<u64>),
     Bytes(Vec<u8>),
-}
-
-impl Read for Kind {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match *self {
-            Kind::Reader(ref mut reader, _) => {
-                reader.read(buf)
-            }
-            Kind::Bytes(ref mut bytes) => {
-                // To make sure the bytes are removed properly when you read
-                // them, you need to use `drain()`
-                // FIXME: this will probably have poor performance for larger
-                // bodies due to allocating more than necessary.
-                let drained_bytes: Vec<u8> = bytes.drain(..).collect();
-
-                // then you need a Cursor because a standard Vec doesn't implement
-                // Read
-                let mut cursor = Cursor::new(drained_bytes);
-                cursor.read(buf)
-            }
-        }
-    }
 }
 
 impl From<Vec<u8>> for Body {
