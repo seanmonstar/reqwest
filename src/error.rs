@@ -10,7 +10,7 @@ pub enum Error {
     ///
     /// This may be serializing a value that is illegal in JSON or
     /// form-url-encoded bodies.
-    Serialize(Box<StdError>),
+    Serialize(Box<StdError + Send + Sync>),
     /// A request tried to redirect too many times.
     TooManyRedirects,
     #[doc(hidden)]
@@ -48,6 +48,12 @@ impl StdError for Error {
             Error::__DontMatchMe => unreachable!()
         }
     }
+}
+
+fn _assert_types() {
+    fn _assert_send<T: Send>() {
+    }
+    _assert_send::<Error>();
 }
 
 impl From<::hyper::Error> for Error {
