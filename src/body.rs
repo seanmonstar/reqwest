@@ -1,4 +1,5 @@
-use std::io::Read;
+use std::io::{Cursor, Read};
+use std::io;
 use std::fs::File;
 use std::fmt;
 
@@ -27,9 +28,37 @@ impl Body {
     */
 }
 
+impl Read for Body {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.reader.read(buf)
+    }
+}
+
 enum Kind {
     Reader(Box<Read>, Option<u64>),
     Bytes(Vec<u8>),
+}
+
+impl Read for Kind {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match *self {
+            Kind::Reader(ref mut reader, _) => {
+                reader.read(buf)
+            }
+            Kind::Bytes(ref mut bytes) => {
+                // To make sure the bytes are removed properly when you read
+                // them, you need to use `drain()`
+                // FIXME: this will probably have poor performance for larger
+                // bodies due to allocating more than necessary.
+                let drained_bytes: Vec<u8> = bytes.drain(..).collect();
+
+                // then you need a Cursor because a standard Vec doesn't implement
+                // Read
+                let mut cursor = Cursor::new(drained_bytes);
+                cursor.read(buf)
+            }
+        }
+    }
 }
 
 impl From<Vec<u8>> for Body {
@@ -101,4 +130,3 @@ pub fn as_hyper_body<'a>(body: &'a mut Body) -> ::hyper::client::Body<'a> {
         }
     }
 }
-

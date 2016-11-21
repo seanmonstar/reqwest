@@ -283,3 +283,141 @@ impl Read for Response {
         self.inner.read(buf)
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hyper::method::Method;
+    use hyper::Url;
+    use hyper::header::{Host, Headers, ContentType};
+    use std::collections::HashMap;
+    use std::io::Read;
+    use serde_urlencoded;
+    use serde_json;
+
+    #[test]
+    fn basic_get_request() {
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com/";
+        let r = client.get(some_url);
+
+        assert_eq!(r.method, Method::Get);
+        assert_eq!(r.url, Url::parse(some_url));
+    }
+
+    #[test]
+    fn basic_head_request() {
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com/";
+        let r = client.head(some_url);
+
+        assert_eq!(r.method, Method::Head);
+        assert_eq!(r.url, Url::parse(some_url));
+    }
+
+    #[test]
+    fn basic_post_request() {
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com/";
+        let r = client.post(some_url);
+
+        assert_eq!(r.method, Method::Post);
+        assert_eq!(r.url, Url::parse(some_url));
+    }
+
+    #[test]
+    fn add_header() {
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com/";
+        let mut r = client.post(some_url);
+
+        let header = Host {
+            hostname: "google.com".to_string(),
+            port: None,
+        };
+
+        // Add a copy of the header to the request builder
+        r = r.header(header.clone());
+
+        // then check it was actually added
+        assert_eq!(r.headers.get::<Host>(), Some(&header));
+    }
+
+    #[test]
+    fn add_headers() {
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com/";
+        let mut r = client.post(some_url);
+
+        let header = Host {
+            hostname: "google.com".to_string(),
+            port: None,
+        };
+
+        let mut headers = Headers::new();
+        headers.set(header);
+
+        // Add a copy of the headers to the request builder
+        r = r.headers(headers.clone());
+
+        // then make sure they were added correctly
+        assert_eq!(r.headers, headers);
+    }
+
+    #[test]
+    fn add_body() {
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com/";
+        let mut r = client.post(some_url);
+
+        let body = "Some interesting content";
+
+        r = r.body(body);
+
+        let mut buf = String::new();
+        r.body.unwrap().unwrap().read_to_string(&mut buf).unwrap();
+
+        assert_eq!(buf, body);
+    }
+
+    #[test]
+    fn add_form() {
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com/";
+        let mut r = client.post(some_url);
+
+        let mut form_data = HashMap::new();
+        form_data.insert("foo", "bar");
+
+        r = r.form(&form_data);
+
+        // Make sure the content type was set
+        assert_eq!(r.headers.get::<ContentType>(), Some(&ContentType::form_url_encoded()));
+
+        let mut buf = String::new();
+        r.body.unwrap().unwrap().read_to_string(&mut buf).unwrap();
+
+        let body_should_be = serde_urlencoded::to_string(&form_data).unwrap();
+        assert_eq!(buf, body_should_be);
+    }
+
+    #[test]
+    fn add_json() {
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com/";
+        let mut r = client.post(some_url);
+
+        let mut json_data = HashMap::new();
+        json_data.insert("foo", "bar");
+
+        r = r.json(&json_data);
+
+        // Make sure the content type was set
+        assert_eq!(r.headers.get::<ContentType>(), Some(&ContentType::json()));
+
+        let mut buf = String::new();
+        r.body.unwrap().unwrap().read_to_string(&mut buf).unwrap();
+
+        let body_should_be = serde_json::to_string(&json_data).unwrap();
+        assert_eq!(buf, body_should_be);
+    }
+}
