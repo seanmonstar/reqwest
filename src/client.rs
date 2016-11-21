@@ -290,6 +290,9 @@ mod tests {
     use hyper::Url;
     use hyper::header::{Host, Headers, ContentType};
     use std::collections::HashMap;
+    use std::io::Read;
+    use serde_urlencoded;
+    use serde_json;
 
     #[test]
     fn basic_get_request() {
@@ -361,30 +364,19 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn add_body() {
-        // Currently Body doesn't have an implementation of PartialEq, so you
-        // can't check whether the body is actually what you set.
-        //
-        // This is most probably because Body's reader attribute is anything
-        // which implements Read, meaning the act of checking the body will
-        // probably consume it. To get around this, you might want to consider
-        // restricting Body.reader to something a little more concrete like a
-        // String.
-        //
-        // A basic test is included below, but commented out so the compiler
-        // won't yell at you.
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com/";
+        let mut r = client.post(some_url);
 
+        let body = "Some interesting content";
 
-        // let client = Client::new().unwrap();
-        // let some_url = "https://google.com/";
-        // let mut r = client.post(some_url);
-        //
-        // let body = "Some interesting content";
-        //
-        // r = r.body(body);
-        //
-        //assert_eq!(r.body.unwrap().unwrap(), body);
+        r = r.body(body);
+
+        let mut buf = String::new();
+        r.body.unwrap().unwrap().read_to_string(&mut buf).unwrap();
+
+        assert_eq!(buf, body);
     }
 
     #[test]
@@ -401,11 +393,11 @@ mod tests {
         // Make sure the content type was set
         assert_eq!(r.headers.get::<ContentType>(), Some(&ContentType::form_url_encoded()));
 
-        // need to check the body is set to the serialized hashmap. Can't
-        // currently do that because Body doesn't implement PartialEq.
+        let mut buf = String::new();
+        r.body.unwrap().unwrap().read_to_string(&mut buf).unwrap();
 
-        // let body_should_be: Body = serde_urlencoded::to_string(form).map(|b| b.into());
-        // assert_eq!(r.body, Some(body_should_be));
+        let body_should_be = serde_urlencoded::to_string(&form_data).unwrap();
+        assert_eq!(buf, body_should_be);
     }
 
     #[test]
@@ -414,18 +406,18 @@ mod tests {
         let some_url = "https://google.com/";
         let mut r = client.post(some_url);
 
-        let mut form_data = HashMap::new();
-        form_data.insert("foo", "bar");
+        let mut json_data = HashMap::new();
+        json_data.insert("foo", "bar");
 
-        r = r.json(&form_data);
+        r = r.json(&json_data);
 
         // Make sure the content type was set
         assert_eq!(r.headers.get::<ContentType>(), Some(&ContentType::json()));
 
-        // need to check the body is set to the serialized hashmap. Can't
-        // currently do that because Body doesn't implement PartialEq.
+        let mut buf = String::new();
+        r.body.unwrap().unwrap().read_to_string(&mut buf).unwrap();
 
-        // let body_should_be: Body = serde_urlencoded::to_string(form).map(|b| b.into());
-        // assert_eq!(r.body, Some(body_should_be));
+        let body_should_be = serde_json::to_string(&json_data).unwrap();
+        assert_eq!(buf, body_should_be);
     }
 }
