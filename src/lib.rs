@@ -96,6 +96,7 @@ extern crate serde;
 extern crate serde_json;
 extern crate serde_urlencoded;
 extern crate url;
+extern crate flate2;
 
 pub use hyper::client::IntoUrl;
 pub use hyper::header;

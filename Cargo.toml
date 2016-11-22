@@ -16,6 +16,7 @@ serde = "0.8"
 serde_json = "0.8"
 serde_urlencoded = "0.3"
 url = "1.2"
+flate2 = "0.2.14"
 
 [dev-dependencies]
 env_logger = "0.3"
