@@ -22,10 +22,8 @@ impl fmt::Display for Error {
         match *self {
             Error::Http(ref e) => fmt::Display::fmt(e, f),
             Error::Serialize(ref e) => fmt::Display::fmt(e, f),
-            Error::TooManyRedirects => {
-                f.pad("Too many redirects")
-            },
-            Error::__DontMatchMe => unreachable!()
+            Error::TooManyRedirects => f.pad("Too many redirects"),
+            Error::__DontMatchMe => unreachable!(),
         }
     }
 }
@@ -36,7 +34,7 @@ impl StdError for Error {
             Error::Http(ref e) => e.description(),
             Error::Serialize(ref e) => e.description(),
             Error::TooManyRedirects => "Too many redirects",
-            Error::__DontMatchMe => unreachable!()
+            Error::__DontMatchMe => unreachable!(),
         }
     }
 
@@ -45,14 +43,13 @@ impl StdError for Error {
             Error::Http(ref e) => Some(e),
             Error::Serialize(ref e) => Some(&**e),
             Error::TooManyRedirects => None,
-            Error::__DontMatchMe => unreachable!()
+            Error::__DontMatchMe => unreachable!(),
         }
     }
 }
 
 fn _assert_types() {
-    fn _assert_send<T: Send>() {
-    }
+    fn _assert_send<T: Send>() {}
     _assert_send::<Error>();
 }
 

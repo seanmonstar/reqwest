@@ -1,6 +1,7 @@
-use std::io::Read;
-use std::fs::File;
+
 use std::fmt;
+use std::fs::File;
+use std::io::Read;
 
 /// Body type for a request.
 #[derive(Debug)]
@@ -11,20 +12,17 @@ pub struct Body {
 impl Body {
     /// Instantiate a `Body` from a reader.
     pub fn new<R: Read + 'static>(reader: R) -> Body {
-        Body {
-            reader: Kind::Reader(Box::new(reader), None),
-        }
+        Body { reader: Kind::Reader(Box::new(reader), None) }
     }
 
-    /*
-    pub fn sized(reader: (), len: u64) -> Body {
-        unimplemented!()
-    }
-
-    pub fn chunked(reader: ()) -> Body {
-        unimplemented!()
-    }
-    */
+    // pub fn sized(reader: (), len: u64) -> Body {
+    // unimplemented!()
+    // }
+    //
+    // pub fn chunked(reader: ()) -> Body {
+    // unimplemented!()
+    // }
+    //
 }
 
 // useful for tests, but not publicly exposed
@@ -32,13 +30,10 @@ impl Body {
 pub fn read_to_string(mut body: Body) -> ::std::io::Result<String> {
     let mut s = String::new();
     match body.reader {
-        Kind::Reader(ref mut reader, _) => {
-            reader.read_to_string(&mut s)
+            Kind::Reader(ref mut reader, _) => reader.read_to_string(&mut s),
+            Kind::Bytes(ref mut bytes) => (&**bytes).read_to_string(&mut s),
         }
-        Kind::Bytes(ref mut bytes) => {
-            (&**bytes).read_to_string(&mut s)
-        }
-    }.map(|_| s)
+        .map(|_| s)
 }
 
 enum Kind {
@@ -49,9 +44,7 @@ enum Kind {
 impl From<Vec<u8>> for Body {
     #[inline]
     fn from(v: Vec<u8>) -> Body {
-        Body {
-            reader: Kind::Bytes(v),
-        }
+        Body { reader: Kind::Bytes(v) }
     }
 }
 
@@ -81,9 +74,7 @@ impl From<File> for Body {
     #[inline]
     fn from(f: File) -> Body {
         let len = f.metadata().map(|m| m.len()).ok();
-        Body {
-            reader: Kind::Reader(Box::new(f), len),
-        }
+        Body { reader: Kind::Reader(Box::new(f), len) }
     }
 }
 
@@ -98,10 +89,10 @@ impl fmt::Debug for Kind {
 
 
 // Wraps a `std::io::Write`.
-//pub struct Pipe(Kind);
+// pub struct Pipe(Kind);
 
 
-pub fn as_hyper_body<'a>(body: &'a mut Body) -> ::hyper::client::Body<'a> {
+pub fn as_hyper_body<'a>(body: Body) -> ::hyper::client::Body<'a> {
     match body.reader {
         Kind::Bytes(ref bytes) => {
             let len = bytes.len();
