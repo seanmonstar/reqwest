@@ -213,7 +213,7 @@ impl<'a> RequestBuilder<'a> {
                     true
                 },
                 StatusCode::TemporaryRedirect |
-                StatusCode::PermanentRedirect => true,
+                StatusCode::PermanentRedirect => body.is_none(),
                 _ => false,
             };
 
