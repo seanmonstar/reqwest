@@ -198,57 +198,62 @@ impl<'a> RequestBuilder<'a> {
 
                 try!(req.send())
             };
-            body.take();
 
-            match res.status {
+            let should_redirect = match res.status {
                 StatusCode::MovedPermanently |
                 StatusCode::Found |
                 StatusCode::SeeOther => {
-
-                    //TODO: turn this into self.redirect_policy.check()
-                    if redirect_count > 10 {
-                        return Err(::Error::TooManyRedirects);
+                    body = None;
+                    match method {
+                        Method::Get | Method::Head => {},
+                        _ => {
+                            method = Method::Get;
+                        }
                     }
-                    redirect_count += 1;
-
-                    method = match method {
-                        Method::Post | Method::Put => Method::Get,
-                        m => m
-                    };
-
-                    headers.set(Referer(url.to_string()));
-
-                    let loc = {
-                        let loc = res.headers.get::<Location>().map(|loc| url.join(loc));
-                        if let Some(loc) = loc {
-                            loc
-                        } else {
-                            return Ok(Response {
-                                inner: res
-                            });
-                        }
-                    };
-
-                    url = match loc {
-                        Ok(u) => u,
-                        Err(e) => {
-                            debug!("Location header had invalid URI: {:?}", e);
-                            return Ok(Response {
-                                inner: res
-                            })
-                        }
-                    };
-
-                    debug!("redirecting to '{}'", url);
-
-                    //TODO: removeSensitiveHeaders(&mut headers, &url);
-
+                    true
                 },
-                _ => {
-                    return Ok(Response {
-                        inner: res
-                    });
+                StatusCode::TemporaryRedirect |
+                StatusCode::PermanentRedirect => body.is_none(),
+                _ => false,
+            };
+
+            if should_redirect {
+                //TODO: turn this into self.redirect_policy.check()
+                if redirect_count > 10 {
+                    return Err(::Error::TooManyRedirects);
                 }
+                redirect_count += 1;
+
+                headers.set(Referer(url.to_string()));
+
+                let loc = {
+                    let loc = res.headers.get::<Location>().map(|loc| url.join(loc));
+                    if let Some(loc) = loc {
+                        loc
+                    } else {
+                        return Ok(Response {
+                            inner: res
+                        });
+                    }
+                };
+
+                url = match loc {
+                    Ok(u) => u,
+                    Err(e) => {
+                        debug!("Location header had invalid URI: {:?}", e);
+                        return Ok(Response {
+                            inner: res
+                        })
+                    }
+                };
+
+                debug!("redirecting to {:?} '{}'", method, url);
+
+                //TODO: removeSensitiveHeaders(&mut headers, &url);
+            } else {
+                return Ok(Response {
+                    inner: res
+                });
             }
         }
     }
