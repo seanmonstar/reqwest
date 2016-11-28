@@ -115,3 +115,10 @@ pub fn as_hyper_body<'a>(body: &'a mut Body) -> ::hyper::client::Body<'a> {
         }
     }
 }
+
+pub fn can_reset(body: &Body) -> bool {
+    match body.reader {
+        Kind::Bytes(_) => true,
+        Kind::Reader(..) => false,
+    }
+}

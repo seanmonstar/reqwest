@@ -213,7 +213,13 @@ impl<'a> RequestBuilder<'a> {
                     true
                 },
                 StatusCode::TemporaryRedirect |
-                StatusCode::PermanentRedirect => true,
+                StatusCode::PermanentRedirect => {
+                    if let Some(ref body) = body {
+                        body::can_reset(body)
+                    } else {
+                        true
+                    }
+                },
                 _ => false,
             };
 
