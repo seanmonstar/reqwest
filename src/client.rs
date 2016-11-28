@@ -1,19 +1,21 @@
-use std::io::{self, Read};
 
-use hyper::client::IntoUrl;
+
+use ::body::{self, Body};
+use hyper::Url;
+
+use hyper::client::{IntoUrl, RequestBuilder as HyperRequestBuilder};
 use hyper::header::{Headers, ContentType, Location, Referer, UserAgent};
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
-use hyper::{Url};
 
 use serde::{Deserialize, Serialize};
 use serde_json;
 use serde_urlencoded;
+use std::io::{self, Read};
 
-use ::body::{self, Body};
-
-static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+static DEFAULT_USER_AGENT: &'static str =
+    concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 /// A `Client` to make Requests with.
 ///
@@ -32,9 +34,7 @@ impl Client {
     pub fn new() -> ::Result<Client> {
         let mut client = try!(new_hyper_client());
         client.set_redirect_policy(::hyper::client::RedirectPolicy::FollowNone);
-        Ok(Client {
-            inner: client
-        })
+        Ok(Client { inner: client })
     }
 
     /// Convenience method to make a `GET` request to a URL.
@@ -105,7 +105,9 @@ impl<'a> RequestBuilder<'a> {
     ///     .header(UserAgent("foo".to_string()))
     ///     .send();
     /// ```
-    pub fn header<H: ::header::Header + ::header::HeaderFormat>(mut self, header: H) -> RequestBuilder<'a> {
+    pub fn header<H: ::header::Header + ::header::HeaderFormat>(mut self,
+                                                                header: H)
+                                                                -> RequestBuilder<'a> {
         self.headers.set(header);
         self
     }
@@ -168,89 +170,72 @@ impl<'a> RequestBuilder<'a> {
         self
     }
 
-    /// Constructs the Request and sends it the target URL, returning a Response.
-    pub fn send(mut self) -> ::Result<Response> {
+    /// Do all finalisation necessary to create a `hyper::Request`. This
+    /// includes adding the UserAgent, checking the URL parsed correctly, etc.
+    fn verify(&self) -> ::Result<HyperRequestBuilder> {
+        // make sure UserAgent is set
         if !self.headers.has::<UserAgent>() {
             self.headers.set(UserAgent(DEFAULT_USER_AGENT.to_owned()));
         }
 
-        let client = self.client;
-        let mut method = self.method;
-        let mut url = try!(self.url);
-        let mut headers = self.headers;
-        let mut body = match self.body {
+        // then check for a valid url
+        let url = try!(self.url);
+
+        // try to unwrap the result inside the body. This might have failed if
+        // the parsing to json/form failed.
+        let body = match self.body {
             Some(b) => Some(try!(b)),
             None => None,
         };
 
-        let mut redirect_count = 0;
+        // then convert the body to a hyper body
+        let body = body.map(|b| body::as_hyper_body(b));
 
-        loop {
-            let res = {
-                debug!("request {:?} \"{}\"", method, url);
-                let mut req = client.inner.request(method.clone(), url.clone())
-                    .headers(headers.clone());
+        let request = self.client.inner.request(self.method, url).headers(self.headers);
 
-                if let Some(ref mut b) = body {
-                    let body = body::as_hyper_body(b);
-                    req = req.body(body);
-                }
+        if let Some(b) = body {
+            request.body(b);
+        }
 
-                try!(req.send())
-            };
-            body.take();
+        Ok(request)
+    }
 
-            match res.status {
-                StatusCode::MovedPermanently |
-                StatusCode::Found |
-                StatusCode::SeeOther => {
+    // - Set UserAgent if not already done
+    // - Unwrap url and body
+    // - While True:
+    //   - Send request
+    //   - match on status code
+    //     - if redirect:
+    //       - update redirect counter (return error if over 10)
+    //       - set Referer
+    //       - find next location
+    //       - deal with invalid location url
+    //       - set new url and go to start of loop
+    //     - otherwise return the response
+    pub fn send(&mut self) -> ::Result<Response> {
+        let mut request: HyperRequestBuilder = self.verify()?;
+        let redirect_count = 0;
 
-                    //TODO: turn this into self.redirect_policy.check()
-                    if redirect_count > 10 {
-                        return Err(::Error::TooManyRedirects);
-                    }
-                    redirect_count += 1;
+        while redirect_count < 10 {
+            debug!("request {:?} \"{}\"",
+                   self.method,
+                   self.url.expect("This should have already been verified"));
 
-                    method = match method {
-                        Method::Post | Method::Put => Method::Get,
-                        m => m
-                    };
+            // try to send the response, if successful, turn it into our Response
+            let response: Response = request.send()?.into();
 
-                    headers.set(Referer(url.to_string()));
-
-                    let loc = {
-                        let loc = res.headers.get::<Location>().map(|loc| url.join(loc));
-                        if let Some(loc) = loc {
-                            loc
-                        } else {
-                            return Ok(Response {
-                                inner: res
-                            });
-                        }
-                    };
-
-                    url = match loc {
-                        Ok(u) => u,
-                        Err(e) => {
-                            debug!("Location header had invalid URI: {:?}", e);
-                            return Ok(Response {
-                                inner: res
-                            })
-                        }
-                    };
-
-                    debug!("redirecting to '{}'", url);
-
-                    //TODO: removeSensitiveHeaders(&mut headers, &url);
-
-                },
-                _ => {
-                    return Ok(Response {
-                        inner: res
-                    });
-                }
+            if let Some(redirect) = response.parse_redirect(request) {
+                // If we got a valid redirect, increment the count and then
+                // use the new request builder.
+                redirect_count += 1;
+                request = redirect.verify()?;
+            } else {
+                return Ok(response);
             }
         }
+
+        // if we get here it means we've been redirected too many times
+        Err(::Error::TooManyRedirects)
     }
 }
 
@@ -280,6 +265,59 @@ impl Response {
     pub fn json<T: Deserialize>(&mut self) -> ::Result<T> {
         serde_json::from_reader(self).map_err(::Error::from)
     }
+
+    /// Check if the response is a redirect.
+    pub fn is_redirect(&self) -> bool {
+        match *self.status() {
+            StatusCode::MovedPermanently |
+            StatusCode::Found |
+            StatusCode::SeeOther => true,
+            _ => false,
+        }
+    }
+
+    /// If the response is a redirect, create a new Request which will go to the
+    /// next link.
+    fn parse_redirect(&self, from: RequestBuilder) -> Option<RequestBuilder> {
+        // turn Post/Put requests into Get
+        // Get the Location header
+        // join it with the current url if Location exists
+        // If the result is None, then return the response
+        // otherwise follow the redirect
+
+        if !self.is_redirect() {
+            return None;
+        }
+
+        // Copy the original request so we keep all the headers, body, etc
+        let mut new_request = from.clone();
+
+        // Convert any Post or Put requests to a Get
+        new_request.method = match from.method {
+            Method::Post | Method::Put => Method::Get,
+            m => m,
+        };
+
+        // Make sure to set the referer
+        let prev_url = from.url.expect("This should have already been verified");
+        new_request.header(Referer(prev_url.into_string()));
+
+        // find where we are being redirected to and set the next url
+        if let Some(loc) = self.headers().get::<Location>() {
+            new_request.url = prev_url.join(loc);
+            Some(new_request)
+        } else {
+            // Location parsing failed, or this isn't a redirect
+            None
+        }
+    }
+}
+
+
+impl From<::hyper::client::Response> for Response {
+    fn from(other: ::hyper::client::Response) -> Response {
+        Response { inner: other }
+    }
 }
 
 /// Read the body of the Response.
@@ -288,16 +326,18 @@ impl Read for Response {
         self.inner.read(buf)
     }
 }
+
+
 #[cfg(test)]
 mod tests {
-    use super::*;
     use ::body;
-    use hyper::method::Method;
     use hyper::Url;
     use hyper::header::{Host, Headers, ContentType};
-    use std::collections::HashMap;
-    use serde_urlencoded;
+    use hyper::method::Method;
     use serde_json;
+    use serde_urlencoded;
+    use std::collections::HashMap;
+    use super::*;
 
     #[test]
     fn basic_get_request() {
@@ -395,7 +435,8 @@ mod tests {
         r = r.form(&form_data);
 
         // Make sure the content type was set
-        assert_eq!(r.headers.get::<ContentType>(), Some(&ContentType::form_url_encoded()));
+        assert_eq!(r.headers.get::<ContentType>(),
+                   Some(&ContentType::form_url_encoded()));
 
         let buf = body::read_to_string(r.body.unwrap().unwrap()).unwrap();
 
@@ -422,4 +463,20 @@ mod tests {
         let body_should_be = serde_json::to_string(&json_data).unwrap();
         assert_eq!(buf, body_should_be);
     }
+
+    #[test]
+    fn check_redirect_works() {
+        // we know going to 'http://google.com/' should redirect to https,
+        // so we use that to see if redirects work properly.
+        // TODO: Delete this method when done. It makes a network call!
+        let client = Client::new().unwrap();
+        let some_url = Url::parse("http://google.com/").unwrap();
+        let response = client.get(some_url.clone()).send().unwrap();
+
+        // Check for a redirect indirectly
+        assert!(response.inner.url != some_url);
+    }
+
+    #[test]
+    fn response_is_redirect() {}
 }
