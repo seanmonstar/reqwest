@@ -10,6 +10,17 @@ pub struct Body {
 
 impl Body {
     /// Instantiate a `Body` from a reader.
+    ///
+    /// # Note
+    ///
+    /// While allowing for many types to be used, these bodies do not have
+    /// a way to reset to the beginning and be reused. This means that when
+    /// encountering a 307 or 308 status code, instead of repeating the
+    /// request at the new location, the `Response` will be returned with
+    /// the redirect status code set.
+    ///
+    /// A `Body` constructed from a set of bytes, like `String` or `Vec<u8>`,
+    /// are stored differently and can be reused.
     pub fn new<R: Read + 'static>(reader: R) -> Body {
         Body {
             reader: Kind::Reader(Box::new(reader), None),
