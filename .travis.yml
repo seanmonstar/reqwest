@@ -1,8 +1,13 @@
 language: rust
-rust:
-  - stable
-  - beta
-  - nightly
+matrix:
+    fast_finish: true
+    allow_failures:
+        - rust: nightly
+    include:
+        - os: osx
+          rust: stable
+        - rust: beta
+        - rust: stable
 
 sudo: false
 
