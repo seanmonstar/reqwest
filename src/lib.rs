@@ -120,3 +120,14 @@ pub fn get<T: IntoUrl>(url: T) -> ::Result<Response> {
     let client = try!(Client::new());
     client.get(url).send()
 }
+
+fn _assert_impls() {
+    fn assert_send<T: Send>() {}
+    fn assert_sync<T: Sync>() {}
+
+    assert_send::<Client>();
+    assert_sync::<Client>();
+
+    assert_send::<RequestBuilder>();
+    assert_send::<Response>();
+}

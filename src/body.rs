@@ -21,7 +21,7 @@ impl Body {
     ///
     /// A `Body` constructed from a set of bytes, like `String` or `Vec<u8>`,
     /// are stored differently and can be reused.
-    pub fn new<R: Read + 'static>(reader: R) -> Body {
+    pub fn new<R: Read + Send + 'static>(reader: R) -> Body {
         Body {
             reader: Kind::Reader(Box::new(reader), None),
         }
@@ -53,7 +53,7 @@ pub fn read_to_string(mut body: Body) -> ::std::io::Result<String> {
 }
 
 enum Kind {
-    Reader(Box<Read>, Option<u64>),
+    Reader(Box<Read + Send>, Option<u64>),
     Bytes(Vec<u8>),
 }
 

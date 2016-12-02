@@ -1,4 +1,6 @@
+use std::fmt;
 use std::io::{self, Read};
+use std::sync::Arc;
 
 use hyper::client::IntoUrl;
 use hyper::header::{Headers, ContentType, Location, Referer, UserAgent};
@@ -22,9 +24,8 @@ static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", e
 ///
 /// The `Client` holds a connection pool internally, so it is advised that
 /// you create one and reuse it.
-#[derive(Debug)]
 pub struct Client {
-    inner: ::hyper::Client,
+    inner: ClientRef,  //::hyper::Client,
 }
 
 impl Client {
@@ -33,7 +34,9 @@ impl Client {
         let mut client = try!(new_hyper_client());
         client.set_redirect_policy(::hyper::client::RedirectPolicy::FollowNone);
         Ok(Client {
-            inner: client
+            inner: ClientRef {
+                hyper: Arc::new(client),
+            }
         })
     }
 
@@ -59,7 +62,7 @@ impl Client {
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
         let url = url.into_url();
         RequestBuilder {
-            client: self,
+            client: self.inner.clone(),
             method: method,
             url: url,
             _version: HttpVersion::Http11,
@@ -68,6 +71,17 @@ impl Client {
             body: None,
         }
     }
+}
+
+impl fmt::Debug for Client {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.pad("Client")
+    }
+}
+
+#[derive(Clone)]
+struct ClientRef {
+    hyper: Arc<::hyper::Client>,
 }
 
 fn new_hyper_client() -> ::Result<::hyper::Client> {
@@ -82,9 +96,8 @@ fn new_hyper_client() -> ::Result<::hyper::Client> {
 
 
 /// A builder to construct the properties of a `Request`.
-#[derive(Debug)]
-pub struct RequestBuilder<'a> {
-    client: &'a Client,
+pub struct RequestBuilder {
+    client: ClientRef,
 
     method: Method,
     url: Result<Url, ::UrlError>,
@@ -94,7 +107,7 @@ pub struct RequestBuilder<'a> {
     body: Option<::Result<Body>>,
 }
 
-impl<'a> RequestBuilder<'a> {
+impl RequestBuilder {
     /// Add a `Header` to this Request.
     ///
     /// ```no_run
@@ -105,20 +118,20 @@ impl<'a> RequestBuilder<'a> {
     ///     .header(UserAgent("foo".to_string()))
     ///     .send();
     /// ```
-    pub fn header<H: ::header::Header + ::header::HeaderFormat>(mut self, header: H) -> RequestBuilder<'a> {
+    pub fn header<H: ::header::Header + ::header::HeaderFormat>(mut self, header: H) -> RequestBuilder {
         self.headers.set(header);
         self
     }
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
-    pub fn headers(mut self, headers: ::header::Headers) -> RequestBuilder<'a> {
+    pub fn headers(mut self, headers: ::header::Headers) -> RequestBuilder {
         self.headers.extend(headers.iter());
         self
     }
 
     /// Set the request body.
-    pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder<'a> {
+    pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder {
         self.body = Some(Ok(body.into()));
         self
     }
@@ -139,7 +152,7 @@ impl<'a> RequestBuilder<'a> {
     ///     .form(&params)
     ///     .send();
     /// ```
-    pub fn form<T: Serialize>(mut self, form: &T) -> RequestBuilder<'a> {
+    pub fn form<T: Serialize>(mut self, form: &T) -> RequestBuilder {
         let body = serde_urlencoded::to_string(form).map_err(::Error::from);
         self.headers.set(ContentType::form_url_encoded());
         self.body = Some(body.map(|b| b.into()));
@@ -161,7 +174,7 @@ impl<'a> RequestBuilder<'a> {
     ///     .json(&map)
     ///     .send();
     /// ```
-    pub fn json<T: Serialize>(mut self, json: &T) -> RequestBuilder<'a> {
+    pub fn json<T: Serialize>(mut self, json: &T) -> RequestBuilder {
         let body = serde_json::to_vec(json).expect("serde to_vec cannot fail");
         self.headers.set(ContentType::json());
         self.body = Some(Ok(body.into()));
@@ -188,7 +201,7 @@ impl<'a> RequestBuilder<'a> {
         loop {
             let res = {
                 debug!("request {:?} \"{}\"", method, url);
-                let mut req = client.inner.request(method.clone(), url.clone())
+                let mut req = client.hyper.request(method.clone(), url.clone())
                     .headers(headers.clone());
 
                 if let Some(ref mut b) = body {
@@ -265,29 +278,42 @@ impl<'a> RequestBuilder<'a> {
     }
 }
 
+impl fmt::Debug for RequestBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("RequestBuilder")
+            .field("method", &self.method)
+            .field("url", &self.url)
+            .field("headers", &self.headers)
+            .finish()
+    }
+}
+
 /// A Response to a submitted `Request`.
-#[derive(Debug)]
 pub struct Response {
     inner: ::hyper::client::Response,
 }
 
 impl Response {
     /// Get the `StatusCode`.
+    #[inline]
     pub fn status(&self) -> &StatusCode {
         &self.inner.status
     }
 
     /// Get the `Headers`.
+    #[inline]
     pub fn headers(&self) -> &Headers {
         &self.inner.headers
     }
 
     /// Get the `HttpVersion`.
+    #[inline]
     pub fn version(&self) -> &HttpVersion {
         &self.inner.version
     }
 
     /// Try and deserialize the response body as JSON.
+    #[inline]
     pub fn json<T: Deserialize>(&mut self) -> ::Result<T> {
         serde_json::from_reader(self).map_err(::Error::from)
     }
@@ -295,10 +321,22 @@ impl Response {
 
 /// Read the body of the Response.
 impl Read for Response {
+    #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.inner.read(buf)
     }
 }
+
+impl fmt::Debug for Response {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Response")
+            .field("status", self.status())
+            .field("headers", self.headers())
+            .field("version", self.version())
+            .finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
