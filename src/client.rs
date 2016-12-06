@@ -1,7 +1,7 @@
 use std::io::{self, Read};
 
 use hyper::client::IntoUrl;
-use hyper::header::{Headers, ContentType, Location, Referer, UserAgent};
+use hyper::header::{Headers, ContentType, Location, Referer, UserAgent, TransferEncoding, Encoding};
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
@@ -12,6 +12,8 @@ use serde_json;
 use serde_urlencoded;
 
 use ::body::{self, Body};
+
+use flate2::read::GzDecoder;
 
 static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
@@ -238,7 +240,7 @@ impl<'a> RequestBuilder<'a> {
                         loc
                     } else {
                         return Ok(Response {
-                            inner: res
+                            inner: Decoder::from_hyper_response(res)
                         });
                     }
                 };
@@ -248,8 +250,8 @@ impl<'a> RequestBuilder<'a> {
                     Err(e) => {
                         debug!("Location header had invalid URI: {:?}", e);
                         return Ok(Response {
-                            inner: res
-                        })
+                            inner: Decoder::from_hyper_response(res)
+                        });
                     }
                 };
 
@@ -258,38 +260,117 @@ impl<'a> RequestBuilder<'a> {
                 //TODO: removeSensitiveHeaders(&mut headers, &url);
             } else {
                 return Ok(Response {
-                    inner: res
-                });
+                        inner: Decoder::from_hyper_response(res)
+                    });
             }
         }
+    }
+}
+
+/// A Decoder, a wrapper around a reading the response body that
+/// also knows how to decode the response body content.
+enum Decoder {
+    /// A `PlainText` decoder just returns the response content as is.
+    PlainText(::hyper::client::Response),
+    /// A `Gzip` decoder will uncompress the gziped response content before returning it.
+    Gzip {
+        decoder: GzDecoder<::hyper::client::Response>,
+        headers: ::hyper::header::Headers,
+        version: ::hyper::version::HttpVersion,
+        status: ::hyper::status::StatusCode,
+    }
+}
+
+impl Decoder {
+    /// Constructs a Decoder from a hyper request.
+    ///
+    /// A decoder is just a wrapper around the hyper request that knows
+    /// how to decode the content body of the request.
+    ///
+    /// Uses the correct variant by inspecting the Transfer-Encoding header.
+    fn from_hyper_response(res: ::hyper::client::Response) -> Self {
+        let mut is_gzip = false;
+        match res.headers.get::<TransferEncoding>() {
+            Some(encoding_types) => {
+                if encoding_types.contains(&Encoding::Gzip) {
+                    is_gzip = true;
+                }
+            }
+            _ => {}
+        }
+
+        if is_gzip {
+            return Decoder::Gzip {
+                status: res.status.clone(),
+                version: res.version.clone(),
+                headers: res.headers.clone(),
+                decoder: GzDecoder::new(res).unwrap()
+            };
+        } else {
+            return Decoder::PlainText(res);
+        }
+    }
+}
+
+impl ::std::fmt::Debug for Decoder {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        if let &Decoder::PlainText(ref hyper_response) = self {
+            return hyper_response.fmt(f);
+        }
+
+        return write!(f, "blank cause lazy")
     }
 }
 
 /// A Response to a submitted `Request`.
 #[derive(Debug)]
 pub struct Response {
-    inner: ::hyper::client::Response,
+    inner: Decoder,
 }
 
 impl Response {
+
     /// Get the `StatusCode`.
     pub fn status(&self) -> &StatusCode {
-        &self.inner.status
+        match &self.inner {
+            &Decoder::PlainText(ref hyper_response) => &hyper_response.status,
+            &Decoder::Gzip{ref status, ..} => status
+        }
     }
 
     /// Get the `Headers`.
     pub fn headers(&self) -> &Headers {
-        &self.inner.headers
+        match &self.inner {
+            &Decoder::PlainText(ref hyper_response) => &hyper_response.headers,
+            &Decoder::Gzip{ref headers, ..} => headers
+        }
     }
 
     /// Get the `HttpVersion`.
     pub fn version(&self) -> &HttpVersion {
-        &self.inner.version
+        match &self.inner {
+            &Decoder::PlainText(ref hyper_response) => &hyper_response.version,
+            &Decoder::Gzip{ref version, ..} => version
+        }
     }
 
     /// Try and deserialize the response body as JSON.
     pub fn json<T: Deserialize>(&mut self) -> ::Result<T> {
         serde_json::from_reader(self).map_err(::Error::from)
+    }
+}
+
+/// Read the body of the Response, decoding it if necessary.
+impl Read for Decoder {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            &mut Decoder::PlainText(ref mut hyper_response) => {
+                hyper_response.read(buf)
+            },
+            &mut Decoder::Gzip{ref mut decoder, ..} => {
+                decoder.read(buf)
+            }
+        }
     }
 }
 
@@ -299,6 +380,7 @@ impl Read for Response {
         self.inner.read(buf)
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
