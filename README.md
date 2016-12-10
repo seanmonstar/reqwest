@@ -10,6 +10,18 @@ Built on top of [hyper](http://hyper.rs), with a batteries-included mindset.
 
 - [Documentation](https://docs.rs/reqwest)
 
+## Requirements
+
+On Linux:
+
+- OpenSSL 1.1 (see https://github.com/sfackler/rust-openssl)
+
+On Windows and macOS:
+
+- Nothing.
+
+Reqwest uses [rust-native-tls](https://github.com/sfackler/rust-native-tls), which will use the operating system TLS framework if available, meaning Windows and macOS. On Linux, it will use OpenSSL 1.1.
+
 ## License
 
 Licensed under either of
