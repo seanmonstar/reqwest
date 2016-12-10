@@ -17,7 +17,7 @@ impl Server {
 static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 pub fn spawn(txns: Vec<(Vec<u8>, Vec<u8>)>) -> Server {
-    let listener = net::TcpListener::bind("0.0.0.0:0").unwrap();
+    let listener = net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     thread::spawn(move || {
         for (mut expected, reply) in txns {
