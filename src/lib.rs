@@ -108,10 +108,12 @@ pub use url::ParseError as UrlError;
 pub use self::client::{Client, Response, RequestBuilder};
 pub use self::error::{Error, Result};
 pub use self::body::Body;
+pub use self::redirect::RedirectPolicy;
 
 mod body;
 mod client;
 mod error;
+mod redirect;
 mod tls;
 
 
