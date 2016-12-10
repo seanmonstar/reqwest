@@ -13,6 +13,8 @@ pub enum Error {
     Serialize(Box<StdError + Send + Sync>),
     /// A request tried to redirect too many times.
     TooManyRedirects,
+    /// An infinite redirect loop was detected.
+    RedirectLoop,
     #[doc(hidden)]
     __DontMatchMe,
 }
@@ -22,9 +24,8 @@ impl fmt::Display for Error {
         match *self {
             Error::Http(ref e) => fmt::Display::fmt(e, f),
             Error::Serialize(ref e) => fmt::Display::fmt(e, f),
-            Error::TooManyRedirects => {
-                f.pad("Too many redirects")
-            },
+            Error::TooManyRedirects => f.pad("Too many redirects"),
+            Error::RedirectLoop => f.pad("Infinite redirect loop"),
             Error::__DontMatchMe => unreachable!()
         }
     }
@@ -36,6 +37,7 @@ impl StdError for Error {
             Error::Http(ref e) => e.description(),
             Error::Serialize(ref e) => e.description(),
             Error::TooManyRedirects => "Too many redirects",
+            Error::RedirectLoop => "Infinite redirect loop",
             Error::__DontMatchMe => unreachable!()
         }
     }
@@ -45,6 +47,7 @@ impl StdError for Error {
             Error::Http(ref e) => Some(e),
             Error::Serialize(ref e) => Some(&**e),
             Error::TooManyRedirects => None,
+            Error::RedirectLoop => None,
             Error::__DontMatchMe => unreachable!()
         }
     }

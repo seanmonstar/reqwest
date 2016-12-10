@@ -160,3 +160,56 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
         assert_eq!(res.status(), &reqwest::StatusCode::from_u16(code));
     }
 }
+
+#[test]
+fn test_redirect_policy_can_return_errors() {
+    let server = server! {
+        request: b"\
+            GET /loop HTTP/1.1\r\n\
+            Host: $HOST\r\n\
+            User-Agent: $USERAGENT\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 302 Found\r\n\
+            Server: test\r\n\
+            Location: /loop
+            Content-Length: 0\r\n\
+            \r\n\
+            "
+    };
+
+    let err = reqwest::get(&format!("http://{}/loop", server.addr())).unwrap_err();
+    match err {
+        reqwest::Error::RedirectLoop => (),
+        e => panic!("wrong error received: {:?}", e),
+    }
+}
+
+#[test]
+fn test_redirect_policy_can_stop_redirects_without_an_error() {
+    let server = server! {
+        request: b"\
+            GET /no-redirect HTTP/1.1\r\n\
+            Host: $HOST\r\n\
+            User-Agent: $USERAGENT\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 302 Found\r\n\
+            Server: test-dont\r\n\
+            Location: /dont
+            Content-Length: 0\r\n\
+            \r\n\
+            "
+    };
+    let mut client = reqwest::Client::new().unwrap();
+    client.redirect(reqwest::RedirectPolicy::none());
+
+    let res = client.get(&format!("http://{}/no-redirect", server.addr()))
+        .send()
+        .unwrap();
+
+    assert_eq!(res.status(), &reqwest::StatusCode::Found);
+    assert_eq!(res.headers().get(), Some(&reqwest::header::Server("test-dont".to_string())));
+}
