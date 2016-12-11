@@ -9,6 +9,15 @@ Built on top of [hyper](http://hyper.rs), with a batteries-included mindset.
 
 - [Documentation](https://docs.rs/reqwest)
 
+### Example
+
+To build and run the [example](https://github.com/seanmonstar/reqwest/blob/master/examples/simple.rs):
+
+```
+$ cd reqwest/
+$ cargo run --example simple
+```
+
 ## License
 
 Licensed under either of

@@ -19,3 +19,7 @@ url = "1.2"
 
 [dev-dependencies]
 env_logger = "0.3"
+
+[[example]]
+name = "simple"
+path = "examples/simple.rs"
