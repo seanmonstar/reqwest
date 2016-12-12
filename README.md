@@ -9,6 +9,8 @@ Built on top of [hyper](http://hyper.rs), with a batteries-included mindset.
 
 - [Documentation](https://docs.rs/reqwest)
 
+Note: this library relies indirectly on the [openssl] crate, so it's installation instructions apply to this crate as well.
+
 ## License
 
 Licensed under either of
