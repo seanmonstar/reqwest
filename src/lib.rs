@@ -10,7 +10,7 @@
 //!
 //! - Uses system-native TLS
 //! - Plain bodies, JSON, urlencoded, (TODO: multipart)
-//! - (TODO: Customizable redirect policy)
+//! - Customizable redirect policy
 //! - (TODO: Cookies)
 //!
 //! The `reqwest::Client` is synchronous, making it a great fit for
