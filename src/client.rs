@@ -3,7 +3,7 @@ use std::io::{self, Read};
 use std::sync::{Arc, Mutex};
 
 use hyper::client::IntoUrl;
-use hyper::header::{Headers, ContentType, Location, Referer, UserAgent};
+use hyper::header::{Headers, ContentType, Location, Referer, UserAgent, Accept};
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
@@ -195,6 +195,10 @@ impl RequestBuilder {
     pub fn send(mut self) -> ::Result<Response> {
         if !self.headers.has::<UserAgent>() {
             self.headers.set(UserAgent(DEFAULT_USER_AGENT.to_owned()));
+        }
+
+        if !self.headers.has::<Accept>() {
+            self.headers.set(Accept::star());
         }
 
         let client = self.client;

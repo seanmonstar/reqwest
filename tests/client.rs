@@ -11,6 +11,7 @@ fn test_get() {
             GET /1 HTTP/1.1\r\n\
             Host: $HOST\r\n\
             User-Agent: $USERAGENT\r\n\
+            Accept: */*\r\n\
             \r\n\
             ",
         response: b"\
@@ -43,6 +44,7 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
                 POST /{} HTTP/1.1\r\n\
                 Host: $HOST\r\n\
                 User-Agent: $USERAGENT\r\n\
+                Accept: */*\r\n\
                 Content-Length: 0\r\n\
                 \r\n\
                 ", code),
@@ -59,6 +61,7 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
                 GET /dst HTTP/1.1\r\n\
                 Host: $HOST\r\n\
                 User-Agent: $USERAGENT\r\n\
+                Accept: */*\r\n\
                 Referer: http://$HOST/{}\r\n\
                 \r\n\
                 ", code),
@@ -88,6 +91,7 @@ fn test_redirect_307_and_308_tries_to_post_again() {
                 POST /{} HTTP/1.1\r\n\
                 Host: $HOST\r\n\
                 User-Agent: $USERAGENT\r\n\
+                Accept: */*\r\n\
                 Content-Length: 5\r\n\
                 \r\n\
                 Hello\
@@ -105,6 +109,7 @@ fn test_redirect_307_and_308_tries_to_post_again() {
                 POST /dst HTTP/1.1\r\n\
                 Host: $HOST\r\n\
                 User-Agent: $USERAGENT\r\n\
+                Accept: */*\r\n\
                 Referer: http://$HOST/{}\r\n\
                 Content-Length: 5\r\n\
                 \r\n\
@@ -137,6 +142,7 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
                 POST /{} HTTP/1.1\r\n\
                 Host: $HOST\r\n\
                 User-Agent: $USERAGENT\r\n\
+                Accept: */*\r\n\
                 Transfer-Encoding: chunked\r\n\
                 \r\n\
                 5\r\n\
@@ -168,6 +174,7 @@ fn test_redirect_policy_can_return_errors() {
             GET /loop HTTP/1.1\r\n\
             Host: $HOST\r\n\
             User-Agent: $USERAGENT\r\n\
+            Accept: */*\r\n\
             \r\n\
             ",
         response: b"\
@@ -193,6 +200,7 @@ fn test_redirect_policy_can_stop_redirects_without_an_error() {
             GET /no-redirect HTTP/1.1\r\n\
             Host: $HOST\r\n\
             User-Agent: $USERAGENT\r\n\
+            Accept: */*\r\n\
             \r\n\
             ",
         response: b"\
@@ -212,4 +220,31 @@ fn test_redirect_policy_can_stop_redirects_without_an_error() {
 
     assert_eq!(res.status(), &reqwest::StatusCode::Found);
     assert_eq!(res.headers().get(), Some(&reqwest::header::Server("test-dont".to_string())));
+}
+
+#[test]
+fn test_accept_header_is_not_changed_if_set() {
+    let server = server! {
+        request: b"\
+            GET /accept HTTP/1.1\r\n\
+            Host: $HOST\r\n\
+            Accept: application/json\r\n\
+            User-Agent: $USERAGENT\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Server: test-accept\r\n\
+            Content-Length: 0\r\n\
+            \r\n\
+            "
+    };
+    let mut client = reqwest::Client::new().unwrap();
+
+    let res = client.get(&format!("http://{}/accept", server.addr()))
+        .header(reqwest::header::Accept::json())
+        .send()
+        .unwrap();
+
+    assert_eq!(res.status(), &reqwest::StatusCode::Ok);
 }
