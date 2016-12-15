@@ -34,7 +34,7 @@ impl RedirectPolicy {
     ///
     /// The default RedirectPolicy handles redirect loops and a maximum loop
     /// chain, but the custom variant does not do that for you automatically.
-    /// The custom policy should hanve some way of handling those.
+    /// The custom policy should have some way of handling those.
     ///
     /// There are variants on `::Error` for both cases that can be used as
     /// return values.
