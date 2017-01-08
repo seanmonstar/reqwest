@@ -91,7 +91,7 @@
 extern crate hyper;
 
 #[macro_use] extern crate log;
-extern crate native_tls;
+extern crate hyper_native_tls;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_urlencoded;
@@ -115,7 +115,6 @@ mod body;
 mod client;
 mod error;
 mod redirect;
-mod tls;
 
 
 /// Shortcut method to quickly make a `GET` request.

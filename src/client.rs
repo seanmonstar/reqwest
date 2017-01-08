@@ -94,11 +94,13 @@ struct ClientRef {
 }
 
 fn new_hyper_client() -> ::Result<::hyper::Client> {
-    use tls::TlsClient;
+    use hyper_native_tls::NativeTlsClient;
     Ok(::hyper::Client::with_connector(
         ::hyper::client::Pool::with_connector(
             Default::default(),
-            ::hyper::net::HttpsConnector::new(try!(TlsClient::new()))
+            ::hyper::net::HttpsConnector::new(
+                try!(NativeTlsClient::new()
+                     .map_err(|e| ::hyper::Error::Ssl(Box::new(e)))))
         )
     ))
 }

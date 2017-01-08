@@ -10,8 +10,8 @@ license = "MIT/Apache-2.0"
 
 [dependencies]
 hyper = "0.10"
+hyper-native-tls = "0.2"
 log = "0.3"
-native-tls = "0.1"
 serde = "0.8"
 serde_json = "0.8"
 serde_urlencoded = "0.3"
