@@ -14,7 +14,7 @@ Built on top of [hyper](http://hyper.rs), with a batteries-included mindset.
 
 On Linux:
 
-- OpenSSL 1.1 (see https://github.com/sfackler/rust-openssl)
+- OpenSSL 1.0.1, 1.0.2, or 1.1.0 with headers (see https://github.com/sfackler/rust-openssl)
 
 On Windows and macOS:
 
