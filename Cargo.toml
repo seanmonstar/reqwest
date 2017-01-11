@@ -9,7 +9,7 @@ authors = ["Sean McArthur <sean.monstar@gmail.com>"]
 license = "MIT/Apache-2.0"
 
 [dependencies]
-hyper = { version = "0.9.14" , default-features = false }
+hyper = "0.10"
 log = "0.3"
 native-tls = "0.1"
 serde = "0.8"
