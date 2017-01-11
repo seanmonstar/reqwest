@@ -239,7 +239,7 @@ fn test_accept_header_is_not_changed_if_set() {
             \r\n\
             "
     };
-    let mut client = reqwest::Client::new().unwrap();
+    let client = reqwest::Client::new().unwrap();
 
     let res = client.get(&format!("http://{}/accept", server.addr()))
         .header(reqwest::header::Accept::json())
