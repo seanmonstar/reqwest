@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.2.0"
+version = "0.3.0"
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 repository = "https://github.com/seanmonstar/reqwest"
