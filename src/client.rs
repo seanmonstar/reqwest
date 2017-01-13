@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::fmt;
 use std::io::{self, Read};
 use std::sync::{Arc, Mutex};
@@ -187,6 +188,35 @@ impl RequestBuilder {
         let body = serde_json::to_vec(json).expect("serde to_vec cannot fail");
         self.headers.set(ContentType::json());
         self.body = Some(Ok(body.into()));
+        self
+    }
+
+    /// Add query string params to the URL.
+    ///
+    /// ```no_run
+    /// # use std::collections::HashMap;
+    /// let mut paramsFromHash = HashMap::new();
+    /// paramsFromHash.insert("lang", "rust");
+    ///
+    /// let client = reqwest::Client::new().unwrap();
+    /// let res = client.post("http://httpbin.org?batteries=included")
+    ///     .params(&paramsFromHash)
+    ///     .params([("array_param", "value 1"), ("array_param", "value 2")].iter())
+    ///     .send();
+    ///
+    /// // The final URL is now:
+    /// // http://httpbin.org?batteries=included&lang=rust&array_param=value+1&array_param=value+2
+    /// ```
+    pub fn params<I, K, V>(mut self, iter: I) -> RequestBuilder
+        where I: IntoIterator,
+              I::Item: Borrow<(K, V)>,
+              K: AsRef<str>,
+              V: AsRef<str>
+    {
+        if let Ok(ref mut url) = self.url {
+            url.query_pairs_mut().extend_pairs(iter);
+        }
+
         self
     }
 
@@ -486,5 +516,28 @@ mod tests {
 
         let body_should_be = serde_json::to_string(&json_data).unwrap();
         assert_eq!(buf, body_should_be);
+    }
+
+    #[test]
+    fn add_params() {
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com/?param1=value1";
+        let mut r = client.post(some_url);
+
+        let mut hash_params = HashMap::new();
+        hash_params.insert("param2", "value2");
+
+        r = r.params(&hash_params);
+        r = r.params([("param3", "value3a"), ("param3", "value3b")].iter());
+
+        let url_query_string = &r.url.unwrap().query().unwrap().to_string();
+
+        let url_query_string_should_be =
+            Url::parse(&format!("{}&param2=value2&param3=value3a&param3=value3b", some_url)).unwrap()
+                .query()
+                .unwrap()
+                .to_string();
+
+        assert_eq!(url_query_string.to_owned(), url_query_string_should_be);
     }
 }
