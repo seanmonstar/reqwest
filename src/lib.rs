@@ -100,6 +100,7 @@ extern crate url;
 pub use hyper::client::IntoUrl;
 pub use hyper::Error as HyperError;
 pub use hyper::header;
+pub use hyper::mime;
 pub use hyper::method::Method;
 pub use hyper::status::StatusCode;
 pub use hyper::version::HttpVersion;
