@@ -27,11 +27,17 @@ impl Body {
         }
     }
 
-    /*
-    pub fn sized(reader: (), len: u64) -> Body {
-        unimplemented!()
+    /// Create a `Body` from a `Reader` where we can predict the size in
+    /// advance, but where we don't want to load the data in memory.  This
+    /// is useful if we need to ensure `Content-Length` is passed with the
+    /// request.
+    pub fn sized<R: Read + Send + 'static>(reader: R, len: u64) -> Body {
+        Body {
+            reader: Kind::Reader(Box::new(reader), Some(len)),
+        }
     }
 
+    /*
     pub fn chunked(reader: ()) -> Body {
         unimplemented!()
     }
