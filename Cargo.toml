@@ -12,9 +12,9 @@ license = "MIT/Apache-2.0"
 hyper = "0.10"
 hyper-native-tls = "0.2"
 log = "0.3"
-serde = "0.8"
-serde_json = "0.8"
-serde_urlencoded = "0.3"
+serde = "0.9"
+serde_json = "0.9"
+serde_urlencoded = "0.4"
 url = "1.2"
 
 [dev-dependencies]
