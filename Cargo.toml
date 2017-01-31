@@ -7,9 +7,10 @@ repository = "https://github.com/seanmonstar/reqwest"
 documentation = "https://docs.rs/reqwest"
 authors = ["Sean McArthur <sean.monstar@gmail.com>"]
 license = "MIT/Apache-2.0"
+categories = ["web-programming::http-client"]
 
 [dependencies]
-hyper = "0.10"
+hyper = "0.10.2"
 hyper-native-tls = "0.2"
 log = "0.3"
 serde = "0.9"
