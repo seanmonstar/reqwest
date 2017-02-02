@@ -22,16 +22,21 @@
 //!
 //! ## Making a GET request
 //!
-//! For a single request, you can use the [`get`](fn.get.html) shortcut method.
+//! For a single request, you can use the [`get`][get] shortcut method.
 //!
 //! ```no_run
-//! # use std::io::Read;
+//! use std::io::Read;
 //! let mut resp = reqwest::get("https://www.rust-lang.org").unwrap();
 //! assert!(resp.status().is_success());
 //!
 //! let mut content = String::new();
 //! resp.read_to_string(&mut content);
 //! ```
+//!
+//! As you can see, reqwest's [`Response`][response] struct implements Rust's
+//! `Read` trait, so many useful standard library and third party crates will
+//! have convenience methods that take a `Response` anywhere `T: Read` is
+//! acceptable.
 //!
 //! If you plan to perform multiple requests, it is best to create a [`Client`][client]
 //! and reuse it, taking advantage of keep-alive connection pooling.
@@ -89,6 +94,7 @@
 //!
 //! [hyper]: http://hyper.rs
 //! [client]: ./struct.Client.html
+//! [response]: ./struct.Response.html
 //! [get]: ./fn.get.html
 //! [builder]: ./client/struct.RequestBuilder.html
 //! [serde]: http://serde.rs
