@@ -56,6 +56,11 @@ impl Client {
     pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Post, url)
     }
+    
+    /// Convenience method to make a `PUT` request to a URL.
+    pub fn put<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        self.request(Method::Put, url)
+    }
 
     /// Convenience method to make a `HEAD` request to a URL.
     pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder {
@@ -393,6 +398,16 @@ mod tests {
         let r = client.post(some_url);
 
         assert_eq!(r.method, Method::Post);
+        assert_eq!(r.url, Url::parse(some_url));
+    }
+
+    #[test]
+    fn basic_put_request() {
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com";
+        let r = client.put(some_url);
+
+        assert_eq!(r.method, Method::Put);
         assert_eq!(r.url, Url::parse(some_url));
     }
 
