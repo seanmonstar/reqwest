@@ -56,10 +56,15 @@ impl Client {
     pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Post, url)
     }
-    
+
     /// Convenience method to make a `PUT` request to a URL.
     pub fn put<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Put, url)
+    }
+
+    /// Convenience method to make a `DELETE` request to a URL.
+    pub fn delete<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        self.request(Method::Delete, url)
     }
 
     /// Convenience method to make a `HEAD` request to a URL.
@@ -408,6 +413,16 @@ mod tests {
         let r = client.put(some_url);
 
         assert_eq!(r.method, Method::Put);
+        assert_eq!(r.url, Url::parse(some_url));
+    }
+
+    #[test]
+    fn basic_delete_request() {
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com";
+        let r = client.delete(some_url);
+
+        assert_eq!(r.method, Method::Delete);
         assert_eq!(r.url, Url::parse(some_url));
     }
 
