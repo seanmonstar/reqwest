@@ -1,8 +1,10 @@
 extern crate reqwest;
+extern crate libflate;
 
 #[macro_use] mod server;
 
 use std::io::Read;
+use std::io::prelude::*;
 
 #[test]
 fn test_get() {
@@ -247,4 +249,45 @@ fn test_accept_header_is_not_changed_if_set() {
         .unwrap();
 
     assert_eq!(res.status(), &reqwest::StatusCode::Ok);
+}
+
+#[test]
+fn test_gzip_response() {
+    let mut encoder = ::libflate::gzip::Encoder::new(Vec::new()).unwrap();
+    match encoder.write(b"test request") {
+        Ok(n) => assert!(n > 0, "Failed to write to encoder."),
+        _ => panic!("Failed to gzip encode string.")
+    };
+
+    let gzipped_content = encoder.finish().into_result().unwrap();
+
+    let mut response = format!("\
+            HTTP/1.1 200 OK\r\n\
+            Server: test-accept\r\n\
+            Content-Encoding: gzip\r\n\
+            Content-Length: {}\r\n\
+            \r\n", &gzipped_content.len())
+        .into_bytes();
+    response.extend(&gzipped_content);
+
+    let server = server! {
+        request: b"\
+            GET /gzip HTTP/1.1\r\n\
+            Host: $HOST\r\n\
+            User-Agent: $USERAGENT\r\n\
+            Accept: */*\r\n\
+            \r\n\
+            ",
+        response: response
+    };
+    let mut res = reqwest::get(&format!("http://{}/gzip", server.addr()))
+        .unwrap();
+
+    let mut body = ::std::string::String::new();
+    match res.read_to_string(&mut body) {
+        Ok(n) => assert!(n > 0, "Failed to write to buffer."),
+        _ => panic!("Failed to write to buffer.")
+    };
+
+    assert_eq!(body, "test request");
 }
