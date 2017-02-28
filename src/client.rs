@@ -1,7 +1,8 @@
 use std::fmt;
 use std::io::{self, Read};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use hyper::client::IntoUrl;
 use hyper::header::{Headers, ContentType, Location, Referer, UserAgent, Accept, ContentEncoding, Encoding, ContentLength,
@@ -38,7 +39,7 @@ impl Client {
         client.set_redirect_policy(::hyper::client::RedirectPolicy::FollowNone);
         Ok(Client {
             inner: Arc::new(ClientRef {
-                hyper: client,
+                hyper: RwLock::new(client),
                 redirect_policy: Mutex::new(RedirectPolicy::default()),
                 auto_ungzip: AtomicBool::new(true),
             }),
@@ -53,6 +54,13 @@ impl Client {
     /// Set a `RedirectPolicy` for this client.
     pub fn redirect(&mut self, policy: RedirectPolicy) {
         *self.inner.redirect_policy.lock().unwrap() = policy;
+    }
+
+    /// Set a timeout for both the read and write operations of a client.
+    pub fn timeout(&mut self, timeout: Duration) {
+        let mut client = self.inner.hyper.write().unwrap();
+        client.set_read_timeout(Some(timeout));
+        client.set_write_timeout(Some(timeout));
     }
 
     /// Convenience method to make a `GET` request to a URL.
@@ -108,7 +116,7 @@ impl fmt::Debug for Client {
 }
 
 struct ClientRef {
-    hyper: ::hyper::Client,
+    hyper: RwLock<::hyper::Client>,
     redirect_policy: Mutex<RedirectPolicy>,
     auto_ungzip: AtomicBool,
 }
@@ -236,7 +244,8 @@ impl RequestBuilder {
         loop {
             let res = {
                 debug!("request {:?} \"{}\"", method, url);
-                let mut req = client.hyper.request(method.clone(), url.clone())
+                let c = client.hyper.read().unwrap();
+                let mut req = c.request(method.clone(), url.clone())
                     .headers(headers.clone());
 
                 if let Some(ref mut b) = body {
