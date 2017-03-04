@@ -19,6 +19,7 @@ cache:
 
 script:
   - cargo build --verbose
+  - cargo build --verbose --no-default-features
   - cargo test --verbose
 
 notifications:
