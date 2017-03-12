@@ -4,7 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use hyper::client::IntoUrl;
-use hyper::header::{Headers, ContentType, Location, Referer, UserAgent, Accept, ContentEncoding, Encoding, ContentLength};
+use hyper::header::{Headers, ContentType, Location, Referer, UserAgent, Accept, ContentEncoding, Encoding, ContentLength,
+    TransferEncoding};
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
@@ -409,23 +410,22 @@ impl Decoder {
         if !check_gzip {
             return Decoder::PlainText(res);
         }
-
-        let mut is_gzip = false;
-        match res.headers.get::<ContentEncoding>() {
-            Some(encoding_types) => {
-                if encoding_types.contains(&Encoding::Gzip) {
-                    is_gzip = true;
-                }
-                if let Some(content_length) =  res.headers.get::<ContentLength>() {
-                    if content_length.0 == 0 {
-                        warn!("GZipped response with content-length of 0");
-                        is_gzip = false;
-                    }
+        let mut is_gzip = {
+            res.headers.get::<ContentEncoding>().map_or(false, |encs|{
+                encs.contains(&Encoding::Gzip)
+            }) ||
+            res.headers.get::<TransferEncoding>().map_or(false, |encs|{
+                encs.contains(&Encoding::Gzip)
+            })
+        };
+        if is_gzip {
+            if let Some(content_length) = res.headers.get::<ContentLength>() {
+                if content_length.0 == 0 {
+                    warn!("GZipped response with content-length of 0");
+                    is_gzip = false;
                 }
             }
-            _ => {}
         }
-
         if is_gzip {
             return Decoder::Gzip {
                 status: res.status.clone(),
