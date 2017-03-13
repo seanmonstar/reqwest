@@ -78,6 +78,11 @@ impl Client {
         self.request(Method::Put, url)
     }
 
+    /// Convenience method to make a `PATCH` request to a URL.
+    pub fn patch<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        self.request(Method::Patch, url)
+    }
+
     /// Convenience method to make a `DELETE` request to a URL.
     pub fn delete<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Delete, url)
@@ -517,6 +522,16 @@ mod tests {
         let r = client.put(some_url);
 
         assert_eq!(r.method, Method::Put);
+        assert_eq!(r.url, Url::parse(some_url));
+    }
+
+    #[test]
+    fn basic_patch_request() {
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com";
+        let r = client.patch(some_url);
+
+        assert_eq!(r.method, Method::Patch);
         assert_eq!(r.url, Url::parse(some_url));
     }
 
