@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use hyper::client::IntoUrl;
 use hyper::header::{Headers, ContentType, Location, Referer, UserAgent, Accept, ContentEncoding, Encoding, ContentLength,
-    TransferEncoding};
+    TransferEncoding, AcceptEncoding, Range, qitem};
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
@@ -234,7 +234,11 @@ impl RequestBuilder {
         if !self.headers.has::<Accept>() {
             self.headers.set(Accept::star());
         }
-
+        if self.client.auto_ungzip.load(Ordering::Relaxed) &&
+            !self.headers.has::<AcceptEncoding>() &&
+            !self.headers.has::<Range>() {
+            self.headers.set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
+        }
         let client = self.client;
         let mut method = self.method;
         let mut url = try!(self.url);
@@ -420,18 +424,23 @@ impl Decoder {
     /// how to decode the content body of the request.
     ///
     /// Uses the correct variant by inspecting the Content-Encoding header.
-    fn from_hyper_response(res: ::hyper::client::Response, check_gzip: bool) -> Self {
+    fn from_hyper_response(mut res: ::hyper::client::Response, check_gzip: bool) -> Self {
         if !check_gzip {
             return Decoder::PlainText(res);
         }
+        let content_encoding_gzip: bool;
         let mut is_gzip = {
-            res.headers.get::<ContentEncoding>().map_or(false, |encs|{
+            content_encoding_gzip = res.headers.get::<ContentEncoding>().map_or(false, |encs|{
                 encs.contains(&Encoding::Gzip)
-            }) ||
-            res.headers.get::<TransferEncoding>().map_or(false, |encs|{
+            });
+            content_encoding_gzip || res.headers.get::<TransferEncoding>().map_or(false, |encs|{
                 encs.contains(&Encoding::Gzip)
             })
         };
+        if content_encoding_gzip {
+            res.headers.remove::<ContentEncoding>();
+            res.headers.remove::<ContentLength>();
+        }
         if is_gzip {
             if let Some(content_length) = res.headers.get::<ContentLength>() {
                 if content_length.0 == 0 {
