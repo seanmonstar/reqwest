@@ -9,6 +9,7 @@ An ergonomic HTTP Client for Rust.
 Built on top of [hyper](http://hyper.rs), with a batteries-included mindset.
 
 - [Documentation](https://docs.rs/reqwest)
+- [ChangeLog](https://github.com/seanmonstar/reqwest/releases)
 
 ## Requirements
 
