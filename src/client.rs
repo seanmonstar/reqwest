@@ -7,6 +7,7 @@ use std::time::Duration;
 use hyper::client::IntoUrl;
 use hyper::header::{Headers, ContentType, Location, Referer, UserAgent, Accept, ContentEncoding, Encoding, ContentLength,
     TransferEncoding, AcceptEncoding, Range, qitem};
+use hyper::header::{SetCookie, Cookie};
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
@@ -303,6 +304,13 @@ impl RequestBuilder {
 
                 url = match loc {
                     Ok(loc) => {
+
+                        if loc.domain() == url.domain() {
+                            if let Some(&SetCookie(ref cookies)) = res.headers.get::<SetCookie>() {
+                                headers.set(Cookie(cookies.iter().map(|c| c.to_owned()).collect::<Vec<String>>()));
+                            }
+                        }
+
                         headers.set(Referer(url.to_string()));
                         urls.push(url);
                         if check_redirect(&client.redirect_policy.lock().unwrap(), &loc, &urls)? {
@@ -646,5 +654,22 @@ mod tests {
 
         let body_should_be = serde_json::to_string(&json_data).unwrap();
         assert_eq!(buf, body_should_be);
+    }
+
+    #[test]
+    fn test_redirect_with_setcookie() {
+
+        let some_url = "http://www.httpbin.org/cookies/set?k2=v2&k1=v1";
+        let mut res = ::get(some_url).unwrap();
+        let mut content = String::new();
+
+        assert_eq!(&::StatusCode::Ok, res.status());
+
+        let _ = res.read_to_string(&mut content);
+
+        assert!(content.contains("k1"));
+        assert!(content.contains("v1"));
+        assert!(content.contains("k2"));
+        assert!(content.contains("v2"));
     }
 }
