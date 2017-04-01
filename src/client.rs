@@ -302,12 +302,15 @@ impl RequestBuilder {
                     }
                 };
 
-                if let Some(&SetCookie(ref cookies)) = res.headers.get::<SetCookie>() {
-                    headers.set(Cookie(cookies.iter().map(|c| c.to_owned()).collect::<Vec<String>>()));
-                }
-
                 url = match loc {
                     Ok(loc) => {
+
+                        if loc.domain() == url.domain() {
+                            if let Some(&SetCookie(ref cookies)) = res.headers.get::<SetCookie>() {
+                                headers.set(Cookie(cookies.iter().map(|c| c.to_owned()).collect::<Vec<String>>()));
+                            }
+                        }
+
                         headers.set(Referer(url.to_string()));
                         urls.push(url);
                         if check_redirect(&client.redirect_policy.lock().unwrap(), &loc, &urls)? {
