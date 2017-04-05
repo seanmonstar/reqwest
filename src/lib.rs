@@ -118,15 +118,17 @@ pub use hyper::version::HttpVersion;
 pub use hyper::Url;
 pub use url::ParseError as UrlError;
 
-pub use self::client::{Client, Response, RequestBuilder};
+pub use self::client::{Client, RequestBuilder};
 pub use self::error::{Error, Result};
 pub use self::body::Body;
 pub use self::redirect::RedirectPolicy;
+pub use self::response::Response;
 
 mod body;
 mod client;
 mod error;
 mod redirect;
+mod response;
 
 
 /// Shortcut method to quickly make a `GET` request.
