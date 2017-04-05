@@ -151,9 +151,11 @@ pub fn get<T: IntoUrl>(url: T) -> ::Result<Response> {
 fn _assert_impls() {
     fn assert_send<T: Send>() {}
     fn assert_sync<T: Sync>() {}
+    fn assert_clone<T: Clone>() {}
 
     assert_send::<Client>();
     assert_sync::<Client>();
+    assert_clone::<Client>();
 
     assert_send::<RequestBuilder>();
     assert_send::<Response>();

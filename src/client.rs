@@ -28,8 +28,9 @@ static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", e
 ///
 /// The `Client` holds a connection pool internally, so it is advised that
 /// you create one and reuse it.
+#[derive(Clone)]
 pub struct Client {
-    inner: Arc<ClientRef>,  //::hyper::Client,
+    inner: Arc<ClientRef>,
 }
 
 impl Client {
