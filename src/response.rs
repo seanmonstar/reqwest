@@ -4,6 +4,7 @@ use std::io::{self, Read};
 use hyper::header::{Headers, ContentEncoding, ContentLength, Encoding, TransferEncoding};
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
+use hyper::Url;
 use serde::Deserialize;
 use serde_json;
 
@@ -24,13 +25,15 @@ impl fmt::Debug for Response {
         return match &self.inner {
             &Decoder::PlainText(ref hyper_response) => {
                 f.debug_struct("Response")
+                    .field("url", &hyper_response.url)
                     .field("status", &hyper_response.status)
                     .field("headers", &hyper_response.headers)
                     .field("version", &hyper_response.version)
                     .finish()
             },
-            &Decoder::Gzip{ref status, ref version, ref headers, ..} => {
+            &Decoder::Gzip{ref url, ref status, ref version, ref headers, ..} => {
                 f.debug_struct("Response")
+                    .field("url", &url)
                     .field("status", &status)
                     .field("headers", &headers)
                     .field("version", &version)
@@ -41,6 +44,15 @@ impl fmt::Debug for Response {
 }
 
 impl Response {
+    /// Get the final `Url` of this response.
+    #[inline]
+    pub fn url(&self) -> &Url {
+        match &self.inner {
+            &Decoder::PlainText(ref hyper_response) => &hyper_response.url,
+            &Decoder::Gzip{ref url, ..} => url,
+        }
+    }
+
     /// Get the `StatusCode`.
     #[inline]
     pub fn status(&self) -> &StatusCode {
@@ -81,6 +93,7 @@ enum Decoder {
     /// A `Gzip` decoder will uncompress the gziped response content before returning it.
     Gzip {
         decoder: ::libflate::gzip::Decoder<::hyper::client::Response>,
+        url: ::hyper::Url,
         headers: ::hyper::header::Headers,
         version: ::hyper::version::HttpVersion,
         status: ::hyper::status::StatusCode,
@@ -121,6 +134,7 @@ impl Decoder {
         }
         if is_gzip {
             return Decoder::Gzip {
+                url: res.url.clone(),
                 status: res.status.clone(),
                 version: res.version.clone(),
                 headers: res.headers.clone(),
