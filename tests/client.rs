@@ -25,7 +25,10 @@ fn test_get() {
             "
     };
 
-    let mut res = reqwest::get(&format!("http://{}/1", server.addr())).unwrap();
+    let url = format!("http://{}/1", server.addr());
+    let mut res = reqwest::get(&url).unwrap();
+
+    assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), &reqwest::StatusCode::Ok);
     assert_eq!(res.version(), &reqwest::HttpVersion::Http11);
     assert_eq!(res.headers().get(), Some(&reqwest::header::Server("test".to_string())));
@@ -78,9 +81,12 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
                 "
         };
 
-        let res = client.post(&format!("http://{}/{}", redirect.addr(), code))
+        let url = format!("http://{}/{}", redirect.addr(), code);
+        let dst = format!("http://{}/{}", redirect.addr(), "dst");
+        let res = client.post(&url)
             .send()
             .unwrap();
+        assert_eq!(res.url().as_str(), dst);
         assert_eq!(res.status(), &reqwest::StatusCode::Ok);
         assert_eq!(res.headers().get(), Some(&reqwest::header::Server("test-dst".to_string())));
     }
@@ -130,10 +136,13 @@ fn test_redirect_307_and_308_tries_to_post_again() {
                 "
         };
 
-        let res = client.post(&format!("http://{}/{}", redirect.addr(), code))
+        let url = format!("http://{}/{}", redirect.addr(), code);
+        let dst = format!("http://{}/{}", redirect.addr(), "dst");
+        let res = client.post(&url)
             .body("Hello")
             .send()
             .unwrap();
+        assert_eq!(res.url().as_str(), dst);
         assert_eq!(res.status(), &reqwest::StatusCode::Ok);
         assert_eq!(res.headers().get(), Some(&reqwest::header::Server("test-dst".to_string())));
     }
@@ -167,10 +176,12 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
                 ", code)
         };
 
-        let res = client.post(&format!("http://{}/{}", redirect.addr(), code))
+        let url = format!("http://{}/{}", redirect.addr(), code);
+        let res = client.post(&url)
             .body(reqwest::Body::new(&b"Hello"[..]))
             .send()
             .unwrap();
+        assert_eq!(res.url().as_str(), url);
         assert_eq!(res.status(), &reqwest::StatusCode::from_u16(code));
     }
 }
@@ -224,10 +235,12 @@ fn test_redirect_policy_can_stop_redirects_without_an_error() {
     let mut client = reqwest::Client::new().unwrap();
     client.redirect(reqwest::RedirectPolicy::none());
 
-    let res = client.get(&format!("http://{}/no-redirect", server.addr()))
+    let url = format!("http://{}/no-redirect", server.addr());
+    let res = client.get(&url)
         .send()
         .unwrap();
 
+    assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), &reqwest::StatusCode::Found);
     assert_eq!(res.headers().get(), Some(&reqwest::header::Server("test-dont".to_string())));
 }
