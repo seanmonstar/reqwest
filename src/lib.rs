@@ -102,6 +102,7 @@ extern crate hyper;
 
 #[macro_use] extern crate log;
 extern crate libflate;
+#[cfg(feature = "default-tls")]
 extern crate hyper_native_tls;
 extern crate serde;
 extern crate serde_json;
@@ -145,6 +146,7 @@ mod response;
 /// reqwest::get("https://www.rust-lang.org").unwrap()
 ///     .read_to_string(&mut result);
 /// ```
+#[cfg(feature = "default-tls")]
 pub fn get<T: IntoUrl>(url: T) -> ::Result<Response> {
     let client = try!(Client::new());
     client.get(url).send()

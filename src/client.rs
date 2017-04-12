@@ -35,16 +35,23 @@ pub struct Client {
 
 impl Client {
     /// Constructs a new `Client`.
+    #[cfg(feature = "default-tls")]
     pub fn new() -> ::Result<Client> {
         let mut client = try!(new_hyper_client());
         client.set_redirect_policy(::hyper::client::RedirectPolicy::FollowNone);
-        Ok(Client {
+        Ok(Client::with_hyper_client(client))
+    }
+
+    /// Constructs a new `Client` with the provided `::hyper::Client` without
+    /// altering any settings.
+    pub fn with_hyper_client(client: ::hyper::Client) -> Client {
+        Client {
             inner: Arc::new(ClientRef {
                 hyper: RwLock::new(client),
                 redirect_policy: Mutex::new(RedirectPolicy::default()),
                 auto_ungzip: AtomicBool::new(true),
             }),
-        })
+        }
     }
 
     /// Enable auto gzip decompression by checking the ContentEncoding response header.
@@ -127,6 +134,7 @@ struct ClientRef {
     auto_ungzip: AtomicBool,
 }
 
+#[cfg(feature = "default-tls")]
 fn new_hyper_client() -> ::Result<::hyper::Client> {
     use hyper_native_tls::NativeTlsClient;
     Ok(::hyper::Client::with_connector(
