@@ -5,7 +5,7 @@ use hyper::header::{Headers, ContentEncoding, ContentLength, Encoding, TransferE
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
 use hyper::Url;
-use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use serde_json;
 
 
@@ -82,7 +82,7 @@ impl Response {
 
     /// Try and deserialize the response body as JSON.
     #[inline]
-    pub fn json<T: Deserialize>(&mut self) -> ::Result<T> {
+    pub fn json<T: DeserializeOwned>(&mut self) -> ::Result<T> {
         serde_json::from_reader(self).map_err(::Error::from)
     }
 }
