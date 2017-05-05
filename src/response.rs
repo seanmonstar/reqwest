@@ -5,6 +5,7 @@ use hyper::header::{Headers, ContentEncoding, ContentLength, Encoding, TransferE
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
 use hyper::Url;
+use libflate::gzip;
 use serde::Deserialize;
 use serde_json;
 
@@ -22,8 +23,8 @@ pub fn new(res: ::hyper::client::Response, gzip: bool) -> Response {
 
 impl fmt::Debug for Response {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        return match &self.inner {
-            &Decoder::PlainText(ref hyper_response) => {
+        match self.inner {
+            Decoder::PlainText(ref hyper_response) => {
                 f.debug_struct("Response")
                     .field("url", &hyper_response.url)
                     .field("status", &hyper_response.status)
@@ -31,12 +32,13 @@ impl fmt::Debug for Response {
                     .field("version", &hyper_response.version)
                     .finish()
             },
-            &Decoder::Gzip{ref url, ref status, ref version, ref headers, ..} => {
+            Decoder::Gzip{ ref head, .. } |
+            Decoder::Errored { ref head, .. } => {
                 f.debug_struct("Response")
-                    .field("url", &url)
-                    .field("status", &status)
-                    .field("headers", &headers)
-                    .field("version", &version)
+                    .field("url", &head.url)
+                    .field("status", &head.status)
+                    .field("headers", &head.headers)
+                    .field("version", &head.version)
                     .finish()
             }
         }
@@ -47,36 +49,40 @@ impl Response {
     /// Get the final `Url` of this response.
     #[inline]
     pub fn url(&self) -> &Url {
-        match &self.inner {
-            &Decoder::PlainText(ref hyper_response) => &hyper_response.url,
-            &Decoder::Gzip{ref url, ..} => url,
+        match self.inner {
+            Decoder::PlainText(ref hyper_response) => &hyper_response.url,
+            Decoder::Gzip{ ref head, .. } |
+            Decoder::Errored { ref head, .. } => &head.url,
         }
     }
 
     /// Get the `StatusCode`.
     #[inline]
     pub fn status(&self) -> &StatusCode {
-        match &self.inner {
-            &Decoder::PlainText(ref hyper_response) => &hyper_response.status,
-            &Decoder::Gzip{ref status, ..} => status
+        match self.inner {
+            Decoder::PlainText(ref hyper_response) => &hyper_response.status,
+            Decoder::Gzip{ ref head, .. } |
+            Decoder::Errored { ref head, .. } => &head.status,
         }
     }
 
     /// Get the `Headers`.
     #[inline]
     pub fn headers(&self) -> &Headers {
-        match &self.inner {
-            &Decoder::PlainText(ref hyper_response) => &hyper_response.headers,
-            &Decoder::Gzip{ref headers, ..} => headers
+        match self.inner {
+            Decoder::PlainText(ref hyper_response) => &hyper_response.headers,
+            Decoder::Gzip{ ref head, .. } |
+            Decoder::Errored { ref head, .. } => &head.headers,
         }
     }
 
     /// Get the `HttpVersion`.
     #[inline]
     pub fn version(&self) -> &HttpVersion {
-        match &self.inner {
-            &Decoder::PlainText(ref hyper_response) => &hyper_response.version,
-            &Decoder::Gzip{ref version, ..} => version
+        match self.inner {
+            Decoder::PlainText(ref hyper_response) => &hyper_response.version,
+            Decoder::Gzip{ ref head, .. } |
+            Decoder::Errored { ref head, .. } => &head.version,
         }
     }
 
@@ -92,11 +98,14 @@ enum Decoder {
     PlainText(::hyper::client::Response),
     /// A `Gzip` decoder will uncompress the gziped response content before returning it.
     Gzip {
-        decoder: ::libflate::gzip::Decoder<::hyper::client::Response>,
-        url: ::hyper::Url,
-        headers: ::hyper::header::Headers,
-        version: ::hyper::version::HttpVersion,
-        status: ::hyper::status::StatusCode,
+        decoder: gzip::Decoder<Peeked>,
+        head: Head,
+    },
+    /// An error occured reading the Gzip header, so return that error
+    /// when the user tries to read on the `Response`.
+    Errored {
+        err: Option<io::Error>,
+        head: Head,
     }
 }
 
@@ -120,10 +129,6 @@ impl Decoder {
                 encs.contains(&Encoding::Gzip)
             })
         };
-        if content_encoding_gzip {
-            res.headers.remove::<ContentEncoding>();
-            res.headers.remove::<ContentLength>();
-        }
         if is_gzip {
             if let Some(content_length) = res.headers.get::<ContentLength>() {
                 if content_length.0 == 0 {
@@ -132,31 +137,108 @@ impl Decoder {
                 }
             }
         }
+        if content_encoding_gzip {
+            res.headers.remove::<ContentEncoding>();
+            res.headers.remove::<ContentLength>();
+        }
         if is_gzip {
-            return Decoder::Gzip {
-                url: res.url.clone(),
-                status: res.status.clone(),
-                version: res.version.clone(),
-                headers: res.headers.clone(),
-                decoder: ::libflate::gzip::Decoder::new(res).unwrap(),
-            };
+            new_gzip(res)
         } else {
-            return Decoder::PlainText(res);
+            Decoder::PlainText(res)
+        }
+    }
+}
+
+fn new_gzip(mut res: ::hyper::client::Response) -> Decoder {
+    // libflate does a read_exact([0; 2]), so its impossible to tell
+    // if the stream was empty, or truly had an UnexpectedEof.
+    // Therefore, we need to peek a byte to make check for EOF first.
+    let mut peek = [0];
+    match res.read(&mut peek) {
+        Ok(0) => return Decoder::PlainText(res),
+        Ok(n) => {
+            debug_assert_eq!(n, 1);
+        },
+        Err(e) => return Decoder::Errored {
+            err: Some(e),
+            head: Head {
+                headers: res.headers.clone(),
+                status: res.status,
+                url: res.url.clone(),
+                version: res.version,
+            }
+        },
+    }
+
+    let head = Head {
+        headers: res.headers.clone(),
+        status: res.status,
+        url: res.url.clone(),
+        version: res.version,
+    };
+
+    let reader = Peeked {
+        peeked: Some(peek[0]),
+        inner: res,
+    };
+    match gzip::Decoder::new(reader) {
+        Ok(gzip) => Decoder::Gzip {
+            decoder: gzip,
+            head: head,
+        },
+        Err(e) => Decoder::Errored {
+            err: Some(e),
+            head: head,
+        }
+    }
+}
+
+struct Head {
+    headers: ::hyper::header::Headers,
+    url: ::hyper::Url,
+    version: ::hyper::version::HttpVersion,
+    status: ::hyper::status::StatusCode,
+}
+
+struct Peeked {
+    peeked: Option<u8>,
+    inner: ::hyper::client::Response,
+}
+
+impl Read for Peeked {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
+        if let Some(byte) = self.peeked.take() {
+            buf[0] = byte;
+            Ok(1)
+        } else {
+            self.inner.read(buf)
         }
     }
 }
 
 impl Read for Decoder {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            &mut Decoder::PlainText(ref mut hyper_response) => {
+        match *self {
+            Decoder::PlainText(ref mut hyper_response) => {
                 hyper_response.read(buf)
             },
-            &mut Decoder::Gzip{ref mut decoder, ..} => {
+            Decoder::Gzip{ref mut decoder, ..} => {
                 decoder.read(buf)
+            },
+            Decoder::Errored { ref mut err, .. } => {
+                Err(err.take().unwrap_or_else(previously_errored))
             }
         }
     }
+}
+
+#[inline]
+fn previously_errored() -> io::Error {
+    io::Error::new(io::ErrorKind::Other, "permanently errored")
 }
 
 /// Read the body of the Response.
