@@ -89,7 +89,7 @@ impl Response {
     /// Try and deserialize the response body as JSON.
     #[inline]
     pub fn json<T: Deserialize>(&mut self) -> ::Result<T> {
-        serde_json::from_reader(self).map_err(::Error::from)
+        serde_json::from_reader(self).map_err(::error::from)
     }
 }
 

@@ -1,87 +1,191 @@
 use std::error::Error as StdError;
 use std::fmt;
 
+use ::Url;
+
 /// The Errors that may occur when processing a `Request`.
 #[derive(Debug)]
-pub enum Error {
-    /// An HTTP error from the `hyper` crate.
-    Http(::hyper::Error),
-    /// An error trying to serialize a value.
-    ///
-    /// This may be serializing a value that is illegal in JSON or
-    /// form-url-encoded bodies.
-    Serialize(Box<StdError + Send + Sync>),
-    /// A request tried to redirect too many times.
-    TooManyRedirects,
-    /// An infinite redirect loop was detected.
-    RedirectLoop,
-    #[doc(hidden)]
-    __DontMatchMe,
+pub struct Error {
+    kind: Kind,
+    url: Option<Url>,
+}
+
+/// A `Result` alias where the `Err` case is `reqwest::Error`.
+pub type Result<T> = ::std::result::Result<T, Error>;
+
+impl Error {
+    /// Returns a possible URL related to this error.
+    #[inline]
+    pub fn url(&self) -> Option<&Url> {
+        self.url.as_ref()
+    }
+
+    /// Returns true if the error is related to HTTP.
+    #[inline]
+    pub fn is_http(&self) -> bool {
+        match self.kind {
+            Kind::Http(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if the error is serialization related.
+    #[inline]
+    pub fn is_serialization(&self) -> bool {
+        match self.kind {
+            Kind::Json(_) |
+            Kind::UrlEncoded(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if the error is from a `RedirectPolicy`.
+    #[inline]
+    pub fn is_redirect(&self) -> bool {
+        match self.kind {
+            Kind::TooManyRedirects |
+            Kind::RedirectLoop => true,
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::Http(ref e) => fmt::Display::fmt(e, f),
-            Error::Serialize(ref e) => fmt::Display::fmt(e, f),
-            Error::TooManyRedirects => f.pad("Too many redirects"),
-            Error::RedirectLoop => f.pad("Infinite redirect loop"),
-            Error::__DontMatchMe => unreachable!()
+        if let Some(ref url) = self.url {
+            try!(fmt::Display::fmt(url, f));
+            try!(f.write_str(": "));
+        }
+        match self.kind {
+            Kind::Http(ref e) => fmt::Display::fmt(e, f),
+            Kind::UrlEncoded(ref e) => fmt::Display::fmt(e, f),
+            Kind::Json(ref e) => fmt::Display::fmt(e, f),
+            Kind::TooManyRedirects => f.write_str("Too many redirects"),
+            Kind::RedirectLoop => f.write_str("Infinite redirect loop"),
         }
     }
 }
 
 impl StdError for Error {
     fn description(&self) -> &str {
-        match *self {
-            Error::Http(ref e) => e.description(),
-            Error::Serialize(ref e) => e.description(),
-            Error::TooManyRedirects => "Too many redirects",
-            Error::RedirectLoop => "Infinite redirect loop",
-            Error::__DontMatchMe => unreachable!()
+        match self.kind {
+            Kind::Http(ref e) => e.description(),
+            Kind::UrlEncoded(ref e) => e.description(),
+            Kind::Json(ref e) => e.description(),
+            Kind::TooManyRedirects => "Too many redirects",
+            Kind::RedirectLoop => "Infinite redirect loop",
         }
     }
 
     fn cause(&self) -> Option<&StdError> {
-        match *self {
-            Error::Http(ref e) => Some(e),
-            Error::Serialize(ref e) => Some(&**e),
-            Error::TooManyRedirects |
-            Error::RedirectLoop => None,
-            Error::__DontMatchMe => unreachable!()
+        match self.kind {
+            Kind::Http(ref e) => Some(e),
+            Kind::UrlEncoded(ref e) => Some(e),
+            Kind::Json(ref e) => Some(e),
+            Kind::TooManyRedirects |
+            Kind::RedirectLoop => None,
         }
     }
 }
 
-fn _assert_types() {
-    fn _assert_send<T: Send>() {
-    }
-    _assert_send::<Error>();
+// pub(crate)
+
+#[derive(Debug)]
+pub enum Kind {
+    Http(::hyper::Error),
+    UrlEncoded(::serde_urlencoded::ser::Error),
+    Json(::serde_json::Error),
+    TooManyRedirects,
+    RedirectLoop,
 }
 
-impl From<::hyper::Error> for Error {
-    fn from(err: ::hyper::Error) -> Error {
-        Error::Http(err)
-    }
-}
 
-impl From<::url::ParseError> for Error {
-    fn from(err: ::url::ParseError) -> Error {
-        Error::Http(::hyper::Error::Uri(err))
-    }
-}
-
-impl From<::serde_urlencoded::ser::Error> for Error {
-    fn from(err: ::serde_urlencoded::ser::Error) -> Error {
-        Error::Serialize(Box::new(err))
+impl From<::hyper::Error> for Kind {
+    #[inline]
+    fn from(err: ::hyper::Error) -> Kind {
+        Kind::Http(err)
     }
 }
 
-impl From<::serde_json::Error> for Error {
-    fn from(err: ::serde_json::Error) -> Error {
-        Error::Serialize(Box::new(err))
+impl From<::url::ParseError> for Kind {
+    #[inline]
+    fn from(err: ::url::ParseError) -> Kind {
+        Kind::Http(::hyper::Error::Uri(err))
     }
 }
 
-/// A `Result` alias where the `Err` case is `reqwest::Error`.
-pub type Result<T> = ::std::result::Result<T, Error>;
+impl From<::serde_urlencoded::ser::Error> for Kind {
+    #[inline]
+    fn from(err: ::serde_urlencoded::ser::Error) -> Kind {
+        Kind::UrlEncoded(err)
+    }
+}
+
+impl From<::serde_json::Error> for Kind {
+    #[inline]
+    fn from(err: ::serde_json::Error) -> Kind {
+        Kind::Json(err)
+    }
+}
+
+pub struct InternalFrom<T>(pub T, pub Option<Url>);
+
+impl From<InternalFrom<Error>> for Error {
+    #[inline]
+    fn from(other: InternalFrom<Error>) -> Error {
+        other.0
+    }
+}
+
+impl<T> From<InternalFrom<T>> for Error
+where T: Into<Kind> {
+    #[inline]
+    fn from(other: InternalFrom<T>) -> Error {
+         Error {
+            kind: other.0.into(),
+            url: other.1,
+        }
+    }
+}
+
+#[inline]
+pub fn from<T>(err: T) -> Error
+where T: Into<Kind> {
+    InternalFrom(err, None).into()
+}
+
+#[inline]
+pub fn loop_detected(url: Url) -> Error {
+    Error {
+        kind: Kind::RedirectLoop,
+        url: Some(url),
+    }
+}
+
+#[inline]
+pub fn too_many_redirects(url: Url) -> Error {
+    Error {
+        kind: Kind::TooManyRedirects,
+        url: Some(url),
+    }
+}
+
+#[macro_export]
+macro_rules! try_ {
+    ($e:expr) => (
+        match $e {
+            Ok(v) => v,
+            Err(err) => {
+                return Err(::Error::from(::error::InternalFrom(err, None)));
+            }
+        }
+    );
+    ($e:expr, $url:expr) => (
+        match $e {
+            Ok(v) => v,
+            Err(err) => {
+                return Err(::Error::from(::error::InternalFrom(err, Some($url.clone()))));
+            }
+        }
+    )
+}
