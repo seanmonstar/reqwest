@@ -46,7 +46,7 @@ impl StdError for Error {
         match *self {
             Error::Http(ref e) => Some(e),
             Error::Serialize(ref e) => Some(&**e),
-            Error::TooManyRedirects => None,
+            Error::TooManyRedirects |
             Error::RedirectLoop => None,
             Error::__DontMatchMe => unreachable!()
         }

@@ -106,9 +106,9 @@ impl From<File> for Body {
 
 impl fmt::Debug for Kind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Kind::Reader(_, ref v) => f.debug_tuple("Kind::Reader").field(&"_").field(v).finish(),
-            &Kind::Bytes(ref v) => f.debug_tuple("Kind::Bytes").field(v).finish(),
+        match *self {
+            Kind::Reader(_, ref v) => f.debug_tuple("Kind::Reader").field(&"_").field(v).finish(),
+            Kind::Bytes(ref v) => f.debug_tuple("Kind::Bytes").field(v).finish(),
         }
     }
 }
@@ -118,7 +118,7 @@ impl fmt::Debug for Kind {
 //pub struct Pipe(Kind);
 
 
-pub fn as_hyper_body<'a>(body: &'a mut Body) -> ::hyper::client::Body<'a> {
+pub fn as_hyper_body(body: &mut Body) -> ::hyper::client::Body {
     match body.reader {
         Kind::Bytes(ref bytes) => {
             let len = bytes.len();
