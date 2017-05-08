@@ -153,6 +153,14 @@ pub struct RequestBuilder {
 }
 
 impl RequestBuilder {
+
+    /// Get the url result.
+    ///
+    /// Will contain an error if the given URL was invalid.
+    pub fn get_url(&self) -> &Result<Url, ::UrlError> {
+        &self.url
+    }
+
     /// Add a `Header` to this Request.
     ///
     /// ```no_run
@@ -175,10 +183,20 @@ impl RequestBuilder {
         self
     }
 
+    /// Get the headers.
+    pub fn get_headers(&self) -> &::header::Headers {
+        &self.headers
+    }
+
     /// Set the request body.
     pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder {
         self.body = Some(Ok(body.into()));
         self
+    }
+
+    /// Get the body.
+    pub fn get_body(&self) -> Option<&::Result<Body>> {
+        self.body.as_ref()
     }
 
     /// Send a form body.
