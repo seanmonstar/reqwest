@@ -175,6 +175,14 @@ impl RequestBuilder {
         self
     }
 
+    /// Enable HTTP basic authentication.
+    pub fn basic_auth(self, username: String, password: Option<String>) -> RequestBuilder {
+        self.header(::header::Authorization(::header::Basic{
+            username: username,
+            password: password,
+        }))
+    }
+
     /// Set the request body.
     pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder {
         self.body = Some(Ok(body.into()));
