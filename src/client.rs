@@ -261,7 +261,7 @@ impl RequestBuilder {
 
         loop {
             let res = {
-                debug!("request {:?} \"{}\"", method, url);
+                info!("Request: {:?} {}", method, url);
                 let c = client.hyper.read().unwrap();
                 let mut req = c.request(method.clone(), url.clone())
                     .headers(headers.clone());
@@ -317,7 +317,6 @@ impl RequestBuilder {
                             redirect::Action::Follow => loc,
                             redirect::Action::Stop => {
                                 debug!("redirect_policy disallowed redirection to '{}'", loc);
-
                                 return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
                             },
                             redirect::Action::LoopDetected => {
