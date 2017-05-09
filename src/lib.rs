@@ -124,9 +124,9 @@ pub use self::body::Body;
 pub use self::redirect::RedirectPolicy;
 pub use self::response::Response;
 
+#[macro_use] mod error;
 mod body;
 mod client;
-mod error;
 mod redirect;
 mod response;
 
@@ -161,4 +161,8 @@ fn _assert_impls() {
 
     assert_send::<RequestBuilder>();
     assert_send::<Response>();
+
+
+    assert_send::<Error>();
+    assert_sync::<Error>();
 }

@@ -207,10 +207,7 @@ fn test_redirect_policy_can_return_errors() {
     };
 
     let err = reqwest::get(&format!("http://{}/loop", server.addr())).unwrap_err();
-    match err {
-        reqwest::Error::RedirectLoop => (),
-        e => panic!("wrong error received: {:?}", e),
-    }
+    assert!(err.is_redirect());
 }
 
 #[test]

@@ -11,10 +11,22 @@ pub struct RedirectPolicy {
     inner: Policy,
 }
 
+#[derive(Debug)]
+pub struct RedirectAttempt<'a> {
+    next: &'a Url,
+    previous: &'a [Url],
+}
+
+/// An action to perform when a redirect status code is found.
+#[derive(Debug)]
+pub struct RedirectAction {
+    inner: Action,
+}
+
 impl RedirectPolicy {
     /// Create a RedirectPolicy with a maximum number of redirects.
     ///
-    /// A `Error::TooManyRedirects` will be returned if the max is reached.
+    /// An `Error` will be returned if the max is reached.
     pub fn limited(max: usize) -> RedirectPolicy {
         RedirectPolicy {
             inner: Policy::Limit(max),
@@ -36,45 +48,48 @@ impl RedirectPolicy {
     /// chain, but the custom variant does not do that for you automatically.
     /// The custom policy should have some way of handling those.
     ///
-    /// There are variants on `::Error` for both cases that can be used as
-    /// return values.
+    /// Information on the next request and previous requests can be found
+    /// on the `RedirectAttempt` argument passed to the closure.
+    ///
+    /// Actions can be conveniently created from methods on the
+    /// `RedirectAttempt`.
     ///
     /// # Example
     ///
     /// ```no_run
     /// # use reqwest::RedirectPolicy;
     /// # let mut client = reqwest::Client::new().unwrap();
-    /// client.redirect(RedirectPolicy::custom(|next, previous| {
-    ///     if previous.len() > 5 {
-    ///         Err(reqwest::Error::TooManyRedirects)
-    ///     } else if next.host_str() == Some("example.domain") {
+    /// client.redirect(RedirectPolicy::custom(|attempt| {
+    ///     if attempt.previous().len() > 5 {
+    ///         attempt.too_many_redirects()
+    ///     } else if attempt.url().host_str() == Some("example.domain") {
     ///         // prevent redirects to 'example.domain'
-    ///         Ok(false)
+    ///         attempt.stop()
     ///     } else {
-    ///         Ok(true)
+    ///         attempt.follow()
     ///     }
     /// }));
     /// ```
     pub fn custom<T>(policy: T) -> RedirectPolicy
-    where T: Fn(&Url, &[Url]) -> ::Result<bool> + Send + Sync + 'static {
+    where T: Fn(RedirectAttempt) -> RedirectAction + Send + Sync + 'static {
         RedirectPolicy {
             inner: Policy::Custom(Box::new(policy)),
         }
     }
 
-    fn redirect(&self, next: &Url, previous: &[Url]) -> ::Result<bool> {
+    fn redirect(&self, attempt: RedirectAttempt) -> RedirectAction {
         match self.inner {
-            Policy::Custom(ref custom) => custom(next, previous),
+            Policy::Custom(ref custom) => custom(attempt),
             Policy::Limit(max) => {
-                if previous.len() == max {
-                    Err(::Error::TooManyRedirects)
-                } else if previous.contains(next) {
-                    Err(::Error::RedirectLoop)
+                if attempt.previous.len() == max {
+                    attempt.too_many_redirects()
+                } else if attempt.previous.contains(attempt.next) {
+                    attempt.loop_detected()
                 } else {
-                    Ok(true)
+                    attempt.follow()
                 }
             },
-            Policy::None => Ok(false),
+            Policy::None => attempt.stop(),
         }
     }
 }
@@ -85,8 +100,53 @@ impl Default for RedirectPolicy {
     }
 }
 
+impl<'a> RedirectAttempt<'a> {
+    /// Get the next URL to redirect to.
+    pub fn url(&self) -> &Url {
+        self.next
+    }
+
+    /// Get the list of previous URLs that have already been requested in this chain.
+    pub fn previous(&self) -> &[Url] {
+        self.previous
+    }
+    /// Returns an action meaning reqwest should follow the next URL.
+    pub fn follow(self) -> RedirectAction {
+        RedirectAction {
+            inner: Action::Follow,
+        }
+    }
+
+    /// Returns an action meaning reqwest should not follow the next URL.
+    ///
+    /// The 30x response will be returned as the `Ok` result.
+    pub fn stop(self) -> RedirectAction {
+        RedirectAction {
+            inner: Action::Stop,
+        }
+    }
+
+    /// Returns an action meaning there was a loop of redirects found.
+    ///
+    /// An `Error` will be returned for the result of the sent request.
+    pub fn loop_detected(self) -> RedirectAction {
+        RedirectAction {
+            inner: Action::LoopDetected,
+        }
+    }
+
+    /// Returns an action meaning there was a loop of redirects found.
+    ///
+    /// An `Error` will be returned for the result of the sent request.
+    pub fn too_many_redirects(self) -> RedirectAction {
+        RedirectAction {
+            inner: Action::TooManyRedirects,
+        }
+    }
+}
+
 enum Policy {
-    Custom(Box<Fn(&Url, &[Url]) -> ::Result<bool> + Send + Sync + 'static>),
+    Custom(Box<Fn(RedirectAttempt) -> RedirectAction + Send + Sync + 'static>),
     Limit(usize),
     None,
 }
@@ -101,8 +161,22 @@ impl fmt::Debug for Policy {
     }
 }
 
-pub fn check_redirect(policy: &RedirectPolicy, next: &Url, previous: &[Url]) -> ::Result<bool> {
-    policy.redirect(next, previous)
+// pub(crate)
+
+#[derive(Debug, PartialEq)]
+pub enum Action {
+    Follow,
+    Stop,
+    LoopDetected,
+    TooManyRedirects,
+}
+
+#[inline]
+pub fn check_redirect(policy: &RedirectPolicy, next: &Url, previous: &[Url]) -> Action {
+    policy.redirect(RedirectAttempt {
+        next: next,
+        previous: previous,
+    }).inner
 }
 
 /*
@@ -132,32 +206,26 @@ fn test_redirect_policy_limit() {
         .collect::<Vec<_>>();
 
 
-    match policy.redirect(&next, &previous) {
-        Ok(true) => {},
-        other => panic!("expected Ok(true), got: {:?}", other)
-    }
+    assert_eq!(check_redirect(&policy, &next, &previous), Action::Follow);
 
     previous.push(Url::parse("http://a.b.d/e/33").unwrap());
 
-    match policy.redirect(&next, &previous) {
-        Err(::Error::TooManyRedirects) => {},
-        other => panic!("expected TooManyRedirects, got: {:?}", other)
-    }
+    assert_eq!(check_redirect(&policy, &next, &previous), Action::TooManyRedirects);
 }
 
 #[test]
 fn test_redirect_policy_custom() {
-    let policy = RedirectPolicy::custom(|next, _previous| {
-        if next.host_str() == Some("foo") {
-            Ok(false)
+    let policy = RedirectPolicy::custom(|attempt| {
+        if attempt.url().host_str() == Some("foo") {
+            attempt.stop()
         } else {
-            Ok(true)
+            attempt.follow()
         }
     });
 
     let next = Url::parse("http://bar/baz").unwrap();
-    assert_eq!(policy.redirect(&next, &[]).unwrap(), true);
+    assert_eq!(check_redirect(&policy, &next, &[]), Action::Follow);
 
     let next = Url::parse("http://foo/baz").unwrap();
-    assert_eq!(policy.redirect(&next, &[]).unwrap(), false);
+    assert_eq!(check_redirect(&policy, &next, &[]), Action::Stop);
 }
