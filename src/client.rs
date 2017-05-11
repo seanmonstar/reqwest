@@ -16,7 +16,7 @@ use serde_json;
 use serde_urlencoded;
 
 use ::body::{self, Body};
-use ::redirect::{self, RedirectPolicy, check_redirect};
+use ::redirect::{self, RedirectPolicy, check_redirect, remove_sensitive_headers};
 use ::response::Response;
 
 static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -166,7 +166,6 @@ fn new_hyper_client() -> ::Result<::hyper::Client> {
         )
     ))
 }
-
 
 /// A builder to construct the properties of a `Request`.
 pub struct RequestBuilder {
@@ -343,6 +342,7 @@ impl RequestBuilder {
                         }
                         urls.push(url);
                         let action = check_redirect(&client.redirect_policy.lock().unwrap(), &loc, &urls);
+
                         match action {
                             redirect::Action::Follow => loc,
                             redirect::Action::Stop => {
@@ -364,9 +364,8 @@ impl RequestBuilder {
                     }
                 };
 
+                headers = remove_sensitive_headers(headers, &url, &urls);
                 debug!("redirecting to {:?} '{}'", method, url);
-
-                //TODO: removeSensitiveHeaders(&mut headers, &url);
             } else {
                 return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)))
             }

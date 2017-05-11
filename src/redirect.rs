@@ -2,6 +2,9 @@ use std::fmt;
 
 use ::Url;
 
+#[allow(unused_imports)]
+use hyper::header::{Headers, Authorization, Cookie, Accept};
+
 /// A type that controls the policy on how to handle the following of redirects.
 ///
 /// The default value will catch redirect loops, and has a maximum of 10
@@ -179,6 +182,16 @@ pub fn check_redirect(policy: &RedirectPolicy, next: &Url, previous: &[Url]) -> 
     }).inner
 }
 
+pub fn remove_sensitive_headers(mut headers: Headers, next: &Url, previous: &[Url]) -> Headers {
+    let cross_host = next.host().unwrap() != previous.last().unwrap().host().unwrap();
+    if cross_host {
+        headers.remove::<Authorization<String>>();
+        headers.remove::<Cookie>();
+        headers.remove_raw("www-authenticate");
+    }
+    headers
+}
+
 /*
 This was the desired way of doing it, but ran in to inference issues when
 using closures, since the arguments received are references (&Url and &[Url]),
@@ -228,4 +241,28 @@ fn test_redirect_policy_custom() {
 
     let next = Url::parse("http://foo/baz").unwrap();
     assert_eq!(check_redirect(&policy, &next, &[]), Action::Stop);
+}
+
+#[test]
+fn test_remove_sensitive_headers() {
+    let mut headers = Headers::new();
+    headers.set(Accept::star());
+    headers.set(Authorization("let me in".to_owned()));
+    headers.set(
+        Cookie(vec![
+            String::from("foo=bar")
+        ])
+    );
+
+    let next  = Url::parse("http://initial-domain.com/path").unwrap();
+    let mut prev = vec![Url::parse("http://initial-domain.com/new_path").unwrap()];
+    
+    assert_eq!(remove_sensitive_headers(headers.clone(), &next, &prev), headers);
+
+    prev.push(Url::parse("http://new-domain.com/path").unwrap());
+    let mut filtered_headers = headers.clone();
+    filtered_headers.remove::<Authorization<String>>();
+    filtered_headers.remove::<Cookie>();
+
+    assert_eq!(remove_sensitive_headers(headers.clone(), &next, &prev), filtered_headers);
 }
