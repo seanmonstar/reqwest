@@ -88,6 +88,27 @@ impl Response {
     }
 
     /// Try and deserialize the response body as JSON.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// extern crate reqwest;
+    /// #[macro_use]
+    /// extern crate serde_derive;
+    ///
+    /// #[derive(Deserialize)]
+    /// struct User {
+    ///     name: String,
+    ///     age: u8,
+    /// }
+    ///
+    /// fn main() {
+    ///     let user: User = reqwest::get("http://127.0.0.1/user.json")
+    ///         .expect("network error")
+    ///         .json()
+    ///         .expect("malformed json");
+    /// }
+    /// ```
     #[inline]
     pub fn json<T: DeserializeOwned>(&mut self) -> ::Result<T> {
         serde_json::from_reader(self).map_err(::error::from)
