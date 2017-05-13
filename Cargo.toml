@@ -20,5 +20,5 @@ url = "1.2"
 libflate = "0.1.5"
 
 [dev-dependencies]
-env_logger = "0.3"
+env_logger = "0.4"
 serde_derive = "1.0"
