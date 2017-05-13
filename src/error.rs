@@ -20,6 +20,21 @@ impl Error {
         self.url.as_ref()
     }
 
+    /// Returns a reference to the internal error, if available.
+    ///
+    /// The `'static` bounds allows using `downcast_ref` to check the
+    /// details of the error.
+    #[inline]
+    pub fn get_ref(&self) -> Option<&(StdError + 'static)> {
+        match self.kind {
+            Kind::Http(ref e) => Some(e),
+            Kind::UrlEncoded(ref e) => Some(e),
+            Kind::Json(ref e) => Some(e),
+            Kind::TooManyRedirects |
+            Kind::RedirectLoop => None,
+        }
+    }
+
     /// Returns true if the error is related to HTTP.
     #[inline]
     pub fn is_http(&self) -> bool {
@@ -188,4 +203,16 @@ macro_rules! try_ {
             }
         }
     )
+}
+
+#[test]
+fn test_error_get_ref_downcasts() {
+    let err: Error = from(::hyper::Error::Status);
+    let cause = err.get_ref().unwrap()
+        .downcast_ref::<::hyper::Error>().unwrap();
+
+    match cause {
+        &::hyper::Error::Status => (),
+        _ => panic!("unexpected downcast: {:?}", cause)
+    }
 }
