@@ -28,6 +28,24 @@ static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", e
 ///
 /// The `Client` holds a connection pool internally, so it is advised that
 /// you create one and reuse it.
+///
+/// # Examples
+///
+/// ```no_run
+/// # extern crate reqwest;
+/// #
+/// # use reqwest::{Error, Client};
+/// #
+/// # fn run() -> Result<(), Error> {
+///     let client = Client::new()?;
+///     client.get("http://httpbin.org/").send()?;
+/// #   Ok(())
+/// # }
+///
+/// # fn main() {
+/// #   run().unwrap();
+/// # }
+/// ```
 #[derive(Clone)]
 pub struct Client {
     inner: Arc<ClientRef>,
