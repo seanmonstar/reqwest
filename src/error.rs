@@ -185,26 +185,6 @@ pub fn too_many_redirects(url: Url) -> Error {
     }
 }
 
-#[macro_export]
-macro_rules! try_ {
-    ($e:expr) => (
-        match $e {
-            Ok(v) => v,
-            Err(err) => {
-                return Err(::Error::from(::error::InternalFrom(err, None)));
-            }
-        }
-    );
-    ($e:expr, $url:expr) => (
-        match $e {
-            Ok(v) => v,
-            Err(err) => {
-                return Err(::Error::from(::error::InternalFrom(err, Some($url.clone()))));
-            }
-        }
-    )
-}
-
 #[test]
 fn test_error_get_ref_downcasts() {
     let err: Error = from(::hyper::Error::Status);
