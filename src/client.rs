@@ -67,11 +67,15 @@ impl Client {
     }
 
     /// Enable auto gzip decompression by checking the ContentEncoding response header.
+    ///
+    /// Default is enabled.
     pub fn gzip(&mut self, enable: bool) {
         self.inner.auto_ungzip.store(enable, Ordering::Relaxed);
     }
 
     /// Set a `RedirectPolicy` for this client.
+    ///
+    /// Default will follow redirects up to a maximum of 10.
     pub fn redirect(&mut self, policy: RedirectPolicy) {
         *self.inner.redirect_policy.lock().unwrap() = policy;
     }
