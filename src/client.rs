@@ -60,6 +60,7 @@ impl Client {
             inner: Arc::new(ClientRef {
                 hyper: RwLock::new(client),
                 redirect_policy: Mutex::new(RedirectPolicy::default()),
+                auto_referer: AtomicBool::new(true),
                 auto_ungzip: AtomicBool::new(true),
             }),
         })
@@ -73,6 +74,13 @@ impl Client {
     /// Set a `RedirectPolicy` for this client.
     pub fn redirect(&mut self, policy: RedirectPolicy) {
         *self.inner.redirect_policy.lock().unwrap() = policy;
+    }
+
+    /// Enable or disable automatic setting of the `Referer` header.
+    ///
+    /// Default is `true`.
+    pub fn referer(&mut self, enable: bool) {
+        self.inner.auto_referer.store(enable, Ordering::Relaxed);
     }
 
     /// Set a timeout for both the read and write operations of a client.
@@ -134,6 +142,7 @@ impl fmt::Debug for Client {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Client")
             .field("redirect_policy", &self.inner.redirect_policy)
+            .field("referer", &self.inner.auto_referer)
             .field("auto_ungzip", &self.inner.auto_ungzip)
             .finish()
     }
@@ -142,6 +151,7 @@ impl fmt::Debug for Client {
 struct ClientRef {
     hyper: RwLock<::hyper::Client>,
     redirect_policy: Mutex<RedirectPolicy>,
+    auto_referer: AtomicBool,
     auto_ungzip: AtomicBool,
 }
 
@@ -328,7 +338,9 @@ impl RequestBuilder {
 
                 url = match loc {
                     Ok(loc) => {
-                        headers.set(Referer(url.to_string()));
+                        if client.auto_referer.load(Ordering::Relaxed) {
+                            headers.set(Referer(url.to_string()));
+                        }
                         urls.push(url);
                         let action = check_redirect(&client.redirect_policy.lock().unwrap(), &loc, &urls);
                         match action {

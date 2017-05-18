@@ -243,6 +243,47 @@ fn test_redirect_policy_can_stop_redirects_without_an_error() {
 }
 
 #[test]
+fn test_referer_is_not_set_if_disabled() {
+    let server = server! {
+        request: b"\
+            GET /no-refer HTTP/1.1\r\n\
+            Host: $HOST\r\n\
+            User-Agent: $USERAGENT\r\n\
+            Accept: */*\r\n\
+            Accept-Encoding: gzip\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 302 Found\r\n\
+            Server: test-no-referer\r\n\
+            Content-Length: 0\r\n\
+            Location: /dst\r\n\
+            Connection: close\r\n\
+            \r\n\
+            ",
+
+        request: b"\
+            GET /dst HTTP/1.1\r\n\
+            Host: $HOST\r\n\
+            User-Agent: $USERAGENT\r\n\
+            Accept: */*\r\n\
+            Accept-Encoding: gzip\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Server: test-dst\r\n\
+            Content-Length: 0\r\n\
+            \r\n\
+            "
+    };
+    let mut client = reqwest::Client::new().unwrap();
+    client.referer(false);
+    client.get(&format!("http://{}/no-refer", server.addr()))
+        .send().unwrap();
+}
+
+#[test]
 fn test_accept_header_is_not_changed_if_set() {
     let server = server! {
         request: b"\
