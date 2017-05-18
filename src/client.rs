@@ -364,7 +364,7 @@ impl RequestBuilder {
                     }
                 };
 
-                headers = remove_sensitive_headers(headers, &url, &urls);
+                remove_sensitive_headers(&mut headers, &url, &urls);
                 debug!("redirecting to {:?} '{}'", method, url);
             } else {
                 return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)))

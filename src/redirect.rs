@@ -1,9 +1,8 @@
 use std::fmt;
 
-use ::Url;
+use hyper::header::{Headers, Authorization, Cookie};
 
-#[allow(unused_imports)]
-use hyper::header::{Headers, Authorization, Cookie, Accept};
+use ::Url;
 
 /// A type that controls the policy on how to handle the following of redirects.
 ///
@@ -182,14 +181,17 @@ pub fn check_redirect(policy: &RedirectPolicy, next: &Url, previous: &[Url]) -> 
     }).inner
 }
 
-pub fn remove_sensitive_headers(mut headers: Headers, next: &Url, previous: &[Url]) -> Headers {
-    let cross_host = next.host().unwrap() != previous.last().unwrap().host().unwrap();
-    if cross_host {
-        headers.remove::<Authorization<String>>();
-        headers.remove::<Cookie>();
-        headers.remove_raw("www-authenticate");
+pub fn remove_sensitive_headers(headers: &mut Headers, next: &Url, previous: &[Url]) {
+    if let Some(previous) = previous.last() {
+        let cross_host = next.host_str() != previous.host_str()
+            || next.port_or_known_default() != previous.port_or_known_default();
+        if cross_host {
+            headers.remove::<Authorization<String>>();
+            headers.remove::<Cookie>();
+            headers.remove_raw("cookie2");
+            headers.remove_raw("www-authenticate");
+        }
     }
-    headers
 }
 
 /*
@@ -245,6 +247,8 @@ fn test_redirect_policy_custom() {
 
 #[test]
 fn test_remove_sensitive_headers() {
+    use hyper::header::Accept;
+
     let mut headers = Headers::new();
     headers.set(Accept::star());
     headers.set(Authorization("let me in".to_owned()));
@@ -256,13 +260,15 @@ fn test_remove_sensitive_headers() {
 
     let next  = Url::parse("http://initial-domain.com/path").unwrap();
     let mut prev = vec![Url::parse("http://initial-domain.com/new_path").unwrap()];
-    
-    assert_eq!(remove_sensitive_headers(headers.clone(), &next, &prev), headers);
+    let mut filtered_headers = headers.clone();
+
+    remove_sensitive_headers(&mut headers, &next, &prev);
+    assert_eq!(headers, filtered_headers);
 
     prev.push(Url::parse("http://new-domain.com/path").unwrap());
-    let mut filtered_headers = headers.clone();
     filtered_headers.remove::<Authorization<String>>();
     filtered_headers.remove::<Cookie>();
 
-    assert_eq!(remove_sensitive_headers(headers.clone(), &next, &prev), filtered_headers);
+    remove_sensitive_headers(&mut headers, &next, &prev);
+    assert_eq!(headers, filtered_headers);
 }

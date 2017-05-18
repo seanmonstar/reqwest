@@ -187,6 +187,55 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
 }
 
 #[test]
+fn test_redirect_removes_sensitive_headers() {
+    let end_server = server! {
+        request: b"\
+            GET /otherhost HTTP/1.1\r\n\
+            Host: $HOST\r\n\
+            User-Agent: $USERAGENT\r\n\
+            Accept: */*\r\n\
+            Accept-Encoding: gzip\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Server: test\r\n\
+            Content-Length: 0\r\n\
+            \r\n\
+            "
+    };
+
+    let mid_server = server! {
+        request: b"\
+            GET /sensitive HTTP/1.1\r\n\
+            Host: $HOST\r\n\
+            Cookie: foo=bar\r\n\
+            User-Agent: $USERAGENT\r\n\
+            Accept: */*\r\n\
+            Accept-Encoding: gzip\r\n\
+            \r\n\
+            ",
+        response: format!("\
+            HTTP/1.1 302 Found\r\n\
+            Server: test\r\n\
+            Location: http://{}/otherhost\r\n\
+            Content-Length: 0\r\n\
+            \r\n\
+            ", end_server.addr())
+    };
+
+    let mut client = reqwest::Client::new().unwrap();
+    client.referer(false);
+    client.get(&format!("http://{}/sensitive", mid_server.addr()))
+        .header(
+            reqwest::header::Cookie(vec![
+                String::from("foo=bar")
+            ])
+        )
+        .send().unwrap();
+}
+
+#[test]
 fn test_redirect_policy_can_return_errors() {
     let server = server! {
         request: b"\
