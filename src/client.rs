@@ -338,7 +338,9 @@ impl RequestBuilder {
                 url = match loc {
                     Ok(loc) => {
                         if client.auto_referer.load(Ordering::Relaxed) {
-                            headers.set(Referer(url.to_string()));
+                            if let Some(referer) = make_referer(&loc, &url) {
+                                headers.set(referer);
+                            }
                         }
                         urls.push(url);
                         let action = check_redirect(&client.redirect_policy.lock().unwrap(), &loc, &urls);
@@ -381,6 +383,18 @@ impl fmt::Debug for RequestBuilder {
             .field("headers", &self.headers)
             .finish()
     }
+}
+
+fn make_referer(next: &Url, previous: &Url) -> Option<Referer> {
+    if next.scheme() == "http" && previous.scheme() == "https" {
+        return None;
+    }
+
+    let mut referer = previous.clone();
+    let _ = referer.set_username("");
+    let _ = referer.set_password(None);
+    referer.set_fragment(None);
+    Some(Referer(referer.into_string()))
 }
 
 #[cfg(test)]
