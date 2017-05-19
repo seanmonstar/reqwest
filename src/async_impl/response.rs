@@ -59,6 +59,40 @@ impl Response {
             _marker: PhantomData,
         }
     }
+
+    /// Turn a response into an error if the server returned an error.
+    // XXX: example disabled since rustdoc still tries to run it
+    // when the 'unstable' feature isn't active, making the import
+    // fail.
+    //
+    // # Example
+    //
+    // ```
+    // # use reqwest::unstable::async::Response;
+    // fn on_response(res: Response) {
+    //     match res.error_for_status() {
+    //         Ok(_res) => (),
+    //         Err(err) => {
+    //             // asserting a 400 as an example
+    //             // it could be any status between 400...599
+    //             assert_eq!(
+    //                 err.status(),
+    //                 Some(reqwest::StatusCode::BadRequest)
+    //             );
+    //         }
+    //     }
+    // }
+    // ```
+    #[inline]
+    pub fn error_for_status(self) -> ::Result<Self> {
+        if self.status.is_client_error() {
+            Err(::error::client_error(self.url, self.status))
+        } else if self.status.is_server_error() {
+            Err(::error::server_error(self.url, self.status))
+        } else {
+            Ok(self)
+        }
+    }
 }
 
 

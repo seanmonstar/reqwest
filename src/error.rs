@@ -2,7 +2,7 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 
-use Url;
+use {StatusCode, Url};
 
 /// The Errors that may occur when processing a `Request`.
 ///
@@ -118,7 +118,9 @@ impl Error {
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
             Kind::TooManyRedirects |
-            Kind::RedirectLoop => None,
+            Kind::RedirectLoop |
+            Kind::ClientError(_) |
+            Kind::ServerError(_) => None,
         }
     }
 
@@ -150,6 +152,34 @@ impl Error {
             _ => false,
         }
     }
+
+    /// Returns true if the error is from a request returning a 4xx error.
+    #[inline]
+    pub fn is_client_error(&self) -> bool {
+        match self.kind {
+            Kind::ClientError(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if the error is from a request returning a 5xx error.
+    #[inline]
+    pub fn is_server_error(&self) -> bool {
+        match self.kind {
+            Kind::ServerError(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns the status code, if the error was generated from a response.
+    #[inline]
+    pub fn status(&self) -> Option<StatusCode> {
+        match self.kind {
+            Kind::ClientError(code) |
+            Kind::ServerError(code) => Some(code),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for Error {
@@ -167,6 +197,14 @@ impl fmt::Display for Error {
             Kind::Json(ref e) => fmt::Display::fmt(e, f),
             Kind::TooManyRedirects => f.write_str("Too many redirects"),
             Kind::RedirectLoop => f.write_str("Infinite redirect loop"),
+            Kind::ClientError(ref code) => {
+                f.write_str("Client Error: ")?;
+                fmt::Display::fmt(code, f)
+            }
+            Kind::ServerError(ref code) => {
+                f.write_str("Server Error: ")?;
+                fmt::Display::fmt(code, f)
+            }
         }
     }
 }
@@ -182,6 +220,8 @@ impl StdError for Error {
             Kind::Json(ref e) => e.description(),
             Kind::TooManyRedirects => "Too many redirects",
             Kind::RedirectLoop => "Infinite redirect loop",
+            Kind::ClientError(_) => "Client Error",
+            Kind::ServerError(_) => "Server Error",
         }
     }
 
@@ -194,7 +234,9 @@ impl StdError for Error {
             Kind::UrlEncoded(ref e) => e.cause(),
             Kind::Json(ref e) => e.cause(),
             Kind::TooManyRedirects |
-            Kind::RedirectLoop => None,
+            Kind::RedirectLoop |
+            Kind::ClientError(_) |
+            Kind::ServerError(_) => None,
         }
     }
 }
@@ -211,6 +253,8 @@ pub enum Kind {
     Json(::serde_json::Error),
     TooManyRedirects,
     RedirectLoop,
+    ClientError(StatusCode),
+    ServerError(StatusCode),
 }
 
 
@@ -374,6 +418,22 @@ pub fn timedout(url: Option<Url>) -> Error {
     }
 }
 
+#[inline]
+pub fn client_error(url: Url, status: StatusCode) -> Error {
+    Error {
+        kind: Kind::ClientError(status),
+        url: Some(url),
+    }
+}
+
+#[inline]
+pub fn server_error(url: Url, status: StatusCode) -> Error {
+    Error {
+        kind: Kind::ServerError(status),
+        url: Some(url),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -438,7 +498,6 @@ mod tests {
         let link = Chain(Some(root));
         let io = ::std::io::Error::new(::std::io::ErrorKind::Other, link);
         let err = Error { kind: Kind::Io(io), url: None };
-
         assert!(err.cause().is_some());
         assert_eq!(err.to_string(), "chain: root");
     }

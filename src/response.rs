@@ -156,6 +156,34 @@ impl Response {
         // Went for easier for now, just to get it working.
         serde_json::from_reader(self).map_err(::error::from)
     }
+
+    /// Turn a response into an error if the server returned an error.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # extern crate reqwest;
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let res = reqwest::get("http://httpbin.org/status/400")?
+    ///     .error_for_status();
+    /// if let Err(err) = res {
+    ///     assert_eq!(err.status(), Some(reqwest::StatusCode::BadRequest));
+    /// }
+    /// # Ok(())
+    /// # }
+    /// # fn main() {}
+    /// ```
+    #[inline]
+    pub fn error_for_status(self) -> ::Result<Self> {
+        let Response { body, inner, _thread_handle } = self;
+        inner.error_for_status().map(move |inner| {
+            Response {
+                body: body,
+                inner: inner,
+                _thread_handle: _thread_handle,
+            }
+        })
+    }
 }
 
 impl Read for Response {
