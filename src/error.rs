@@ -31,7 +31,9 @@ impl Error {
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
             Kind::TooManyRedirects |
-            Kind::RedirectLoop => None,
+            Kind::RedirectLoop |
+            Kind::ClientError(_) |
+            Kind::ServerError(_) => None,
         }
     }
 
@@ -63,6 +65,34 @@ impl Error {
             _ => false,
         }
     }
+
+    /// Returns true if the error is from a request returning a 4xx error.
+    #[inline]
+    pub fn is_client_error(&self) -> bool {
+        match self.kind {
+            Kind::ClientError(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if the error is from a request returning a 5xx error.
+    #[inline]
+    pub fn is_server_error(&self) -> bool {
+        match self.kind {
+            Kind::ServerError(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns the status code, if the error was generated from a response.
+    #[inline]
+    pub fn status(&self) -> Option<::hyper::status::StatusCode> {
+        match self.kind {
+            Kind::ClientError(code) |
+            Kind::ServerError(code) => Some(code),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for Error {
@@ -77,6 +107,14 @@ impl fmt::Display for Error {
             Kind::Json(ref e) => fmt::Display::fmt(e, f),
             Kind::TooManyRedirects => f.write_str("Too many redirects"),
             Kind::RedirectLoop => f.write_str("Infinite redirect loop"),
+            Kind::ClientError(ref code) => {
+                f.write_str("Client Error: ")?;
+                fmt::Display::fmt(code, f)
+            }
+            Kind::ServerError(ref code) => {
+                f.write_str("Server Error: ")?;
+                fmt::Display::fmt(code, f)
+            }
         }
     }
 }
@@ -89,6 +127,8 @@ impl StdError for Error {
             Kind::Json(ref e) => e.description(),
             Kind::TooManyRedirects => "Too many redirects",
             Kind::RedirectLoop => "Infinite redirect loop",
+            Kind::ClientError(_) => "Client Error",
+            Kind::ServerError(_) => "Server Error",
         }
     }
 
@@ -98,7 +138,9 @@ impl StdError for Error {
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
             Kind::TooManyRedirects |
-            Kind::RedirectLoop => None,
+            Kind::RedirectLoop |
+            Kind::ClientError(_) |
+            Kind::ServerError(_) => None,
         }
     }
 }
@@ -112,6 +154,8 @@ pub enum Kind {
     Json(::serde_json::Error),
     TooManyRedirects,
     RedirectLoop,
+    ClientError(::hyper::status::StatusCode),
+    ServerError(::hyper::status::StatusCode),
 }
 
 
@@ -181,6 +225,22 @@ pub fn loop_detected(url: Url) -> Error {
 pub fn too_many_redirects(url: Url) -> Error {
     Error {
         kind: Kind::TooManyRedirects,
+        url: Some(url),
+    }
+}
+
+#[inline]
+pub fn client_error(url: Url, status: ::hyper::status::StatusCode) -> Error {
+    Error {
+        kind: Kind::ClientError(status),
+        url: Some(url),
+    }
+}
+
+#[inline]
+pub fn server_error(url: Url, status: ::hyper::status::StatusCode) -> Error {
+    Error {
+        kind: Kind::ServerError(status),
         url: Some(url),
     }
 }
