@@ -31,7 +31,7 @@ static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", e
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust
 /// # use reqwest::{Error, Client};
 /// #
 /// # fn run() -> Result<(), Error> {
@@ -182,13 +182,18 @@ pub struct RequestBuilder {
 impl RequestBuilder {
     /// Add a `Header` to this Request.
     ///
-    /// ```no_run
+    /// ```rust
+    /// # use reqwest::Error;
+    /// #
+    /// # fn run() -> Result<(), Error> {
     /// use reqwest::header::UserAgent;
-    /// let client = reqwest::Client::new().expect("client failed to construct");
+    /// let client = reqwest::Client::new()?;
     ///
     /// let res = client.get("https://www.rust-lang.org")
     ///     .header(UserAgent("foo".to_string()))
-    ///     .send();
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn header<H: ::header::Header + ::header::HeaderFormat>(mut self, header: H) -> RequestBuilder {
         self.headers.set(header);
@@ -222,15 +227,20 @@ impl RequestBuilder {
     /// and also sets the `Content-Type: application/www-form-url-encoded`
     /// header.
     ///
-    /// ```no_run
+    /// ```rust
+    /// # use reqwest::Error;
     /// # use std::collections::HashMap;
+    /// #
+    /// # fn run() -> Result<(), Error> {
     /// let mut params = HashMap::new();
     /// params.insert("lang", "rust");
     ///
-    /// let client = reqwest::Client::new().unwrap();
+    /// let client = reqwest::Client::new()?;
     /// let res = client.post("http://httpbin.org")
     ///     .form(&params)
-    ///     .send();
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn form<T: Serialize>(mut self, form: &T) -> RequestBuilder {
         let body = serde_urlencoded::to_string(form).map_err(::error::from);
@@ -244,15 +254,20 @@ impl RequestBuilder {
     /// Sets the body to the JSON serialization of the passed value, and
     /// also sets the `Content-Type: application/json` header.
     ///
-    /// ```no_run
+    /// ```rust
+    /// # use reqwest::Error;
     /// # use std::collections::HashMap;
+    /// #
+    /// # fn run() -> Result<(), Error> {
     /// let mut map = HashMap::new();
     /// map.insert("lang", "rust");
     ///
-    /// let client = reqwest::Client::new().unwrap();
+    /// let client = reqwest::Client::new()?;
     /// let res = client.post("http://httpbin.org")
     ///     .json(&map)
-    ///     .send();
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn json<T: Serialize>(mut self, json: &T) -> RequestBuilder {
         let body = serde_json::to_vec(json).expect("serde to_vec cannot fail");
