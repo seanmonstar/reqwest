@@ -11,7 +11,7 @@ categories = ["web-programming::http-client"]
 
 [dependencies]
 hyper = "0.10.2"
-hyper-native-tls = "0.2"
+hyper-native-tls = { git = "https://github.com/sfackler/hyper-native-tls" }
 log = "0.3"
 serde = "1.0"
 serde_json = "1.0"
