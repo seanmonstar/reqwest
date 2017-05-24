@@ -58,9 +58,11 @@ impl RedirectPolicy {
     ///
     /// # Example
     ///
-    /// ```no_run
-    /// # use reqwest::RedirectPolicy;
-    /// # let mut client = reqwest::Client::new().unwrap();
+    /// ```rust
+    /// # use reqwest::{Error, RedirectPolicy};
+    /// #
+    /// # fn run() -> Result<(), Error> {
+    /// let mut client = reqwest::Client::new()?;
     /// client.redirect(RedirectPolicy::custom(|attempt| {
     ///     if attempt.previous().len() > 5 {
     ///         attempt.too_many_redirects()
@@ -71,6 +73,8 @@ impl RedirectPolicy {
     ///         attempt.follow()
     ///     }
     /// }));
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn custom<T>(policy: T) -> RedirectPolicy
     where T: Fn(RedirectAttempt) -> RedirectAction + Send + Sync + 'static {
