@@ -15,13 +15,19 @@ dist: trusty
 
 cache:
   apt: true
+  cargo: true
   directories:
     - target/debug/deps
     - target/debug/build
 
+before_script:
+  - export PATH=$HOME/.cargo/bin:$PATH
+  - type -p cargo-install-update || cargo install --force cargo-update
+  - cargo install-update -i rustfmt
 script:
   - cargo build --verbose
   - cargo test --verbose
+  - cargo fmt -- --write-mode diff
 
 notifications:
   email: false
