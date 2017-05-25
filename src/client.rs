@@ -75,10 +75,8 @@ impl Certificate {
     ///
     /// If the provided buffer is not valid DER, an error will be returned.
     pub fn from_der(der: &[u8]) -> ::Result<Certificate> {
-        let inner = try_!(
-            native_tls::Certificate::from_der(der)
-                .map_err(|e| ::hyper::Error::Ssl(Box::new(e)))
-        );
+        let inner =
+            try_!(native_tls::Certificate::from_der(der).map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
         Ok(Certificate(inner))
     }
 }
@@ -121,15 +119,13 @@ struct Config {
 impl ClientBuilder {
     /// Constructs a new `ClientBuilder`
     pub fn new() -> ::Result<ClientBuilder> {
-        let tls_connector_builder = try_!(
-            native_tls::TlsConnector::builder()
-                .map_err(|e| ::hyper::Error::Ssl(Box::new(e)))
-        );
+        let tls_connector_builder =
+            try_!(native_tls::TlsConnector::builder().map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
         Ok(ClientBuilder {
             config: Some(Config {
                 hostname_verification: true,
                 tls: tls_connector_builder,
-            })
+            }),
         })
     }
 
@@ -142,23 +138,19 @@ impl ClientBuilder {
     pub fn build(&mut self) -> ::Result<Client> {
         let config = self.take_config();
 
-        let tls_connector = try_!(
-            config
-                .tls
-                .build()
-                .map_err(|e| ::hyper::Error::Ssl(Box::new(e)))
-        );
+        let tls_connector = try_!(config.tls.build().map_err(
+                |e| ::hyper::Error::Ssl(Box::new(e)),
+            ));
         let mut tls_client = NativeTlsClient::from(tls_connector);
         if !config.hostname_verification {
             tls_client.danger_disable_hostname_verification(true);
         }
 
-        let mut hyper_client = ::hyper::Client::with_connector(
-            ::hyper::client::Pool::with_connector(
+        let mut hyper_client =
+            ::hyper::Client::with_connector(::hyper::client::Pool::with_connector(
                 Default::default(),
                 ::hyper::net::HttpsConnector::new(tls_client),
-            )
-        );
+            ));
 
         hyper_client.set_redirect_policy(::hyper::client::RedirectPolicy::FollowNone);
 
@@ -177,12 +169,11 @@ impl ClientBuilder {
     /// This can be used to connect to a server that has a self-signed
     /// certificate for example.
     pub fn add_root_certificate(&mut self, cert: Certificate) -> ::Result<&mut ClientBuilder> {
-        try_!(
-            self.config_mut()
-                .tls
-                .add_root_certificate(cert.0)
-                .map_err(|e| ::hyper::Error::Ssl(Box::new(e)))
-        );
+        try_!(self.config_mut().tls.add_root_certificate(cert.0).map_err(
+                |e| {
+                    ::hyper::Error::Ssl(Box::new(e))
+                },
+            ));
         Ok(self)
     }
 
@@ -205,15 +196,15 @@ impl ClientBuilder {
 
     // private
     fn config_mut(&mut self) -> &mut Config {
-        self.config
-            .as_mut()
-            .expect("ClientBuilder cannot be reused after building a Client")
+        self.config.as_mut().expect(
+            "ClientBuilder cannot be reused after building a Client",
+        )
     }
 
     fn take_config(&mut self) -> Config {
-        self.config
-            .take()
-            .expect("ClientBuilder cannot be reused after building a Client")
+        self.config.take().expect(
+            "ClientBuilder cannot be reused after building a Client",
+        )
     }
 }
 
@@ -365,7 +356,7 @@ impl RequestBuilder {
         U: Into<String>,
         P: Into<String>,
     {
-        self.header(::header::Authorization(::header::Basic{
+        self.header(::header::Authorization(::header::Basic {
             username: username.into(),
             password: password.map(|p| p.into()),
         }))
@@ -442,9 +433,10 @@ impl RequestBuilder {
             self.headers.set(Accept::star());
         }
         if self.client.auto_ungzip.load(Ordering::Relaxed) &&
-            !self.headers.has::<AcceptEncoding>() &&
-            !self.headers.has::<Range>() {
-            self.headers.set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
+           !self.headers.has::<AcceptEncoding>() && !self.headers.has::<Range>() {
+            self.headers.set(
+                AcceptEncoding(vec![qitem(Encoding::Gzip)]),
+            );
         }
         let client = self.client;
         let mut method = self.method;
@@ -461,8 +453,9 @@ impl RequestBuilder {
             let res = {
                 info!("Request: {:?} {}", method, url);
                 let c = client.hyper.read().unwrap();
-                let mut req = c.request(method.clone(), url.clone())
-                    .headers(headers.clone());
+                let mut req = c.request(method.clone(), url.clone()).headers(
+                    headers.clone(),
+                );
 
                 if let Some(ref mut b) = body {
                     let body = body::as_hyper_body(b);
@@ -502,7 +495,10 @@ impl RequestBuilder {
                     if let Some(loc) = loc {
                         loc
                     } else {
-                        return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
+                        return Ok(::response::new(
+                            res,
+                            client.auto_ungzip.load(Ordering::Relaxed),
+                        ));
                     }
                 };
 
@@ -521,7 +517,10 @@ impl RequestBuilder {
                             redirect::Action::Follow => loc,
                             redirect::Action::Stop => {
                                 debug!("redirect_policy disallowed redirection to '{}'", loc);
-                                return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
+                                return Ok(::response::new(
+                                    res,
+                                    client.auto_ungzip.load(Ordering::Relaxed),
+                                ));
                             }
                             redirect::Action::LoopDetected => {
                                 return Err(::error::loop_detected(res.url.clone()));
@@ -534,14 +533,20 @@ impl RequestBuilder {
                     Err(e) => {
                         debug!("Location header had invalid URI: {:?}", e);
 
-                        return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
+                        return Ok(::response::new(
+                            res,
+                            client.auto_ungzip.load(Ordering::Relaxed),
+                        ));
                     }
                 };
 
                 remove_sensitive_headers(&mut headers, &url, &urls);
                 debug!("redirecting to {:?} '{}'", method, url);
             } else {
-                return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
+                return Ok(::response::new(
+                    res,
+                    client.auto_ungzip.load(Ordering::Relaxed),
+                ));
             }
         }
     }
@@ -706,8 +711,10 @@ mod tests {
         r = r.form(&form_data);
 
         // Make sure the content type was set
-        assert_eq!(r.headers.get::<ContentType>(),
-                   Some(&ContentType::form_url_encoded()));
+        assert_eq!(
+            r.headers.get::<ContentType>(),
+            Some(&ContentType::form_url_encoded())
+        );
 
         let buf = body::read_to_string(r.body.unwrap().unwrap()).unwrap();
 

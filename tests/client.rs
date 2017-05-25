@@ -9,7 +9,8 @@ use std::io::prelude::*;
 
 #[test]
 fn test_get() {
-    let server = server! {
+    let server =
+        server! {
         request: b"\
             GET /1 HTTP/1.1\r\n\
             Host: $HOST\r\n\
@@ -32,10 +33,14 @@ fn test_get() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), &reqwest::StatusCode::Ok);
     assert_eq!(res.version(), &reqwest::HttpVersion::Http11);
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::Server("test".to_string())));
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::ContentLength(0)));
+    assert_eq!(
+        res.headers().get(),
+        Some(&reqwest::header::Server("test".to_string()))
+    );
+    assert_eq!(
+        res.headers().get(),
+        Some(&reqwest::header::ContentLength(0))
+    );
 
     let mut buf = [0; 1024];
     let n = res.read(&mut buf).unwrap();
@@ -48,7 +53,8 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
     let codes = [301, 302, 303];
 
     for code in codes.iter() {
-        let redirect = server! {
+        let redirect =
+            server! {
             request: format!("\
                 POST /{} HTTP/1.1\r\n\
                 Host: $HOST\r\n\
@@ -89,8 +95,10 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
         let res = client.post(&url).send().unwrap();
         assert_eq!(res.url().as_str(), dst);
         assert_eq!(res.status(), &reqwest::StatusCode::Ok);
-        assert_eq!(res.headers().get(),
-                   Some(&reqwest::header::Server("test-dst".to_string())));
+        assert_eq!(
+            res.headers().get(),
+            Some(&reqwest::header::Server("test-dst".to_string()))
+        );
     }
 }
 
@@ -99,7 +107,8 @@ fn test_redirect_307_and_308_tries_to_post_again() {
     let client = reqwest::Client::new().unwrap();
     let codes = [307, 308];
     for code in codes.iter() {
-        let redirect = server! {
+        let redirect =
+            server! {
             request: format!("\
                 POST /{} HTTP/1.1\r\n\
                 Host: $HOST\r\n\
@@ -143,8 +152,10 @@ fn test_redirect_307_and_308_tries_to_post_again() {
         let res = client.post(&url).body("Hello").send().unwrap();
         assert_eq!(res.url().as_str(), dst);
         assert_eq!(res.status(), &reqwest::StatusCode::Ok);
-        assert_eq!(res.headers().get(),
-                   Some(&reqwest::header::Server("test-dst".to_string())));
+        assert_eq!(
+            res.headers().get(),
+            Some(&reqwest::header::Server("test-dst".to_string()))
+        );
     }
 }
 
@@ -153,7 +164,8 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
     let client = reqwest::Client::new().unwrap();
     let codes = [307, 308];
     for &code in codes.iter() {
-        let redirect = server! {
+        let redirect =
+            server! {
             request: format!("\
                 POST /{} HTTP/1.1\r\n\
                 Host: $HOST\r\n\
@@ -189,7 +201,8 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
 
 #[test]
 fn test_redirect_removes_sensitive_headers() {
-    let end_server = server! {
+    let end_server =
+        server! {
         request: b"\
             GET /otherhost HTTP/1.1\r\n\
             Host: $HOST\r\n\
@@ -206,7 +219,8 @@ fn test_redirect_removes_sensitive_headers() {
             "
     };
 
-    let mid_server = server! {
+    let mid_server =
+        server! {
         request: b"\
             GET /sensitive HTTP/1.1\r\n\
             Host: $HOST\r\n\
@@ -236,7 +250,8 @@ fn test_redirect_removes_sensitive_headers() {
 
 #[test]
 fn test_redirect_policy_can_return_errors() {
-    let server = server! {
+    let server =
+        server! {
         request: b"\
             GET /loop HTTP/1.1\r\n\
             Host: $HOST\r\n\
@@ -260,7 +275,8 @@ fn test_redirect_policy_can_return_errors() {
 
 #[test]
 fn test_redirect_policy_can_stop_redirects_without_an_error() {
-    let server = server! {
+    let server =
+        server! {
         request: b"\
             GET /no-redirect HTTP/1.1\r\n\
             Host: $HOST\r\n\
@@ -285,13 +301,16 @@ fn test_redirect_policy_can_stop_redirects_without_an_error() {
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), &reqwest::StatusCode::Found);
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::Server("test-dont".to_string())));
+    assert_eq!(
+        res.headers().get(),
+        Some(&reqwest::header::Server("test-dont".to_string()))
+    );
 }
 
 #[test]
 fn test_referer_is_not_set_if_disabled() {
-    let server = server! {
+    let server =
+        server! {
         request: b"\
             GET /no-refer HTTP/1.1\r\n\
             Host: $HOST\r\n\
@@ -334,7 +353,8 @@ fn test_referer_is_not_set_if_disabled() {
 
 #[test]
 fn test_accept_header_is_not_changed_if_set() {
-    let server = server! {
+    let server =
+        server! {
         request: b"\
             GET /accept HTTP/1.1\r\n\
             Host: $HOST\r\n\
@@ -363,7 +383,8 @@ fn test_accept_header_is_not_changed_if_set() {
 
 #[test]
 fn test_accept_encoding_header_is_not_changed_if_set() {
-    let server = server! {
+    let server =
+        server! {
         request: b"\
             GET /accept-encoding HTTP/1.1\r\n\
             Host: $HOST\r\n\
@@ -381,9 +402,10 @@ fn test_accept_encoding_header_is_not_changed_if_set() {
     };
     let client = reqwest::Client::new().unwrap();
 
-    let res = client.get(&format!("http://{}/accept-encoding", server.addr()))
+    let res = client
+        .get(&format!("http://{}/accept-encoding", server.addr()))
         .header(reqwest::header::AcceptEncoding(
-            vec![reqwest::header::qitem(reqwest::header::Encoding::Identity)]
+            vec![reqwest::header::qitem(reqwest::header::Encoding::Identity)],
         ))
         .send()
         .unwrap();
@@ -401,16 +423,20 @@ fn test_gzip_response() {
 
     let gzipped_content = encoder.finish().into_result().unwrap();
 
-    let mut response = format!("\
+    let mut response = format!(
+        "\
             HTTP/1.1 200 OK\r\n\
             Server: test-accept\r\n\
             Content-Encoding: gzip\r\n\
             Content-Length: {}\r\n\
-            \r\n", &gzipped_content.len())
+            \r\n",
+        &gzipped_content.len()
+    )
         .into_bytes();
     response.extend(&gzipped_content);
 
-    let server = server! {
+    let server =
+        server! {
         request: b"\
             GET /gzip HTTP/1.1\r\n\
             Host: $HOST\r\n\
@@ -434,7 +460,8 @@ fn test_gzip_response() {
 
 #[test]
 fn test_gzip_empty_body() {
-    let server = server! {
+    let server =
+        server! {
         request: b"\
             HEAD /gzip HTTP/1.1\r\n\
             Host: $HOST\r\n\
@@ -465,7 +492,8 @@ fn test_gzip_empty_body() {
 
 #[test]
 fn test_gzip_invalid_body() {
-    let server = server! {
+    let server =
+        server! {
         request: b"\
             GET /gzip HTTP/1.1\r\n\
             Host: $HOST\r\n\

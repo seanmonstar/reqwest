@@ -30,8 +30,7 @@ impl Error {
             Kind::Http(ref e) => Some(e),
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
-            Kind::TooManyRedirects |
-            Kind::RedirectLoop => None,
+            Kind::TooManyRedirects | Kind::RedirectLoop => None,
         }
     }
 
@@ -58,8 +57,7 @@ impl Error {
     #[inline]
     pub fn is_redirect(&self) -> bool {
         match self.kind {
-            Kind::TooManyRedirects |
-            Kind::RedirectLoop => true,
+            Kind::TooManyRedirects | Kind::RedirectLoop => true,
             _ => false,
         }
     }
@@ -97,8 +95,7 @@ impl StdError for Error {
             Kind::Http(ref e) => Some(e),
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
-            Kind::TooManyRedirects |
-            Kind::RedirectLoop => None,
+            Kind::TooManyRedirects | Kind::RedirectLoop => None,
         }
     }
 }
