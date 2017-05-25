@@ -327,7 +327,9 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn header<H: ::header::Header + ::header::HeaderFormat>(mut self, header: H) -> RequestBuilder {
+    pub fn header<H>(mut self, header: H) -> RequestBuilder
+    where H: ::header::Header + ::header::HeaderFormat
+    {
         self.headers.set(header);
         self
     }
