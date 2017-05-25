@@ -181,10 +181,14 @@ pub enum Action {
 
 #[inline]
 pub fn check_redirect(policy: &RedirectPolicy, next: &Url, previous: &[Url]) -> Action {
-    policy.redirect(RedirectAttempt {
-        next: next,
-        previous: previous,
-    }).inner
+    policy
+        .redirect(
+            RedirectAttempt {
+                next: next,
+                previous: previous,
+            }
+        )
+        .inner
 }
 
 pub fn remove_sensitive_headers(headers: &mut Headers, next: &Url, previous: &[Url]) {
@@ -231,19 +235,21 @@ fn test_redirect_policy_limit() {
 
     previous.push(Url::parse("http://a.b.d/e/33").unwrap());
 
-    assert_eq!(check_redirect(&policy, &next, &previous),
-               Action::TooManyRedirects);
+    assert_eq!(
+        check_redirect(&policy, &next, &previous),
+        Action::TooManyRedirects
+    );
 }
 
 #[test]
 fn test_redirect_policy_custom() {
-    let policy = RedirectPolicy::custom(|attempt| {
-        if attempt.url().host_str() == Some("foo") {
+    let policy = RedirectPolicy::custom(
+        |attempt| if attempt.url().host_str() == Some("foo") {
             attempt.stop()
         } else {
             attempt.follow()
         }
-    });
+    );
 
     let next = Url::parse("http://bar/baz").unwrap();
     assert_eq!(check_redirect(&policy, &next, &[]), Action::Follow);
