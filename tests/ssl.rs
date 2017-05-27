@@ -3,7 +3,7 @@ extern crate hyper;
 extern crate hyper_native_tls;
 extern crate reqwest;
 
-use hyper::server::{Server, Request, Response, Fresh};
+use hyper::server::{Server, Request, Response, Fresh, Listening};
 use hyper_native_tls::NativeTlsServer;
 
 use reqwest::{Client, ClientBuilder, Certificate};
@@ -14,45 +14,50 @@ use std::mem;
 
 #[test]
 fn test_custom_ca_hostname_verification_disabled() {
-    let ssl = NativeTlsServer::new("tests/certificates/server-wrong.hostname.com.pfx", "mypass").unwrap();
-    let server = Server::https("localhost:12345", ssl).unwrap();
-    let listening = server.handle(|_: Request, resp: Response<Fresh>| {
-        resp.send(b"ok").unwrap();
-    }).unwrap();
-    mem::forget(listening);
-
-    let client = get_client(true);
-
+    let listening = start_server("tests/certificates/server-wrong.hostname.com.pfx");
+    let client = get_client(HostnameVerification::Disabled);
     let mut resp = client.get("https://localhost:12345").send().unwrap();
     let mut body = vec![];
     resp.read_to_end(&mut body).unwrap();
     assert_eq!(body, b"ok");
+    mem::forget(listening);
 }
 
 #[test]
 fn test_custom_ca_hostname_verification_enabled() {
-    let ssl = NativeTlsServer::new("tests/certificates/server-localhost.pfx", "mypass").unwrap();
-    let server = Server::https("localhost:12344", ssl).unwrap();
-    let listening = server.handle(|_: Request, resp: Response<Fresh>| {
-        resp.send(b"ok").unwrap();
-    }).unwrap();
-    mem::forget(listening);
-
-    let client = get_client(false);
-    let mut resp = client.get("https://localhost:12344").send().unwrap();
+    let listening = start_server("tests/certificates/server-localhost.pfx");
+    let client = get_client(HostnameVerification::Enabled);
+    let mut resp = client.get("https://localhost:12345").send().unwrap();
     let mut body = vec![];
     resp.read_to_end(&mut body).unwrap();
     assert_eq!(body, b"ok");
+    mem::forget(listening);
 }
 
-fn get_client(disable_hostname_verification: bool) -> Client {
-    let mut client_builder = ClientBuilder::new().unwrap();
+#[derive(PartialEq)]
+enum HostnameVerification {
+    Enabled,
+    Disabled,
+}
+
+fn get_client(hostname_verification: HostnameVerification) -> Client {
     let mut buf = Vec::new();
     File::open("tests/certificates/root.der").unwrap().read_to_end(&mut buf).unwrap();
     let cert = Certificate::from_der(&buf).unwrap();
+
+    let mut client_builder = ClientBuilder::new().unwrap();
     client_builder.add_root_certificate(cert).unwrap();
-    if disable_hostname_verification {
+    if hostname_verification == HostnameVerification::Disabled {
         client_builder.danger_disable_hostname_verification();
     }
+
     client_builder.build().unwrap()
+}
+
+fn start_server(cert: &str) -> Listening {
+    let ssl = NativeTlsServer::new(cert, "mypass").unwrap();
+    let server = Server::https("localhost:12345", ssl).unwrap();
+    server.handle(|_: Request, resp: Response<Fresh>| {
+        resp.send(b"ok").unwrap();
+    }).unwrap()
 }
