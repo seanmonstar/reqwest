@@ -2,24 +2,157 @@ use std::fmt;
 use std::sync::{Arc, Mutex, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+use std::fs;
+use std::io::Read;
 
 use hyper::client::IntoUrl;
 use hyper::header::{Headers, ContentType, Location, Referer, UserAgent, Accept, Encoding,
-    AcceptEncoding, Range, qitem};
+                    AcceptEncoding, Range, qitem};
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
-use hyper::{Url};
+use hyper::Url;
+use hyper::mime;
 
 use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
 
-use ::body::{self, Body};
-use ::redirect::{self, RedirectPolicy, check_redirect, remove_sensitive_headers};
-use ::response::Response;
+use uuid::Uuid;
 
-static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+use body::{self, Body};
+use redirect::{self, RedirectPolicy, check_redirect, remove_sensitive_headers};
+use response::Response;
+use file::File;
+
+static DEFAULT_USER_AGENT: &'static str =
+    concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+
+pub type Params<'a> = Vec<(&'a str, &'a str)>;
+
+macro_rules! impl_send {
+    ($sname:ident) => (
+        impl $sname {
+            /// Constructs the Request and sends it the target URL, returning a Response.
+            pub fn send(mut self) -> ::Result<Response> {
+                if !self.headers.has::<UserAgent>() {
+                    self.headers
+                        .set(UserAgent(DEFAULT_USER_AGENT.to_owned()));
+                }
+
+                if !self.headers.has::<Accept>() {
+                    self.headers.set(Accept::star());
+                }
+                if self.client.auto_ungzip.load(Ordering::Relaxed) &&
+                   !self.headers.has::<AcceptEncoding>() && !self.headers.has::<Range>() {
+                    self.headers
+                        .set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
+                }
+                let client = self.client;
+                let mut method = self.method;
+                let mut url = try_!(self.url);
+                let mut headers = self.headers;
+                let mut body = match self.body {
+                    Some(b) => Some(try_!(b)),
+                    None => None,
+                };
+
+                let mut urls = Vec::new();
+
+                loop {
+                    let res = {
+                        info!("Request: {:?} {}", method, url);
+                        let c = client.hyper.read().unwrap();
+                        let mut req = c.request(method.clone(), url.clone())
+                            .headers(headers.clone());
+
+                        if let Some(ref mut b) = body {
+                            let body = body::as_hyper_body(b);
+                            req = req.body(body);
+                        }
+
+                        try_!(req.send(), &url)
+                    };
+
+                    let should_redirect = match res.status {
+                        StatusCode::MovedPermanently |
+                        StatusCode::Found |
+                        StatusCode::SeeOther => {
+                            body = None;
+                            match method {
+                                Method::Get | Method::Head => {}
+                                _ => {
+                                    method = Method::Get;
+                                }
+                            }
+                            true
+                        }
+                        StatusCode::TemporaryRedirect |
+                        StatusCode::PermanentRedirect => {
+                            if let Some(ref body) = body {
+                                body::can_reset(body)
+                            } else {
+                                true
+                            }
+                        }
+                        _ => false,
+                    };
+
+                    if should_redirect {
+                        let loc = {
+                            let loc = res.headers.get::<Location>().map(|loc| url.join(loc));
+                            if let Some(loc) = loc {
+                                loc
+                            } else {
+                                return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
+                            }
+                        };
+
+                        url = match loc {
+                            Ok(loc) => {
+                                if client.auto_referer.load(Ordering::Relaxed) {
+                                    if let Some(referer) = make_referer(&loc, &url) {
+                                        headers.set(referer);
+                                    }
+                                }
+                                urls.push(url);
+                                let action =
+                                    check_redirect(&client.redirect_policy.lock().unwrap(), &loc, &urls);
+
+                                match action {
+                                    redirect::Action::Follow => loc,
+                                    redirect::Action::Stop => {
+                                        debug!("redirect_policy disallowed redirection to '{}'", loc);
+                                        return Ok(::response::new(res,
+                                                                  client
+                                                                      .auto_ungzip
+                                                                      .load(Ordering::Relaxed)));
+                                    }
+                                    redirect::Action::LoopDetected => {
+                                        return Err(::error::loop_detected(res.url.clone()));
+                                    }
+                                    redirect::Action::TooManyRedirects => {
+                                        return Err(::error::too_many_redirects(res.url.clone()));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                debug!("Location header had invalid URI: {:?}", e);
+
+                                return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
+                            }
+                        };
+
+                        remove_sensitive_headers(&mut headers, &url, &urls);
+                        debug!("redirecting to {:?} '{}'", method, url);
+                    } else {
+                        return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
+                    }
+                }
+            }
+        }
+    )
+}
 
 /// A `Client` to make Requests with.
 ///
@@ -53,13 +186,13 @@ impl Client {
         let mut client = try_!(new_hyper_client());
         client.set_redirect_policy(::hyper::client::RedirectPolicy::FollowNone);
         Ok(Client {
-            inner: Arc::new(ClientRef {
-                hyper: RwLock::new(client),
-                redirect_policy: Mutex::new(RedirectPolicy::default()),
-                auto_referer: AtomicBool::new(true),
-                auto_ungzip: AtomicBool::new(true),
-            }),
-        })
+               inner: Arc::new(ClientRef {
+                                   hyper: RwLock::new(client),
+                                   redirect_policy: Mutex::new(RedirectPolicy::default()),
+                                   auto_referer: AtomicBool::new(true),
+                                   auto_ungzip: AtomicBool::new(true),
+                               }),
+           })
     }
 
     /// Enable auto gzip decompression by checking the ContentEncoding response header.
@@ -136,6 +269,48 @@ impl Client {
             body: None,
         }
     }
+
+    /// Start building a `multipart/form-data POST Request` with the `Url`.
+    ///
+    /// Returns a `MultipartRequestBuilder`.
+    pub fn multipart<'a, U: IntoUrl>(self, url: U, files: Vec<File>, params: Params<'a>) -> ::Result<MultipartRequestBuilder> {
+        let mut body = String::new();
+        let boundary = format!{"\r\n{}\r\n", MultipartRequestBuilder::choose_boundary()};
+        let multipart_mime = ContentType(format!{"multipart/form-data; boundary={}", boundary}
+                                             .parse::<mime::Mime>()
+                                             .unwrap());
+        let mut headers = Headers::new();
+        headers.set(multipart_mime);
+
+        for (name, value) in params {
+            body.push_str(&boundary);
+            body.push_str(&format!{"Content-Disposition: form-data; name\"{}\"", name});
+            body.push_str(&format!{"\r\n{}\r\n", value});
+        }
+
+        for File { name, path, mime } in files {
+            body.push_str(&boundary);
+            body.push_str(&format!{"Content-Disposition: form-data; name\"{}\"", name});
+            body.push_str(&format!{"; filename=\"{}\"", path.file_name().unwrap().to_str().unwrap()});
+            body.push_str(&format!("\r\nContent-Type: {}\r\n\r\n", mime.unwrap()));
+
+            let mut content = try_!(fs::File::open(path));
+            content.read_to_string(&mut body).unwrap();
+            body.push_str("\r\n\r\n");
+        }
+
+        body.push_str(&format!{"\r\n--{}--", boundary});
+        Ok(MultipartRequestBuilder {
+            client: self.inner.clone(),
+
+            method: Method::Post,
+            url: url.into_url(),
+            _version: HttpVersion::Http11,
+            headers: Headers::new(),
+
+            body: Some(Ok(body.into())),
+        })
+    }
 }
 
 impl fmt::Debug for Client {
@@ -179,6 +354,8 @@ pub struct RequestBuilder {
     body: Option<::Result<Body>>,
 }
 
+impl_send!(RequestBuilder);
+
 impl RequestBuilder {
     /// Add a `Header` to this Request.
     ///
@@ -195,7 +372,9 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn header<H: ::header::Header + ::header::HeaderFormat>(mut self, header: H) -> RequestBuilder {
+    pub fn header<H: ::header::Header + ::header::HeaderFormat>(mut self,
+                                                                header: H)
+                                                                -> RequestBuilder {
         self.headers.set(header);
         self
     }
@@ -277,119 +456,6 @@ impl RequestBuilder {
         self.body = Some(Ok(body.into()));
         self
     }
-
-    /// Constructs the Request and sends it the target URL, returning a Response.
-    pub fn send(mut self) -> ::Result<Response> {
-        if !self.headers.has::<UserAgent>() {
-            self.headers.set(UserAgent(DEFAULT_USER_AGENT.to_owned()));
-        }
-
-        if !self.headers.has::<Accept>() {
-            self.headers.set(Accept::star());
-        }
-        if self.client.auto_ungzip.load(Ordering::Relaxed) &&
-            !self.headers.has::<AcceptEncoding>() &&
-            !self.headers.has::<Range>() {
-            self.headers.set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
-        }
-        let client = self.client;
-        let mut method = self.method;
-        let mut url = try_!(self.url);
-        let mut headers = self.headers;
-        let mut body = match self.body {
-            Some(b) => Some(try_!(b)),
-            None => None,
-        };
-
-        let mut urls = Vec::new();
-
-        loop {
-            let res = {
-                info!("Request: {:?} {}", method, url);
-                let c = client.hyper.read().unwrap();
-                let mut req = c.request(method.clone(), url.clone())
-                    .headers(headers.clone());
-
-                if let Some(ref mut b) = body {
-                    let body = body::as_hyper_body(b);
-                    req = req.body(body);
-                }
-
-                try_!(req.send(), &url)
-            };
-
-            let should_redirect = match res.status {
-                StatusCode::MovedPermanently |
-                StatusCode::Found |
-                StatusCode::SeeOther => {
-                    body = None;
-                    match method {
-                        Method::Get | Method::Head => {},
-                        _ => {
-                            method = Method::Get;
-                        }
-                    }
-                    true
-                },
-                StatusCode::TemporaryRedirect |
-                StatusCode::PermanentRedirect => {
-                    if let Some(ref body) = body {
-                        body::can_reset(body)
-                    } else {
-                        true
-                    }
-                },
-                _ => false,
-            };
-
-            if should_redirect {
-                let loc = {
-                    let loc = res.headers.get::<Location>().map(|loc| url.join(loc));
-                    if let Some(loc) = loc {
-                        loc
-                    } else {
-                        return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
-                    }
-                };
-
-                url = match loc {
-                    Ok(loc) => {
-                        if client.auto_referer.load(Ordering::Relaxed) {
-                            if let Some(referer) = make_referer(&loc, &url) {
-                                headers.set(referer);
-                            }
-                        }
-                        urls.push(url);
-                        let action = check_redirect(&client.redirect_policy.lock().unwrap(), &loc, &urls);
-
-                        match action {
-                            redirect::Action::Follow => loc,
-                            redirect::Action::Stop => {
-                                debug!("redirect_policy disallowed redirection to '{}'", loc);
-                                return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
-                            },
-                            redirect::Action::LoopDetected => {
-                                return Err(::error::loop_detected(res.url.clone()));
-                            },
-                            redirect::Action::TooManyRedirects => {
-                                return Err(::error::too_many_redirects(res.url.clone()));
-                            }
-                        }
-                    },
-                    Err(e) => {
-                        debug!("Location header had invalid URI: {:?}", e);
-
-                        return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)))
-                    }
-                };
-
-                remove_sensitive_headers(&mut headers, &url, &urls);
-                debug!("redirecting to {:?} '{}'", method, url);
-            } else {
-                return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)))
-            }
-        }
-    }
 }
 
 impl fmt::Debug for RequestBuilder {
@@ -401,6 +467,26 @@ impl fmt::Debug for RequestBuilder {
             .finish()
     }
 }
+
+pub struct MultipartRequestBuilder {
+    client: Arc<ClientRef>,
+
+    method: Method,
+    url: Result<Url, ::UrlError>,
+    _version: HttpVersion,
+    headers: Headers,
+
+    body: Option<::Result<Body>>,
+}
+
+impl_send!(MultipartRequestBuilder);
+
+impl MultipartRequestBuilder {
+    fn choose_boundary() -> String {
+        Uuid::new_v4().simple().to_string()
+    }
+}
+
 
 fn make_referer(next: &Url, previous: &Url) -> Option<Referer> {
     if next.scheme() == "http" && previous.scheme() == "https" {
@@ -417,7 +503,7 @@ fn make_referer(next: &Url, previous: &Url) -> Option<Referer> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::body;
+    use body;
     use hyper::method::Method;
     use hyper::Url;
     use hyper::header::{Host, Headers, ContentType};
@@ -551,7 +637,8 @@ mod tests {
         r = r.form(&form_data);
 
         // Make sure the content type was set
-        assert_eq!(r.headers.get::<ContentType>(), Some(&ContentType::form_url_encoded()));
+        assert_eq!(r.headers.get::<ContentType>(),
+                   Some(&ContentType::form_url_encoded()));
 
         let buf = body::read_to_string(r.body.unwrap().unwrap()).unwrap();
 

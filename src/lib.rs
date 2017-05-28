@@ -122,6 +122,7 @@ extern crate serde;
 extern crate serde_json;
 extern crate serde_urlencoded;
 extern crate url;
+extern crate uuid;
 
 // should be in error.rs module, but due to scopes of macros,
 // other modules won't see it there.
@@ -147,7 +148,6 @@ macro_rules! try_ {
 pub use hyper::client::IntoUrl;
 pub use hyper::Error as HyperError;
 pub use hyper::header;
-pub use hyper::mime;
 pub use hyper::method::Method;
 pub use hyper::status::StatusCode;
 pub use hyper::version::HttpVersion;
@@ -165,6 +165,7 @@ mod body;
 mod client;
 mod redirect;
 mod response;
+mod file;
 
 
 /// Shortcut method to quickly make a `GET` request.

@@ -32,6 +32,7 @@ impl Error {
             Kind::Json(ref e) => Some(e),
             Kind::TooManyRedirects |
             Kind::RedirectLoop => None,
+            Kind::IO(ref e) => Some(e)
         }
     }
 
@@ -77,6 +78,7 @@ impl fmt::Display for Error {
             Kind::Json(ref e) => fmt::Display::fmt(e, f),
             Kind::TooManyRedirects => f.write_str("Too many redirects"),
             Kind::RedirectLoop => f.write_str("Infinite redirect loop"),
+            Kind::IO(ref e) => fmt::Display::fmt(e, f),
         }
     }
 }
@@ -89,6 +91,7 @@ impl StdError for Error {
             Kind::Json(ref e) => e.description(),
             Kind::TooManyRedirects => "Too many redirects",
             Kind::RedirectLoop => "Infinite redirect loop",
+            Kind::IO(ref e) => e.description(),
         }
     }
 
@@ -99,6 +102,7 @@ impl StdError for Error {
             Kind::Json(ref e) => Some(e),
             Kind::TooManyRedirects |
             Kind::RedirectLoop => None,
+            Kind::IO(ref e) => Some(e),
         }
     }
 }
@@ -112,8 +116,8 @@ pub enum Kind {
     Json(::serde_json::Error),
     TooManyRedirects,
     RedirectLoop,
+    IO(::std::io::Error),
 }
-
 
 impl From<::hyper::Error> for Kind {
     #[inline]
@@ -149,6 +153,13 @@ impl From<InternalFrom<Error>> for Error {
     #[inline]
     fn from(other: InternalFrom<Error>) -> Error {
         other.0
+    }
+}
+
+impl From<::std::io::Error> for Kind {
+    #[inline]
+    fn from(err: ::std::io::Error) -> Kind {
+        Kind::IO(err)
     }
 }
 
