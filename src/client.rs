@@ -310,7 +310,7 @@ impl Client {
                method: Method::Post,
                url: url.into_url(),
                _version: HttpVersion::Http11,
-               headers: Headers::new(),
+               headers: headers,
 
                body: Some(Ok(body.into())),
            })
@@ -508,6 +508,9 @@ fn make_referer(next: &Url, previous: &Url) -> Option<Referer> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::path::Path;
+
     use body;
     use hyper::method::Method;
     use hyper::Url;
@@ -574,6 +577,17 @@ mod tests {
 
         assert_eq!(r.method, Method::Delete);
         assert_eq!(r.url, Url::parse(some_url));
+    }
+
+    #[test]
+    fn basic_multipart_request() {
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com";
+        let mime: mime::Mime = "text/plain".parse().unwrap();
+        let file = vec![File { name: "tomlfile".to_string(), path: &Path::new("Cargo.toml"), mime: Some(mime) }];
+        let r = client.multipart(some_url, file, vec![("foo", "bar")]).unwrap();
+
+        assert_eq!(r.method, Method::Post);
     }
 
     #[test]
