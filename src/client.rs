@@ -30,6 +30,12 @@ static DEFAULT_USER_AGENT: &'static str =
 
 pub type Params<'a> = Vec<(&'a str, &'a str)>;
 
+macro_rules! write_bytes {
+    ($buf:ident, $f:expr, $a:expr) => (
+        $buf.extend(format!($f, $a).as_bytes())
+    )
+}
+
 macro_rules! impl_send {
     ($sname:ident) => (
         impl $sname {
@@ -278,8 +284,8 @@ impl Client {
                                      files: Vec<File>,
                                      params: Params<'a>)
                                      -> ::Result<MultipartRequestBuilder> {
-        let mut body = String::new();
-        let boundary = format!{"\r\n{}\r\n", MultipartRequestBuilder::choose_boundary()};
+        let mut body: Vec<u8> = Vec::new();
+        let boundary = MultipartRequestBuilder::choose_boundary();
         let multipart_mime = ContentType(format!{"multipart/form-data; boundary={}", boundary}
                                              .parse::<mime::Mime>()
                                              .unwrap());
@@ -287,23 +293,22 @@ impl Client {
         headers.set(multipart_mime);
 
         for (name, value) in params {
-            body.push_str(&boundary);
-            body.push_str(&format!{"Content-Disposition: form-data; name\"{}\"", name});
-            body.push_str(&format!{"\r\n{}\r\n", value});
+            write_bytes!(body, "\r\n--{}\r\n", boundary);
+            write_bytes!(body, "Content-Disposition: form-data; name\"{}\"", name);
+            write_bytes!(body, "\r\n{}\r\n", value);
         }
 
         for File { name, path, mime } in files {
-            body.push_str(&boundary);
-            body.push_str(&format!{"Content-Disposition: form-data; name\"{}\"", name});
-            body.push_str(&format!{"; filename=\"{}\"", path.file_name().unwrap().to_str().unwrap()});
-            body.push_str(&format!("\r\nContent-Type: {}\r\n\r\n", mime.unwrap()));
-
+            write_bytes!(body, "\r\n--{}\r\n", boundary);
+            write_bytes!(body, "Content-Disposition: form-data; name\"{}\"", name);
+            write_bytes!(body, "; filename=\"{}\"", path.file_name().unwrap().to_str().unwrap());
+            write_bytes!(body, "\r\nContent-type: {}\r\n\r\n", mime.unwrap());
             let mut content = try_!(fs::File::open(path));
-            content.read_to_string(&mut body).unwrap();
-            body.push_str("\r\n\r\n");
+            content.read_to_end(&mut body).unwrap();
+            body.extend("\r\n\r\n".as_bytes());
         }
 
-        body.push_str(&format!{"\r\n--{}--", boundary});
+        write_bytes!(body, "\r\n--{}--", boundary);
         Ok(MultipartRequestBuilder {
                client: self.inner.clone(),
 
