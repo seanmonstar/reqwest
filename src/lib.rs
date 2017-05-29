@@ -145,6 +145,7 @@ macro_rules! try_ {
     )
 }
 
+pub use file::File;
 pub use hyper::client::IntoUrl;
 pub use hyper::Error as HyperError;
 pub use hyper::header;
