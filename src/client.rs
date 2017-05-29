@@ -273,7 +273,11 @@ impl Client {
     /// Start building a `multipart/form-data POST Request` with the `Url`.
     ///
     /// Returns a `MultipartRequestBuilder`.
-    pub fn multipart<'a, U: IntoUrl>(self, url: U, files: Vec<File>, params: Params<'a>) -> ::Result<MultipartRequestBuilder> {
+    pub fn multipart<'a, U: IntoUrl>(&self,
+                                     url: U,
+                                     files: Vec<File>,
+                                     params: Params<'a>)
+                                     -> ::Result<MultipartRequestBuilder> {
         let mut body = String::new();
         let boundary = format!{"\r\n{}\r\n", MultipartRequestBuilder::choose_boundary()};
         let multipart_mime = ContentType(format!{"multipart/form-data; boundary={}", boundary}
@@ -301,15 +305,15 @@ impl Client {
 
         body.push_str(&format!{"\r\n--{}--", boundary});
         Ok(MultipartRequestBuilder {
-            client: self.inner.clone(),
+               client: self.inner.clone(),
 
-            method: Method::Post,
-            url: url.into_url(),
-            _version: HttpVersion::Http11,
-            headers: Headers::new(),
+               method: Method::Post,
+               url: url.into_url(),
+               _version: HttpVersion::Http11,
+               headers: Headers::new(),
 
-            body: Some(Ok(body.into())),
-        })
+               body: Some(Ok(body.into())),
+           })
     }
 }
 
@@ -388,12 +392,13 @@ impl RequestBuilder {
 
     /// Enable HTTP basic authentication.
     pub fn basic_auth<U, P>(self, username: U, password: Option<P>) -> RequestBuilder
-            where U: Into<String>, P: Into<String>
+        where U: Into<String>,
+              P: Into<String>
     {
-        self.header(::header::Authorization(::header::Basic{
-            username: username.into(),
-            password: password.map(|p| p.into()),
-        }))
+        self.header(::header::Authorization(::header::Basic {
+                                                username: username.into(),
+                                                password: password.map(|p| p.into()),
+                                            }))
     }
 
     /// Set the request body.
