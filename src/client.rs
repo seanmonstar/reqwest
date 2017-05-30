@@ -289,8 +289,6 @@ impl Client {
         let multipart_mime = ContentType(format!{"multipart/form-data; boundary={}", boundary}
                                              .parse::<mime::Mime>()
                                              .unwrap());
-        let mut headers = Headers::new();
-        headers.set(multipart_mime);
 
         for (name, value) in params {
             write_bytes!(body, "\r\n--{}\r\n", boundary);
@@ -301,7 +299,9 @@ impl Client {
         for File { name, path, mime } in files {
             write_bytes!(body, "\r\n--{}\r\n", boundary);
             write_bytes!(body, "Content-Disposition: form-data; name\"{}\"", name);
-            write_bytes!(body, "; filename=\"{}\"", path.file_name().unwrap().to_str().unwrap());
+            write_bytes!(body,
+                         "; filename=\"{}\"",
+                         path.file_name().unwrap().to_str().unwrap());
             write_bytes!(body, "\r\nContent-type: {}\r\n\r\n", mime.unwrap());
             let mut content = try_!(fs::File::open(path));
             content.read_to_end(&mut body).unwrap();
@@ -309,16 +309,10 @@ impl Client {
         }
 
         write_bytes!(body, "\r\n--{}--", boundary);
-        Ok(MultipartRequestBuilder {
-               client: self.inner.clone(),
+        let mut req = self.request(Method::Post, url).body(body);
+        req.headers.set(multipart_mime);
 
-               method: Method::Post,
-               url: url.into_url(),
-               _version: HttpVersion::Http11,
-               headers: headers,
-
-               body: Some(Ok(body.into())),
-           })
+        Ok(MultipartRequestBuilder { request: req })
     }
 }
 
@@ -479,24 +473,18 @@ impl fmt::Debug for RequestBuilder {
 }
 
 pub struct MultipartRequestBuilder {
-    client: Arc<ClientRef>,
-
-    method: Method,
-    url: Result<Url, ::UrlError>,
-    _version: HttpVersion,
-    headers: Headers,
-
-    body: Option<::Result<Body>>,
+    request: RequestBuilder,
 }
 
-impl_send!(MultipartRequestBuilder);
-
 impl MultipartRequestBuilder {
+    pub fn send(self) -> ::Result<Response> {
+        self.request.send()
+    }
+
     fn choose_boundary() -> String {
         Uuid::new_v4().simple().to_string()
     }
 }
-
 
 fn make_referer(next: &Url, previous: &Url) -> Option<Referer> {
     if next.scheme() == "http" && previous.scheme() == "https" {
@@ -589,10 +577,17 @@ mod tests {
         let client = Client::new().unwrap();
         let some_url = "https://google.com";
         let mime: mime::Mime = "text/plain".parse().unwrap();
-        let file = vec![File { name: "tomlfile".to_string(), path: &Path::new("Cargo.toml"), mime: Some(mime) }];
-        let r = client.multipart(some_url, file, vec![("foo", "bar")]).unwrap();
+        let file = vec![File {
+                            name: "tomlfile".to_string(),
+                            path: &Path::new("Cargo.toml"),
+                            mime: Some(mime),
+                        }];
+        let r = client
+            .multipart(some_url, file, vec![("foo", "bar")])
+            .unwrap();
 
-        assert_eq!(r.method, Method::Post);
+        assert_eq!(r.request.method, Method::Post);
+        assert_eq!(r.request.url, Url::parse(some_url));
     }
 
     #[test]
