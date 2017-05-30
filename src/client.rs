@@ -36,130 +36,6 @@ macro_rules! write_bytes {
     )
 }
 
-macro_rules! impl_send {
-    ($sname:ident) => (
-        impl $sname {
-            /// Constructs the Request and sends it the target URL, returning a Response.
-            pub fn send(mut self) -> ::Result<Response> {
-                if !self.headers.has::<UserAgent>() {
-                    self.headers
-                        .set(UserAgent(DEFAULT_USER_AGENT.to_owned()));
-                }
-
-                if !self.headers.has::<Accept>() {
-                    self.headers.set(Accept::star());
-                }
-                if self.client.auto_ungzip.load(Ordering::Relaxed) &&
-                   !self.headers.has::<AcceptEncoding>() && !self.headers.has::<Range>() {
-                    self.headers
-                        .set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
-                }
-                let client = self.client;
-                let mut method = self.method;
-                let mut url = try_!(self.url);
-                let mut headers = self.headers;
-                let mut body = match self.body {
-                    Some(b) => Some(try_!(b)),
-                    None => None,
-                };
-
-                let mut urls = Vec::new();
-
-                loop {
-                    let res = {
-                        info!("Request: {:?} {}", method, url);
-                        let c = client.hyper.read().unwrap();
-                        let mut req = c.request(method.clone(), url.clone())
-                            .headers(headers.clone());
-
-                        if let Some(ref mut b) = body {
-                            let body = body::as_hyper_body(b);
-                            req = req.body(body);
-                        }
-
-                        try_!(req.send(), &url)
-                    };
-
-                    let should_redirect = match res.status {
-                        StatusCode::MovedPermanently |
-                        StatusCode::Found |
-                        StatusCode::SeeOther => {
-                            body = None;
-                            match method {
-                                Method::Get | Method::Head => {}
-                                _ => {
-                                    method = Method::Get;
-                                }
-                            }
-                            true
-                        }
-                        StatusCode::TemporaryRedirect |
-                        StatusCode::PermanentRedirect => {
-                            if let Some(ref body) = body {
-                                body::can_reset(body)
-                            } else {
-                                true
-                            }
-                        }
-                        _ => false,
-                    };
-
-                    if should_redirect {
-                        let loc = {
-                            let loc = res.headers.get::<Location>().map(|loc| url.join(loc));
-                            if let Some(loc) = loc {
-                                loc
-                            } else {
-                                return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
-                            }
-                        };
-
-                        url = match loc {
-                            Ok(loc) => {
-                                if client.auto_referer.load(Ordering::Relaxed) {
-                                    if let Some(referer) = make_referer(&loc, &url) {
-                                        headers.set(referer);
-                                    }
-                                }
-                                urls.push(url);
-                                let action =
-                                    check_redirect(&client.redirect_policy.lock().unwrap(), &loc, &urls);
-
-                                match action {
-                                    redirect::Action::Follow => loc,
-                                    redirect::Action::Stop => {
-                                        debug!("redirect_policy disallowed redirection to '{}'", loc);
-                                        return Ok(::response::new(res,
-                                                                  client
-                                                                      .auto_ungzip
-                                                                      .load(Ordering::Relaxed)));
-                                    }
-                                    redirect::Action::LoopDetected => {
-                                        return Err(::error::loop_detected(res.url.clone()));
-                                    }
-                                    redirect::Action::TooManyRedirects => {
-                                        return Err(::error::too_many_redirects(res.url.clone()));
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                debug!("Location header had invalid URI: {:?}", e);
-
-                                return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
-                            }
-                        };
-
-                        remove_sensitive_headers(&mut headers, &url, &urls);
-                        debug!("redirecting to {:?} '{}'", method, url);
-                    } else {
-                        return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
-                    }
-                }
-            }
-        }
-    )
-}
-
 /// A `Client` to make Requests with.
 ///
 /// The Client has various configuration values to tweak, but the defaults
@@ -357,8 +233,6 @@ pub struct RequestBuilder {
     body: Option<::Result<Body>>,
 }
 
-impl_send!(RequestBuilder);
-
 impl RequestBuilder {
     /// Add a `Header` to this Request.
     ///
@@ -459,6 +333,124 @@ impl RequestBuilder {
         self.headers.set(ContentType::json());
         self.body = Some(Ok(body.into()));
         self
+    }
+
+    /// Constructs the Request and sends it the target URL, returning a Response.
+    pub fn send(mut self) -> ::Result<Response> {
+        if !self.headers.has::<UserAgent>() {
+            self.headers
+                .set(UserAgent(DEFAULT_USER_AGENT.to_owned()));
+        }
+
+        if !self.headers.has::<Accept>() {
+            self.headers.set(Accept::star());
+        }
+        if self.client.auto_ungzip.load(Ordering::Relaxed) &&
+           !self.headers.has::<AcceptEncoding>() && !self.headers.has::<Range>() {
+            self.headers
+                .set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
+        }
+        let client = self.client;
+        let mut method = self.method;
+        let mut url = try_!(self.url);
+        let mut headers = self.headers;
+        let mut body = match self.body {
+            Some(b) => Some(try_!(b)),
+            None => None,
+        };
+
+        let mut urls = Vec::new();
+
+        loop {
+            let res = {
+                info!("Request: {:?} {}", method, url);
+                let c = client.hyper.read().unwrap();
+                let mut req = c.request(method.clone(), url.clone())
+                    .headers(headers.clone());
+
+                if let Some(ref mut b) = body {
+                    let body = body::as_hyper_body(b);
+                    req = req.body(body);
+                }
+
+                try_!(req.send(), &url)
+            };
+
+            let should_redirect = match res.status {
+                StatusCode::MovedPermanently |
+                StatusCode::Found |
+                StatusCode::SeeOther => {
+                    body = None;
+                    match method {
+                        Method::Get | Method::Head => {}
+                        _ => {
+                            method = Method::Get;
+                        }
+                    }
+                    true
+                }
+                StatusCode::TemporaryRedirect |
+                StatusCode::PermanentRedirect => {
+                    if let Some(ref body) = body {
+                        body::can_reset(body)
+                    } else {
+                        true
+                    }
+                }
+                _ => false,
+            };
+
+            if should_redirect {
+                let loc = {
+                    let loc = res.headers.get::<Location>().map(|loc| url.join(loc));
+                    if let Some(loc) = loc {
+                        loc
+                    } else {
+                        return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
+                    }
+                };
+
+                url = match loc {
+                    Ok(loc) => {
+                        if client.auto_referer.load(Ordering::Relaxed) {
+                            if let Some(referer) = make_referer(&loc, &url) {
+                                headers.set(referer);
+                            }
+                        }
+                        urls.push(url);
+                        let action =
+                            check_redirect(&client.redirect_policy.lock().unwrap(), &loc, &urls);
+
+                        match action {
+                            redirect::Action::Follow => loc,
+                            redirect::Action::Stop => {
+                                debug!("redirect_policy disallowed redirection to '{}'", loc);
+                                return Ok(::response::new(res,
+                                                          client
+                                                              .auto_ungzip
+                                                              .load(Ordering::Relaxed)));
+                            }
+                            redirect::Action::LoopDetected => {
+                                return Err(::error::loop_detected(res.url.clone()));
+                            }
+                            redirect::Action::TooManyRedirects => {
+                                return Err(::error::too_many_redirects(res.url.clone()));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        debug!("Location header had invalid URI: {:?}", e);
+
+                        return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
+                    }
+                };
+
+                remove_sensitive_headers(&mut headers, &url, &urls);
+                debug!("redirecting to {:?} '{}'", method, url);
+            } else {
+                return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
+            }
+        }
     }
 }
 
