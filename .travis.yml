@@ -11,6 +11,7 @@ matrix:
         - rust: nightly
 
 sudo: false
+dist: trusty
 
 cache:
   apt: true

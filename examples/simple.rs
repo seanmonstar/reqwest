@@ -1,7 +1,8 @@
 //! `cargo run --example simple`
 extern crate reqwest;
 extern crate env_logger;
-#[macro_use] extern crate error_chain;
+#[macro_use]
+extern crate error_chain;
 
 error_chain! {
     foreign_links {
@@ -11,8 +12,7 @@ error_chain! {
 }
 
 fn run() -> Result<()> {
-    env_logger::init()
-        .expect("Failed to initialize logger");
+    env_logger::init().expect("Failed to initialize logger");
 
     println!("GET https://www.rust-lang.org");
 

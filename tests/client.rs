@@ -1,7 +1,8 @@
 extern crate reqwest;
 extern crate libflate;
 
-#[macro_use] mod server;
+#[macro_use]
+mod server;
 
 use std::io::Read;
 use std::io::prelude::*;
@@ -31,8 +32,10 @@ fn test_get() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), &reqwest::StatusCode::Ok);
     assert_eq!(res.version(), &reqwest::HttpVersion::Http11);
-    assert_eq!(res.headers().get(), Some(&reqwest::header::Server("test".to_string())));
-    assert_eq!(res.headers().get(), Some(&reqwest::header::ContentLength(0)));
+    assert_eq!(res.headers().get(),
+               Some(&reqwest::header::Server("test".to_string())));
+    assert_eq!(res.headers().get(),
+               Some(&reqwest::header::ContentLength(0)));
 
     let mut buf = [0; 1024];
     let n = res.read(&mut buf).unwrap();
@@ -83,12 +86,11 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
 
         let url = format!("http://{}/{}", redirect.addr(), code);
         let dst = format!("http://{}/{}", redirect.addr(), "dst");
-        let res = client.post(&url)
-            .send()
-            .unwrap();
+        let res = client.post(&url).send().unwrap();
         assert_eq!(res.url().as_str(), dst);
         assert_eq!(res.status(), &reqwest::StatusCode::Ok);
-        assert_eq!(res.headers().get(), Some(&reqwest::header::Server("test-dst".to_string())));
+        assert_eq!(res.headers().get(),
+                   Some(&reqwest::header::Server("test-dst".to_string())));
     }
 }
 
@@ -138,13 +140,11 @@ fn test_redirect_307_and_308_tries_to_post_again() {
 
         let url = format!("http://{}/{}", redirect.addr(), code);
         let dst = format!("http://{}/{}", redirect.addr(), "dst");
-        let res = client.post(&url)
-            .body("Hello")
-            .send()
-            .unwrap();
+        let res = client.post(&url).body("Hello").send().unwrap();
         assert_eq!(res.url().as_str(), dst);
         assert_eq!(res.status(), &reqwest::StatusCode::Ok);
-        assert_eq!(res.headers().get(), Some(&reqwest::header::Server("test-dst".to_string())));
+        assert_eq!(res.headers().get(),
+                   Some(&reqwest::header::Server("test-dst".to_string())));
     }
 }
 
@@ -177,7 +177,8 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
         };
 
         let url = format!("http://{}/{}", redirect.addr(), code);
-        let res = client.post(&url)
+        let res = client
+            .post(&url)
             .body(reqwest::Body::new(&b"Hello"[..]))
             .send()
             .unwrap();
@@ -226,13 +227,11 @@ fn test_redirect_removes_sensitive_headers() {
 
     let mut client = reqwest::Client::new().unwrap();
     client.referer(false);
-    client.get(&format!("http://{}/sensitive", mid_server.addr()))
-        .header(
-            reqwest::header::Cookie(vec![
-                String::from("foo=bar")
-            ])
-        )
-        .send().unwrap();
+    client
+        .get(&format!("http://{}/sensitive", mid_server.addr()))
+        .header(reqwest::header::Cookie(vec![String::from("foo=bar")]))
+        .send()
+        .unwrap();
 }
 
 #[test]
@@ -282,13 +281,12 @@ fn test_redirect_policy_can_stop_redirects_without_an_error() {
     client.redirect(reqwest::RedirectPolicy::none());
 
     let url = format!("http://{}/no-redirect", server.addr());
-    let res = client.get(&url)
-        .send()
-        .unwrap();
+    let res = client.get(&url).send().unwrap();
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), &reqwest::StatusCode::Found);
-    assert_eq!(res.headers().get(), Some(&reqwest::header::Server("test-dont".to_string())));
+    assert_eq!(res.headers().get(),
+               Some(&reqwest::header::Server("test-dont".to_string())));
 }
 
 #[test]
@@ -328,8 +326,10 @@ fn test_referer_is_not_set_if_disabled() {
     };
     let mut client = reqwest::Client::new().unwrap();
     client.referer(false);
-    client.get(&format!("http://{}/no-refer", server.addr()))
-        .send().unwrap();
+    client
+        .get(&format!("http://{}/no-refer", server.addr()))
+        .send()
+        .unwrap();
 }
 
 #[test]
@@ -352,7 +352,8 @@ fn test_accept_header_is_not_changed_if_set() {
     };
     let client = reqwest::Client::new().unwrap();
 
-    let res = client.get(&format!("http://{}/accept", server.addr()))
+    let res = client
+        .get(&format!("http://{}/accept", server.addr()))
         .header(reqwest::header::Accept::json())
         .send()
         .unwrap();
@@ -395,7 +396,7 @@ fn test_gzip_response() {
     let mut encoder = ::libflate::gzip::Encoder::new(Vec::new()).unwrap();
     match encoder.write(b"test request") {
         Ok(n) => assert!(n > 0, "Failed to write to encoder."),
-        _ => panic!("Failed to gzip encode string.")
+        _ => panic!("Failed to gzip encode string."),
     };
 
     let gzipped_content = encoder.finish().into_result().unwrap();
@@ -420,13 +421,12 @@ fn test_gzip_response() {
             ",
         response: response
     };
-    let mut res = reqwest::get(&format!("http://{}/gzip", server.addr()))
-        .unwrap();
+    let mut res = reqwest::get(&format!("http://{}/gzip", server.addr())).unwrap();
 
     let mut body = ::std::string::String::new();
     match res.read_to_string(&mut body) {
         Ok(n) => assert!(n > 0, "Failed to write to buffer."),
-        _ => panic!("Failed to write to buffer.")
+        _ => panic!("Failed to write to buffer."),
     };
 
     assert_eq!(body, "test request");
@@ -452,7 +452,8 @@ fn test_gzip_empty_body() {
     };
 
     let client = reqwest::Client::new().unwrap();
-    let mut res = client.head(&format!("http://{}/gzip", server.addr()))
+    let mut res = client
+        .head(&format!("http://{}/gzip", server.addr()))
         .send()
         .unwrap();
 
@@ -482,8 +483,7 @@ fn test_gzip_invalid_body() {
             0"
     };
 
-    let mut res = reqwest::get(&format!("http://{}/gzip", server.addr()))
-        .unwrap();
+    let mut res = reqwest::get(&format!("http://{}/gzip", server.addr())).unwrap();
     // this tests that the request.send() didn't error, but that the error
     // is in reading the body
 
