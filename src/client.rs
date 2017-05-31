@@ -168,13 +168,13 @@ impl Client {
 
         for (name, value) in params {
             write_bytes!(body, "\r\n--{}\r\n", boundary);
-            write_bytes!(body, "Content-Disposition: form-data; name\"{}\"", name);
+            write_bytes!(body, "Content-Disposition: form-data; name=\"{}\"", name);
             write_bytes!(body, "\r\n{}\r\n", value);
         }
 
         for File { name, path, mime } in files {
             write_bytes!(body, "\r\n--{}\r\n", boundary);
-            write_bytes!(body, "Content-Disposition: form-data; name\"{}\"", name);
+            write_bytes!(body, "Content-Disposition: form-data; name=\"{}\"", name);
             write_bytes!(body,
                          "; filename=\"{}\"",
                          path.file_name().unwrap().to_str().unwrap());
@@ -358,6 +358,8 @@ impl RequestBuilder {
             Some(b) => Some(try_!(b)),
             None => None,
         };
+
+        println!("{:?}", body);
 
         let mut urls = Vec::new();
 
