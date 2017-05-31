@@ -249,7 +249,7 @@ fn test_redirect_policy_can_return_errors() {
         response: b"\
             HTTP/1.1 302 Found\r\n\
             Server: test\r\n\
-            Location: /loop
+            Location: /loop\r\n\
             Content-Length: 0\r\n\
             \r\n\
             "
@@ -273,7 +273,7 @@ fn test_redirect_policy_can_stop_redirects_without_an_error() {
         response: b"\
             HTTP/1.1 302 Found\r\n\
             Server: test-dont\r\n\
-            Location: /dont
+            Location: /dont\r\n\
             Content-Length: 0\r\n\
             \r\n\
             "
