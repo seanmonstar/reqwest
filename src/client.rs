@@ -11,7 +11,7 @@ use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
 use hyper::{Url};
 
-use hyper_native_tls::{self, NativeTlsClient, native_tls};
+use hyper_native_tls::{NativeTlsClient, native_tls};
 
 use serde::Serialize;
 use serde_json;
@@ -50,7 +50,7 @@ pub struct Client {
 }
 
 /// Represent an X509 certificate.
-pub struct Certificate(hyper_native_tls::Certificate);
+pub struct Certificate(native_tls::Certificate);
 
 impl Certificate {
     /// Create a `Certificate` from a binary DER encoded certificate
@@ -69,15 +69,19 @@ impl Certificate {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// If the provided buffer is not valid DER, an error will be returned.
     pub fn from_der(der: &[u8]) -> ::Result<Certificate> {
         let inner = try_!(
-            hyper_native_tls::Certificate::from_der(der)
+            native_tls::Certificate::from_der(der)
                 .map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
         Ok(Certificate(inner))
     }
 }
 
-/// A `ClientBuilder` can be used to create a `Client` with a custom TLS configuration:
+/// A `ClientBuilder` can be used to create a `Client` with  custom configuration:
 ///
 /// - with hostname verification disabled
 /// - with one or multiple custom certificates
@@ -88,9 +92,6 @@ impl Certificate {
 /// # use std::fs::File;
 /// # use std::io::Read;
 /// # fn build_client() -> Result<(), Box<std::error::Error>> {
-/// // get a client builder
-/// let mut client_builder = reqwest::ClientBuilder::new()?;
-///
 /// // read a local binary DER encoded certificate
 /// let mut buf = Vec::new();
 /// File::open("my-cert.der")?.read_to_end(&mut buf)?;
@@ -98,18 +99,21 @@ impl Certificate {
 /// // create a certificate
 /// let cert = reqwest::Certificate::from_der(&buf)?;
 ///
-/// // add the certificate
-/// client_builder.add_root_certificate(cert)?;
-///
-/// // create the actual client
-/// let client = client_builder.build()?;
+/// // get a client builder
+/// let client = reqwest::ClientBuilder::new()?
+///     .add_root_certificate(cert)?
+///     .build()?;
 /// # drop(client);
 /// # Ok(())
 /// # }
 /// ```
 pub struct ClientBuilder {
-    inner: native_tls::TlsConnectorBuilder,
+    config: Option<Config>,
+}
+
+struct Config {
     hostname_verification: bool,
+    tls: native_tls::TlsConnectorBuilder,
 }
 
 impl ClientBuilder {
@@ -119,18 +123,26 @@ impl ClientBuilder {
             native_tls::TlsConnector::builder()
                 .map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
         Ok(ClientBuilder {
-            inner: tls_connector_builder,
-            hostname_verification: true,
+            config: Some(Config {
+                hostname_verification: true,
+                tls: tls_connector_builder,
+            })
         })
     }
 
     /// Returns a `Client` that uses this `ClientBuilder` configuration.
-    pub fn build(self) -> ::Result<Client> {
+    ///
+    /// # Note
+    ///
+    /// This consumes the internal state of the builder. Trying to use this
+    /// builder again after calling `build` will panic.
+    pub fn build(&mut self) -> ::Result<Client> {
+        let config = self.take_config();
 
         let tls_connector = try_!(
-            self.inner.build().map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
+            config.tls.build().map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
         let mut tls_client = NativeTlsClient::from(tls_connector);
-        if ! self.hostname_verification {
+        if !config.hostname_verification {
             tls_client.danger_disable_hostname_verification(true);
         }
 
@@ -151,22 +163,40 @@ impl ClientBuilder {
         })
     }
 
-    /// Add a custom root certificate. This can be used to connect to a server that has a
-    /// self-signed certificate for example.
+    /// Add a custom root certificate.
+    ///
+    /// This can be used to connect to a server that has a self-signed
+    /// certificate for example.
     pub fn add_root_certificate(&mut self, cert: Certificate) -> ::Result<&mut ClientBuilder> {
-        try_!(self.inner.add_root_certificate(cert.0)
+        try_!(self.config_mut().tls.add_root_certificate(cert.0)
                 .map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
         Ok(self)
     }
 
-    /// Disable hostname verification
+    /// Disable hostname verification.
+    ///
+    /// # Warning
+    ///
+    /// You should think very carefully before you use this method. If
+    /// hostname verification is not used, any valid certificate for any
+    /// site will be trusted for use from any other. This introduces a
+    /// significant vulnerability to man-in-the-middle attacks.
     pub fn danger_disable_hostname_verification(&mut self) {
-        self.hostname_verification = false;
+        self.config_mut().hostname_verification = false;
     }
 
-    /// Enable hostname verification
+    /// Enable hostname verification.
     pub fn enable_hostname_verification(&mut self) {
-        self.hostname_verification = true;
+        self.config_mut().hostname_verification = true;
+    }
+
+    // private
+    fn config_mut(&mut self) -> &mut Config {
+        self.config.as_mut().expect("ClientBuilder cannot be reused after building a Client")
+    }
+
+    fn take_config(&mut self) -> Config {
+        self.config.take().expect("ClientBuilder cannot be reused after building a Client")
     }
 }
 
