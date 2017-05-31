@@ -280,6 +280,17 @@ impl Client {
             body: None,
         }
     }
+
+    /// Executes a `Request`.
+    ///
+    /// A `Request` can be built manually with `Request::new()` or obtained
+    /// from a RequestBuilder with `RequestBuilder::build()`.
+    ///
+    /// You should prefer to use the `RequestBuilder` and
+    /// `RequestBuilder::send()`.
+    pub fn execute(&self, request: Request) -> ::Result<Response> {
+        self.inner.execute_request(request)
+    }
 }
 
 impl fmt::Debug for Client {
@@ -297,6 +308,188 @@ struct ClientRef {
     redirect_policy: Mutex<RedirectPolicy>,
     auto_referer: AtomicBool,
     auto_ungzip: AtomicBool,
+}
+
+impl ClientRef {
+    fn execute_request(&self, request: Request) -> ::Result<Response> {
+        let mut headers = request.headers;
+        if !headers.has::<UserAgent>() {
+            headers.set(UserAgent(DEFAULT_USER_AGENT.to_owned()));
+        }
+
+        if !headers.has::<Accept>() {
+            headers.set(Accept::star());
+        }
+        if self.auto_ungzip.load(Ordering::Relaxed) &&
+            !headers.has::<AcceptEncoding>() &&
+            !headers.has::<Range>() {
+            headers.set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
+        }
+        let mut method = request.method;
+        let mut url = request.url;
+        let mut body = request.body;
+
+        let mut urls = Vec::new();
+
+        loop {
+            let res = {
+                info!("Request: {:?} {}", method, url);
+                let c = self.hyper.read().unwrap();
+                let mut req = c.request(method.clone(), url.clone())
+                    .headers(headers.clone());
+
+                if let Some(ref mut b) = body {
+                    let body = body::as_hyper_body(b);
+                    req = req.body(body);
+                }
+
+                try_!(req.send(), &url)
+            };
+
+            let should_redirect = match res.status {
+                StatusCode::MovedPermanently |
+                StatusCode::Found |
+                StatusCode::SeeOther => {
+                    body = None;
+                    match method {
+                        Method::Get | Method::Head => {},
+                        _ => {
+                            method = Method::Get;
+                        }
+                    }
+                    true
+                },
+                StatusCode::TemporaryRedirect |
+                StatusCode::PermanentRedirect => {
+                    if let Some(ref body) = body {
+                        body::can_reset(body)
+                    } else {
+                        true
+                    }
+                },
+                _ => false,
+            };
+
+            if should_redirect {
+                let loc = {
+                    let loc = res.headers.get::<Location>().map(|loc| url.join(loc));
+                    if let Some(loc) = loc {
+                        loc
+                    } else {
+                        return Ok(::response::new(res, self.auto_ungzip.load(Ordering::Relaxed)));
+                    }
+                };
+
+                url = match loc {
+                    Ok(loc) => {
+                        if self.auto_referer.load(Ordering::Relaxed) {
+                            if let Some(referer) = make_referer(&loc, &url) {
+                                headers.set(referer);
+                            }
+                        }
+                        urls.push(url);
+                        let action = check_redirect(&self.redirect_policy.lock().unwrap(), &loc, &urls);
+
+                        match action {
+                            redirect::Action::Follow => loc,
+                            redirect::Action::Stop => {
+                                debug!("redirect_policy disallowed redirection to '{}'", loc);
+                                return Ok(::response::new(res, self.auto_ungzip.load(Ordering::Relaxed)));
+                            },
+                            redirect::Action::LoopDetected => {
+                                return Err(::error::loop_detected(res.url.clone()));
+                            },
+                            redirect::Action::TooManyRedirects => {
+                                return Err(::error::too_many_redirects(res.url.clone()));
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        debug!("Location header had invalid URI: {:?}", e);
+
+                        return Ok(::response::new(res, self.auto_ungzip.load(Ordering::Relaxed)))
+                    }
+                };
+
+                remove_sensitive_headers(&mut headers, &url, &urls);
+                debug!("redirecting to {:?} '{}'", method, url);
+            } else {
+                return Ok(::response::new(res, self.auto_ungzip.load(Ordering::Relaxed)))
+            }
+        }
+    }
+}
+
+/// A request which can be executed with `Client::execute()`.
+pub struct Request {
+    _version: HttpVersion,
+    method: Method,
+    url: Url,
+    headers: Headers,
+    body: Option<Body>,
+}
+
+impl Request {
+    /// Constructs a new request.
+    pub fn new(method: Method, url: Url) -> Self {
+        Request {
+            _version: HttpVersion::Http11,
+            method,
+            url,
+            headers: Headers::new(),
+            body: None,
+        }
+    }
+
+    /// Get the method.
+    pub fn method(&self) -> &Method {
+        &self.method
+    }
+
+    /// Set the method.
+    pub fn set_method(&mut self, method: Method) {
+        self.method = method;
+    }
+
+    /// Get the url.
+    pub fn url(&self) -> &Url {
+        &self.url
+    }
+
+    /// Get a mutable reference to the url.
+    pub fn url_mut(&mut self) -> &mut Url {
+        &mut self.url
+    }
+
+    /// Set the url.
+    pub fn set_url(&mut self, url: Url) {
+        self.url = url;
+    }
+
+    /// Get the headers.
+    pub fn headers(&self) -> &Headers {
+        &self.headers
+    }
+
+    /// Get a mutable reference to the headers.
+    pub fn headers_mut(&mut self) -> &mut Headers {
+        &mut self.headers
+    }
+
+    /// Get the body.
+    pub fn body(&self) -> Option<&Body> {
+        self.body.as_ref()
+    }
+
+    /// Get a mutable reference to the body.
+    pub fn body_mut(&mut self) -> &mut Option<Body> {
+        &mut self.body
+    }
+
+    /// Set the body.
+    pub fn set_body(&mut self, body: Option<Body>) {
+        self.body = body;
+    }
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -410,117 +603,29 @@ impl RequestBuilder {
         self
     }
 
-    /// Constructs the Request and sends it the target URL, returning a Response.
-    pub fn send(mut self) -> ::Result<Response> {
-        if !self.headers.has::<UserAgent>() {
-            self.headers.set(UserAgent(DEFAULT_USER_AGENT.to_owned()));
-        }
-
-        if !self.headers.has::<Accept>() {
-            self.headers.set(Accept::star());
-        }
-        if self.client.auto_ungzip.load(Ordering::Relaxed) &&
-            !self.headers.has::<AcceptEncoding>() &&
-            !self.headers.has::<Range>() {
-            self.headers.set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
-        }
-        let client = self.client;
-        let mut method = self.method;
-        let mut url = try_!(self.url);
-        let mut headers = self.headers;
-        let mut body = match self.body {
+    /// Build a `Request`, which can be inspected, modified and executed with
+    /// `Client::execute()`.
+    pub fn build(self) -> ::Result<Request> {
+        let url = try_!(self.url);
+        let body = match self.body {
             Some(b) => Some(try_!(b)),
             None => None,
         };
+        let req = Request {
+            _version: self._version,
+            method: self.method,
+            url: url,
+            headers: self.headers,
+            body: body,
+        };
+        Ok(req)
+    }
 
-        let mut urls = Vec::new();
-
-        loop {
-            let res = {
-                info!("Request: {:?} {}", method, url);
-                let c = client.hyper.read().unwrap();
-                let mut req = c.request(method.clone(), url.clone())
-                    .headers(headers.clone());
-
-                if let Some(ref mut b) = body {
-                    let body = body::as_hyper_body(b);
-                    req = req.body(body);
-                }
-
-                try_!(req.send(), &url)
-            };
-
-            let should_redirect = match res.status {
-                StatusCode::MovedPermanently |
-                StatusCode::Found |
-                StatusCode::SeeOther => {
-                    body = None;
-                    match method {
-                        Method::Get | Method::Head => {},
-                        _ => {
-                            method = Method::Get;
-                        }
-                    }
-                    true
-                },
-                StatusCode::TemporaryRedirect |
-                StatusCode::PermanentRedirect => {
-                    if let Some(ref body) = body {
-                        body::can_reset(body)
-                    } else {
-                        true
-                    }
-                },
-                _ => false,
-            };
-
-            if should_redirect {
-                let loc = {
-                    let loc = res.headers.get::<Location>().map(|loc| url.join(loc));
-                    if let Some(loc) = loc {
-                        loc
-                    } else {
-                        return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
-                    }
-                };
-
-                url = match loc {
-                    Ok(loc) => {
-                        if client.auto_referer.load(Ordering::Relaxed) {
-                            if let Some(referer) = make_referer(&loc, &url) {
-                                headers.set(referer);
-                            }
-                        }
-                        urls.push(url);
-                        let action = check_redirect(&client.redirect_policy.lock().unwrap(), &loc, &urls);
-
-                        match action {
-                            redirect::Action::Follow => loc,
-                            redirect::Action::Stop => {
-                                debug!("redirect_policy disallowed redirection to '{}'", loc);
-                                return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
-                            },
-                            redirect::Action::LoopDetected => {
-                                return Err(::error::loop_detected(res.url.clone()));
-                            },
-                            redirect::Action::TooManyRedirects => {
-                                return Err(::error::too_many_redirects(res.url.clone()));
-                            }
-                        }
-                    },
-                    Err(e) => {
-                        debug!("Location header had invalid URI: {:?}", e);
-
-                        return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)))
-                    }
-                };
-
-                remove_sensitive_headers(&mut headers, &url, &urls);
-                debug!("redirecting to {:?} '{}'", method, url);
-            } else {
-                return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)))
-            }
-        }
+    /// Constructs the Request and sends it the target URL, returning a Response.
+    pub fn send(self) -> ::Result<Response> {
+        let client = self.client.clone();
+        let request = self.build()?;
+        client.execute_request(request)
     }
 }
 
