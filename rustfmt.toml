@@ -1,0 +1,4 @@
+take_source_hints = true
+fn_call_style = "Block"
+struct_lit_multiline_style = "ForceMulti"
+where_style = "Rfc"

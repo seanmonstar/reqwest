@@ -125,12 +125,16 @@ impl ClientBuilder {
             native_tls::TlsConnector::builder()
                 .map_err(|e| ::hyper::Error::Ssl(Box::new(e)))
         );
-        Ok(ClientBuilder {
-            config: Some(Config {
-                hostname_verification: true,
-                tls: tls_connector_builder,
-            })
-        })
+        Ok(
+            ClientBuilder {
+                config: Some(
+                    Config {
+                        hostname_verification: true,
+                        tls: tls_connector_builder,
+                    }
+                ),
+            }
+        )
     }
 
     /// Returns a `Client` that uses this `ClientBuilder` configuration.
@@ -162,14 +166,18 @@ impl ClientBuilder {
 
         hyper_client.set_redirect_policy(::hyper::client::RedirectPolicy::FollowNone);
 
-        Ok(Client {
-            inner: Arc::new(ClientRef {
-                hyper: RwLock::new(hyper_client),
-                redirect_policy: Mutex::new(RedirectPolicy::default()),
-                auto_referer: AtomicBool::new(true),
-                auto_ungzip: AtomicBool::new(true),
-            }),
-        })
+        Ok(
+            Client {
+                inner: Arc::new(
+                    ClientRef {
+                        hyper: RwLock::new(hyper_client),
+                        redirect_policy: Mutex::new(RedirectPolicy::default()),
+                        auto_referer: AtomicBool::new(true),
+                        auto_ungzip: AtomicBool::new(true),
+                    }
+                ),
+            }
+        )
     }
 
     /// Add a custom root certificate.
@@ -365,10 +373,14 @@ impl RequestBuilder {
         U: Into<String>,
         P: Into<String>,
     {
-        self.header(::header::Authorization(::header::Basic{
-            username: username.into(),
-            password: password.map(|p| p.into()),
-        }))
+        self.header(
+            ::header::Authorization(
+                ::header::Basic {
+                    username: username.into(),
+                    password: password.map(|p| p.into()),
+                }
+            )
+        )
     }
 
     /// Set the request body.
@@ -442,9 +454,9 @@ impl RequestBuilder {
             self.headers.set(Accept::star());
         }
         if self.client.auto_ungzip.load(Ordering::Relaxed) &&
-            !self.headers.has::<AcceptEncoding>() &&
-            !self.headers.has::<Range>() {
-            self.headers.set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
+           !self.headers.has::<AcceptEncoding>() && !self.headers.has::<Range>() {
+            self.headers
+                .set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
         }
         let client = self.client;
         let mut method = self.method;
@@ -521,7 +533,12 @@ impl RequestBuilder {
                             redirect::Action::Follow => loc,
                             redirect::Action::Stop => {
                                 debug!("redirect_policy disallowed redirection to '{}'", loc);
-                                return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
+                                return Ok(
+                                    ::response::new(
+                                        res,
+                                        client.auto_ungzip.load(Ordering::Relaxed),
+                                    )
+                                );
                             }
                             redirect::Action::LoopDetected => {
                                 return Err(::error::loop_detected(res.url.clone()));
@@ -706,8 +723,10 @@ mod tests {
         r = r.form(&form_data);
 
         // Make sure the content type was set
-        assert_eq!(r.headers.get::<ContentType>(),
-                   Some(&ContentType::form_url_encoded()));
+        assert_eq!(
+            r.headers.get::<ContentType>(),
+            Some(&ContentType::form_url_encoded())
+        );
 
         let buf = body::read_to_string(r.body.unwrap().unwrap()).unwrap();
 

@@ -23,7 +23,11 @@ pub fn spawn(txns: Vec<(Vec<u8>, Vec<u8>)>) -> Server {
     thread::spawn(
         move || for (mut expected, reply) in txns {
             let (mut socket, _addr) = listener.accept().unwrap();
-            replace_expected_vars(&mut expected, addr.to_string().as_ref(), DEFAULT_USER_AGENT.as_ref());
+            replace_expected_vars(
+                &mut expected,
+                addr.to_string().as_ref(),
+                DEFAULT_USER_AGENT.as_ref(),
+            );
             let mut buf = [0; 4096];
             let n = socket.read(&mut buf).unwrap();
 
