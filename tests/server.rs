@@ -20,8 +20,8 @@ static DEFAULT_USER_AGENT: &'static str =
 pub fn spawn(txns: Vec<(Vec<u8>, Vec<u8>)>) -> Server {
     let listener = net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
-    thread::spawn(move || {
-        for (mut expected, reply) in txns {
+    thread::spawn(
+        move || for (mut expected, reply) in txns {
             let (mut socket, _addr) = listener.accept().unwrap();
             replace_expected_vars(&mut expected, addr.to_string().as_ref(), DEFAULT_USER_AGENT.as_ref());
             let mut buf = [0; 4096];
@@ -33,7 +33,7 @@ pub fn spawn(txns: Vec<(Vec<u8>, Vec<u8>)>) -> Server {
             }
             socket.write_all(&reply).unwrap();
         }
-    });
+    );
 
     Server {
         addr: addr,
