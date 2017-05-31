@@ -1,7 +1,9 @@
 //! `cargo run --example response_json`
 extern crate reqwest;
-#[macro_use] extern crate serde_derive;
-#[macro_use] extern crate error_chain;
+#[macro_use]
+extern crate serde_derive;
+#[macro_use]
+extern crate error_chain;
 
 error_chain! {
     foreign_links {

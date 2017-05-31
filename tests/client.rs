@@ -1,7 +1,8 @@
 extern crate reqwest;
 extern crate libflate;
 
-#[macro_use] mod server;
+#[macro_use]
+mod server;
 
 use std::io::Read;
 use std::io::prelude::*;
@@ -395,7 +396,7 @@ fn test_gzip_response() {
     let mut encoder = ::libflate::gzip::Encoder::new(Vec::new()).unwrap();
     match encoder.write(b"test request") {
         Ok(n) => assert!(n > 0, "Failed to write to encoder."),
-        _ => panic!("Failed to gzip encode string.")
+        _ => panic!("Failed to gzip encode string."),
     };
 
     let gzipped_content = encoder.finish().into_result().unwrap();
@@ -426,7 +427,7 @@ fn test_gzip_response() {
     let mut body = ::std::string::String::new();
     match res.read_to_string(&mut body) {
         Ok(n) => assert!(n > 0, "Failed to write to buffer."),
-        _ => panic!("Failed to write to buffer.")
+        _ => panic!("Failed to write to buffer."),
     };
 
     assert_eq!(body, "test request");

@@ -18,7 +18,7 @@ pub struct Response {
 pub fn new(res: ::hyper::client::Response, gzip: bool) -> Response {
     info!("Response: '{}' for {}", res.status, res.url);
     Response {
-        inner: Decoder::from_hyper_response(res, gzip)
+        inner: Decoder::from_hyper_response(res, gzip),
     }
 }
 
@@ -32,8 +32,8 @@ impl fmt::Debug for Response {
                     .field("headers", &hyper_response.headers)
                     .field("version", &hyper_response.version)
                     .finish()
-            },
-            Decoder::Gzip{ ref head, .. } |
+            }
+            Decoder::Gzip { ref head, .. } |
             Decoder::Errored { ref head, .. } => {
                 f.debug_struct("Response")
                     .field("url", &head.url)
@@ -52,7 +52,7 @@ impl Response {
     pub fn url(&self) -> &Url {
         match self.inner {
             Decoder::PlainText(ref hyper_response) => &hyper_response.url,
-            Decoder::Gzip{ ref head, .. } |
+            Decoder::Gzip { ref head, .. } |
             Decoder::Errored { ref head, .. } => &head.url,
         }
     }
@@ -62,7 +62,7 @@ impl Response {
     pub fn status(&self) -> &StatusCode {
         match self.inner {
             Decoder::PlainText(ref hyper_response) => &hyper_response.status,
-            Decoder::Gzip{ ref head, .. } |
+            Decoder::Gzip { ref head, .. } |
             Decoder::Errored { ref head, .. } => &head.status,
         }
     }
@@ -72,7 +72,7 @@ impl Response {
     pub fn headers(&self) -> &Headers {
         match self.inner {
             Decoder::PlainText(ref hyper_response) => &hyper_response.headers,
-            Decoder::Gzip{ ref head, .. } |
+            Decoder::Gzip { ref head, .. } |
             Decoder::Errored { ref head, .. } => &head.headers,
         }
     }
@@ -82,7 +82,7 @@ impl Response {
     pub fn version(&self) -> &HttpVersion {
         match self.inner {
             Decoder::PlainText(ref hyper_response) => &hyper_response.version,
-            Decoder::Gzip{ ref head, .. } |
+            Decoder::Gzip { ref head, .. } |
             Decoder::Errored { ref head, .. } => &head.version,
         }
     }
@@ -184,7 +184,7 @@ fn new_gzip(mut res: ::hyper::client::Response) -> Decoder {
         Ok(0) => return Decoder::PlainText(res),
         Ok(n) => {
             debug_assert_eq!(n, 1);
-        },
+        }
         Err(e) => return Decoder::Errored {
             err: Some(e),
             head: Head {
@@ -193,7 +193,7 @@ fn new_gzip(mut res: ::hyper::client::Response) -> Decoder {
                 url: res.url.clone(),
                 version: res.version,
             }
-        },
+        }
     }
 
     let head = Head {
@@ -274,4 +274,3 @@ impl Read for Response {
         self.inner.read(buf)
     }
 }
-

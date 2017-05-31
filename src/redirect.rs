@@ -2,7 +2,7 @@ use std::fmt;
 
 use hyper::header::{Headers, Authorization, Cookie};
 
-use ::Url;
+use Url;
 
 /// A type that controls the policy on how to handle the following of redirects.
 ///
@@ -77,7 +77,9 @@ impl RedirectPolicy {
     /// # }
     /// ```
     pub fn custom<T>(policy: T) -> RedirectPolicy
-    where T: Fn(RedirectAttempt) -> RedirectAction + Send + Sync + 'static {
+    where
+        T: Fn(RedirectAttempt) -> RedirectAction + Send + Sync + 'static,
+    {
         RedirectPolicy {
             inner: Policy::Custom(Box::new(policy)),
         }
@@ -94,7 +96,7 @@ impl RedirectPolicy {
                 } else {
                     attempt.follow()
                 }
-            },
+            }
             Policy::None => attempt.stop(),
         }
     }
@@ -262,7 +264,7 @@ fn test_remove_sensitive_headers() {
         ])
     );
 
-    let next  = Url::parse("http://initial-domain.com/path").unwrap();
+    let next = Url::parse("http://initial-domain.com/path").unwrap();
     let mut prev = vec![Url::parse("http://initial-domain.com/new_path").unwrap()];
     let mut filtered_headers = headers.clone();
 

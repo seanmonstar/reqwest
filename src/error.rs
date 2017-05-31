@@ -1,7 +1,7 @@
 use std::error::Error as StdError;
 use std::fmt;
 
-use ::Url;
+use Url;
 
 /// The Errors that may occur when processing a `Request`.
 #[derive(Debug)]
@@ -153,10 +153,12 @@ impl From<InternalFrom<Error>> for Error {
 }
 
 impl<T> From<InternalFrom<T>> for Error
-where T: Into<Kind> {
+where
+    T: Into<Kind>,
+{
     #[inline]
     fn from(other: InternalFrom<T>) -> Error {
-         Error {
+        Error {
             kind: other.0.into(),
             url: other.1,
         }
@@ -165,7 +167,9 @@ where T: Into<Kind> {
 
 #[inline]
 pub fn from<T>(err: T) -> Error
-where T: Into<Kind> {
+where
+    T: Into<Kind>,
+{
     InternalFrom(err, None).into()
 }
 
@@ -193,6 +197,6 @@ fn test_error_get_ref_downcasts() {
 
     match cause {
         &::hyper::Error::Status => (),
-        _ => panic!("unexpected downcast: {:?}", cause)
+        _ => panic!("unexpected downcast: {:?}", cause),
     }
 }

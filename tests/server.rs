@@ -28,7 +28,7 @@ pub fn spawn(txns: Vec<(Vec<u8>, Vec<u8>)>) -> Server {
 
             match (::std::str::from_utf8(&expected), ::std::str::from_utf8(&buf[..n])) {
                 (Ok(expected), Ok(received)) => assert_eq!(expected, received),
-                _ => assert_eq!(expected, &buf[..n])
+                _ => assert_eq!(expected, &buf[..n]),
             }
             socket.write_all(&reply).unwrap();
         }

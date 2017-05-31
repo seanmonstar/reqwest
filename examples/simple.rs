@@ -1,7 +1,8 @@
 //! `cargo run --example simple`
 extern crate reqwest;
 extern crate env_logger;
-#[macro_use] extern crate error_chain;
+#[macro_use]
+extern crate error_chain;
 
 error_chain! {
     foreign_links {

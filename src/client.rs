@@ -5,11 +5,11 @@ use std::time::Duration;
 
 use hyper::client::IntoUrl;
 use hyper::header::{Headers, ContentType, Location, Referer, UserAgent, Accept, Encoding,
-    AcceptEncoding, Range, qitem};
+                    AcceptEncoding, Range, qitem};
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
-use hyper::{Url};
+use hyper::Url;
 
 use hyper_native_tls::{NativeTlsClient, native_tls};
 
@@ -17,9 +17,9 @@ use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
 
-use ::body::{self, Body};
-use ::redirect::{self, RedirectPolicy, check_redirect, remove_sensitive_headers};
-use ::response::Response;
+use body::{self, Body};
+use redirect::{self, RedirectPolicy, check_redirect, remove_sensitive_headers};
+use response::Response;
 
 static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
@@ -328,7 +328,8 @@ impl RequestBuilder {
     /// # }
     /// ```
     pub fn header<H>(mut self, header: H) -> RequestBuilder
-    where H: ::header::Header + ::header::HeaderFormat
+    where
+        H: ::header::Header + ::header::HeaderFormat,
     {
         self.headers.set(header);
         self
@@ -343,7 +344,9 @@ impl RequestBuilder {
 
     /// Enable HTTP basic authentication.
     pub fn basic_auth<U, P>(self, username: U, password: Option<P>) -> RequestBuilder
-            where U: Into<String>, P: Into<String>
+    where
+        U: Into<String>,
+        P: Into<String>,
     {
         self.header(::header::Authorization(::header::Basic{
             username: username.into(),
@@ -458,13 +461,13 @@ impl RequestBuilder {
                 StatusCode::SeeOther => {
                     body = None;
                     match method {
-                        Method::Get | Method::Head => {},
+                        Method::Get | Method::Head => {}
                         _ => {
                             method = Method::Get;
                         }
                     }
                     true
-                },
+                }
                 StatusCode::TemporaryRedirect |
                 StatusCode::PermanentRedirect => {
                     if let Some(ref body) = body {
@@ -472,7 +475,7 @@ impl RequestBuilder {
                     } else {
                         true
                     }
-                },
+                }
                 _ => false,
             };
 
@@ -501,26 +504,26 @@ impl RequestBuilder {
                             redirect::Action::Stop => {
                                 debug!("redirect_policy disallowed redirection to '{}'", loc);
                                 return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
-                            },
+                            }
                             redirect::Action::LoopDetected => {
                                 return Err(::error::loop_detected(res.url.clone()));
-                            },
+                            }
                             redirect::Action::TooManyRedirects => {
                                 return Err(::error::too_many_redirects(res.url.clone()));
                             }
                         }
-                    },
+                    }
                     Err(e) => {
                         debug!("Location header had invalid URI: {:?}", e);
 
-                        return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)))
+                        return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
                     }
                 };
 
                 remove_sensitive_headers(&mut headers, &url, &urls);
                 debug!("redirecting to {:?} '{}'", method, url);
             } else {
-                return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)))
+                return Ok(::response::new(res, client.auto_ungzip.load(Ordering::Relaxed)));
             }
         }
     }
@@ -551,7 +554,7 @@ fn make_referer(next: &Url, previous: &Url) -> Option<Referer> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::body;
+    use body;
     use hyper::method::Method;
     use hyper::Url;
     use hyper::header::{Host, Headers, ContentType};
