@@ -612,16 +612,16 @@ impl RequestBuilder {
     ///
     /// let client = reqwest::Client::new()?;
     /// let res = client.post("http://httpbin.org")
-    ///     .json(&map)
+    ///     .json(&map)?
     ///     .send()?;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn json<T: Serialize>(mut self, json: &T) -> RequestBuilder {
-        let body = serde_json::to_vec(json).expect("serde to_vec cannot fail");
+    pub fn json<T: Serialize>(mut self, json: &T) -> ::Result<RequestBuilder> {
+        let body = serde_json::to_vec(json).map_err(::error::from)?;
         self.headers.set(ContentType::json());
         self.body = Some(Ok(body.into()));
-        self
+        Ok(self)
     }
 
     /// Build a `Request`, which can be inspected, modified and executed with
