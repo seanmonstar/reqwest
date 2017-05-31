@@ -148,12 +148,13 @@ impl Decoder {
         }
         let content_encoding_gzip: bool;
         let mut is_gzip = {
-            content_encoding_gzip = res.headers.get::<ContentEncoding>().map_or(false, |encs|{
-                encs.contains(&Encoding::Gzip)
-            });
-            content_encoding_gzip || res.headers.get::<TransferEncoding>().map_or(false, |encs|{
-                encs.contains(&Encoding::Gzip)
-            })
+            content_encoding_gzip = res.headers
+                .get::<ContentEncoding>()
+                .map_or(false, |encs| encs.contains(&Encoding::Gzip));
+            content_encoding_gzip ||
+            res.headers
+                .get::<TransferEncoding>()
+                .map_or(false, |encs| encs.contains(&Encoding::Gzip))
         };
         if is_gzip {
             if let Some(content_length) = res.headers.get::<ContentLength>() {
@@ -249,12 +250,8 @@ impl Read for Peeked {
 impl Read for Decoder {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match *self {
-            Decoder::PlainText(ref mut hyper_response) => {
-                hyper_response.read(buf)
-            },
-            Decoder::Gzip{ref mut decoder, ..} => {
-                decoder.read(buf)
-            },
+            Decoder::PlainText(ref mut hyper_response) => hyper_response.read(buf),
+            Decoder::Gzip { ref mut decoder, .. } => decoder.read(buf),
             Decoder::Errored { ref mut err, .. } => {
                 Err(err.take().unwrap_or_else(previously_errored))
             }

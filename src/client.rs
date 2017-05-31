@@ -21,7 +21,8 @@ use body::{self, Body};
 use redirect::{self, RedirectPolicy, check_redirect, remove_sensitive_headers};
 use response::Response;
 
-static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+static DEFAULT_USER_AGENT: &'static str =
+    concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 /// A `Client` to make Requests with.
 ///
@@ -74,9 +75,8 @@ impl Certificate {
     ///
     /// If the provided buffer is not valid DER, an error will be returned.
     pub fn from_der(der: &[u8]) -> ::Result<Certificate> {
-        let inner = try_!(
-            native_tls::Certificate::from_der(der)
-                .map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
+        let inner = try_!(native_tls::Certificate::from_der(der)
+                              .map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
         Ok(Certificate(inner))
     }
 }
@@ -119,9 +119,8 @@ struct Config {
 impl ClientBuilder {
     /// Constructs a new `ClientBuilder`
     pub fn new() -> ::Result<ClientBuilder> {
-        let tls_connector_builder = try_!(
-            native_tls::TlsConnector::builder()
-                .map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
+        let tls_connector_builder = try_!(native_tls::TlsConnector::builder()
+                                              .map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
         Ok(ClientBuilder {
             config: Some(Config {
                 hostname_verification: true,
@@ -139,8 +138,10 @@ impl ClientBuilder {
     pub fn build(&mut self) -> ::Result<Client> {
         let config = self.take_config();
 
-        let tls_connector = try_!(
-            config.tls.build().map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
+        let tls_connector = try_!(config
+                                      .tls
+                                      .build()
+                                      .map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
         let mut tls_client = NativeTlsClient::from(tls_connector);
         if !config.hostname_verification {
             tls_client.danger_disable_hostname_verification(true);
@@ -149,7 +150,9 @@ impl ClientBuilder {
         let mut hyper_client = ::hyper::Client::with_connector(
             ::hyper::client::Pool::with_connector(
                 Default::default(),
-                ::hyper::net::HttpsConnector::new(tls_client)));
+                ::hyper::net::HttpsConnector::new(tls_client),
+            )
+        );
 
         hyper_client.set_redirect_policy(::hyper::client::RedirectPolicy::FollowNone);
 
@@ -168,8 +171,10 @@ impl ClientBuilder {
     /// This can be used to connect to a server that has a self-signed
     /// certificate for example.
     pub fn add_root_certificate(&mut self, cert: Certificate) -> ::Result<&mut ClientBuilder> {
-        try_!(self.config_mut().tls.add_root_certificate(cert.0)
-                .map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
+        try_!(self.config_mut()
+                  .tls
+                  .add_root_certificate(cert.0)
+                  .map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
         Ok(self)
     }
 
@@ -192,11 +197,15 @@ impl ClientBuilder {
 
     // private
     fn config_mut(&mut self) -> &mut Config {
-        self.config.as_mut().expect("ClientBuilder cannot be reused after building a Client")
+        self.config
+            .as_mut()
+            .expect("ClientBuilder cannot be reused after building a Client")
     }
 
     fn take_config(&mut self) -> Config {
-        self.config.take().expect("ClientBuilder cannot be reused after building a Client")
+        self.config
+            .take()
+            .expect("ClientBuilder cannot be reused after building a Client")
     }
 }
 
@@ -497,7 +506,8 @@ impl RequestBuilder {
                             }
                         }
                         urls.push(url);
-                        let action = check_redirect(&client.redirect_policy.lock().unwrap(), &loc, &urls);
+                        let action =
+                            check_redirect(&client.redirect_policy.lock().unwrap(), &loc, &urls);
 
                         match action {
                             redirect::Action::Follow => loc,
@@ -688,7 +698,8 @@ mod tests {
         r = r.form(&form_data);
 
         // Make sure the content type was set
-        assert_eq!(r.headers.get::<ContentType>(), Some(&ContentType::form_url_encoded()));
+        assert_eq!(r.headers.get::<ContentType>(),
+                   Some(&ContentType::form_url_encoded()));
 
         let buf = body::read_to_string(r.body.unwrap().unwrap()).unwrap();
 

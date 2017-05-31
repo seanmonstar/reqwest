@@ -189,8 +189,8 @@ pub fn check_redirect(policy: &RedirectPolicy, next: &Url, previous: &[Url]) -> 
 
 pub fn remove_sensitive_headers(headers: &mut Headers, next: &Url, previous: &[Url]) {
     if let Some(previous) = previous.last() {
-        let cross_host = next.host_str() != previous.host_str()
-            || next.port_or_known_default() != previous.port_or_known_default();
+        let cross_host = next.host_str() != previous.host_str() ||
+                         next.port_or_known_default() != previous.port_or_known_default();
         if cross_host {
             headers.remove::<Authorization<String>>();
             headers.remove::<Cookie>();
@@ -231,7 +231,8 @@ fn test_redirect_policy_limit() {
 
     previous.push(Url::parse("http://a.b.d/e/33").unwrap());
 
-    assert_eq!(check_redirect(&policy, &next, &previous), Action::TooManyRedirects);
+    assert_eq!(check_redirect(&policy, &next, &previous),
+               Action::TooManyRedirects);
 }
 
 #[test]
@@ -258,11 +259,7 @@ fn test_remove_sensitive_headers() {
     let mut headers = Headers::new();
     headers.set(Accept::star());
     headers.set(Authorization("let me in".to_owned()));
-    headers.set(
-        Cookie(vec![
-            String::from("foo=bar")
-        ])
-    );
+    headers.set(Cookie(vec![String::from("foo=bar")]));
 
     let next = Url::parse("http://initial-domain.com/path").unwrap();
     let mut prev = vec![Url::parse("http://initial-domain.com/new_path").unwrap()];

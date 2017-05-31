@@ -192,8 +192,10 @@ pub fn too_many_redirects(url: Url) -> Error {
 #[test]
 fn test_error_get_ref_downcasts() {
     let err: Error = from(::hyper::Error::Status);
-    let cause = err.get_ref().unwrap()
-        .downcast_ref::<::hyper::Error>().unwrap();
+    let cause = err.get_ref()
+        .unwrap()
+        .downcast_ref::<::hyper::Error>()
+        .unwrap();
 
     match cause {
         &::hyper::Error::Status => (),
