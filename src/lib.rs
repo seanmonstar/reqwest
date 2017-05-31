@@ -154,7 +154,7 @@ pub use hyper::version::HttpVersion;
 pub use hyper::Url;
 pub use url::ParseError as UrlError;
 
-pub use self::client::{Client, RequestBuilder};
+pub use self::client::{Certificate, Client, ClientBuilder, RequestBuilder};
 pub use self::error::{Error, Result};
 pub use self::body::Body;
 pub use self::redirect::RedirectPolicy;

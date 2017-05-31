@@ -11,6 +11,8 @@ use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
 use hyper::{Url};
 
+use hyper_native_tls::{NativeTlsClient, native_tls};
+
 use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
@@ -47,19 +49,161 @@ pub struct Client {
     inner: Arc<ClientRef>,
 }
 
-impl Client {
-    /// Constructs a new `Client`.
-    pub fn new() -> ::Result<Client> {
-        let mut client = try_!(new_hyper_client());
-        client.set_redirect_policy(::hyper::client::RedirectPolicy::FollowNone);
+/// Represent an X509 certificate.
+pub struct Certificate(native_tls::Certificate);
+
+impl Certificate {
+    /// Create a `Certificate` from a binary DER encoded certificate
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::fs::File;
+    /// # use std::io::Read;
+    /// # fn cert() -> Result<(), Box<std::error::Error>> {
+    /// let mut buf = Vec::new();
+    /// File::open("my_cert.der")?
+    ///     .read_to_end(&mut buf)?;
+    /// let cert = reqwest::Certificate::from_der(&buf)?;
+    /// # drop(cert);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// If the provided buffer is not valid DER, an error will be returned.
+    pub fn from_der(der: &[u8]) -> ::Result<Certificate> {
+        let inner = try_!(
+            native_tls::Certificate::from_der(der)
+                .map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
+        Ok(Certificate(inner))
+    }
+}
+
+/// A `ClientBuilder` can be used to create a `Client` with  custom configuration:
+///
+/// - with hostname verification disabled
+/// - with one or multiple custom certificates
+///
+/// # Examples
+///
+/// ```
+/// # use std::fs::File;
+/// # use std::io::Read;
+/// # fn build_client() -> Result<(), Box<std::error::Error>> {
+/// // read a local binary DER encoded certificate
+/// let mut buf = Vec::new();
+/// File::open("my-cert.der")?.read_to_end(&mut buf)?;
+///
+/// // create a certificate
+/// let cert = reqwest::Certificate::from_der(&buf)?;
+///
+/// // get a client builder
+/// let client = reqwest::ClientBuilder::new()?
+///     .add_root_certificate(cert)?
+///     .build()?;
+/// # drop(client);
+/// # Ok(())
+/// # }
+/// ```
+pub struct ClientBuilder {
+    config: Option<Config>,
+}
+
+struct Config {
+    hostname_verification: bool,
+    tls: native_tls::TlsConnectorBuilder,
+}
+
+impl ClientBuilder {
+    /// Constructs a new `ClientBuilder`
+    pub fn new() -> ::Result<ClientBuilder> {
+        let tls_connector_builder = try_!(
+            native_tls::TlsConnector::builder()
+                .map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
+        Ok(ClientBuilder {
+            config: Some(Config {
+                hostname_verification: true,
+                tls: tls_connector_builder,
+            })
+        })
+    }
+
+    /// Returns a `Client` that uses this `ClientBuilder` configuration.
+    ///
+    /// # Note
+    ///
+    /// This consumes the internal state of the builder. Trying to use this
+    /// builder again after calling `build` will panic.
+    pub fn build(&mut self) -> ::Result<Client> {
+        let config = self.take_config();
+
+        let tls_connector = try_!(
+            config.tls.build().map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
+        let mut tls_client = NativeTlsClient::from(tls_connector);
+        if !config.hostname_verification {
+            tls_client.danger_disable_hostname_verification(true);
+        }
+
+        let mut hyper_client = ::hyper::Client::with_connector(
+            ::hyper::client::Pool::with_connector(
+                Default::default(),
+                ::hyper::net::HttpsConnector::new(tls_client)));
+
+        hyper_client.set_redirect_policy(::hyper::client::RedirectPolicy::FollowNone);
+
         Ok(Client {
             inner: Arc::new(ClientRef {
-                hyper: RwLock::new(client),
+                hyper: RwLock::new(hyper_client),
                 redirect_policy: Mutex::new(RedirectPolicy::default()),
                 auto_referer: AtomicBool::new(true),
                 auto_ungzip: AtomicBool::new(true),
             }),
         })
+    }
+
+    /// Add a custom root certificate.
+    ///
+    /// This can be used to connect to a server that has a self-signed
+    /// certificate for example.
+    pub fn add_root_certificate(&mut self, cert: Certificate) -> ::Result<&mut ClientBuilder> {
+        try_!(self.config_mut().tls.add_root_certificate(cert.0)
+                .map_err(|e| ::hyper::Error::Ssl(Box::new(e))));
+        Ok(self)
+    }
+
+    /// Disable hostname verification.
+    ///
+    /// # Warning
+    ///
+    /// You should think very carefully before you use this method. If
+    /// hostname verification is not used, any valid certificate for any
+    /// site will be trusted for use from any other. This introduces a
+    /// significant vulnerability to man-in-the-middle attacks.
+    pub fn danger_disable_hostname_verification(&mut self) {
+        self.config_mut().hostname_verification = false;
+    }
+
+    /// Enable hostname verification.
+    pub fn enable_hostname_verification(&mut self) {
+        self.config_mut().hostname_verification = true;
+    }
+
+    // private
+    fn config_mut(&mut self) -> &mut Config {
+        self.config.as_mut().expect("ClientBuilder cannot be reused after building a Client")
+    }
+
+    fn take_config(&mut self) -> Config {
+        self.config.take().expect("ClientBuilder cannot be reused after building a Client")
+    }
+}
+
+impl Client {
+    /// Constructs a new `Client`.
+    pub fn new() -> ::Result<Client> {
+        try_!(ClientBuilder::new()).build()
     }
 
     /// Enable auto gzip decompression by checking the ContentEncoding response header.
@@ -153,18 +297,6 @@ struct ClientRef {
     redirect_policy: Mutex<RedirectPolicy>,
     auto_referer: AtomicBool,
     auto_ungzip: AtomicBool,
-}
-
-fn new_hyper_client() -> ::Result<::hyper::Client> {
-    use hyper_native_tls::NativeTlsClient;
-    Ok(::hyper::Client::with_connector(
-        ::hyper::client::Pool::with_connector(
-            Default::default(),
-            ::hyper::net::HttpsConnector::new(
-                try_!(NativeTlsClient::new()
-                     .map_err(|e| ::hyper::Error::Ssl(Box::new(e)))))
-        )
-    ))
 }
 
 /// A builder to construct the properties of a `Request`.
