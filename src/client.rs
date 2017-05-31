@@ -448,6 +448,7 @@ pub struct Request {
 
 impl Request {
     /// Constructs a new request.
+    #[inline]
     pub fn new(method: Method, url: Url) -> Self {
         Request {
             _version: HttpVersion::Http11,
@@ -459,53 +460,51 @@ impl Request {
     }
 
     /// Get the method.
+    #[inline]
     pub fn method(&self) -> &Method {
         &self.method
     }
 
-    /// Set the method.
-    pub fn set_method(&mut self, method: Method) {
-        self.method = method;
+    /// Get a mutable reference to the method.
+    #[inline]
+    pub fn method_mut(&mut self) -> &mut Method {
+        &mut self.method
     }
 
     /// Get the url.
+    #[inline]
     pub fn url(&self) -> &Url {
         &self.url
     }
 
     /// Get a mutable reference to the url.
+    #[inline]
     pub fn url_mut(&mut self) -> &mut Url {
         &mut self.url
     }
 
-    /// Set the url.
-    pub fn set_url(&mut self, url: Url) {
-        self.url = url;
-    }
-
     /// Get the headers.
+    #[inline]
     pub fn headers(&self) -> &Headers {
         &self.headers
     }
 
     /// Get a mutable reference to the headers.
+    #[inline]
     pub fn headers_mut(&mut self) -> &mut Headers {
         &mut self.headers
     }
 
     /// Get the body.
+    #[inline]
     pub fn body(&self) -> Option<&Body> {
         self.body.as_ref()
     }
 
     /// Get a mutable reference to the body.
+    #[inline]
     pub fn body_mut(&mut self) -> &mut Option<Body> {
         &mut self.body
-    }
-
-    /// Set the body.
-    pub fn set_body(&mut self, body: Option<Body>) {
-        self.body = body;
     }
 }
 
