@@ -4,10 +4,11 @@ matrix:
     allow_failures:
         - rust: nightly
     include:
+        - rust: stable
         - os: osx
           rust: stable
         - rust: beta
-        - rust: stable
+        - rust: nightly
 
 sudo: false
 
