@@ -143,6 +143,13 @@ impl From<::serde_json::Error> for Kind {
     }
 }
 
+impl From<::hyper_native_tls::native_tls::Error> for Kind {
+    fn from(other: ::hyper_native_tls::native_tls::Error) -> Kind {
+        ::hyper::Error::Ssl(Box::new(other)).into()
+    }
+}
+
+
 pub struct InternalFrom<T>(pub T, pub Option<Url>);
 
 impl From<InternalFrom<Error>> for Error {
