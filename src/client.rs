@@ -855,6 +855,6 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.post(some_url);
         let json_data = MyStruct{};
-        assert_eq!(format!("{}", r.json(&json_data).unwrap_err()), "nope".to_string());
+        assert!(r.json(&json_data).unwrap_err().is_serialization());
     }
 }
