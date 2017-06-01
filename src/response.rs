@@ -2,7 +2,7 @@ use std::fmt;
 use std::io::{self, Read};
 
 use hyper::header::{Headers, ContentEncoding, ContentLength, Encoding, TransferEncoding};
-use hyper::status::StatusCode;
+use hyper::status::{StatusCode, StatusClass};
 use hyper::version::HttpVersion;
 use hyper::Url;
 use libflate::gzip;
@@ -116,6 +116,32 @@ impl Response {
     #[inline]
     pub fn json<T: DeserializeOwned>(&mut self) -> ::Result<T> {
         serde_json::from_reader(self).map_err(::error::from)
+    }
+
+    /// Turn a response into an error if the server returned an error.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// extern crate reqwest;
+    ///
+    /// fn main() {
+    ///     let resp = reqwest::get("http://127.0.0.1/")
+    ///         .expect("network error")
+    ///         .error_for_status()
+    ///         .expect("client or server error");
+    /// }
+    /// ```
+    pub fn error_for_status(self) -> ::Result<Self> {
+        match self.status().class() {
+            StatusClass::ClientError => {
+                Err(::error::client_error(self.url().clone(), *self.status()))
+            }
+            StatusClass::ServerError => {
+                Err(::error::server_error(self.url().clone(), *self.status()))
+            }
+            _ => Ok(self),
+        }
     }
 }
 
