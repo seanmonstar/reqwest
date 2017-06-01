@@ -617,6 +617,11 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Serialization can fail if `T`'s implementation of `Serialize` decides to
+    /// fail, or if `T` contains a map with non-string keys.
     pub fn json<T: Serialize>(mut self, json: &T) -> ::Result<RequestBuilder> {
         let body = serde_json::to_vec(json).map_err(::error::from)?;
         self.headers.set(ContentType::json());
