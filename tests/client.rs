@@ -225,9 +225,11 @@ fn test_redirect_removes_sensitive_headers() {
             ", end_server.addr())
     };
 
-    let mut client = reqwest::Client::new().unwrap();
-    client.referer(false);
-    client
+    reqwest::Client::builder()
+        .unwrap()
+        .referer(false)
+        .build()
+        .unwrap()
         .get(&format!("http://{}/sensitive", mid_server.addr()))
         .header(reqwest::header::Cookie(vec![String::from("foo=bar")]))
         .send()
@@ -277,11 +279,17 @@ fn test_redirect_policy_can_stop_redirects_without_an_error() {
             \r\n\
             "
     };
-    let mut client = reqwest::Client::new().unwrap();
-    client.redirect(reqwest::RedirectPolicy::none());
 
     let url = format!("http://{}/no-redirect", server.addr());
-    let res = client.get(&url).send().unwrap();
+
+    let res = reqwest::Client::builder()
+        .unwrap()
+        .redirect(reqwest::RedirectPolicy::none())
+        .build()
+        .unwrap()
+        .get(&url)
+        .send()
+        .unwrap();
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), &reqwest::StatusCode::Found);
@@ -324,9 +332,10 @@ fn test_referer_is_not_set_if_disabled() {
             \r\n\
             "
     };
-    let mut client = reqwest::Client::new().unwrap();
-    client.referer(false);
-    client
+    reqwest::Client::builder().unwrap()
+        .referer(false)
+        .build().unwrap()
+        //client
         .get(&format!("http://{}/no-refer", server.addr()))
         .send()
         .unwrap();

@@ -62,8 +62,7 @@ impl RedirectPolicy {
     /// # use reqwest::{Error, RedirectPolicy};
     /// #
     /// # fn run() -> Result<(), Error> {
-    /// let mut client = reqwest::Client::new()?;
-    /// client.redirect(RedirectPolicy::custom(|attempt| {
+    /// let custom = RedirectPolicy::custom(|attempt| {
     ///     if attempt.previous().len() > 5 {
     ///         attempt.too_many_redirects()
     ///     } else if attempt.url().host_str() == Some("example.domain") {
@@ -72,7 +71,10 @@ impl RedirectPolicy {
     ///     } else {
     ///         attempt.follow()
     ///     }
-    /// }));
+    /// });
+    /// let client = reqwest::Client::builder()?
+    ///     .redirect(custom)
+    ///     .build()?;
     /// # Ok(())
     /// # }
     /// ```

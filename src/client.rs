@@ -1,6 +1,5 @@
 use std::fmt;
-use std::sync::{Arc, Mutex, RwLock};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use hyper::client::IntoUrl;
@@ -114,7 +113,11 @@ pub struct ClientBuilder {
 }
 
 struct Config {
+    gzip: bool,
     hostname_verification: bool,
+    redirect_policy: RedirectPolicy,
+    referer: bool,
+    timeout: Option<Duration>,
     tls: native_tls::TlsConnectorBuilder,
 }
 
@@ -127,7 +130,11 @@ impl ClientBuilder {
         );
         Ok(ClientBuilder {
             config: Some(Config {
+                gzip: true,
                 hostname_verification: true,
+                redirect_policy: RedirectPolicy::default(),
+                referer: true,
+                timeout: None,
                 tls: tls_connector_builder,
             })
         })
@@ -161,13 +168,15 @@ impl ClientBuilder {
         );
 
         hyper_client.set_redirect_policy(::hyper::client::RedirectPolicy::FollowNone);
+        hyper_client.set_read_timeout(config.timeout);
+        hyper_client.set_write_timeout(config.timeout);
 
         Ok(Client {
             inner: Arc::new(ClientRef {
-                hyper: RwLock::new(hyper_client),
-                redirect_policy: Mutex::new(RedirectPolicy::default()),
-                auto_referer: AtomicBool::new(true),
-                auto_ungzip: AtomicBool::new(true),
+                gzip: config.gzip,
+                hyper: hyper_client,
+                redirect_policy: config.redirect_policy,
+                referer: config.referer,
             }),
         })
     }
@@ -194,13 +203,51 @@ impl ClientBuilder {
     /// hostname verification is not used, any valid certificate for any
     /// site will be trusted for use from any other. This introduces a
     /// significant vulnerability to man-in-the-middle attacks.
-    pub fn danger_disable_hostname_verification(&mut self) {
+    #[inline]
+    pub fn danger_disable_hostname_verification(&mut self) -> &mut ClientBuilder {
         self.config_mut().hostname_verification = false;
+        self
     }
 
     /// Enable hostname verification.
-    pub fn enable_hostname_verification(&mut self) {
+    #[inline]
+    pub fn enable_hostname_verification(&mut self) -> &mut ClientBuilder {
         self.config_mut().hostname_verification = true;
+        self
+    }
+
+    /// Enable auto gzip decompression by checking the ContentEncoding response header.
+    ///
+    /// Default is enabled.
+    #[inline]
+    pub fn gzip(&mut self, enable: bool) -> &mut ClientBuilder {
+        self.config_mut().gzip = enable;
+        self
+    }
+
+    /// Set a `RedirectPolicy` for this client.
+    ///
+    /// Default will follow redirects up to a maximum of 10.
+    #[inline]
+    pub fn redirect(&mut self, policy: RedirectPolicy) -> &mut ClientBuilder {
+        self.config_mut().redirect_policy = policy;
+        self
+    }
+
+    /// Enable or disable automatic setting of the `Referer` header.
+    ///
+    /// Default is `true`.
+    #[inline]
+    pub fn referer(&mut self, enable: bool) -> &mut ClientBuilder {
+        self.config_mut().referer = enable;
+        self
+    }
+
+    /// Set a timeout for both the read and write operations of a client.
+    #[inline]
+    pub fn timeout(&mut self, timeout: Duration) -> &mut ClientBuilder {
+        self.config_mut().timeout = Some(timeout);
+        self
     }
 
     // private
@@ -219,36 +266,15 @@ impl ClientBuilder {
 
 impl Client {
     /// Constructs a new `Client`.
+    #[inline]
     pub fn new() -> ::Result<Client> {
-        try_!(ClientBuilder::new()).build()
+        ClientBuilder::new()?.build()
     }
 
-    /// Enable auto gzip decompression by checking the ContentEncoding response header.
-    ///
-    /// Default is enabled.
-    pub fn gzip(&mut self, enable: bool) {
-        self.inner.auto_ungzip.store(enable, Ordering::Relaxed);
-    }
-
-    /// Set a `RedirectPolicy` for this client.
-    ///
-    /// Default will follow redirects up to a maximum of 10.
-    pub fn redirect(&mut self, policy: RedirectPolicy) {
-        *self.inner.redirect_policy.lock().unwrap() = policy;
-    }
-
-    /// Enable or disable automatic setting of the `Referer` header.
-    ///
-    /// Default is `true`.
-    pub fn referer(&mut self, enable: bool) {
-        self.inner.auto_referer.store(enable, Ordering::Relaxed);
-    }
-
-    /// Set a timeout for both the read and write operations of a client.
-    pub fn timeout(&mut self, timeout: Duration) {
-        let mut client = self.inner.hyper.write().unwrap();
-        client.set_read_timeout(Some(timeout));
-        client.set_write_timeout(Some(timeout));
+    /// Creates a `ClientBuilder` to configure a `Client`.
+    #[inline]
+    pub fn builder() -> ::Result<ClientBuilder> {
+        ClientBuilder::new()
     }
 
     /// Convenience method to make a `GET` request to a URL.
@@ -288,7 +314,7 @@ impl Client {
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
         let url = url.into_url();
         RequestBuilder {
-            client: self.inner.clone(),
+            client: self.clone(),
             method: method,
             url: url,
             _version: HttpVersion::Http11,
@@ -313,18 +339,18 @@ impl Client {
 impl fmt::Debug for Client {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Client")
+            .field("gzip", &self.inner.gzip)
             .field("redirect_policy", &self.inner.redirect_policy)
-            .field("referer", &self.inner.auto_referer)
-            .field("auto_ungzip", &self.inner.auto_ungzip)
+            .field("referer", &self.inner.referer)
             .finish()
     }
 }
 
 struct ClientRef {
-    hyper: RwLock<::hyper::Client>,
-    redirect_policy: Mutex<RedirectPolicy>,
-    auto_referer: AtomicBool,
-    auto_ungzip: AtomicBool,
+    gzip: bool,
+    hyper: ::hyper::Client,
+    redirect_policy: RedirectPolicy,
+    referer: bool,
 }
 
 impl ClientRef {
@@ -337,7 +363,7 @@ impl ClientRef {
         if !headers.has::<Accept>() {
             headers.set(Accept::star());
         }
-        if self.auto_ungzip.load(Ordering::Relaxed) &&
+        if self.gzip &&
             !headers.has::<AcceptEncoding>() &&
             !headers.has::<Range>() {
             headers.set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
@@ -351,8 +377,7 @@ impl ClientRef {
         loop {
             let res = {
                 info!("Request: {:?} {}", method, url);
-                let c = self.hyper.read().unwrap();
-                let mut req = c.request(method.clone(), url.clone())
+                let mut req = self.hyper.request(method.clone(), url.clone())
                     .headers(headers.clone());
 
                 if let Some(ref mut b) = body {
@@ -393,25 +418,25 @@ impl ClientRef {
                     if let Some(loc) = loc {
                         loc
                     } else {
-                        return Ok(::response::new(res, self.auto_ungzip.load(Ordering::Relaxed)));
+                        return Ok(::response::new(res, self.gzip));
                     }
                 };
 
                 url = match loc {
                     Ok(loc) => {
-                        if self.auto_referer.load(Ordering::Relaxed) {
+                        if self.referer {
                             if let Some(referer) = make_referer(&loc, &url) {
                                 headers.set(referer);
                             }
                         }
                         urls.push(url);
-                        let action = check_redirect(&self.redirect_policy.lock().unwrap(), &loc, &urls);
+                        let action = check_redirect(&self.redirect_policy, &loc, &urls);
 
                         match action {
                             redirect::Action::Follow => loc,
                             redirect::Action::Stop => {
                                 debug!("redirect_policy disallowed redirection to '{}'", loc);
-                                return Ok(::response::new(res, self.auto_ungzip.load(Ordering::Relaxed)));
+                                return Ok(::response::new(res, self.gzip));
                             },
                             redirect::Action::LoopDetected => {
                                 return Err(::error::loop_detected(res.url.clone()));
@@ -424,14 +449,14 @@ impl ClientRef {
                     Err(e) => {
                         debug!("Location header had invalid URI: {:?}", e);
 
-                        return Ok(::response::new(res, self.auto_ungzip.load(Ordering::Relaxed)))
+                        return Ok(::response::new(res, self.gzip));
                     }
                 };
 
                 remove_sensitive_headers(&mut headers, &url, &urls);
                 debug!("redirecting to {:?} '{}'", method, url);
             } else {
-                return Ok(::response::new(res, self.auto_ungzip.load(Ordering::Relaxed)))
+                return Ok(::response::new(res, self.gzip));
             }
         }
     }
@@ -439,7 +464,6 @@ impl ClientRef {
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
-    _version: HttpVersion,
     method: Method,
     url: Url,
     headers: Headers,
@@ -451,7 +475,6 @@ impl Request {
     #[inline]
     pub fn new(method: Method, url: Url) -> Self {
         Request {
-            _version: HttpVersion::Http11,
             method,
             url,
             headers: Headers::new(),
@@ -510,7 +533,7 @@ impl Request {
 
 /// A builder to construct the properties of a `Request`.
 pub struct RequestBuilder {
-    client: Arc<ClientRef>,
+    client: Client,
 
     method: Method,
     url: Result<Url, ::UrlError>,
@@ -638,7 +661,6 @@ impl RequestBuilder {
             None => None,
         };
         let req = Request {
-            _version: self._version,
             method: self.method,
             url: url,
             headers: self.headers,
@@ -651,7 +673,7 @@ impl RequestBuilder {
     pub fn send(self) -> ::Result<Response> {
         let client = self.client.clone();
         let request = self.build()?;
-        client.execute_request(request)
+        client.execute(request)
     }
 }
 
