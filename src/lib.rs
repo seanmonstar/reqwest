@@ -1,5 +1,6 @@
 #![deny(warnings)]
 #![deny(missing_docs)]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.6.2")]
 
 //! # reqwest
 //!
