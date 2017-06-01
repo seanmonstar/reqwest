@@ -101,7 +101,7 @@
 //!
 //! let client = reqwest::Client::new()?;
 //! let res = client.post("http://httpbin.org/post")
-//!     .json(&map)
+//!     .json(&map)?
 //!     .send()?;
 //! # Ok(())
 //! # }

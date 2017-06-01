@@ -612,16 +612,21 @@ impl RequestBuilder {
     ///
     /// let client = reqwest::Client::new()?;
     /// let res = client.post("http://httpbin.org")
-    ///     .json(&map)
+    ///     .json(&map)?
     ///     .send()?;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn json<T: Serialize>(mut self, json: &T) -> RequestBuilder {
-        let body = serde_json::to_vec(json).expect("serde to_vec cannot fail");
+    ///
+    /// # Errors
+    ///
+    /// Serialization can fail if `T`'s implementation of `Serialize` decides to
+    /// fail, or if `T` contains a map with non-string keys.
+    pub fn json<T: Serialize>(mut self, json: &T) -> ::Result<RequestBuilder> {
+        let body = serde_json::to_vec(json).map_err(::error::from)?;
         self.headers.set(ContentType::json());
         self.body = Some(Ok(body.into()));
-        self
+        Ok(self)
     }
 
     /// Build a `Request`, which can be inspected, modified and executed with
@@ -827,7 +832,7 @@ mod tests {
         let mut json_data = HashMap::new();
         json_data.insert("foo", "bar");
 
-        r = r.json(&json_data);
+        r = r.json(&json_data).unwrap();
 
         // Make sure the content type was set
         assert_eq!(r.headers.get::<ContentType>(), Some(&ContentType::json()));
@@ -836,5 +841,25 @@ mod tests {
 
         let body_should_be = serde_json::to_string(&json_data).unwrap();
         assert_eq!(buf, body_should_be);
+    }
+
+    #[test]
+    fn add_json_fail() {
+        use serde::{Serialize, Serializer};
+        use serde::ser::Error;
+        struct MyStruct;
+        impl Serialize for MyStruct {
+            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+                where S: Serializer
+                {
+                    Err(S::Error::custom("nope"))
+                }
+        }
+
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com/";
+        let r = client.post(some_url);
+        let json_data = MyStruct{};
+        assert!(r.json(&json_data).unwrap_err().is_serialization());
     }
 }
