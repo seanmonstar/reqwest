@@ -55,7 +55,7 @@
 //! #
 //! # fn run() -> Result<(), Error> {
 //! let client = reqwest::Client::new()?;
-//! let res = client.post("http://httpbin.org/post")
+//! let res = client.post("http://httpbin.org/post")?
 //!     .body("the exact body that is sent")
 //!     .send()?;
 //! # Ok(())
@@ -77,8 +77,8 @@
 //! // This will POST a body of `foo=bar&baz=quux`
 //! let params = [("foo", "bar"), ("baz", "quux")];
 //! let client = reqwest::Client::new()?;
-//! let res = client.post("http://httpbin.org/post")
-//!     .form(&params)
+//! let res = client.post("http://httpbin.org/post")?
+//!     .form(&params)?
 //!     .send()?;
 //! # Ok(())
 //! # }
@@ -101,7 +101,7 @@
 //! map.insert("body", "json");
 //!
 //! let client = reqwest::Client::new()?;
-//! let res = client.post("http://httpbin.org/post")
+//! let res = client.post("http://httpbin.org/post")?
 //!     .json(&map)?
 //!     .send()?;
 //! # Ok(())
@@ -156,16 +156,18 @@ pub use hyper::version::HttpVersion;
 pub use hyper::Url;
 pub use url::ParseError as UrlError;
 
-pub use self::client::{Certificate, Client, ClientBuilder, RequestBuilder};
+pub use self::client::{Certificate, Client, ClientBuilder};
 pub use self::error::{Error, Result};
 pub use self::body::Body;
 pub use self::redirect::RedirectPolicy;
+pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
 
 mod error;
 mod body;
 mod client;
 mod redirect;
+mod request;
 mod response;
 
 
@@ -203,8 +205,9 @@ mod response;
 /// # }
 /// ```
 pub fn get<T: IntoUrl>(url: T) -> ::Result<Response> {
-    let client = try!(Client::new());
-    client.get(url).send()
+    Client::new()?
+        .get(url)?
+        .send()
 }
 
 fn _assert_impls() {
@@ -216,9 +219,10 @@ fn _assert_impls() {
     assert_sync::<Client>();
     assert_clone::<Client>();
 
+    assert_send::<Request>();
     assert_send::<RequestBuilder>();
-    assert_send::<Response>();
 
+    assert_send::<Response>();
 
     assert_send::<Error>();
     assert_sync::<Error>();
