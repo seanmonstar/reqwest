@@ -25,7 +25,7 @@ impl Error {
     /// The `'static` bounds allows using `downcast_ref` to check the
     /// details of the error.
     #[inline]
-    pub fn get_ref(&self) -> Option<&(StdError + 'static)> {
+    pub fn get_ref(&self) -> Option<&(StdError + Send + Sync + 'static)> {
         match self.kind {
             Kind::Http(ref e) => Some(e),
             Kind::UrlEncoded(ref e) => Some(e),
