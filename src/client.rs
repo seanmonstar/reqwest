@@ -74,10 +74,7 @@ impl Certificate {
     ///
     /// If the provided buffer is not valid DER, an error will be returned.
     pub fn from_der(der: &[u8]) -> ::Result<Certificate> {
-        let inner = try_!(
-            native_tls::Certificate::from_der(der)
-                .map_err(|e| ::hyper::Error::Ssl(Box::new(e)))
-        );
+        let inner = try_!(native_tls::Certificate::from_der(der));
         Ok(Certificate(inner))
     }
 }
@@ -124,10 +121,7 @@ struct Config {
 impl ClientBuilder {
     /// Constructs a new `ClientBuilder`
     pub fn new() -> ::Result<ClientBuilder> {
-        let tls_connector_builder = try_!(
-            native_tls::TlsConnector::builder()
-                .map_err(|e| ::hyper::Error::Ssl(Box::new(e)))
-        );
+        let tls_connector_builder = try_!(native_tls::TlsConnector::builder());
         Ok(ClientBuilder {
             config: Some(Config {
                 gzip: true,
@@ -149,12 +143,7 @@ impl ClientBuilder {
     pub fn build(&mut self) -> ::Result<Client> {
         let config = self.take_config();
 
-        let tls_connector = try_!(
-            config
-                .tls
-                .build()
-                .map_err(|e| ::hyper::Error::Ssl(Box::new(e)))
-        );
+        let tls_connector = try_!(config.tls.build());
         let mut tls_client = NativeTlsClient::from(tls_connector);
         if !config.hostname_verification {
             tls_client.danger_disable_hostname_verification(true);
@@ -186,12 +175,7 @@ impl ClientBuilder {
     /// This can be used to connect to a server that has a self-signed
     /// certificate for example.
     pub fn add_root_certificate(&mut self, cert: Certificate) -> ::Result<&mut ClientBuilder> {
-        try_!(
-            self.config_mut()
-                .tls
-                .add_root_certificate(cert.0)
-                .map_err(|e| ::hyper::Error::Ssl(Box::new(e)))
-        );
+        try_!(self.config_mut().tls.add_root_certificate(cert.0));
         Ok(self)
     }
 
