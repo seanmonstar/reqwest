@@ -31,7 +31,6 @@ fn test_get() {
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), &reqwest::StatusCode::Ok);
-    assert_eq!(res.version(), &reqwest::HttpVersion::Http11);
     assert_eq!(res.headers().get(),
                Some(&reqwest::header::Server("test".to_string())));
     assert_eq!(res.headers().get(),
