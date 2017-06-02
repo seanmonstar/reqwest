@@ -152,7 +152,6 @@ pub use hyper::header;
 pub use hyper::mime;
 pub use hyper::method::Method;
 pub use hyper::status::StatusCode;
-pub use hyper::version::HttpVersion;
 pub use hyper::Url;
 pub use url::ParseError as UrlError;
 

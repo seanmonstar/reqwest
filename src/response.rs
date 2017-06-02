@@ -3,7 +3,6 @@ use std::io::{self, Read};
 
 use hyper::header::{Headers, ContentEncoding, ContentLength, Encoding, TransferEncoding};
 use hyper::status::StatusCode;
-use hyper::version::HttpVersion;
 use hyper::Url;
 use libflate::gzip;
 use serde::de::DeserializeOwned;
@@ -30,7 +29,6 @@ impl fmt::Debug for Response {
                     .field("url", &hyper_response.url)
                     .field("status", &hyper_response.status)
                     .field("headers", &hyper_response.headers)
-                    .field("version", &hyper_response.version)
                     .finish()
             }
             Decoder::Gzip { ref head, .. } |
@@ -39,7 +37,6 @@ impl fmt::Debug for Response {
                     .field("url", &head.url)
                     .field("status", &head.status)
                     .field("headers", &head.headers)
-                    .field("version", &head.version)
                     .finish()
             }
         }
@@ -74,16 +71,6 @@ impl Response {
             Decoder::PlainText(ref hyper_response) => &hyper_response.headers,
             Decoder::Gzip { ref head, .. } |
             Decoder::Errored { ref head, .. } => &head.headers,
-        }
-    }
-
-    /// Get the `HttpVersion`.
-    #[inline]
-    pub fn version(&self) -> &HttpVersion {
-        match self.inner {
-            Decoder::PlainText(ref hyper_response) => &hyper_response.version,
-            Decoder::Gzip { ref head, .. } |
-            Decoder::Errored { ref head, .. } => &head.version,
         }
     }
 
@@ -192,7 +179,6 @@ fn new_gzip(mut res: ::hyper::client::Response) -> Decoder {
                 headers: res.headers.clone(),
                 status: res.status,
                 url: res.url.clone(),
-                version: res.version,
             }
         }
     }
@@ -201,7 +187,6 @@ fn new_gzip(mut res: ::hyper::client::Response) -> Decoder {
         headers: res.headers.clone(),
         status: res.status,
         url: res.url.clone(),
-        version: res.version,
     };
 
     let reader = Peeked {
@@ -223,7 +208,6 @@ fn new_gzip(mut res: ::hyper::client::Response) -> Decoder {
 struct Head {
     headers: ::hyper::header::Headers,
     url: ::hyper::Url,
-    version: ::hyper::version::HttpVersion,
     status: ::hyper::status::StatusCode,
 }
 
