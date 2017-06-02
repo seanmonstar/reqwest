@@ -25,13 +25,18 @@
 //!
 //! For a single request, you can use the [`get`][get] shortcut method.
 //!
-//! ```no_run
+//! ```rust
 //! use std::io::Read;
-//! let mut resp = reqwest::get("https://www.rust-lang.org").unwrap();
+//! # use reqwest::{Error, Response};
+//!
+//! # fn run() -> Result<Response, Error> {
+//! let mut resp = reqwest::get("https://www.rust-lang.org")?;
 //! assert!(resp.status().is_success());
 //!
 //! let mut content = String::new();
 //! resp.read_to_string(&mut content);
+//! # Ok(resp)
+//! # }
 //! ```
 //!
 //! As you can see, reqwest's [`Response`][response] struct implements Rust's
