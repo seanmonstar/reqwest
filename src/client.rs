@@ -116,6 +116,10 @@ struct Config {
 
 impl ClientBuilder {
     /// Constructs a new `ClientBuilder`
+    ///
+    /// # Errors
+    ///
+    /// This method fails if native TLS backend cannot be created.
     pub fn new() -> ::Result<ClientBuilder> {
         let tls_connector_builder = try_!(native_tls::TlsConnector::builder());
         Ok(ClientBuilder {
@@ -132,10 +136,14 @@ impl ClientBuilder {
 
     /// Returns a `Client` that uses this `ClientBuilder` configuration.
     ///
-    /// # Note
+    /// # Errors
     ///
-    /// This consumes the internal state of the builder. Trying to use this
-    /// builder again after calling `build` will panic.
+    /// This method fails if native TLS backend cannot be initialized.
+    ///
+    /// # Panics
+    ///
+    /// This method consumes the internal state of the builder.
+    /// Trying to use this builder again after calling `build` will panic.
     pub fn build(&mut self) -> ::Result<Client> {
         let config = self.take_config();
 
@@ -170,6 +178,10 @@ impl ClientBuilder {
     ///
     /// This can be used to connect to a server that has a self-signed
     /// certificate for example.
+    ///
+    /// # Errors
+    ///
+    /// This method fails if adding root certificate was unsuccessful.
     pub fn add_root_certificate(&mut self, cert: Certificate) -> ::Result<&mut ClientBuilder> {
         try_!(self.config_mut().tls.add_root_certificate(cert.0));
         Ok(self)
@@ -246,43 +258,75 @@ impl ClientBuilder {
 
 impl Client {
     /// Constructs a new `Client`.
+    ///
+    /// # Errors
+    ///
+    /// This method fails if native TLS backend cannot be created or initialized.
     #[inline]
     pub fn new() -> ::Result<Client> {
         ClientBuilder::new()?.build()
     }
 
     /// Creates a `ClientBuilder` to configure a `Client`.
+    ///
+    /// # Errors
+    ///
+    /// This method fails if native TLS backend cannot be created.
     #[inline]
     pub fn builder() -> ::Result<ClientBuilder> {
         ClientBuilder::new()
     }
 
     /// Convenience method to make a `GET` request to a URL.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn get<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
         self.request(Method::Get, url)
     }
 
     /// Convenience method to make a `POST` request to a URL.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn post<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
         self.request(Method::Post, url)
     }
 
     /// Convenience method to make a `PUT` request to a URL.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn put<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
         self.request(Method::Put, url)
     }
 
     /// Convenience method to make a `PATCH` request to a URL.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn patch<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
         self.request(Method::Patch, url)
     }
 
     /// Convenience method to make a `DELETE` request to a URL.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn delete<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
         self.request(Method::Delete, url)
     }
 
     /// Convenience method to make a `HEAD` request to a URL.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn head<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
         self.request(Method::Head, url)
     }
@@ -291,6 +335,10 @@ impl Client {
     ///
     /// Returns a `RequestBuilder`, which will allow setting headers and
     /// request body before sending.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> ::Result<RequestBuilder> {
         let url = try_!(url.into_url());
         Ok(request::builder(self.clone(), Request::new(method, url)))
@@ -303,6 +351,11 @@ impl Client {
     ///
     /// You should prefer to use the `RequestBuilder` and
     /// `RequestBuilder::send()`.
+    ///
+    /// # Errors
+    ///
+    /// This method fails if there was an error while sending request,
+    /// redirect loop was detected or redirect limit was exhausted.
     pub fn execute(&self, request: Request) -> ::Result<Response> {
         self.inner.execute_request(request)
     }
