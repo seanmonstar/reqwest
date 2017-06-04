@@ -13,6 +13,8 @@ pub struct RedirectPolicy {
     inner: Policy,
 }
 
+/// A type that holds information on the next request and previous requests
+/// in redirect chain.
 #[derive(Debug)]
 pub struct RedirectAttempt<'a> {
     next: &'a Url,
@@ -51,10 +53,10 @@ impl RedirectPolicy {
     /// The custom policy should have some way of handling those.
     ///
     /// Information on the next request and previous requests can be found
-    /// on the `RedirectAttempt` argument passed to the closure.
+    /// on the [`RedirectAttempt`] argument passed to the closure.
     ///
     /// Actions can be conveniently created from methods on the
-    /// `RedirectAttempt`.
+    /// [`RedirectAttempt`].
     ///
     /// # Example
     ///
@@ -78,6 +80,8 @@ impl RedirectPolicy {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// [`RedirectAttempt`]: struct.RedirectAttempt.html
     pub fn custom<T>(policy: T) -> RedirectPolicy
     where
         T: Fn(RedirectAttempt) -> RedirectAction + Send + Sync + 'static,
