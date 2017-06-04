@@ -163,7 +163,7 @@ pub use url::ParseError as UrlError;
 pub use self::client::{Certificate, Client, ClientBuilder};
 pub use self::error::{Error, Result};
 pub use self::body::Body;
-pub use self::redirect::RedirectPolicy;
+pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
 
