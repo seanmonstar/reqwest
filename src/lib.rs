@@ -208,6 +208,16 @@ mod response;
 /// #    }
 /// # }
 /// ```
+///
+/// # Errors
+///
+/// This function fails if:
+///
+/// - native TLS backend cannot be initialized
+/// - supplied `Url` cannot be parsed
+/// - there was an error while sending request
+/// - redirect loop was detected
+/// - redirect limit was exhausted
 pub fn get<T: IntoUrl>(url: T) -> ::Result<Response> {
     Client::new()?
         .get(url)?
