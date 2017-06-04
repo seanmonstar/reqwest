@@ -100,6 +100,13 @@ impl Response {
     /// #     }
     /// # }
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever the response body is not in JSON format
+    /// or it cannot be properly deserialized to target type `T`. For more
+    /// details please see [`serde_json::from_reader`].
+    /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
     #[inline]
     pub fn json<T: DeserializeOwned>(&mut self) -> ::Result<T> {
         serde_json::from_reader(self).map_err(::error::from)

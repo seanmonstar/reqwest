@@ -153,6 +153,11 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// This method fails if the passed value cannot be serialized into
+    /// url encoded format
     pub fn form<T: Serialize>(&mut self, form: &T) -> ::Result<&mut RequestBuilder> {
         {
             // check request_mut() before running serde
@@ -202,6 +207,11 @@ impl RequestBuilder {
 
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
+    ///
+    /// # Panics
+    ///
+    /// This method consumes builder internal state. It panics on an attempt to
+    /// reuse already consumed builder.
     pub fn build(&mut self) -> Request {
         self.request
             .take()
@@ -209,6 +219,11 @@ impl RequestBuilder {
     }
 
     /// Constructs the Request and sends it the target URL, returning a Response.
+    ///
+    /// # Errors
+    ///
+    /// This method fails if there was an error while sending request,
+    /// redirect loop was detected or redirect limit was exhausted.
     pub fn send(&mut self) -> ::Result<::Response> {
         let request = self.build();
         self.client.execute(request)
