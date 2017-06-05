@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.6.2"
+version = "0.6.2" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 repository = "https://github.com/seanmonstar/reqwest"
@@ -11,7 +11,7 @@ categories = ["web-programming::http-client"]
 
 [dependencies]
 hyper = "0.10.2"
-hyper-native-tls = "0.2"
+hyper-native-tls = "0.2.3"
 log = "0.3"
 serde = "1.0"
 serde_json = "1.0"

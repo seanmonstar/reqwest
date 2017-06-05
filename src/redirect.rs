@@ -2,7 +2,7 @@ use std::fmt;
 
 use hyper::header::{Headers, Authorization, Cookie};
 
-use ::Url;
+use Url;
 
 /// A type that controls the policy on how to handle the following of redirects.
 ///
@@ -13,6 +13,8 @@ pub struct RedirectPolicy {
     inner: Policy,
 }
 
+/// A type that holds information on the next request and previous requests
+/// in redirect chain.
 #[derive(Debug)]
 pub struct RedirectAttempt<'a> {
     next: &'a Url,
@@ -51,10 +53,10 @@ impl RedirectPolicy {
     /// The custom policy should have some way of handling those.
     ///
     /// Information on the next request and previous requests can be found
-    /// on the `RedirectAttempt` argument passed to the closure.
+    /// on the [`RedirectAttempt`] argument passed to the closure.
     ///
     /// Actions can be conveniently created from methods on the
-    /// `RedirectAttempt`.
+    /// [`RedirectAttempt`].
     ///
     /// # Example
     ///
@@ -62,8 +64,7 @@ impl RedirectPolicy {
     /// # use reqwest::{Error, RedirectPolicy};
     /// #
     /// # fn run() -> Result<(), Error> {
-    /// let mut client = reqwest::Client::new()?;
-    /// client.redirect(RedirectPolicy::custom(|attempt| {
+    /// let custom = RedirectPolicy::custom(|attempt| {
     ///     if attempt.previous().len() > 5 {
     ///         attempt.too_many_redirects()
     ///     } else if attempt.url().host_str() == Some("example.domain") {
@@ -72,12 +73,19 @@ impl RedirectPolicy {
     ///     } else {
     ///         attempt.follow()
     ///     }
-    /// }));
+    /// });
+    /// let client = reqwest::Client::builder()?
+    ///     .redirect(custom)
+    ///     .build()?;
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// [`RedirectAttempt`]: struct.RedirectAttempt.html
     pub fn custom<T>(policy: T) -> RedirectPolicy
-    where T: Fn(RedirectAttempt) -> RedirectAction + Send + Sync + 'static {
+    where
+        T: Fn(RedirectAttempt) -> RedirectAction + Send + Sync + 'static,
+    {
         RedirectPolicy {
             inner: Policy::Custom(Box::new(policy)),
         }
@@ -94,7 +102,7 @@ impl RedirectPolicy {
                 } else {
                     attempt.follow()
                 }
-            },
+            }
             Policy::None => attempt.stop(),
         }
     }
@@ -187,8 +195,8 @@ pub fn check_redirect(policy: &RedirectPolicy, next: &Url, previous: &[Url]) -> 
 
 pub fn remove_sensitive_headers(headers: &mut Headers, next: &Url, previous: &[Url]) {
     if let Some(previous) = previous.last() {
-        let cross_host = next.host_str() != previous.host_str()
-            || next.port_or_known_default() != previous.port_or_known_default();
+        let cross_host = next.host_str() != previous.host_str() ||
+                         next.port_or_known_default() != previous.port_or_known_default();
         if cross_host {
             headers.remove::<Authorization<String>>();
             headers.remove::<Cookie>();
@@ -229,7 +237,8 @@ fn test_redirect_policy_limit() {
 
     previous.push(Url::parse("http://a.b.d/e/33").unwrap());
 
-    assert_eq!(check_redirect(&policy, &next, &previous), Action::TooManyRedirects);
+    assert_eq!(check_redirect(&policy, &next, &previous),
+               Action::TooManyRedirects);
 }
 
 #[test]
@@ -256,13 +265,9 @@ fn test_remove_sensitive_headers() {
     let mut headers = Headers::new();
     headers.set(Accept::star());
     headers.set(Authorization("let me in".to_owned()));
-    headers.set(
-        Cookie(vec![
-            String::from("foo=bar")
-        ])
-    );
+    headers.set(Cookie(vec![String::from("foo=bar")]));
 
-    let next  = Url::parse("http://initial-domain.com/path").unwrap();
+    let next = Url::parse("http://initial-domain.com/path").unwrap();
     let mut prev = vec![Url::parse("http://initial-domain.com/new_path").unwrap()];
     let mut filtered_headers = headers.clone();
 

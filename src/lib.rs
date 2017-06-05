@@ -1,5 +1,6 @@
 #![deny(warnings)]
 #![deny(missing_docs)]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.6.2")]
 
 //! # reqwest
 //!
@@ -24,13 +25,18 @@
 //!
 //! For a single request, you can use the [`get`][get] shortcut method.
 //!
-//! ```no_run
+//! ```rust
 //! use std::io::Read;
-//! let mut resp = reqwest::get("https://www.rust-lang.org").unwrap();
+//! # use reqwest::{Error, Response};
+//!
+//! # fn run() -> Result<Response, Error> {
+//! let mut resp = reqwest::get("https://www.rust-lang.org")?;
 //! assert!(resp.status().is_success());
 //!
 //! let mut content = String::new();
 //! resp.read_to_string(&mut content);
+//! # Ok(resp)
+//! # }
 //! ```
 //!
 //! As you can see, reqwest's [`Response`][response] struct implements Rust's
@@ -54,7 +60,7 @@
 //! #
 //! # fn run() -> Result<(), Error> {
 //! let client = reqwest::Client::new()?;
-//! let res = client.post("http://httpbin.org/post")
+//! let res = client.post("http://httpbin.org/post")?
 //!     .body("the exact body that is sent")
 //!     .send()?;
 //! # Ok(())
@@ -76,8 +82,8 @@
 //! // This will POST a body of `foo=bar&baz=quux`
 //! let params = [("foo", "bar"), ("baz", "quux")];
 //! let client = reqwest::Client::new()?;
-//! let res = client.post("http://httpbin.org/post")
-//!     .form(&params)
+//! let res = client.post("http://httpbin.org/post")?
+//!     .form(&params)?
 //!     .send()?;
 //! # Ok(())
 //! # }
@@ -100,8 +106,8 @@
 //! map.insert("body", "json");
 //!
 //! let client = reqwest::Client::new()?;
-//! let res = client.post("http://httpbin.org/post")
-//!     .json(&map)
+//! let res = client.post("http://httpbin.org/post")?
+//!     .json(&map)?
 //!     .send()?;
 //! # Ok(())
 //! # }
@@ -115,7 +121,8 @@
 //! [serde]: http://serde.rs
 extern crate hyper;
 
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 extern crate libflate;
 extern crate hyper_native_tls;
 extern crate serde;
@@ -151,20 +158,21 @@ pub use hyper::Error as HyperError;
 pub use hyper::header;
 pub use hyper::method::Method;
 pub use hyper::status::StatusCode;
-pub use hyper::version::HttpVersion;
 pub use hyper::Url;
 pub use url::ParseError as UrlError;
 
-pub use self::client::{Client, RequestBuilder};
+pub use self::client::{Certificate, Client, ClientBuilder};
 pub use self::error::{Error, Result};
 pub use self::body::Body;
-pub use self::redirect::RedirectPolicy;
+pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
+pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
 
 mod error;
 mod body;
 mod client;
 mod redirect;
+mod request;
 mod response;
 mod file;
 
@@ -202,9 +210,20 @@ mod file;
 /// #    }
 /// # }
 /// ```
+///
+/// # Errors
+///
+/// This function fails if:
+///
+/// - native TLS backend cannot be initialized
+/// - supplied `Url` cannot be parsed
+/// - there was an error while sending request
+/// - redirect loop was detected
+/// - redirect limit was exhausted
 pub fn get<T: IntoUrl>(url: T) -> ::Result<Response> {
-    let client = try!(Client::new());
-    client.get(url).send()
+    Client::new()?
+        .get(url)?
+        .send()
 }
 
 fn _assert_impls() {
@@ -216,9 +235,10 @@ fn _assert_impls() {
     assert_sync::<Client>();
     assert_clone::<Client>();
 
+    assert_send::<Request>();
     assert_send::<RequestBuilder>();
-    assert_send::<Response>();
 
+    assert_send::<Response>();
 
     assert_send::<Error>();
     assert_sync::<Error>();

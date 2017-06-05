@@ -1,7 +1,7 @@
 use std::error::Error as StdError;
 use std::fmt;
 
-use ::Url;
+use Url;
 
 /// The Errors that may occur when processing a `Request`.
 #[derive(Debug)]
@@ -25,7 +25,7 @@ impl Error {
     /// The `'static` bounds allows using `downcast_ref` to check the
     /// details of the error.
     #[inline]
-    pub fn get_ref(&self) -> Option<&(StdError + 'static)> {
+    pub fn get_ref(&self) -> Option<&(StdError + Send + Sync + 'static)> {
         match self.kind {
             Kind::Http(ref e) => Some(e),
             Kind::UrlEncoded(ref e) => Some(e),
@@ -147,8 +147,16 @@ impl From<::serde_json::Error> for Kind {
     }
 }
 
+impl From<::hyper_native_tls::native_tls::Error> for Kind {
+    fn from(other: ::hyper_native_tls::native_tls::Error) -> Kind {
+        ::hyper::Error::Ssl(Box::new(other)).into()
+    }
+}
+
+
 pub struct InternalFrom<T>(pub T, pub Option<Url>);
 
+#[doc(hidden)] // https://github.com/rust-lang/rust/issues/42323
 impl From<InternalFrom<Error>> for Error {
     #[inline]
     fn from(other: InternalFrom<Error>) -> Error {
@@ -163,11 +171,14 @@ impl From<::std::io::Error> for Kind {
     }
 }
 
+#[doc(hidden)] // https://github.com/rust-lang/rust/issues/42323
 impl<T> From<InternalFrom<T>> for Error
-where T: Into<Kind> {
+where
+    T: Into<Kind>,
+{
     #[inline]
     fn from(other: InternalFrom<T>) -> Error {
-         Error {
+        Error {
             kind: other.0.into(),
             url: other.1,
         }
@@ -176,7 +187,9 @@ where T: Into<Kind> {
 
 #[inline]
 pub fn from<T>(err: T) -> Error
-where T: Into<Kind> {
+where
+    T: Into<Kind>,
+{
     InternalFrom(err, None).into()
 }
 
@@ -199,11 +212,13 @@ pub fn too_many_redirects(url: Url) -> Error {
 #[test]
 fn test_error_get_ref_downcasts() {
     let err: Error = from(::hyper::Error::Status);
-    let cause = err.get_ref().unwrap()
-        .downcast_ref::<::hyper::Error>().unwrap();
+    let cause = err.get_ref()
+        .unwrap()
+        .downcast_ref::<::hyper::Error>()
+        .unwrap();
 
     match cause {
         &::hyper::Error::Status => (),
-        _ => panic!("unexpected downcast: {:?}", cause)
+        _ => panic!("unexpected downcast: {:?}", cause),
     }
 }
