@@ -19,16 +19,25 @@ impl Body {
     /// request at the new location, the `Response` will be returned with
     /// the redirect status code set.
     ///
-    /// A `Body` constructed from a set of bytes, like `String` or `Vec<u8>`,
-    /// are stored differently and can be reused.
+    /// ```rust
+    /// # use std::fs::File;
+    /// # use reqwest::Body;
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// let file = File::open("national_secrets.txt")?;
+    /// let body = Body::new(file);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// If you have a set of bytes, like `String` or `Vec<u8>`, using the
+    /// `From` implementations for `Body` will store the data in a manner
+    /// it can be reused.
     ///
     /// ```rust
     /// # use reqwest::Body;
-    /// # use std::fs::File;
     /// # fn run() -> Result<(), Box<std::error::Error>> {
-    /// // std::fs::File implements std::io::Read
-    /// let file = File::open("national_secrets.txt")?;
-    /// let body = Body::new(file);
+    /// let s = "A stringy body";
+    /// let body = Body::from(s);
     /// # Ok(())
     /// # }
     /// ```
@@ -44,14 +53,12 @@ impl Body {
     /// request.
     ///
     /// ```rust
+    /// # use std::fs::File;
     /// # use reqwest::Body;
     /// # fn run() -> Result<(), Box<std::error::Error>> {
-    /// // &[u8] implements std::io::Read, and the source `s` has a
-    /// // 'static lifetime and a known number of bytes.
-    /// let s = "A predictable body";
-    /// let bytes = s.as_bytes();
-    /// let size  = bytes.len() as u64;
-    /// let body = Body::sized(bytes, size);
+    /// let file = File::open("a_large_file.txt")?;
+    /// let file_size = file.metadata()?.len();
+    /// let body = Body::sized(file, file_size);
     /// # Ok(())
     /// # }
     /// ```
