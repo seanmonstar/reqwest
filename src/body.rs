@@ -21,6 +21,17 @@ impl Body {
     ///
     /// A `Body` constructed from a set of bytes, like `String` or `Vec<u8>`,
     /// are stored differently and can be reused.
+    ///
+    /// ```rust
+    /// # use reqwest::Body;
+    /// # use std::fs::File;
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// // std::fs::File implements std::io::Read
+    /// let file = File::open("national_secrets.txt")?;
+    /// let body = Body::new(file);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn new<R: Read + Send + 'static>(reader: R) -> Body {
         Body {
             reader: Kind::Reader(Box::new(reader), None),
@@ -31,6 +42,19 @@ impl Body {
     /// advance, but where we don't want to load the data in memory.  This
     /// is useful if we need to ensure `Content-Length` is passed with the
     /// request.
+    ///
+    /// ```rust
+    /// # use reqwest::Body;
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// // &[u8] implements std::io::Read, and the source `s` has a
+    /// // 'static lifetime and a known number of bytes.
+    /// let s = "A predictable body";
+    /// let bytes = s.as_bytes();
+    /// let size  = bytes.len() as u64;
+    /// let body = Body::sized(bytes, size);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn sized<R: Read + Send + 'static>(reader: R, len: u64) -> Body {
         Body {
             reader: Kind::Reader(Box::new(reader), Some(len)),
