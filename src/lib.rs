@@ -123,6 +123,7 @@ extern crate hyper;
 
 #[macro_use]
 extern crate log;
+extern crate libc;
 extern crate libflate;
 extern crate hyper_native_tls;
 extern crate serde;
