@@ -310,22 +310,38 @@ fn socket_is_dead(socket: &TcpStream) -> bool {
 #[cfg(windows)]
 fn socket_is_dead(socket: &TcpStream) -> bool {
     use std::mem;
-    use std::os::windows::io::AsRawSocket;
+    use std::os::windows::io::{AsRawSocket, RawSocket};
     use std::ptr;
-    use libc::{FD_SET, select, timeval};
+    use libc::{c_int, timeval};
+
+    const FD_SETSIZE: usize = 64;
+
+    #[repr(C)]
+    struct fd_set {
+        fd_count: c_int,
+        fd_array: [RawSocket; FD_SETSIZE],
+    }
+
+    extern "system" {
+        fn select(maxfds: c_int, readfs: *mut fd_set, writefs: *mut fd_set,
+                  errfs: *mut fd_set, timeout: *mut timeval) -> c_int;
+    }
 
     let ret = unsafe {
         let fd = socket.as_raw_socket();
         let nfds = 0; // msdn says nfds is ignored
-        let timeout = timeval {
+        let mut timeout = timeval {
             tv_sec: 0,
             tv_usec: 0,
         };
 
-        let mut readfs = mem::zeroed();
-        let mut errfs = mem::zeroed();
-        FD_SET(fd, &mut readfs);
-        FD_SET(fd, &mut errfs);
+        let mut readfs: fd_set = mem::zeroed();
+        let mut errfs: fd_set = mem::zeroed();
+        readfs.fd_count = 1;
+        readfs.fd_array[0] = fd;
+        errfs.fd_count = 1;
+        errfs.fd_array[0] = fd;
+
         select(nfds, &mut readfs, ptr::null_mut(), &mut errfs, &mut timeout)
     };
 
