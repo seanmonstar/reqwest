@@ -56,11 +56,11 @@ impl Response {
 
     /// Get the `StatusCode`.
     #[inline]
-    pub fn status(&self) -> &StatusCode {
+    pub fn status(&self) -> StatusCode {
         match self.inner {
-            Decoder::PlainText(ref hyper_response) => &hyper_response.status,
+            Decoder::PlainText(ref hyper_response) => hyper_response.status,
             Decoder::Gzip { ref head, .. } |
-            Decoder::Errored { ref head, .. } => &head.status,
+            Decoder::Errored { ref head, .. } => head.status,
         }
     }
 
