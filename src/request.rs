@@ -1,6 +1,7 @@
 use std::fmt;
 use std::fs;
 use std::io::Read;
+use std::path::PathBuf;
 
 use hyper::header::ContentType;
 use serde::Serialize;
@@ -10,7 +11,6 @@ use hyper::mime;
 
 use header::Headers;
 use {Body, Client, Method, Url};
-use file::File;
 
 pub type Params = Vec<(&'static str, &'static str)>;
 pub type Files = Vec<File>;
@@ -35,10 +35,22 @@ pub struct RequestBuilder {
     request: Option<Request>,
 }
 
+/// A builder to construct the properties of a `Request` with the multipart/form-data ContentType.
 pub struct MultipartRequestBuilder {
     request_builder: RequestBuilder,
     params: Option<Params>,
     files: Option<Files>,
+}
+
+/// A `File` to send with the `MultipartRequestBuilder` used in `MultipartRequestBuilder.files()`.
+#[derive(Clone)]
+pub struct File {
+    /// The name of the file in the multipart/form-data request.
+    pub name: String,
+    /// The path of the file on your filesystem.
+    pub path: PathBuf,
+    /// The mime of the file for in the multipart/form-data request.
+    pub mime: mime::Mime,
 }
 
 impl Request {
@@ -235,7 +247,7 @@ impl RequestBuilder {
             .expect("RequestBuilder cannot be reused after builder a Request")
     }
 
-    /// Constructs the Request and sends it the target URL, returning a Response.
+    /// Constructs the Request and sends it to the target URL, returning a Response.
     ///
     /// # Errors
     ///
@@ -308,16 +320,25 @@ impl MultipartRequestBuilder {
         self
     }
 
+    /// Add parameters to the multipart/form-data `Request`.
     pub fn params(&mut self, params: Params) -> &mut MultipartRequestBuilder {
         self.params = Some(params);
         self
     }
 
+    /// Add files to the multipart/form-data `Request`.
     pub fn files(&mut self, files: Files) -> &mut MultipartRequestBuilder {
         self.files = Some(files);
         self
     }
 
+    /// Build a `Request`, which can be inspected, modified and executed with
+    /// `Client::execute()`.
+    ///
+    /// # Panics
+    ///
+    /// This method consumes builder internal state. It panics on an attempt to
+    /// reuse already consumed builder.
     pub fn build(&mut self) -> ::Result<Request> {
         let mut body: Vec<u8> = Vec::new();
         let boundary = MultipartRequestBuilder::choose_boundary();
@@ -355,6 +376,12 @@ impl MultipartRequestBuilder {
                .expect("MultipartRequestBuilder cannot be reused after builder a Request"))
     }
 
+    /// Constructs the Request and sends it to the target URL, returning a Response.
+    ///
+    /// # Errors
+    ///
+    /// This method fails if there was an error while sending request,
+    /// redirect loop was detected or redirect limit was exhausted.
     pub fn send(&mut self) -> ::Result<::Response> {
         let request = try_!(self.build());
         self.request_builder
@@ -364,6 +391,17 @@ impl MultipartRequestBuilder {
 
     fn choose_boundary() -> String {
         ::uuid::Uuid::new_v4().simple().to_string()
+    }
+}
+
+impl File {
+    /// Constructs a new File.
+    pub fn new(name: String, path: PathBuf, mime: mime::Mime) -> File {
+        File {
+            name: name,
+            path: path,
+            mime: mime,
+        }
     }
 }
 

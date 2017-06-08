@@ -144,9 +144,8 @@ pub use self::client::{Certificate, Client, ClientBuilder};
 pub use self::error::{Error, Result};
 pub use self::body::Body;
 pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
-pub use self::request::{Request, RequestBuilder};
+pub use self::request::{Request, RequestBuilder, MultipartRequestBuilder, File};
 pub use self::response::Response;
-pub use self::File;
 
 #[macro_use]
 mod error;
@@ -155,7 +154,6 @@ mod client;
 mod redirect;
 mod request;
 mod response;
-mod file;
 
 
 /// Shortcut method to quickly make a `GET` request.

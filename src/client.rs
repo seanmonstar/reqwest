@@ -435,10 +435,14 @@ impl Client {
         let url = try_!(url.into_url());
         Ok(request::builder(self.clone(), Request::new(method, url)))
     }
-
-    /// Start building a `multipart/form-data POST Request` with the `Url`.
+    /// Start building a multipart/form-data `Request` with the `Url`.
     ///
-    /// Returns a `MultipartRequestBuilder`.
+    /// Returns a `MultipartRequestBuilder`, which will allow setting headers,
+    /// request body, files and parameters before sending.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn multipart<U: IntoUrl>(&self, url: U) -> ::Result<MultipartRequestBuilder> {
         let url = try_!(url.into_url());
         let request_builder = request::builder(self.clone(), Request::new(Method::Post, url));
