@@ -349,7 +349,7 @@ impl MultipartRequestBuilder {
             for (name, value) in p {
                 write_bytes!(body, "\r\n--{}\r\n", boundary);
                 write_bytes!(body, "Content-Disposition: form-data; name=\"{}\"", name);
-                write_bytes!(body, "\r\n{}\r\n", value);
+                write_bytes!(body, "\n\r\n{}\r\n", value);
             }
         }
 
@@ -462,6 +462,7 @@ mod tests {
     use std::collections::HashMap;
 
     use client::Client;
+    use super::File;
     use hyper::method::Method;
     use hyper::header::{Host, Headers, ContentType, Allow};
     use hyper::mime;
@@ -469,7 +470,6 @@ mod tests {
     use serde_json;
 
     use body;
-    use file::File;
 
     #[test]
     fn basic_get_request() {
