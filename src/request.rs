@@ -348,8 +348,8 @@ impl MultipartRequestBuilder {
         if let Some(p) = self.params.clone() {
             for (name, value) in p {
                 write_bytes!(body, "\r\n--{}\r\n", boundary);
-                write_bytes!(body, "Content-Disposition: form-data; name=\"{}\"", name);
-                write_bytes!(body, "\n\r\n{}\r\n", value);
+                write_bytes!(body, "Content-Disposition: form-data; name=\"{}\"\n", name);
+                write_bytes!(body, "\r\n{}\r\n", value);
             }
         }
 
