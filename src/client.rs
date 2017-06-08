@@ -1,4 +1,5 @@
 use std::fmt;
+use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -8,7 +9,7 @@ use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::Url;
 
-use hyper_native_tls::{NativeTlsClient, native_tls};
+use hyper_native_tls::{NativeTlsClient, TlsStream, native_tls};
 
 use body;
 use redirect::{self, RedirectPolicy, check_redirect, remove_sensitive_headers};
@@ -152,14 +153,8 @@ impl ClientBuilder {
             tls_client.danger_disable_hostname_verification(true);
         }
 
-        let mut hyper_client = ::hyper::Client::with_connector(
-            ::hyper::client::Pool::with_connector(
-                Default::default(),
-                ::hyper::net::HttpsConnector::new(tls_client),
-            )
-        );
+        let mut hyper_client = create_hyper_client(tls_client);
 
-        hyper_client.set_redirect_policy(::hyper::client::RedirectPolicy::FollowNone);
         hyper_client.set_read_timeout(config.timeout);
         hyper_client.set_write_timeout(config.timeout);
 
@@ -253,6 +248,104 @@ impl ClientBuilder {
             .take()
             .expect("ClientBuilder cannot be reused after building a Client")
     }
+}
+
+fn create_hyper_client(tls_client: NativeTlsClient) -> ::hyper::Client {
+    let mut pool = ::hyper::client::Pool::with_connector(
+        Default::default(),
+        ::hyper::net::HttpsConnector::new(tls_client),
+    );
+    // For now, while experiementing, they're constants.
+    // TODO: maybe make these configurable someday?
+    pool.set_idle_timeout(Some(Duration::from_secs(60 * 2)));
+    pool.set_stale_check(|mut check| {
+        if stream_dead(check.stream()) {
+            check.stale()
+        } else {
+            check.fresh()
+        }
+    });
+
+    let mut hyper_client = ::hyper::Client::with_connector(pool);
+
+    hyper_client.set_redirect_policy(::hyper::client::RedirectPolicy::FollowNone);
+    hyper_client
+}
+
+fn stream_dead(stream: &::hyper::net::HttpsStream<TlsStream<::hyper::net::HttpStream>>) -> bool {
+    match *stream {
+        ::hyper::net::HttpsStream::Http(ref http) => socket_is_dead(&http.0),
+        ::hyper::net::HttpsStream::Https(ref https) => socket_is_dead(&https.lock().get_ref().0),
+    }
+}
+
+#[cfg(unix)]
+fn socket_is_dead(socket: &TcpStream) -> bool {
+    use std::mem;
+    use std::os::unix::io::AsRawFd;
+    use std::ptr;
+    use libc::{FD_SET, select, timeval};
+
+    let ret = unsafe {
+        let fd = socket.as_raw_fd();
+        let nfds = fd + 1;
+
+        let mut timeout = timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        };
+
+        let mut readfs = mem::zeroed();
+        let mut errfs = mem::zeroed();
+        FD_SET(fd, &mut readfs);
+        FD_SET(fd, &mut errfs);
+        select(nfds, &mut readfs, ptr::null_mut(), &mut errfs, &mut timeout)
+    };
+
+    // socket was readable (eof), or an error, then it's dead
+    ret != 0
+}
+
+#[cfg(windows)]
+fn socket_is_dead(socket: &TcpStream) -> bool {
+    use std::mem;
+    use std::os::windows::io::{AsRawSocket, RawSocket};
+    use std::ptr;
+    use libc::{c_int, timeval};
+
+    const FD_SETSIZE: usize = 64;
+
+    #[repr(C)]
+    struct fd_set {
+        fd_count: c_int,
+        fd_array: [RawSocket; FD_SETSIZE],
+    }
+
+    extern "system" {
+        fn select(maxfds: c_int, readfs: *mut fd_set, writefs: *mut fd_set,
+                  errfs: *mut fd_set, timeout: *mut timeval) -> c_int;
+    }
+
+    let ret = unsafe {
+        let fd = socket.as_raw_socket();
+        let nfds = 0; // msdn says nfds is ignored
+        let mut timeout = timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        };
+
+        let mut readfs: fd_set = mem::zeroed();
+        let mut errfs: fd_set = mem::zeroed();
+        readfs.fd_count = 1;
+        readfs.fd_array[0] = fd;
+        errfs.fd_count = 1;
+        errfs.fd_array[0] = fd;
+
+        select(nfds, &mut readfs, ptr::null_mut(), &mut errfs, &mut timeout)
+    };
+
+    // socket was readable (eof), or an error, then it's dead
+    ret != 0
 }
 
 impl Client {

@@ -19,8 +19,28 @@ impl Body {
     /// request at the new location, the `Response` will be returned with
     /// the redirect status code set.
     ///
-    /// A `Body` constructed from a set of bytes, like `String` or `Vec<u8>`,
-    /// are stored differently and can be reused.
+    /// ```rust
+    /// # use std::fs::File;
+    /// # use reqwest::Body;
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// let file = File::open("national_secrets.txt")?;
+    /// let body = Body::new(file);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// If you have a set of bytes, like `String` or `Vec<u8>`, using the
+    /// `From` implementations for `Body` will store the data in a manner
+    /// it can be reused.
+    ///
+    /// ```rust
+    /// # use reqwest::Body;
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// let s = "A stringy body";
+    /// let body = Body::from(s);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn new<R: Read + Send + 'static>(reader: R) -> Body {
         Body {
             reader: Kind::Reader(Box::new(reader), None),
@@ -31,6 +51,17 @@ impl Body {
     /// advance, but where we don't want to load the data in memory.  This
     /// is useful if we need to ensure `Content-Length` is passed with the
     /// request.
+    ///
+    /// ```rust
+    /// # use std::fs::File;
+    /// # use reqwest::Body;
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// let file = File::open("a_large_file.txt")?;
+    /// let file_size = file.metadata()?.len();
+    /// let body = Body::sized(file, file_size);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn sized<R: Read + Send + 'static>(reader: R, len: u64) -> Body {
         Body {
             reader: Kind::Reader(Box::new(reader), Some(len)),
