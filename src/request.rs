@@ -1,12 +1,25 @@
 use std::fmt;
+use std::fs;
+use std::io::Read;
 
 use hyper::header::ContentType;
 use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
+use hyper::mime;
 
 use header::Headers;
 use {Body, Client, Method, Url};
+use file::File;
+
+pub type Params = Vec<(&'static str, &'static str)>;
+pub type Files = Vec<File>;
+
+macro_rules! write_bytes {
+    ($buf:ident, $f:expr, $a:expr) => (
+        $buf.extend(format!($f, $a).as_bytes())
+    )
+}
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -20,6 +33,12 @@ pub struct Request {
 pub struct RequestBuilder {
     client: Client,
     request: Option<Request>,
+}
+
+pub struct MultipartRequestBuilder {
+    request_builder: RequestBuilder,
+    params: Option<Params>,
+    files: Option<Files>,
 }
 
 impl Request {
@@ -100,8 +119,7 @@ impl RequestBuilder {
     /// # }
     /// ```
     pub fn header<H>(&mut self, header: H) -> &mut RequestBuilder
-    where
-        H: ::header::Header + ::header::HeaderFormat,
+        where H: ::header::Header + ::header::HeaderFormat
     {
         self.request_mut().headers.set(header);
         self
@@ -116,14 +134,13 @@ impl RequestBuilder {
 
     /// Enable HTTP basic authentication.
     pub fn basic_auth<U, P>(&mut self, username: U, password: Option<P>) -> &mut RequestBuilder
-    where
-        U: Into<String>,
-        P: Into<String>,
+        where U: Into<String>,
+              P: Into<String>
     {
         self.header(::header::Authorization(::header::Basic {
-            username: username.into(),
-            password: password.map(|p| p.into()),
-        }))
+                                                username: username.into(),
+                                                password: password.map(|p| p.into()),
+                                            }))
     }
 
     /// Set the request body.
@@ -238,27 +255,149 @@ impl RequestBuilder {
     }
 }
 
+impl MultipartRequestBuilder {
+    pub fn builder(request_builder: RequestBuilder) -> MultipartRequestBuilder {
+        MultipartRequestBuilder { request_builder: request_builder, params: None, files: None }
+    }
+
+    /// Add a `Header` to this Request.
+    ///
+    /// ```rust
+    /// # use reqwest::Error;
+    /// #
+    /// # fn run() -> Result<(), Error> {
+    /// use reqwest::header::UserAgent;
+    /// let client = reqwest::Client::new()?;
+    ///
+    /// let res = client.get("https://www.rust-lang.org")?
+    ///     .header(UserAgent("foo".to_string()))
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn header<H>(&mut self, header: H) -> &mut MultipartRequestBuilder
+        where H: ::header::Header + ::header::HeaderFormat
+    {
+        self.request_builder.request_mut().headers.set(header);
+        self
+    }
+
+    /// Add a set of Headers to the existing ones on this Request.
+    ///
+    /// The headers will be merged in to any already set.
+    pub fn headers(&mut self, headers: ::header::Headers) -> &mut MultipartRequestBuilder {
+        self.request_builder.request_mut().headers.extend(headers.iter());
+        self
+    }
+
+    /// Enable HTTP basic authentication.
+    pub fn basic_auth<U, P>(&mut self, username: U, password: Option<P>) -> &mut MultipartRequestBuilder
+        where U: Into<String>,
+              P: Into<String>
+    {
+        self.request_builder.header(::header::Authorization(::header::Basic {
+                                                username: username.into(),
+                                                password: password.map(|p| p.into()),
+                                            }));
+        self
+    }
+
+    /// Set the request body.
+    pub fn body<T: Into<Body>>(&mut self, body: T) -> &mut MultipartRequestBuilder {
+        self.request_builder.request_mut().body = Some(body.into());
+        self
+    }
+
+    pub fn params(&mut self, params: Params) -> &mut MultipartRequestBuilder {
+        self.params = Some(params);
+        self
+    }
+
+    pub fn files(&mut self, files: Files) -> &mut MultipartRequestBuilder {
+        self.files = Some(files);
+        self
+    }
+
+    pub fn build(&mut self) -> ::Result<Request> {
+        let mut body: Vec<u8> = Vec::new();
+        let boundary = MultipartRequestBuilder::choose_boundary();
+        let multipart_mime = ContentType(format!{"multipart/form-data; boundary={}", boundary}
+                                             .parse::<mime::Mime>()
+                                             .unwrap());
+        if let Some(p) = self.params.clone() {
+            for (name, value) in p {
+                write_bytes!(body, "\r\n--{}\r\n", boundary);
+                write_bytes!(body, "Content-Disposition: form-data; name=\"{}\"", name);
+                write_bytes!(body, "\r\n{}\r\n", value);
+            }
+        }
+
+        if let Some(f) = self.files.clone() {
+            for File { name, path, mime } in f {
+                write_bytes!(body, "\r\n--{}\r\n", boundary);
+                write_bytes!(body, "Content-Disposition: form-data; name=\"{}\"", name);
+                write_bytes!(body,
+                             "; filename=\"{}\"",
+                             path.file_name().unwrap().to_str().unwrap());
+                write_bytes!(body, "\r\nContent-type: {}\r\n\r\n", mime);
+                let mut content = try_!(fs::File::open(path));
+                content.read_to_end(&mut body).unwrap();
+                body.extend("\r\n\r\n".as_bytes());
+            }
+        }
+
+        write_bytes!(body, "\r\n--{}--", boundary);
+        self.request_builder.body(body).header(multipart_mime);
+
+        Ok(self.request_builder
+               .request
+               .take()
+               .expect("MultipartRequestBuilder cannot be reused after builder a Request"))
+    }
+
+    pub fn send(&mut self) -> ::Result<::Response> {
+        let request = try_!(self.build());
+        self.request_builder
+            .client
+            .execute(request)
+    }
+
+    fn choose_boundary() -> String {
+        ::uuid::Uuid::new_v4().simple().to_string()
+    }
+}
+
 impl fmt::Debug for Request {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt_request_fields(&mut f.debug_struct("Request"), self)
-            .finish()
+        fmt_request_fields(&mut f.debug_struct("Request"), self).finish()
     }
 }
 
 impl fmt::Debug for RequestBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(ref req) = self.request {
-            fmt_request_fields(&mut f.debug_struct("RequestBuilder"), req)
-                .finish()
+            fmt_request_fields(&mut f.debug_struct("RequestBuilder"), req).finish()
         } else {
-            f.debug_tuple("RequestBuilder")
+            f.debug_tuple("RequestBuilder").field(&"Consumed").finish()
+        }
+    }
+}
+
+impl fmt::Debug for MultipartRequestBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(ref req) = self.request_builder.request {
+            fmt_request_fields(&mut f.debug_struct("MultipartRequestBuilder"), req).finish()
+        } else {
+            f.debug_tuple("MultipartRequestBuilder")
                 .field(&"Consumed")
                 .finish()
         }
     }
 }
 
-fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>, req: &Request) -> &'a mut fmt::DebugStruct<'a, 'b> {
+fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>,
+                              req: &Request)
+                              -> &'a mut fmt::DebugStruct<'a, 'b> {
     f.field("method", &req.method)
         .field("url", &req.url)
         .field("headers", &req.headers)
@@ -281,13 +420,18 @@ pub fn pieces(req: Request) -> (Method, Url, Headers, Option<Body>) {
 
 #[cfg(test)]
 mod tests {
-    use body;
+    use std::path::PathBuf;
+    use std::collections::HashMap;
+
     use client::Client;
     use hyper::method::Method;
-    use hyper::header::{Host, Headers, ContentType};
-    use std::collections::HashMap;
+    use hyper::header::{Host, Headers, ContentType, Allow};
+    use hyper::mime;
     use serde_urlencoded;
     use serde_json;
+
+    use body;
+    use file::File;
 
     #[test]
     fn basic_get_request() {
@@ -346,6 +490,26 @@ mod tests {
         let r = client.delete(some_url).unwrap().build();
 
         assert_eq!(r.method, Method::Delete);
+        assert_eq!(r.url.as_str(), some_url);
+    }
+
+    #[test]
+    fn basic_multipart_post_request() {
+        let client = Client::new().unwrap();
+        let some_url = "https://posttestserver.com/post.php";
+        let params = vec![("foo", "bar")];
+        let name = "Cargo.toml".to_string();
+        let path = PathBuf::from("Cargo.toml");
+        let mime: mime::Mime = "plain/text".parse().unwrap();
+        let toml_file = File::new(name, path, mime);
+        let files = vec![toml_file];
+        let mut multipart = client.multipart(some_url).unwrap();
+        let header = Allow(vec![Method::Get]);
+        multipart.params(params).files(files).header(header.clone());
+        let r = multipart.build().unwrap();
+
+        assert_eq!(r.headers.get::<Allow>(), Some(&header));
+        assert_eq!(r.method, Method::Post);
         assert_eq!(r.url.as_str(), some_url);
     }
 
@@ -452,15 +616,15 @@ mod tests {
         impl Serialize for MyStruct {
             fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
                 where S: Serializer
-                {
-                    Err(S::Error::custom("nope"))
-                }
+            {
+                Err(S::Error::custom("nope"))
+            }
         }
 
         let client = Client::new().unwrap();
         let some_url = "https://google.com/";
         let mut r = client.post(some_url).unwrap();
-        let json_data = MyStruct{};
+        let json_data = MyStruct {};
         assert!(r.json(&json_data).unwrap_err().is_serialization());
     }
 }

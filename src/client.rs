@@ -1,37 +1,22 @@
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
-use std::fs;
-use std::io::Read;
 
 use hyper::client::IntoUrl;
-use hyper::header::{Location, Referer, UserAgent, Accept, Encoding,
-                    AcceptEncoding, Range, qitem};
+use hyper::header::{Location, Referer, UserAgent, Accept, Encoding, AcceptEncoding, Range, qitem};
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::Url;
-use hyper::mime;
 
 use hyper_native_tls::{NativeTlsClient, native_tls};
 
-use uuid::Uuid;
-
 use body;
 use redirect::{self, RedirectPolicy, check_redirect, remove_sensitive_headers};
-use request::{self, Request, RequestBuilder};
+use request::{self, Request, RequestBuilder, MultipartRequestBuilder};
 use response::Response;
-use file::File;
 
 static DEFAULT_USER_AGENT: &'static str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
-
-pub type Params<'a> = Vec<(&'a str, &'a str)>;
-
-macro_rules! write_bytes {
-    ($buf:ident, $f:expr, $a:expr) => (
-        $buf.extend(format!($f, $a).as_bytes())
-    )
-}
 
 /// A `Client` to make Requests with.
 ///
@@ -137,15 +122,15 @@ impl ClientBuilder {
     pub fn new() -> ::Result<ClientBuilder> {
         let tls_connector_builder = try_!(native_tls::TlsConnector::builder());
         Ok(ClientBuilder {
-            config: Some(Config {
-                gzip: true,
-                hostname_verification: true,
-                redirect_policy: RedirectPolicy::default(),
-                referer: true,
-                timeout: None,
-                tls: tls_connector_builder,
-            })
-        })
+               config: Some(Config {
+                                gzip: true,
+                                hostname_verification: true,
+                                redirect_policy: RedirectPolicy::default(),
+                                referer: true,
+                                timeout: None,
+                                tls: tls_connector_builder,
+                            }),
+           })
     }
 
     /// Returns a `Client` that uses this `ClientBuilder` configuration.
@@ -179,13 +164,13 @@ impl ClientBuilder {
         hyper_client.set_write_timeout(config.timeout);
 
         Ok(Client {
-            inner: Arc::new(ClientRef {
-                gzip: config.gzip,
-                hyper: hyper_client,
-                redirect_policy: config.redirect_policy,
-                referer: config.referer,
-            }),
-        })
+               inner: Arc::new(ClientRef {
+                                   gzip: config.gzip,
+                                   hyper: hyper_client,
+                                   redirect_policy: config.redirect_policy,
+                                   referer: config.referer,
+                               }),
+           })
     }
 
     /// Add a custom root certificate.
@@ -358,6 +343,15 @@ impl Client {
         Ok(request::builder(self.clone(), Request::new(method, url)))
     }
 
+    /// Start building a `multipart/form-data POST Request` with the `Url`.
+    ///
+    /// Returns a `MultipartRequestBuilder`.
+    pub fn multipart<U: IntoUrl>(&self, url: U) -> ::Result<MultipartRequestBuilder> {
+        let url = try_!(url.into_url());
+        let request_builder = request::builder(self.clone(), Request::new(Method::Post, url));
+        Ok(MultipartRequestBuilder::builder(request_builder))
+    }
+
     /// Executes a `Request`.
     ///
     /// A `Request` can be built manually with `Request::new()` or obtained
@@ -372,45 +366,6 @@ impl Client {
     /// redirect loop was detected or redirect limit was exhausted.
     pub fn execute(&self, request: Request) -> ::Result<Response> {
         self.inner.execute_request(request)
-    }
-
-    /// Start building a `multipart/form-data POST Request` with the `Url`.
-    ///
-    /// Returns a `MultipartRequestBuilder`.
-    pub fn multipart<'a, U: IntoUrl>(&self,
-                                     url: U,
-                                     files: Vec<File>,
-                                     params: Params<'a>)
-                                     -> ::Result<MultipartRequestBuilder> {
-        let mut body: Vec<u8> = Vec::new();
-        let boundary = MultipartRequestBuilder::choose_boundary();
-        let multipart_mime = ContentType(format!{"multipart/form-data; boundary={}", boundary}
-                                             .parse::<mime::Mime>()
-                                             .unwrap());
-
-        for (name, value) in params {
-            write_bytes!(body, "\r\n--{}\r\n", boundary);
-            write_bytes!(body, "Content-Disposition: form-data; name=\"{}\"", name);
-            write_bytes!(body, "\r\n{}\r\n", value);
-        }
-
-        for File { name, path, mime } in files {
-            write_bytes!(body, "\r\n--{}\r\n", boundary);
-            write_bytes!(body, "Content-Disposition: form-data; name=\"{}\"", name);
-            write_bytes!(body,
-                         "; filename=\"{}\"",
-                         path.file_name().unwrap().to_str().unwrap());
-            write_bytes!(body, "\r\nContent-type: {}\r\n\r\n", mime.unwrap());
-            let mut content = try_!(fs::File::open(path));
-            content.read_to_end(&mut body).unwrap();
-            body.extend("\r\n\r\n".as_bytes());
-        }
-
-        write_bytes!(body, "\r\n--{}--", boundary);
-        let mut req = self.request(Method::Post, url).body(body);
-        req.headers.set(multipart_mime);
-
-        Ok(MultipartRequestBuilder { request: req })
     }
 }
 
@@ -433,12 +388,7 @@ struct ClientRef {
 
 impl ClientRef {
     fn execute_request(&self, req: Request) -> ::Result<Response> {
-        let (
-            mut method,
-            mut url,
-            mut headers,
-            mut body
-        ) = request::pieces(req);
+        let (mut method, mut url, mut headers, mut body) = request::pieces(req);
 
         if !headers.has::<UserAgent>() {
             headers.set(UserAgent(DEFAULT_USER_AGENT.to_owned()));
@@ -447,9 +397,7 @@ impl ClientRef {
         if !headers.has::<Accept>() {
             headers.set(Accept::star());
         }
-        if self.gzip &&
-            !headers.has::<AcceptEncoding>() &&
-            !headers.has::<Range>() {
+        if self.gzip && !headers.has::<AcceptEncoding>() && !headers.has::<Range>() {
             headers.set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
         }
 
@@ -460,7 +408,8 @@ impl ClientRef {
         loop {
             let res = {
                 info!("Request: {:?} {}", method, url);
-                let mut req = self.hyper.request(method.clone(), url.clone())
+                let mut req = self.hyper
+                    .request(method.clone(), url.clone())
                     .headers(headers.clone());
 
                 if let Some(ref mut b) = body {
@@ -520,7 +469,7 @@ impl ClientRef {
                             redirect::Action::Stop => {
                                 debug!("redirect_policy disallowed redirection to '{}'", loc);
                                 return Ok(::response::new(res, self.gzip));
-                            },
+                            }
                             redirect::Action::LoopDetected => {
                                 return Err(::error::loop_detected(res.url.clone()));
                             }
@@ -542,20 +491,6 @@ impl ClientRef {
                 return Ok(::response::new(res, self.gzip));
             }
         }
-    }
-}
-
-pub struct MultipartRequestBuilder {
-    request: RequestBuilder,
-}
-
-impl MultipartRequestBuilder {
-    pub fn send(self) -> ::Result<Response> {
-        self.request.send()
-    }
-
-    fn choose_boundary() -> String {
-        Uuid::new_v4().simple().to_string()
     }
 }
 
