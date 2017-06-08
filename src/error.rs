@@ -182,6 +182,26 @@ where
     InternalFrom(err, None).into()
 }
 
+#[macro_export]
+macro_rules! try_ {
+    ($e:expr) => (
+        match $e {
+            Ok(v) => v,
+            Err(err) => {
+                return Err(::Error::from(::error::InternalFrom(err, None)));
+            }
+        }
+    );
+    ($e:expr, $url:expr) => (
+        match $e {
+            Ok(v) => v,
+            Err(err) => {
+                return Err(::Error::from(::error::InternalFrom(err, Some($url.clone()))));
+            }
+        }
+    )
+}
+
 #[inline]
 pub fn loop_detected(url: Url) -> Error {
     Error {

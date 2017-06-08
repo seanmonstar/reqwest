@@ -131,27 +131,6 @@ extern crate serde_json;
 extern crate serde_urlencoded;
 extern crate url;
 
-// should be in error.rs module, but due to scopes of macros,
-// other modules won't see it there.
-macro_rules! try_ {
-    ($e:expr) => (
-        match $e {
-            Ok(v) => v,
-            Err(err) => {
-                return Err(::Error::from(::error::InternalFrom(err, None)));
-            }
-        }
-    );
-    ($e:expr, $url:expr) => (
-        match $e {
-            Ok(v) => v,
-            Err(err) => {
-                return Err(::Error::from(::error::InternalFrom(err, Some($url.clone()))));
-            }
-        }
-    )
-}
-
 pub use hyper::client::IntoUrl;
 pub use hyper::Error as HyperError;
 pub use hyper::header;
@@ -168,6 +147,7 @@ pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
 
+#[macro_use]
 mod error;
 mod body;
 mod client;
