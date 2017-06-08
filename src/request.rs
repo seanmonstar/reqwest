@@ -349,7 +349,7 @@ impl MultipartRequestBuilder {
             for (name, value) in p {
                 write_bytes!(body, "\r\n--{}\r\n", boundary);
                 write_bytes!(body, "Content-Disposition: form-data; name=\"{}\"\n", name);
-                write_bytes!(body, "\r\n{}\r\n", value);
+                write_bytes!(body, "\r\n{}", value);
             }
         }
 
