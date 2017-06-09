@@ -30,7 +30,7 @@ fn test_get() {
     let mut res = reqwest::get(&url).unwrap();
 
     assert_eq!(res.url().as_str(), &url);
-    assert_eq!(res.status(), &reqwest::StatusCode::Ok);
+    assert_eq!(res.status(), reqwest::StatusCode::Ok);
     assert_eq!(res.headers().get(),
                Some(&reqwest::header::Server("test".to_string())));
     assert_eq!(res.headers().get(),
@@ -90,7 +90,7 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
             .send()
             .unwrap();
         assert_eq!(res.url().as_str(), dst);
-        assert_eq!(res.status(), &reqwest::StatusCode::Ok);
+        assert_eq!(res.status(), reqwest::StatusCode::Ok);
         assert_eq!(res.headers().get(),
                    Some(&reqwest::header::Server("test-dst".to_string())));
     }
@@ -148,7 +148,7 @@ fn test_redirect_307_and_308_tries_to_post_again() {
             .send()
             .unwrap();
         assert_eq!(res.url().as_str(), dst);
-        assert_eq!(res.status(), &reqwest::StatusCode::Ok);
+        assert_eq!(res.status(), reqwest::StatusCode::Ok);
         assert_eq!(res.headers().get(),
                    Some(&reqwest::header::Server("test-dst".to_string())));
     }
@@ -190,7 +190,7 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
             .send()
             .unwrap();
         assert_eq!(res.url().as_str(), url);
-        assert_eq!(res.status(), &reqwest::StatusCode::from_u16(code));
+        assert_eq!(res.status(), reqwest::StatusCode::from_u16(code));
     }
 }
 
@@ -301,7 +301,7 @@ fn test_redirect_policy_can_stop_redirects_without_an_error() {
         .unwrap();
 
     assert_eq!(res.url().as_str(), url);
-    assert_eq!(res.status(), &reqwest::StatusCode::Found);
+    assert_eq!(res.status(), reqwest::StatusCode::Found);
     assert_eq!(res.headers().get(),
                Some(&reqwest::header::Server("test-dont".to_string())));
 }
@@ -378,7 +378,7 @@ fn test_accept_header_is_not_changed_if_set() {
         .send()
         .unwrap();
 
-    assert_eq!(res.status(), &reqwest::StatusCode::Ok);
+    assert_eq!(res.status(), reqwest::StatusCode::Ok);
 }
 
 #[test]
@@ -409,7 +409,7 @@ fn test_accept_encoding_header_is_not_changed_if_set() {
         .send()
         .unwrap();
 
-    assert_eq!(res.status(), &reqwest::StatusCode::Ok);
+    assert_eq!(res.status(), reqwest::StatusCode::Ok);
 }
 
 #[test]
