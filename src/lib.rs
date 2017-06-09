@@ -164,30 +164,15 @@ mod response;
 /// # Examples
 ///
 /// ```rust
-/// # extern crate reqwest;
-/// # #[macro_use] extern crate error_chain;
-/// #
 /// use std::io::Read;
 ///
-/// # error_chain! {
-/// #     foreign_links {
-/// #         Reqwest(reqwest::Error);
-/// #         Io(std::io::Error);
-/// #     }
-/// # }
-/// #
-/// # fn run() -> Result<()> {
+/// # fn run() -> Result<(), Box<::std::error::Error>> {
 /// let mut result = String::new();
 /// reqwest::get("https://www.rust-lang.org")?
 ///     .read_to_string(&mut result)?;
 /// # Ok(())
 /// # }
-/// #
-/// # fn main() {
-/// #    if let Err(error) = run() {
-/// #        println!("Error: {:?}", error);
-/// #    }
-/// # }
+/// # fn main() { }
 /// ```
 ///
 /// # Errors
