@@ -35,7 +35,7 @@ pub struct RequestBuilder {
     request: Option<Request>,
 }
 
-/// A builder to construct the properties of a `Request` with the multipart/form-data ContentType.
+/// A builder to construct the properties of a `Request` with the multipart/form-data content type.
 pub struct MultipartRequestBuilder {
     request_builder: RequestBuilder,
     params: Option<Params>,
