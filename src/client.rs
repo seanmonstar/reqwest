@@ -446,7 +446,7 @@ impl Client {
     pub fn multipart<U: IntoUrl>(&self, url: U) -> ::Result<MultipartRequestBuilder> {
         let url = try_!(url.into_url());
         let request_builder = request::builder(self.clone(), Request::new(Method::Post, url));
-        Ok(MultipartRequestBuilder::builder(request_builder))
+        Ok(MultipartRequestBuilder::new(request_builder))
     }
 
     /// Executes a `Request`.

@@ -268,7 +268,8 @@ impl RequestBuilder {
 }
 
 impl MultipartRequestBuilder {
-    pub fn builder(request_builder: RequestBuilder) -> MultipartRequestBuilder {
+    /// Constructs a new request.
+    pub fn new(request_builder: RequestBuilder) -> MultipartRequestBuilder {
         MultipartRequestBuilder { request_builder: request_builder, params: None, files: None }
     }
 
