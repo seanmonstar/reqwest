@@ -44,7 +44,15 @@ impl fmt::Debug for Response {
 }
 
 impl Response {
-    /// Get the final `Url` of this response.
+    /// Get the final `Url` of this `Response`.
+    ///
+    /// ```rust
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let resp = reqwest::get("http://httpbin.org/redirect/1")?;
+    /// assert_eq!(resp.url().as_str(), "http://httpbin.org/get");
+    /// # Ok(())
+    /// # }
+    /// ```
     #[inline]
     pub fn url(&self) -> &Url {
         match self.inner {
@@ -54,7 +62,40 @@ impl Response {
         }
     }
 
-    /// Get the `StatusCode`.
+    /// Get the `StatusCode` of this `Response`.
+    ///
+    /// ```rust
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let resp = reqwest::get("http://httpbin.org/get")?;
+    /// if resp.status().is_success() {
+    ///     println!("success!");
+    /// } else if resp.status().is_server_error() {
+    ///     println!("server error!");
+    /// } else {
+    ///     println!("Something else happened. Status: {:?}", resp.status());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// ```rust
+    /// use reqwest::Client;
+    /// use reqwest::StatusCode;
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let client = Client::new()?;
+    /// let resp = client.post("http://httpbin.org/post")?
+    ///             .body("possibly too large")
+    ///             .send()?;
+    /// match resp.status() {
+    ///     StatusCode::Ok => println!("success!"),
+    ///     StatusCode::PayloadTooLarge => {
+    ///         println!("Request payload is too large!");
+    ///     }
+    ///     s => println!("Received response status: {:?}", s),
+    /// };
+    /// # Ok(())
+    /// # }
+    /// ```
     #[inline]
     pub fn status(&self) -> StatusCode {
         match self.inner {
@@ -64,7 +105,32 @@ impl Response {
         }
     }
 
-    /// Get the `Headers`.
+    /// Get the `Headers` of this `Response`.
+    ///
+    /// ```rust
+    /// # use std::io::{Read, Write};
+    /// # use reqwest::Client;
+    /// # use reqwest::header::ContentLength;
+    /// #
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let client = Client::new()?;
+    /// let mut resp = client.head("http://httpbin.org/bytes/3000")?.send()?;
+    /// if resp.status().is_success() {
+    ///     let len = resp.headers().get::<ContentLength>()
+    ///                 .map(|ct_len| **ct_len)
+    ///                 .unwrap_or(0);
+    ///     // limit 1mb response
+    ///     if len <= 1_000_000 {
+    ///         let mut buf = Vec::with_capacity(len as usize);
+    ///         let mut resp = reqwest::get("http://httpbin.org/bytes/3000")?;
+    ///         if resp.status().is_success() {
+    ///             ::std::io::copy(&mut resp, &mut buf)?;
+    ///         }
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     #[inline]
     pub fn headers(&self) -> &Headers {
         match self.inner {
@@ -90,15 +156,11 @@ impl Response {
     /// }
     ///
     /// # fn run() -> Result<(), Error> {
-    /// let resp: Response = reqwest::get("http://127.0.0.1/user.json")?.json()?;
+    /// let resp: Response = reqwest::get("http://httpbin.org/ip")?.json()?;
     /// # Ok(())
     /// # }
     /// #
-    /// # fn main() {
-    /// #     if let Err(error) = run() {
-    /// #         println!("Error: {:?}", error);
-    /// #     }
-    /// # }
+    /// # fn main() { }
     /// ```
     ///
     /// # Errors
