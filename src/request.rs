@@ -118,12 +118,10 @@ impl RequestBuilder {
     /// Add a `Header` to this Request.
     ///
     /// ```rust
-    /// # use reqwest::Error;
-    /// #
-    /// # fn run() -> Result<(), Error> {
     /// use reqwest::header::UserAgent;
-    /// let client = reqwest::Client::new()?;
     ///
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let client = reqwest::Client::new()?;
     /// let res = client.get("https://www.rust-lang.org")?
     ///     .header(UserAgent("foo".to_string()))
     ///     .send()?;
@@ -139,12 +137,44 @@ impl RequestBuilder {
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
+    ///
+    /// ```rust
+    /// use reqwest::header::{Headers, UserAgent, ContentType};
+    /// # use std::fs;
+    ///
+    /// fn construct_headers() -> Headers {
+    ///     let mut headers = Headers::new();
+    ///     headers.set(UserAgent("reqwest".to_string()));
+    ///     headers.set(ContentType::png());
+    ///     headers
+    /// }
+    ///
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let file = fs::File::open("much_beauty.png")?;
+    /// let client = reqwest::Client::new()?;
+    /// let res = client.post("http://httpbin.org/post")?
+    ///     .headers(construct_headers())
+    ///     .body(file)
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn headers(&mut self, headers: ::header::Headers) -> &mut RequestBuilder {
         self.request_mut().headers.extend(headers.iter());
         self
     }
 
     /// Enable HTTP basic authentication.
+    ///
+    /// ```rust
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let client = reqwest::Client::new()?;
+    /// let resp = client.delete("http://httpbin.org/delete")?
+    ///     .basic_auth("admin", Some("good password"))
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn basic_auth<U, P>(&mut self, username: U, password: Option<P>) -> &mut RequestBuilder
         where U: Into<String>,
               P: Into<String>
@@ -156,6 +186,41 @@ impl RequestBuilder {
     }
 
     /// Set the request body.
+    ///
+    /// ```rust
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let client = reqwest::Client::new()?;
+    /// let res = client.post("http://httpbin.org/post")?
+    ///     .body("from a &str!")
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// ```rust
+    /// # use std::fs;
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let file = fs::File::open("from_a_file.txt")?;
+    /// let client = reqwest::Client::new()?;
+    /// let res = client.post("http://httpbin.org/post")?
+    ///     .body(file)
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// ```rust
+    /// # use std::fs;
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// // from bytes!
+    /// let bytes: Vec<u8> = vec![1, 10, 100];
+    /// let client = reqwest::Client::new()?;
+    /// let res = client.post("http://httpbin.org/post")?
+    ///     .body(bytes)
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn body<T: Into<Body>>(&mut self, body: T) -> &mut RequestBuilder {
         self.request_mut().body = Some(body.into());
         self
