@@ -28,6 +28,9 @@ impl Error {
     pub fn get_ref(&self) -> Option<&(StdError + Send + Sync + 'static)> {
         match self.kind {
             Kind::Http(ref e) => Some(e),
+            Kind::Url(ref e) => Some(e),
+            Kind::Tls(ref e) => Some(e),
+            Kind::Io(ref e) => Some(e),
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
             Kind::TooManyRedirects |
@@ -74,6 +77,9 @@ impl fmt::Display for Error {
         }
         match self.kind {
             Kind::Http(ref e) => fmt::Display::fmt(e, f),
+            Kind::Url(ref e) => fmt::Display::fmt(e, f),
+            Kind::Tls(ref e) => fmt::Display::fmt(e, f),
+            Kind::Io(ref e) => fmt::Display::fmt(e, f),
             Kind::UrlEncoded(ref e) => fmt::Display::fmt(e, f),
             Kind::Json(ref e) => fmt::Display::fmt(e, f),
             Kind::TooManyRedirects => f.write_str("Too many redirects"),
@@ -87,6 +93,9 @@ impl StdError for Error {
     fn description(&self) -> &str {
         match self.kind {
             Kind::Http(ref e) => e.description(),
+            Kind::Url(ref e) => e.description(),
+            Kind::Tls(ref e) => e.description(),
+            Kind::Io(ref e) => e.description(),
             Kind::UrlEncoded(ref e) => e.description(),
             Kind::Json(ref e) => e.description(),
             Kind::TooManyRedirects => "Too many redirects",
@@ -97,9 +106,12 @@ impl StdError for Error {
 
     fn cause(&self) -> Option<&StdError> {
         match self.kind {
-            Kind::Http(ref e) => Some(e),
-            Kind::UrlEncoded(ref e) => Some(e),
-            Kind::Json(ref e) => Some(e),
+            Kind::Http(ref e) => e.cause(),
+            Kind::Url(ref e) => e.cause(),
+            Kind::Tls(ref e) => e.cause(),
+            Kind::Io(ref e) => e.cause(),
+            Kind::UrlEncoded(ref e) => e.cause(),
+            Kind::Json(ref e) => e.cause(),
             Kind::TooManyRedirects |
             Kind::RedirectLoop => None,
             Kind::IO(ref e) => Some(e),
@@ -112,6 +124,9 @@ impl StdError for Error {
 #[derive(Debug)]
 pub enum Kind {
     Http(::hyper::Error),
+    Url(::url::ParseError),
+    Tls(::hyper_native_tls::native_tls::Error),
+    Io(::std::io::Error),
     UrlEncoded(::serde_urlencoded::ser::Error),
     Json(::serde_json::Error),
     TooManyRedirects,
@@ -122,14 +137,24 @@ pub enum Kind {
 impl From<::hyper::Error> for Kind {
     #[inline]
     fn from(err: ::hyper::Error) -> Kind {
-        Kind::Http(err)
+        match err {
+            ::hyper::Error::Io(err) => Kind::Io(err),
+            ::hyper::Error::Uri(err) => Kind::Url(err),
+            ::hyper::Error::Ssl(err) => {
+                match err.downcast() {
+                    Ok(tls) => Kind::Tls(*tls),
+                    Err(ssl) => Kind::Http(::hyper::Error::Ssl(ssl)),
+                }
+            }
+            other => Kind::Http(other),
+        }
     }
 }
 
 impl From<::url::ParseError> for Kind {
     #[inline]
     fn from(err: ::url::ParseError) -> Kind {
-        Kind::Http(::hyper::Error::Uri(err))
+        Kind::Url(err)
     }
 }
 
@@ -148,11 +173,12 @@ impl From<::serde_json::Error> for Kind {
 }
 
 impl From<::hyper_native_tls::native_tls::Error> for Kind {
-    fn from(other: ::hyper_native_tls::native_tls::Error) -> Kind {
-        ::hyper::Error::Ssl(Box::new(other)).into()
+    fn from(err: ::hyper_native_tls::native_tls::Error) -> Kind {
+        Kind::Tls(err)
     }
 }
 
+// pub(crate)
 
 pub struct InternalFrom<T>(pub T, pub Option<Url>);
 
@@ -228,16 +254,72 @@ pub fn too_many_redirects(url: Url) -> Error {
     }
 }
 
-#[test]
-fn test_error_get_ref_downcasts() {
-    let err: Error = from(::hyper::Error::Status);
-    let cause = err.get_ref()
-        .unwrap()
-        .downcast_ref::<::hyper::Error>()
-        .unwrap();
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    match cause {
-        &::hyper::Error::Status => (),
-        _ => panic!("unexpected downcast: {:?}", cause),
+    #[test]
+    fn test_error_get_ref_downcasts() {
+        let err: Error = from(::hyper::Error::Status);
+        let cause = err.get_ref()
+            .unwrap()
+            .downcast_ref::<::hyper::Error>()
+            .unwrap();
+
+        match cause {
+            &::hyper::Error::Status => (),
+            _ => panic!("unexpected downcast: {:?}", cause),
+        }
+    }
+
+    #[test]
+    fn test_cause_chain() {
+        #[derive(Debug)]
+        struct Chain<T>(Option<T>);
+
+        impl<T: fmt::Display> fmt::Display  for Chain<T> {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                if let Some(ref link) = self.0 {
+                    write!(f, "chain: {}", link)
+                } else {
+                    f.write_str("root")
+                }
+            }
+        }
+
+        impl<T: StdError> StdError for Chain<T> {
+            fn description(&self) -> &str {
+                if self.0.is_some() {
+                    "chain"
+                } else {
+                    "root"
+                }
+            }
+            fn cause(&self) -> Option<&StdError> {
+                if let Some(ref e) = self.0 {
+                    Some(e)
+                } else {
+                    None
+                }
+            }
+        }
+
+        let err = from(::hyper::Error::Status);
+        assert!(err.cause().is_none());
+
+        let root = Chain(None::<Error>);
+        let io = ::std::io::Error::new(::std::io::ErrorKind::Other, root);
+        let err = Error { kind: Kind::Io(io), url: None };
+        assert!(err.cause().is_none());
+        assert_eq!(err.to_string(), "root");
+
+
+        let root = ::std::io::Error::new(::std::io::ErrorKind::Other, Chain(None::<Error>));
+        let link = Chain(Some(root));
+        let io = ::std::io::Error::new(::std::io::ErrorKind::Other, link);
+        let err = Error { kind: Kind::Io(io), url: None };
+
+        assert!(err.cause().is_some());
+        assert_eq!(err.to_string(), "chain: root");
     }
 }
