@@ -68,6 +68,48 @@ impl Error {
     }
 }
 
+/// Wraps unstable `hyper::Error`
+#[derive(Debug)]
+pub struct HyperError(::hyper::Error);
+impl HyperError {
+    pub fn new(e: ::hyper::Error) -> Self {
+        HyperError(e)
+    }
+}
+
+impl fmt::Display for HyperError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl StdError for HyperError {
+    fn description(&self) -> &str {
+        self.0.description()
+    }
+}
+
+/// Wraps unstable `serde_urlencoded::ser::Error`
+#[derive(Debug)]
+pub struct SerdeUrlencodeError(::serde_urlencoded::ser::Error);
+impl SerdeUrlencodeError {
+    pub fn new(e: ::serde_urlencoded::ser::Error) -> Self {
+        SerdeUrlencodeError(e)
+    }
+}
+
+impl fmt::Display for SerdeUrlencodeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl StdError for SerdeUrlencodeError {
+    fn description(&self) -> &str {
+        self.0.description()
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(ref url) = self.url {
@@ -119,11 +161,11 @@ impl StdError for Error {
 
 #[derive(Debug)]
 pub enum Kind {
-    Http(::hyper::Error),
+    Http(HyperError),
     Url(::url::ParseError),
     Tls(::hyper_native_tls::native_tls::Error),
     Io(::std::io::Error),
-    UrlEncoded(::serde_urlencoded::ser::Error),
+    UrlEncoded(SerdeUrlencodeError),
     Json(::serde_json::Error),
     TooManyRedirects,
     RedirectLoop,
@@ -139,10 +181,10 @@ impl From<::hyper::Error> for Kind {
             ::hyper::Error::Ssl(err) => {
                 match err.downcast() {
                     Ok(tls) => Kind::Tls(*tls),
-                    Err(ssl) => Kind::Http(::hyper::Error::Ssl(ssl)),
+                    Err(ssl) => Kind::Http(HyperError::new(::hyper::Error::Ssl(ssl))),
                 }
             }
-            other => Kind::Http(other),
+            other => Kind::Http(HyperError::new(other)),
         }
     }
 }
@@ -157,7 +199,7 @@ impl From<::url::ParseError> for Kind {
 impl From<::serde_urlencoded::ser::Error> for Kind {
     #[inline]
     fn from(err: ::serde_urlencoded::ser::Error) -> Kind {
-        Kind::UrlEncoded(err)
+        Kind::UrlEncoded(SerdeUrlencodeError::new(err))
     }
 }
 
@@ -252,13 +294,18 @@ mod tests {
         let err: Error = from(::hyper::Error::Status);
         let cause = err.get_ref()
             .unwrap()
-            .downcast_ref::<::hyper::Error>()
+            .downcast_ref::<HyperError>()
             .unwrap();
+        assert!(cause.cause().is_none());
 
-        match cause {
-            &::hyper::Error::Status => (),
-            _ => panic!("unexpected downcast: {:?}", cause),
-        }
+        let err: Error = from(
+            ::serde_urlencoded::ser::Error::Custom(
+                ::std::borrow::Cow::Borrowed("cow")));
+        let cause = err.get_ref()
+            .unwrap()
+            .downcast_ref::<SerdeUrlencodeError>()
+            .unwrap();
+        assert!(cause.cause().is_none());
     }
 
     #[test]
