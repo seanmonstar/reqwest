@@ -348,7 +348,7 @@ pub fn pieces(req: Request) -> (Method, Url, Headers, Option<Body>) {
 mod tests {
     use body;
     use client::Client;
-    use hyper::method::Method;
+    use method::Method;
     use hyper::header::{Host, Headers, ContentType};
     use std::collections::HashMap;
     use serde_urlencoded;

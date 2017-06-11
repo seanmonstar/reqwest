@@ -117,7 +117,8 @@ impl Error {
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
             Kind::TooManyRedirects |
-            Kind::RedirectLoop => None,
+            Kind::RedirectLoop |
+            Kind::Method => None,
         }
     }
 
@@ -166,6 +167,7 @@ impl fmt::Display for Error {
             Kind::Json(ref e) => fmt::Display::fmt(e, f),
             Kind::TooManyRedirects => f.write_str("Too many redirects"),
             Kind::RedirectLoop => f.write_str("Infinite redirect loop"),
+            Kind::Method => f.write_str("Invalid Method specified"),
         }
     }
 }
@@ -181,6 +183,7 @@ impl StdError for Error {
             Kind::Json(ref e) => e.description(),
             Kind::TooManyRedirects => "Too many redirects",
             Kind::RedirectLoop => "Infinite redirect loop",
+            Kind::Method => "Invalid Method specified",
         }
     }
 
@@ -193,7 +196,8 @@ impl StdError for Error {
             Kind::UrlEncoded(ref e) => e.cause(),
             Kind::Json(ref e) => e.cause(),
             Kind::TooManyRedirects |
-            Kind::RedirectLoop => None,
+            Kind::RedirectLoop |
+            Kind::Method => None,
         }
     }
 }
@@ -210,6 +214,7 @@ pub enum Kind {
     Json(::serde_json::Error),
     TooManyRedirects,
     RedirectLoop,
+    Method,
 }
 
 
