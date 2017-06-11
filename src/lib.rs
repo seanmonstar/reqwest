@@ -130,11 +130,11 @@ extern crate serde;
 extern crate serde_json;
 extern crate serde_urlencoded;
 extern crate url;
+extern crate uuid;
 
 pub use hyper::client::IntoUrl;
 pub use hyper::Error as HyperError;
 pub use hyper::header;
-pub use hyper::mime;
 pub use hyper::method::Method;
 pub use hyper::status::StatusCode;
 pub use hyper::Url;
@@ -144,7 +144,7 @@ pub use self::client::{Certificate, Client, ClientBuilder};
 pub use self::error::{Error, Result};
 pub use self::body::Body;
 pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
-pub use self::request::{Request, RequestBuilder};
+pub use self::request::{Request, RequestBuilder, MultipartRequestBuilder, File};
 pub use self::response::Response;
 
 #[macro_use]

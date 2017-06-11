@@ -4,8 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use hyper::client::IntoUrl;
-use hyper::header::{Location, Referer, UserAgent, Accept, Encoding,
-                    AcceptEncoding, Range, qitem};
+use hyper::header::{Location, Referer, UserAgent, Accept, Encoding, AcceptEncoding, Range, qitem};
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::Url;
@@ -14,7 +13,7 @@ use hyper_native_tls::{NativeTlsClient, TlsStream, native_tls};
 
 use body;
 use redirect::{self, RedirectPolicy, check_redirect, remove_sensitive_headers};
-use request::{self, Request, RequestBuilder};
+use request::{self, Request, RequestBuilder, MultipartRequestBuilder};
 use response::Response;
 
 static DEFAULT_USER_AGENT: &'static str =
@@ -124,15 +123,15 @@ impl ClientBuilder {
     pub fn new() -> ::Result<ClientBuilder> {
         let tls_connector_builder = try_!(native_tls::TlsConnector::builder());
         Ok(ClientBuilder {
-            config: Some(Config {
+           config: Some(Config {
                 gzip: true,
                 hostname_verification: true,
                 redirect_policy: RedirectPolicy::default(),
                 referer: true,
                 timeout: None,
                 tls: tls_connector_builder,
-            })
-        })
+            }),
+       })
     }
 
     /// Returns a `Client` that uses this `ClientBuilder` configuration.
@@ -160,13 +159,13 @@ impl ClientBuilder {
         hyper_client.set_write_timeout(config.timeout);
 
         Ok(Client {
-            inner: Arc::new(ClientRef {
-                gzip: config.gzip,
-                hyper: hyper_client,
-                redirect_policy: config.redirect_policy,
-                referer: config.referer,
-            }),
-        })
+           inner: Arc::new(ClientRef {
+               gzip: config.gzip,
+               hyper: hyper_client,
+               redirect_policy: config.redirect_policy,
+               referer: config.referer,
+           }),
+       })
     }
 
     /// Add a custom root certificate.
@@ -436,6 +435,19 @@ impl Client {
         let url = try_!(url.into_url());
         Ok(request::builder(self.clone(), Request::new(method, url)))
     }
+    /// Start building a multipart/form-data `Request` with the `Url`.
+    ///
+    /// Returns a `MultipartRequestBuilder`, which will allow setting headers,
+    /// request body, files and parameters before sending.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
+    pub fn multipart<U: IntoUrl>(&self, url: U) -> ::Result<MultipartRequestBuilder> {
+        let url = try_!(url.into_url());
+        let request_builder = request::builder(self.clone(), Request::new(Method::Post, url));
+        Ok(MultipartRequestBuilder::new(request_builder))
+    }
 
     /// Executes a `Request`.
     ///
@@ -473,11 +485,10 @@ struct ClientRef {
 
 impl ClientRef {
     fn execute_request(&self, req: Request) -> ::Result<Response> {
-        let (
-            mut method,
-            mut url,
-            mut headers,
-            mut body
+        let (mut method,
+             mut url,
+             mut headers,
+             mut body
         ) = request::pieces(req);
 
         if !headers.has::<UserAgent>() {
@@ -487,9 +498,7 @@ impl ClientRef {
         if !headers.has::<Accept>() {
             headers.set(Accept::star());
         }
-        if self.gzip &&
-            !headers.has::<AcceptEncoding>() &&
-            !headers.has::<Range>() {
+        if self.gzip && !headers.has::<AcceptEncoding>() && !headers.has::<Range>() {
             headers.set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
         }
 
@@ -498,7 +507,7 @@ impl ClientRef {
         loop {
             let res = {
                 info!("Request: {:?} {}", method, url);
-                let mut req = self.hyper.request(method.clone(), url.clone())
+                let mut req = self.hyper .request(method.clone(), url.clone())
                     .headers(headers.clone());
 
                 if let Some(ref mut b) = body {
@@ -515,7 +524,7 @@ impl ClientRef {
                 StatusCode::SeeOther => {
                     body = None;
                     match method {
-                        Method::Get | Method::Head => {},
+                        Method::Get | Method::Head => {}
                         _ => {
                             method = Method::Get;
                         }
@@ -558,10 +567,10 @@ impl ClientRef {
                             redirect::Action::Stop => {
                                 debug!("redirect_policy disallowed redirection to '{}'", loc);
                                 return Ok(::response::new(res, self.gzip));
-                            },
+                            }
                             redirect::Action::LoopDetected => {
                                 return Err(::error::loop_detected(res.url.clone()));
-                            },
+                            }
                             redirect::Action::TooManyRedirects => {
                                 return Err(::error::too_many_redirects(res.url.clone()));
                             }
