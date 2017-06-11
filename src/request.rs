@@ -180,9 +180,9 @@ impl RequestBuilder {
               P: Into<String>
     {
         self.header(::header::Authorization(::header::Basic {
-                                                username: username.into(),
-                                                password: password.map(|p| p.into()),
-                                            }))
+            username: username.into(),
+            password: password.map(|p| p.into()),
+        }))
     }
 
     /// Set the request body.

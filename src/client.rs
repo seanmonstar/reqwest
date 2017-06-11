@@ -123,15 +123,15 @@ impl ClientBuilder {
     pub fn new() -> ::Result<ClientBuilder> {
         let tls_connector_builder = try_!(native_tls::TlsConnector::builder());
         Ok(ClientBuilder {
-               config: Some(Config {
-                                gzip: true,
-                                hostname_verification: true,
-                                redirect_policy: RedirectPolicy::default(),
-                                referer: true,
-                                timeout: None,
-                                tls: tls_connector_builder,
-                            }),
-           })
+           config: Some(Config {
+                gzip: true,
+                hostname_verification: true,
+                redirect_policy: RedirectPolicy::default(),
+                referer: true,
+                timeout: None,
+                tls: tls_connector_builder,
+            }),
+       })
     }
 
     /// Returns a `Client` that uses this `ClientBuilder` configuration.
@@ -159,13 +159,13 @@ impl ClientBuilder {
         hyper_client.set_write_timeout(config.timeout);
 
         Ok(Client {
-               inner: Arc::new(ClientRef {
-                                   gzip: config.gzip,
-                                   hyper: hyper_client,
-                                   redirect_policy: config.redirect_policy,
-                                   referer: config.referer,
-                               }),
-           })
+           inner: Arc::new(ClientRef {
+               gzip: config.gzip,
+               hyper: hyper_client,
+               redirect_policy: config.redirect_policy,
+               referer: config.referer,
+           }),
+       })
     }
 
     /// Add a custom root certificate.
@@ -485,7 +485,11 @@ struct ClientRef {
 
 impl ClientRef {
     fn execute_request(&self, req: Request) -> ::Result<Response> {
-        let (mut method, mut url, mut headers, mut body) = request::pieces(req);
+        let (mut method,
+             mut url,
+             mut headers,
+             mut body
+        ) = request::pieces(req);
 
         if !headers.has::<UserAgent>() {
             headers.set(UserAgent(DEFAULT_USER_AGENT.to_owned()));
@@ -498,15 +502,12 @@ impl ClientRef {
             headers.set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
         }
 
-        println!("{:?}", body);
-
         let mut urls = Vec::new();
 
         loop {
             let res = {
                 info!("Request: {:?} {}", method, url);
-                let mut req = self.hyper
-                    .request(method.clone(), url.clone())
+                let mut req = self.hyper .request(method.clone(), url.clone())
                     .headers(headers.clone());
 
                 if let Some(ref mut b) = body {
@@ -529,7 +530,7 @@ impl ClientRef {
                         }
                     }
                     true
-                }
+                },
                 StatusCode::TemporaryRedirect |
                 StatusCode::PermanentRedirect => {
                     if let Some(ref body) = body {
@@ -537,7 +538,7 @@ impl ClientRef {
                     } else {
                         true
                     }
-                }
+                },
                 _ => false,
             };
 
@@ -574,7 +575,7 @@ impl ClientRef {
                                 return Err(::error::too_many_redirects(res.url.clone()));
                             }
                         }
-                    }
+                    },
                     Err(e) => {
                         debug!("Location header had invalid URI: {:?}", e);
 
