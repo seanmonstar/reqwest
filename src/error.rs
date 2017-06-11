@@ -67,16 +67,13 @@ impl Error {
     /// # fn run() {
     /// // displays last stop of a redirect loop
     /// let response = reqwest::get("http://site.with.redirect.loop");
-    /// match response {
-    ///   Err(e) => if e.is_redirect() {
-    ///      let final_stop = match e.url() {
-    ///          Some(url) => url,
-    ///          None      => return,
-    ///      };
-    ///      println!("Last redirect led to: {}", final_stop);
-    ///   },
-    ///   _       => return,
-    /// };
+    /// if let Err(e) = response {
+    ///     if e.is_redirect() {
+    ///         if let Some(final_stop) = e.url() {
+    ///             println!("redirect loop at {}", final_stop);
+    ///         }
+    ///     }
+    /// }
     /// # }
     /// ```
     #[inline]
@@ -92,21 +89,23 @@ impl Error {
     /// # Examples
     ///
     /// ```
+    /// extern crate url;
+    /// # extern crate reqwest;
     /// // retries requests with no host on localhost
     /// # fn run() {
     /// let invalid_request = "http://";
     /// let mut response = reqwest::get(invalid_request);
-    /// match response {
-    ///   Err(e) => match e.get_ref() {
-    ///     Some(internal_error) => if internal_error.description() == "empty host" {
-    ///       let valid_request = format!("{}{}",invalid_request, "localhost");
-    ///       response = reqwest::get(&valid_request);
-    ///     },
-    ///     _          => return,
-    ///   },
-    ///   _      => return,
-    /// };
+    /// if let Err(e) = response {
+    ///     match e.get_ref().and_then(|e| e.downcast_ref::<url::ParseError>()) {
+    ///         Some(&url::ParseError::EmptyHost) => {
+    ///             let valid_request = format!("{}{}",invalid_request, "localhost");
+    ///             response = reqwest::get(&valid_request);
+    ///         },
+    ///         _ => (),
+    ///     }
+    /// }
     /// # }
+    /// # fn main() {}
     /// ```
     #[inline]
     pub fn get_ref(&self) -> Option<&(StdError + Send + Sync + 'static)> {
