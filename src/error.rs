@@ -4,6 +4,51 @@ use std::fmt;
 use Url;
 
 /// The Errors that may occur when processing a `Request`.
+///
+/// # Examples
+///
+/// ```
+/// #[macro_use]
+/// extern crate serde_derive;
+/// extern crate reqwest;
+///
+/// #[derive(Deserialize)]
+/// struct Simple {
+///    key: String
+/// }
+/// # fn main() { }
+///
+/// fn run() {
+///    match make_request() {
+///        Err(e) => handler(e),
+///        Ok(_)  => return,
+///    }
+/// }
+/// // Response is not a json object conforming to the Simple struct
+/// fn make_request() -> Result<Simple, reqwest::Error> {
+///   reqwest::get("http://httpbin.org/ip")?.json()
+/// }
+///
+/// fn handler(e: reqwest::Error) {
+///    if e.is_http() {
+///        match e.url() {
+///            None => println!("No Url given"),
+///            Some(url) => println!("Problem making request to: {}", url),
+///        }
+///    }
+///    // Inspect the internal error and output it
+///    if e.is_serialization() {
+///       let serde_error = match e.get_ref() {
+///            None => return,
+///            Some(err) => err,
+///        };
+///        println!("problem parsing information {}", serde_error);
+///    }
+///    if e.is_redirect() {
+///        println!("server redirecting too many times or making loop");
+///    }
+/// }
+/// ```
 #[derive(Debug)]
 pub struct Error {
     kind: Kind,
@@ -15,6 +60,22 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 
 impl Error {
     /// Returns a possible URL related to this error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # fn run() {
+    /// // displays last stop of a redirect loop
+    /// let response = reqwest::get("http://site.with.redirect.loop");
+    /// if let Err(e) = response {
+    ///     if e.is_redirect() {
+    ///         if let Some(final_stop) = e.url() {
+    ///             println!("redirect loop at {}", final_stop);
+    ///         }
+    ///     }
+    /// }
+    /// # }
+    /// ```
     #[inline]
     pub fn url(&self) -> Option<&Url> {
         self.url.as_ref()
@@ -24,6 +85,28 @@ impl Error {
     ///
     /// The `'static` bounds allows using `downcast_ref` to check the
     /// details of the error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// extern crate url;
+    /// # extern crate reqwest;
+    /// // retries requests with no host on localhost
+    /// # fn run() {
+    /// let invalid_request = "http://";
+    /// let mut response = reqwest::get(invalid_request);
+    /// if let Err(e) = response {
+    ///     match e.get_ref().and_then(|e| e.downcast_ref::<url::ParseError>()) {
+    ///         Some(&url::ParseError::EmptyHost) => {
+    ///             let valid_request = format!("{}{}",invalid_request, "localhost");
+    ///             response = reqwest::get(&valid_request);
+    ///         },
+    ///         _ => (),
+    ///     }
+    /// }
+    /// # }
+    /// # fn main() {}
+    /// ```
     #[inline]
     pub fn get_ref(&self) -> Option<&(StdError + Send + Sync + 'static)> {
         match self.kind {
