@@ -135,11 +135,11 @@ pub use hyper::client::IntoUrl;
 pub use hyper::Error as HyperError;
 pub use hyper::header;
 pub use hyper::mime;
-pub use hyper::method::Method;
 pub use hyper::status::StatusCode;
 pub use hyper::Url;
 pub use url::ParseError as UrlError;
 
+pub use self::method::Method;
 pub use self::client::{Certificate, Client, ClientBuilder};
 pub use self::error::{Error, Result};
 pub use self::body::Body;
@@ -149,6 +149,7 @@ pub use self::response::Response;
 
 #[macro_use]
 mod error;
+mod method;
 mod body;
 mod client;
 mod redirect;

@@ -6,13 +6,13 @@ use std::time::Duration;
 use hyper::client::IntoUrl;
 use hyper::header::{Location, Referer, UserAgent, Accept, Encoding,
                     AcceptEncoding, Range, qitem};
-use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper::Url;
 
 use hyper_native_tls::{NativeTlsClient, TlsStream, native_tls};
 
 use body;
+use method::Method;
 use redirect::{self, RedirectPolicy, check_redirect, remove_sensitive_headers};
 use request::{self, Request, RequestBuilder};
 use response::Response;
