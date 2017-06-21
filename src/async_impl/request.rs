@@ -1,18 +1,20 @@
 use std::fmt;
 
-use hyper::header::ContentType;
 use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
 
-use body::{self, Body};
-use header::Headers;
-use {async_impl, Client, Method, Url};
+use super::body::{self, Body};
+use super::client::{Client, Pending};
+use header::{ContentType, Headers};
+use {Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
+    method: Method,
+    url: Url,
+    headers: Headers,
     body: Option<Body>,
-    inner: async_impl::Request,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -26,45 +28,47 @@ impl Request {
     #[inline]
     pub fn new(method: Method, url: Url) -> Self {
         Request {
+            method,
+            url,
+            headers: Headers::new(),
             body: None,
-            inner: async_impl::Request::new(method, url),
         }
     }
 
     /// Get the method.
     #[inline]
     pub fn method(&self) -> &Method {
-        self.inner.method()
+        &self.method
     }
 
     /// Get a mutable reference to the method.
     #[inline]
     pub fn method_mut(&mut self) -> &mut Method {
-        self.inner.method_mut()
+        &mut self.method
     }
 
     /// Get the url.
     #[inline]
     pub fn url(&self) -> &Url {
-        self.inner.url()
+        &self.url
     }
 
     /// Get a mutable reference to the url.
     #[inline]
     pub fn url_mut(&mut self) -> &mut Url {
-        self.inner.url_mut()
+        &mut self.url
     }
 
     /// Get the headers.
     #[inline]
     pub fn headers(&self) -> &Headers {
-        self.inner.headers()
+        &self.headers
     }
 
     /// Get a mutable reference to the headers.
     #[inline]
     pub fn headers_mut(&mut self) -> &mut Headers {
-        self.inner.headers_mut()
+        &mut self.headers
     }
 
     /// Get the body.
@@ -82,67 +86,22 @@ impl Request {
 
 impl RequestBuilder {
     /// Add a `Header` to this Request.
-    ///
-    /// ```rust
-    /// use reqwest::header::UserAgent;
-    ///
-    /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let client = reqwest::Client::new()?;
-    /// let res = client.get("https://www.rust-lang.org")?
-    ///     .header(UserAgent::new("foo"))
-    ///     .send()?;
-    /// # Ok(())
-    /// # }
-    /// ```
     pub fn header<H>(&mut self, header: H) -> &mut RequestBuilder
     where
         H: ::header::Header,
     {
-        self.request_mut().headers_mut().set(header);
+        self.request_mut().headers.set(header);
         self
     }
-
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
-    ///
-    /// ```rust
-    /// use reqwest::header::{Headers, UserAgent, ContentType};
-    /// # use std::fs;
-    ///
-    /// fn construct_headers() -> Headers {
-    ///     let mut headers = Headers::new();
-    ///     headers.set(UserAgent::new("reqwest"));
-    ///     headers.set(ContentType::png());
-    ///     headers
-    /// }
-    ///
-    /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let file = fs::File::open("much_beauty.png")?;
-    /// let client = reqwest::Client::new()?;
-    /// let res = client.post("http://httpbin.org/post")?
-    ///     .headers(construct_headers())
-    ///     .body(file)
-    ///     .send()?;
-    /// # Ok(())
-    /// # }
-    /// ```
     pub fn headers(&mut self, headers: ::header::Headers) -> &mut RequestBuilder {
-        self.request_mut().headers_mut().extend(headers.iter());
+        self.request_mut().headers.extend(headers.iter());
         self
     }
 
     /// Enable HTTP basic authentication.
-    ///
-    /// ```rust
-    /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let client = reqwest::Client::new()?;
-    /// let resp = client.delete("http://httpbin.org/delete")?
-    ///     .basic_auth("admin", Some("good password"))
-    ///     .send()?;
-    /// # Ok(())
-    /// # }
-    /// ```
     pub fn basic_auth<U, P>(&mut self, username: U, password: Option<P>) -> &mut RequestBuilder
     where
         U: Into<String>,
@@ -155,104 +114,24 @@ impl RequestBuilder {
     }
 
     /// Set the request body.
-    ///
-    /// ```rust
-    /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let client = reqwest::Client::new()?;
-    /// let res = client.post("http://httpbin.org/post")?
-    ///     .body("from a &str!")
-    ///     .send()?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// ```rust
-    /// # use std::fs;
-    /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let file = fs::File::open("from_a_file.txt")?;
-    /// let client = reqwest::Client::new()?;
-    /// let res = client.post("http://httpbin.org/post")?
-    ///     .body(file)
-    ///     .send()?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// ```rust
-    /// # use std::fs;
-    /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// // from bytes!
-    /// let bytes: Vec<u8> = vec![1, 10, 100];
-    /// let client = reqwest::Client::new()?;
-    /// let res = client.post("http://httpbin.org/post")?
-    ///     .body(bytes)
-    ///     .send()?;
-    /// # Ok(())
-    /// # }
-    /// ```
     pub fn body<T: Into<Body>>(&mut self, body: T) -> &mut RequestBuilder {
-        *self.request_mut().body_mut() = Some(body.into());
+        self.request_mut().body = Some(body.into());
         self
     }
 
     /// Send a form body.
-    ///
-    /// Sets the body to the url encoded serialization of the passed value,
-    /// and also sets the `Content-Type: application/www-form-url-encoded`
-    /// header.
-    ///
-    /// ```rust
-    /// # use reqwest::Error;
-    /// # use std::collections::HashMap;
-    /// #
-    /// # fn run() -> Result<(), Error> {
-    /// let mut params = HashMap::new();
-    /// params.insert("lang", "rust");
-    ///
-    /// let client = reqwest::Client::new()?;
-    /// let res = client.post("http://httpbin.org")?
-    ///     .form(&params)?
-    ///     .send()?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// This method fails if the passed value cannot be serialized into
-    /// url encoded format
     pub fn form<T: Serialize>(&mut self, form: &T) -> ::Result<&mut RequestBuilder> {
-
         {
             // check request_mut() before running serde
             let mut req = self.request_mut();
             let body = try_!(serde_urlencoded::to_string(form));
-            req.headers_mut().set(ContentType::form_url_encoded());
-            *req.body_mut() = Some(body.into());
+            req.headers.set(ContentType::form_url_encoded());
+            req.body = Some(body::reusable(body.into()));
         }
         Ok(self)
     }
 
     /// Send a JSON body.
-    ///
-    /// Sets the body to the JSON serialization of the passed value, and
-    /// also sets the `Content-Type: application/json` header.
-    ///
-    /// ```rust
-    /// # use reqwest::Error;
-    /// # use std::collections::HashMap;
-    /// #
-    /// # fn run() -> Result<(), Error> {
-    /// let mut map = HashMap::new();
-    /// map.insert("lang", "rust");
-    ///
-    /// let client = reqwest::Client::new()?;
-    /// let res = client.post("http://httpbin.org")?
-    ///     .json(&map)?
-    ///     .send()?;
-    /// # Ok(())
-    /// # }
-    /// ```
     ///
     /// # Errors
     ///
@@ -263,8 +142,8 @@ impl RequestBuilder {
             // check request_mut() before running serde
             let mut req = self.request_mut();
             let body = try_!(serde_json::to_vec(json));
-            req.headers_mut().set(ContentType::json());
-            *req.body_mut() = Some(body.into());
+            req.headers.set(ContentType::json());
+            req.body = Some(body::reusable(body.into()));
         }
         Ok(self)
     }
@@ -288,7 +167,7 @@ impl RequestBuilder {
     ///
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
-    pub fn send(&mut self) -> ::Result<::Response> {
+    pub fn send(&mut self) -> Pending {
         let request = self.build();
         self.client.execute(request)
     }
@@ -323,9 +202,9 @@ impl fmt::Debug for RequestBuilder {
 }
 
 fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>, req: &Request) -> &'a mut fmt::DebugStruct<'a, 'b> {
-    f.field("method", req.method())
-        .field("url", req.url())
-        .field("headers", req.headers())
+    f.field("method", &req.method)
+        .field("url", &req.url)
+        .field("headers", &req.headers)
 }
 
 // pub(crate)
@@ -339,24 +218,15 @@ pub fn builder(client: Client, req: Request) -> RequestBuilder {
 }
 
 #[inline]
-pub fn async(req: Request) -> (async_impl::Request, Option<body::Sender>) {
-    use header::ContentLength;
-
-    let mut req_async = req.inner;
-    let body = req.body.and_then(|body| {
-        let (tx, body, len) = body::async(body);
-        if let Some(len) = len {
-            req_async.headers_mut().set(ContentLength(len));
-        }
-        *req_async.body_mut() = Some(body);
-        tx
-    });
-    (req_async, body)
+pub fn pieces(req: Request) -> (Method, Url, Headers, Option<Body>) {
+    (req.method, req.url, req.headers, req.body)
 }
 
 #[cfg(test)]
 mod tests {
-    use {body, Client, Method};
+    /*
+    use {body, Method};
+    use super::Client;
     use header::{Host, Headers, ContentType};
     use std::collections::HashMap;
     use serde_urlencoded;
@@ -368,8 +238,8 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.get(some_url).unwrap().build();
 
-        assert_eq!(r.method(), &Method::Get);
-        assert_eq!(r.url().as_str(), some_url);
+        assert_eq!(r.method, Method::Get);
+        assert_eq!(r.url.as_str(), some_url);
     }
 
     #[test]
@@ -378,8 +248,8 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.head(some_url).unwrap().build();
 
-        assert_eq!(r.method(), &Method::Head);
-        assert_eq!(r.url().as_str(), some_url);
+        assert_eq!(r.method, Method::Head);
+        assert_eq!(r.url.as_str(), some_url);
     }
 
     #[test]
@@ -388,8 +258,8 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.post(some_url).unwrap().build();
 
-        assert_eq!(r.method(), &Method::Post);
-        assert_eq!(r.url().as_str(), some_url);
+        assert_eq!(r.method, Method::Post);
+        assert_eq!(r.url.as_str(), some_url);
     }
 
     #[test]
@@ -398,8 +268,8 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.put(some_url).unwrap().build();
 
-        assert_eq!(r.method(), &Method::Put);
-        assert_eq!(r.url().as_str(), some_url);
+        assert_eq!(r.method, Method::Put);
+        assert_eq!(r.url.as_str(), some_url);
     }
 
     #[test]
@@ -408,8 +278,8 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.patch(some_url).unwrap().build();
 
-        assert_eq!(r.method(), &Method::Patch);
-        assert_eq!(r.url().as_str(), some_url);
+        assert_eq!(r.method, Method::Patch);
+        assert_eq!(r.url.as_str(), some_url);
     }
 
     #[test]
@@ -418,8 +288,8 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.delete(some_url).unwrap().build();
 
-        assert_eq!(r.method(), &Method::Delete);
-        assert_eq!(r.url().as_str(), some_url);
+        assert_eq!(r.method, Method::Delete);
+        assert_eq!(r.url.as_str(), some_url);
     }
 
     #[test]
@@ -428,13 +298,16 @@ mod tests {
         let some_url = "https://google.com/";
         let mut r = client.post(some_url).unwrap();
 
-        let header = Host::new("google.com", None);
+        let header = Host {
+            hostname: "google.com".to_string(),
+            port: None,
+        };
 
         // Add a copy of the header to the request builder
         let r = r.header(header.clone()).build();
 
         // then check it was actually added
-        assert_eq!(r.headers().get::<Host>(), Some(&header));
+        assert_eq!(r.headers.get::<Host>(), Some(&header));
     }
 
     #[test]
@@ -443,7 +316,10 @@ mod tests {
         let some_url = "https://google.com/";
         let mut r = client.post(some_url).unwrap();
 
-        let header = Host::new("google.com", None);
+        let header = Host {
+            hostname: "google.com".to_string(),
+            port: None,
+        };
 
         let mut headers = Headers::new();
         headers.set(header);
@@ -452,7 +328,7 @@ mod tests {
         let r = r.headers(headers.clone()).build();
 
         // then make sure they were added correctly
-        assert_eq!(r.headers(), &headers);
+        assert_eq!(r.headers, headers);
     }
 
     #[test]
@@ -463,9 +339,9 @@ mod tests {
 
         let body = "Some interesting content";
 
-        let mut r = r.body(body).build();
+        let r = r.body(body).build();
 
-        let buf = body::read_to_string(r.body_mut().take().unwrap()).unwrap();
+        let buf = body::read_to_string(r.body.unwrap()).unwrap();
 
         assert_eq!(buf, body);
     }
@@ -479,13 +355,13 @@ mod tests {
         let mut form_data = HashMap::new();
         form_data.insert("foo", "bar");
 
-        let mut r = r.form(&form_data).unwrap().build();
+        let r = r.form(&form_data).unwrap().build();
 
         // Make sure the content type was set
-        assert_eq!(r.headers().get::<ContentType>(),
+        assert_eq!(r.headers.get::<ContentType>(),
                    Some(&ContentType::form_url_encoded()));
 
-        let buf = body::read_to_string(r.body_mut().take().unwrap()).unwrap();
+        let buf = body::read_to_string(r.body.unwrap()).unwrap();
 
         let body_should_be = serde_urlencoded::to_string(&form_data).unwrap();
         assert_eq!(buf, body_should_be);
@@ -500,12 +376,12 @@ mod tests {
         let mut json_data = HashMap::new();
         json_data.insert("foo", "bar");
 
-        let mut r = r.json(&json_data).unwrap().build();
+        let r = r.json(&json_data).unwrap().build();
 
         // Make sure the content type was set
-        assert_eq!(r.headers().get::<ContentType>(), Some(&ContentType::json()));
+        assert_eq!(r.headers.get::<ContentType>(), Some(&ContentType::json()));
 
-        let buf = body::read_to_string(r.body_mut().take().unwrap()).unwrap();
+        let buf = body::read_to_string(r.body.unwrap()).unwrap();
 
         let body_should_be = serde_json::to_string(&json_data).unwrap();
         assert_eq!(buf, body_should_be);
@@ -527,7 +403,8 @@ mod tests {
         let client = Client::new().unwrap();
         let some_url = "https://google.com/";
         let mut r = client.post(some_url).unwrap();
-        let json_data = MyStruct;
+        let json_data = MyStruct{};
         assert!(r.json(&json_data).unwrap_err().is_serialization());
     }
+    */
 }

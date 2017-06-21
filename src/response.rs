@@ -1,45 +1,26 @@
 use std::fmt;
 use std::io::{self, Read};
+use std::time::Duration;
 
-use hyper::header::{Headers, ContentEncoding, ContentLength, Encoding, TransferEncoding};
-use hyper::status::StatusCode;
-use hyper::Url;
 use libflate::gzip;
 use serde::de::DeserializeOwned;
 use serde_json;
 
+use client::KeepCoreThreadAlive;
+use header::{Headers, ContentEncoding, ContentLength, Encoding, TransferEncoding};
+use {async_impl, StatusCode, Url, wait};
+
 
 /// A Response to a submitted `Request`.
 pub struct Response {
-    inner: Decoder,
-}
-
-pub fn new(res: ::hyper::client::Response, gzip: bool) -> Response {
-    info!("Response: '{}' for {}", res.status, res.url);
-    Response {
-        inner: Decoder::from_hyper_response(res, gzip),
-    }
+    body: Decoder,
+    inner: async_impl::Response,
+    _thread_handle: KeepCoreThreadAlive,
 }
 
 impl fmt::Debug for Response {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.inner {
-            Decoder::PlainText(ref hyper_response) => {
-                f.debug_struct("Response")
-                    .field("url", &hyper_response.url)
-                    .field("status", &hyper_response.status)
-                    .field("headers", &hyper_response.headers)
-                    .finish()
-            }
-            Decoder::Gzip { ref head, .. } |
-            Decoder::Errored { ref head, .. } => {
-                f.debug_struct("Response")
-                    .field("url", &head.url)
-                    .field("status", &head.status)
-                    .field("headers", &head.headers)
-                    .finish()
-            }
-        }
+        fmt::Debug::fmt(&self.inner, f)
     }
 }
 
@@ -55,11 +36,7 @@ impl Response {
     /// ```
     #[inline]
     pub fn url(&self) -> &Url {
-        match self.inner {
-            Decoder::PlainText(ref hyper_response) => &hyper_response.url,
-            Decoder::Gzip { ref head, .. } |
-            Decoder::Errored { ref head, .. } => &head.url,
-        }
+        self.inner.url()
     }
 
     /// Get the `StatusCode` of this `Response`.
@@ -98,11 +75,7 @@ impl Response {
     /// ```
     #[inline]
     pub fn status(&self) -> StatusCode {
-        match self.inner {
-            Decoder::PlainText(ref hyper_response) => hyper_response.status,
-            Decoder::Gzip { ref head, .. } |
-            Decoder::Errored { ref head, .. } => head.status,
-        }
+        self.inner.status()
     }
 
     /// Get the `Headers` of this `Response`.
@@ -133,11 +106,7 @@ impl Response {
     /// ```
     #[inline]
     pub fn headers(&self) -> &Headers {
-        match self.inner {
-            Decoder::PlainText(ref hyper_response) => &hyper_response.headers,
-            Decoder::Gzip { ref head, .. } |
-            Decoder::Errored { ref head, .. } => &head.headers,
-        }
+        self.inner.headers()
     }
 
     /// Try and deserialize the response body as JSON using `serde`.
@@ -151,12 +120,12 @@ impl Response {
     /// # use reqwest::Error;
     /// #
     /// #[derive(Deserialize)]
-    /// struct Response {
+    /// struct Ip {
     ///     origin: String,
     /// }
     ///
     /// # fn run() -> Result<(), Error> {
-    /// let resp: Response = reqwest::get("http://httpbin.org/ip")?.json()?;
+    /// let json: Ip = reqwest::get("http://httpbin.org/ip")?.json()?;
     /// # Ok(())
     /// # }
     /// #
@@ -171,24 +140,98 @@ impl Response {
     /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
     #[inline]
     pub fn json<T: DeserializeOwned>(&mut self) -> ::Result<T> {
+        // There's 2 ways we could implement this:
+        //
+        // 1. Just using from_reader(self), making use of our blocking read adapter
+        // 2. Just use self.inner.json().wait()
+        //
+        // Doing 1 is pretty easy, but it means we have the `serde_json` code
+        // in more than one place, doing basically the same thing.
+        //
+        // Doing 2 would mean `serde_json` is only in one place, but we'd
+        // need to update the sync Response to lazily make a blocking read
+        // adapter, so that our `inner` could possibly still have the original
+        // body.
+        //
+        // Went for easier for now, just to get it working.
         serde_json::from_reader(self).map_err(::error::from)
     }
 }
 
+impl Read for Response {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.body.read(buf)
+    }
+}
+
+struct ReadableBody {
+    state: ReadState,
+    stream:  wait::WaitStream<async_impl::Body>,
+}
+
+enum ReadState {
+    Ready(async_impl::Chunk, usize),
+    NotReady,
+    Eof,
+}
+
+
+impl Read for ReadableBody {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        use std::cmp;
+
+        loop {
+            let ret;
+            match self.state {
+                ReadState::Ready(ref mut chunk, ref mut pos) => {
+                    let chunk_start = *pos;
+                    let len = cmp::min(buf.len(), chunk.len() - chunk_start);
+                    let chunk_end = chunk_start + len;
+                    buf[..len].copy_from_slice(&chunk[chunk_start..chunk_end]);
+                    *pos += len;
+                    if *pos == chunk.len() {
+                        ret = len;
+                    } else {
+                        return Ok(len);
+                    }
+                },
+                ReadState::NotReady => {
+                    match self.stream.next() {
+                        Some(Ok(chunk)) => {
+                            self.state = ReadState::Ready(chunk, 0);
+                            continue;
+                        },
+                        Some(Err(e)) => {
+                            let req_err = match e {
+                                wait::Waited::TimedOut => ::error::timedout(None),
+                                wait::Waited::Err(e) => e,
+                            };
+                            return Err(::error::into_io(req_err));
+                        },
+                        None => {
+                            self.state = ReadState::Eof;
+                            return Ok(0);
+                        },
+                    }
+                },
+                ReadState::Eof => return Ok(0),
+            }
+            self.state = ReadState::NotReady;
+            return Ok(ret);
+        }
+    }
+}
+
+
 enum Decoder {
     /// A `PlainText` decoder just returns the response content as is.
-    PlainText(::hyper::client::Response),
+    PlainText(ReadableBody),
     /// A `Gzip` decoder will uncompress the gziped response content before returning it.
-    Gzip {
-        decoder: gzip::Decoder<Peeked>,
-        head: Head,
-    },
+    Gzip(gzip::Decoder<Peeked>),
     /// An error occured reading the Gzip header, so return that error
     /// when the user tries to read on the `Response`.
-    Errored {
-        err: Option<io::Error>,
-        head: Head,
-    }
+    Errored(Option<io::Error>),
 }
 
 impl Decoder {
@@ -198,22 +241,28 @@ impl Decoder {
     /// how to decode the content body of the request.
     ///
     /// Uses the correct variant by inspecting the Content-Encoding header.
-    fn from_hyper_response(mut res: ::hyper::client::Response, check_gzip: bool) -> Self {
+    fn new(res: &mut async_impl::Response, check_gzip: bool, timeout: Option<Duration>) -> Self {
+        let body = async_impl::body::take(res.body_mut());
+        let body = ReadableBody {
+            state: ReadState::NotReady,
+            stream: wait::stream(body, timeout),
+        };
+
         if !check_gzip {
-            return Decoder::PlainText(res);
+            return Decoder::PlainText(body);
         }
         let content_encoding_gzip: bool;
         let mut is_gzip = {
-            content_encoding_gzip = res.headers
+            content_encoding_gzip = res.headers()
                 .get::<ContentEncoding>()
                 .map_or(false, |encs| encs.contains(&Encoding::Gzip));
             content_encoding_gzip ||
-            res.headers
+            res.headers()
                 .get::<TransferEncoding>()
                 .map_or(false, |encs| encs.contains(&Encoding::Gzip))
         };
         if is_gzip {
-            if let Some(content_length) = res.headers.get::<ContentLength>() {
+            if let Some(content_length) = res.headers().get::<ContentLength>() {
                 if content_length.0 == 0 {
                     warn!("GZipped response with content-length of 0");
                     is_gzip = false;
@@ -221,68 +270,41 @@ impl Decoder {
             }
         }
         if content_encoding_gzip {
-            res.headers.remove::<ContentEncoding>();
-            res.headers.remove::<ContentLength>();
+            res.headers_mut().remove::<ContentEncoding>();
+            res.headers_mut().remove::<ContentLength>();
         }
         if is_gzip {
-            new_gzip(res)
+            new_gzip(body)
         } else {
-            Decoder::PlainText(res)
+            Decoder::PlainText(body)
         }
     }
 }
 
-fn new_gzip(mut res: ::hyper::client::Response) -> Decoder {
+fn new_gzip(mut body: ReadableBody) -> Decoder {
     // libflate does a read_exact([0; 2]), so its impossible to tell
     // if the stream was empty, or truly had an UnexpectedEof.
     // Therefore, we need to peek a byte to make check for EOF first.
     let mut peek = [0];
-    match res.read(&mut peek) {
-        Ok(0) => return Decoder::PlainText(res),
-        Ok(n) => {
-            debug_assert_eq!(n, 1);
-        }
-        Err(e) => return Decoder::Errored {
-            err: Some(e),
-            head: Head {
-                headers: res.headers.clone(),
-                status: res.status,
-                url: res.url.clone(),
-            }
-        }
+    match body.read(&mut peek) {
+        Ok(0) => return Decoder::PlainText(body),
+        Ok(n) => debug_assert_eq!(n, 1),
+        Err(e) => return Decoder::Errored(Some(e)),
     }
-
-    let head = Head {
-        headers: res.headers.clone(),
-        status: res.status,
-        url: res.url.clone(),
-    };
 
     let reader = Peeked {
         peeked: Some(peek[0]),
-        inner: res,
+        inner: body,
     };
     match gzip::Decoder::new(reader) {
-        Ok(gzip) => Decoder::Gzip {
-            decoder: gzip,
-            head: head,
-        },
-        Err(e) => Decoder::Errored {
-            err: Some(e),
-            head: head,
-        }
+        Ok(gzip) => Decoder::Gzip(gzip),
+        Err(e) => Decoder::Errored(Some(e)),
     }
-}
-
-struct Head {
-    headers: ::hyper::header::Headers,
-    url: ::hyper::Url,
-    status: ::hyper::status::StatusCode,
 }
 
 struct Peeked {
     peeked: Option<u8>,
-    inner: ::hyper::client::Response,
+    inner: ReadableBody,
 }
 
 impl Read for Peeked {
@@ -303,9 +325,9 @@ impl Read for Peeked {
 impl Read for Decoder {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match *self {
-            Decoder::PlainText(ref mut hyper_response) => hyper_response.read(buf),
-            Decoder::Gzip { ref mut decoder, .. } => decoder.read(buf),
-            Decoder::Errored { ref mut err, .. } => {
+            Decoder::PlainText(ref mut body) => body.read(buf),
+            Decoder::Gzip(ref mut decoder) => decoder.read(buf),
+            Decoder::Errored(ref mut err) => {
                 Err(err.take().unwrap_or_else(previously_errored))
             }
         }
@@ -317,10 +339,15 @@ fn previously_errored() -> io::Error {
     io::Error::new(io::ErrorKind::Other, "permanently errored")
 }
 
-/// Read the body of the Response.
-impl Read for Response {
-    #[inline]
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.inner.read(buf)
+
+// pub(crate)
+
+pub fn new(mut res: async_impl::Response, gzip: bool, timeout: Option<Duration>, thread: KeepCoreThreadAlive) -> Response {
+
+    let decoder = Decoder::new(&mut res, gzip, timeout);
+    Response {
+        body: decoder,
+        inner: res,
+        _thread_handle: thread,
     }
 }

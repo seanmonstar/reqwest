@@ -4,11 +4,22 @@ matrix:
     allow_failures:
         - rust: nightly
     include:
-        - rust: stable
         - os: osx
           rust: stable
+
+        - rust: stable
+          env: FEATURES=""
         - rust: beta
+          env: FEATURES=""
         - rust: nightly
+          env: FEATURES=""
+
+        - rust: stable
+          env: FEATURES="--features unstable"
+        - rust: beta
+          env: FEATURES="--features unstable"
+        - rust: nightly
+          env: FEATURES="--features unstable"
 
 sudo: false
 dist: trusty
@@ -20,8 +31,5 @@ cache:
     - target/debug/build
 
 script:
-  - cargo build --verbose
-  - cargo test --verbose
-
-notifications:
-  email: false
+  - cargo build $FEATURES
+  - cargo test $FEATURES

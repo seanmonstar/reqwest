@@ -2,6 +2,7 @@
 
 use std::io::{Read, Write};
 use std::net;
+use std::time::Duration;
 use std::thread;
 
 pub struct Server {
@@ -14,16 +15,33 @@ impl Server {
     }
 }
 
+#[derive(Default)]
+pub struct Txn {
+    pub request: Vec<u8>,
+    pub response: Vec<u8>,
+
+    pub read_timeout: Option<Duration>,
+    pub response_timeout: Option<Duration>,
+    pub write_timeout: Option<Duration>,
+}
+
 static DEFAULT_USER_AGENT: &'static str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
-pub fn spawn(txns: Vec<(Vec<u8>, Vec<u8>)>) -> Server {
+pub fn spawn(txns: Vec<Txn>) -> Server {
     let listener = net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     thread::spawn(
-        move || for (mut expected, reply) in txns {
+        move || for txn in txns {
+            let mut expected = txn.request;
+            let reply = txn.response;
             let (mut socket, _addr) = listener.accept().unwrap();
             replace_expected_vars(&mut expected, addr.to_string().as_ref(), DEFAULT_USER_AGENT.as_ref());
+
+            if let Some(dur) = txn.read_timeout {
+                thread::park_timeout(dur);
+            }
+
             let mut buf = [0; 4096];
             let n = socket.read(&mut buf).unwrap();
 
@@ -31,7 +49,19 @@ pub fn spawn(txns: Vec<(Vec<u8>, Vec<u8>)>) -> Server {
                 (Ok(expected), Ok(received)) => assert_eq!(expected, received),
                 _ => assert_eq!(expected, &buf[..n]),
             }
-            socket.write_all(&reply).unwrap();
+
+            if let Some(dur) = txn.response_timeout {
+                thread::park_timeout(dur);
+            }
+
+            if let Some(dur) = txn.write_timeout {
+                let headers_end = ::std::str::from_utf8(&reply).unwrap().find("\r\n\r\n").unwrap() + 4;
+                socket.write_all(&reply[..headers_end]).unwrap();
+                thread::park_timeout(dur);
+                socket.write_all(&reply[headers_end..]).unwrap();
+            } else {
+                socket.write_all(&reply).unwrap();
+            }
         }
     );
 
@@ -76,9 +106,38 @@ fn replace_expected_vars(bytes: &mut Vec<u8>, host: &[u8], ua: &[u8]) {
 #[macro_export]
 macro_rules! server {
     ($(request: $req:expr, response: $res:expr),*) => ({
+        server!($(request: $req, response: $res;)*)
+    });
+    ($($($f:ident: $v:expr),*);*) => ({
         let txns = vec![
-            $(((&$req[..]).into(), (&$res[..]).into()),)*
+            $(__internal__txn! {
+                $($f: $v,)*
+            }),*
         ];
-        ::server::spawn(txns)
+        ::support::server::spawn(txns)
     })
+}
+
+#[macro_export]
+macro_rules! __internal__txn {
+    ($($field:ident: $val:expr,)*) => (
+        ::support::server::Txn {
+            $( $field: __internal__prop!($field: $val), )*
+            .. Default::default()
+        }
+    )
+}
+
+
+#[macro_export]
+macro_rules! __internal__prop {
+    (request: $val:expr) => (
+        From::from(&$val[..])
+    );
+    (response: $val:expr) => (
+        From::from(&$val[..])
+    );
+    ($field:ident: $val:expr) => (
+        From::from($val)
+    )
 }

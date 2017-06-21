@@ -16,7 +16,7 @@ fn run() -> Result<()> {
 
     println!("GET https://www.rust-lang.org");
 
-    let mut res = reqwest::get("https://www.rust-lang.org")?;
+    let mut res = reqwest::get("https://www.rust-lang.org/en-US/")?;
 
     println!("Status: {}", res.status());
     println!("Headers:\n{}", res.headers());
