@@ -1,5 +1,6 @@
 #![deny(warnings)]
 #![deny(missing_docs)]
+#![deny(missing_debug_implementations)]
 #![doc(html_root_url = "https://docs.rs/reqwest/0.6.2")]
 
 //! # reqwest
@@ -16,10 +17,7 @@
 //!
 //! The `reqwest::Client` is synchronous, making it a great fit for
 //! applications that only require a few HTTP requests, and wish to handle
-//! them synchronously. When [hyper][] releases with asynchronous support,
-//! `reqwest` will be updated to use it internally, but still provide a
-//! synchronous Client, for convenience. A `reqwest::async::Client` will also
-//! be added.
+//! them synchronously.
 //!
 //! ## Making a GET request
 //!
@@ -119,41 +117,76 @@
 //! [get]: ./fn.get.html
 //! [builder]: ./client/struct.RequestBuilder.html
 //! [serde]: http://serde.rs
-extern crate hyper;
 
+extern crate bytes;
+#[macro_use]
+extern crate futures;
+extern crate hyper;
+extern crate hyper_tls;
 #[macro_use]
 extern crate log;
-extern crate libc;
 extern crate libflate;
-extern crate hyper_native_tls;
+extern crate native_tls;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_urlencoded;
+extern crate tokio_core;
 extern crate url;
 
-pub use hyper::client::IntoUrl;
-pub use hyper::Error as HyperError;
 pub use hyper::header;
 pub use hyper::mime;
-pub use hyper::method::Method;
-pub use hyper::status::StatusCode;
-pub use hyper::Url;
+pub use hyper::Method;
+pub use hyper::StatusCode;
+pub use url::Url;
 pub use url::ParseError as UrlError;
 
-pub use self::client::{Certificate, Client, ClientBuilder};
+pub use self::client::{Client, ClientBuilder};
 pub use self::error::{Error, Result};
 pub use self::body::Body;
+pub use self::into_url::IntoUrl;
 pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
+pub use self::tls::Certificate;
 
+
+// this module must be first because of the `try_` macro
 #[macro_use]
 mod error;
+
+/// A set of unstable functionality.
+///
+/// This module is only available when the `unstable` feature is enabled.
+/// There is no backwards compatibility guarantee for any of the types within.
+#[cfg(feature = "unstable")]
+pub mod unstable {
+    /// An 'async' implementation of the reqwest `Client`.
+    ///
+    /// Relies on the `futures` crate, which is unstable, hence this module
+    /// is unstable.
+    pub mod async {
+        pub use ::async_impl::{
+            Body,
+            Chunk,
+            Client,
+            ClientBuilder,
+            Request,
+            RequestBuilder,
+            Response,
+        };
+    }
+}
+
+
+mod async_impl;
 mod body;
 mod client;
+mod into_url;
 mod redirect;
 mod request;
 mod response;
+mod tls;
+mod wait;
 
 
 /// Shortcut method to quickly make a `GET` request.

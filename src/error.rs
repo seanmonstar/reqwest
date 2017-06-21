@@ -1,5 +1,6 @@
 use std::error::Error as StdError;
 use std::fmt;
+use std::io;
 
 use Url;
 
@@ -204,8 +205,8 @@ impl StdError for Error {
 pub enum Kind {
     Http(::hyper::Error),
     Url(::url::ParseError),
-    Tls(::hyper_native_tls::native_tls::Error),
-    Io(::std::io::Error),
+    Tls(::native_tls::Error),
+    Io(io::Error),
     UrlEncoded(::serde_urlencoded::ser::Error),
     Json(::serde_json::Error),
     TooManyRedirects,
@@ -218,6 +219,7 @@ impl From<::hyper::Error> for Kind {
     fn from(err: ::hyper::Error) -> Kind {
         match err {
             ::hyper::Error::Io(err) => Kind::Io(err),
+            /*
             ::hyper::Error::Uri(err) => Kind::Url(err),
             ::hyper::Error::Ssl(err) => {
                 match err.downcast() {
@@ -225,8 +227,16 @@ impl From<::hyper::Error> for Kind {
                     Err(ssl) => Kind::Http(::hyper::Error::Ssl(ssl)),
                 }
             }
+            */
             other => Kind::Http(other),
         }
+    }
+}
+
+impl From<io::Error> for Kind {
+    #[inline]
+    fn from(err: io::Error) -> Kind {
+        Kind::Io(err)
     }
 }
 
@@ -251,14 +261,35 @@ impl From<::serde_json::Error> for Kind {
     }
 }
 
-impl From<::hyper_native_tls::native_tls::Error> for Kind {
-    fn from(err: ::hyper_native_tls::native_tls::Error) -> Kind {
+impl From<::native_tls::Error> for Kind {
+    fn from(err: ::native_tls::Error) -> Kind {
         Kind::Tls(err)
     }
 }
 
+impl<T> From<::wait::Waited<T>> for Kind
+where T: Into<Kind> {
+    fn from(err: ::wait::Waited<T>) -> Kind {
+        match err {
+            ::wait::Waited::TimedOut =>  io_timeout().into(),
+            ::wait::Waited::Err(e) => e.into(),
+        }
+    }
+}
+
+#[cfg(unix)]
+fn io_timeout() -> io::Error {
+    io::Error::new(io::ErrorKind::WouldBlock, "timed out")
+}
+
+#[cfg(windows)]
+fn io_timeout() -> io::Error {
+    io::Error::new(io::ErrorKind::TimedOut, "timed out")
+}
+
 // pub(crate)
 
+#[allow(missing_debug_implementations)]
 pub struct InternalFrom<T>(pub T, pub Option<Url>);
 
 #[doc(hidden)] // https://github.com/rust-lang/rust/issues/42323
@@ -291,12 +322,21 @@ where
     InternalFrom(err, None).into()
 }
 
+#[inline]
+pub fn into_io(e: Error) -> io::Error {
+    match e.kind {
+        Kind::Io(io) => io,
+        _ => io::Error::new(io::ErrorKind::Other, e),
+    }
+}
+
+
 macro_rules! try_ {
     ($e:expr) => (
         match $e {
             Ok(v) => v,
             Err(err) => {
-                return Err(::Error::from(::error::InternalFrom(err, None)));
+                return Err(::error::from(err));
             }
         }
     );
@@ -323,6 +363,14 @@ pub fn too_many_redirects(url: Url) -> Error {
     Error {
         kind: Kind::TooManyRedirects,
         url: Some(url),
+    }
+}
+
+#[inline]
+pub fn timedout(url: Option<Url>) -> Error {
+    Error {
+        kind: Kind::Io(io_timeout()),
+        url: url,
     }
 }
 

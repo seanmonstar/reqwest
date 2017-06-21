@@ -265,7 +265,9 @@ fn test_remove_sensitive_headers() {
     let mut headers = Headers::new();
     headers.set(Accept::star());
     headers.set(Authorization("let me in".to_owned()));
-    headers.set(Cookie(vec![String::from("foo=bar")]));
+    let mut cookie = Cookie::new();
+    cookie.set("foo", "bar");
+    headers.set(cookie);
 
     let next = Url::parse("http://initial-domain.com/path").unwrap();
     let mut prev = vec![Url::parse("http://initial-domain.com/new_path").unwrap()];

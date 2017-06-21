@@ -1,6 +1,11 @@
-use std::io::Read;
+use std::io::{self, Read};
 use std::fs::File;
 use std::fmt;
+
+use bytes::Bytes;
+use hyper::{self, Chunk};
+
+use {async_impl, wait};
 
 /// Body type for a request.
 #[derive(Debug)]
@@ -67,12 +72,6 @@ impl Body {
             reader: Kind::Reader(Box::new(reader), Some(len)),
         }
     }
-
-    /*
-    pub fn chunked(reader: ()) -> Body {
-        unimplemented!()
-    }
-    */
 }
 
 // useful for tests, but not publicly exposed
@@ -88,14 +87,14 @@ pub fn read_to_string(mut body: Body) -> ::std::io::Result<String> {
 
 enum Kind {
     Reader(Box<Read + Send>, Option<u64>),
-    Bytes(Vec<u8>),
+    Bytes(Bytes),
 }
 
 impl From<Vec<u8>> for Body {
     #[inline]
     fn from(v: Vec<u8>) -> Body {
         Body {
-            reader: Kind::Bytes(v),
+            reader: Kind::Bytes(v.into()),
         }
     }
 }
@@ -108,16 +107,18 @@ impl From<String> for Body {
 }
 
 
-impl<'a> From<&'a [u8]> for Body {
+impl From<&'static [u8]> for Body {
     #[inline]
-    fn from(s: &'a [u8]) -> Body {
-        s.to_vec().into()
+    fn from(s: &'static [u8]) -> Body {
+        Body {
+            reader: Kind::Bytes(Bytes::from_static(s)),
+        }
     }
 }
 
-impl<'a> From<&'a str> for Body {
+impl From<&'static str> for Body {
     #[inline]
-    fn from(s: &'a str) -> Body {
+    fn from(s: &'static str) -> Body {
         s.as_bytes().into()
     }
 }
@@ -142,28 +143,65 @@ impl fmt::Debug for Kind {
 }
 
 
-// Wraps a `std::io::Write`.
-//pub struct Pipe(Kind);
+// pub(crate)
 
+pub struct Sender {
+    body: (Box<Read + Send>, Option<u64>),
+    tx: wait::WaitSink<::futures::sync::mpsc::Sender<hyper::Result<Chunk>>>,
+}
 
-pub fn as_hyper_body(body: &mut Body) -> ::hyper::client::Body {
-    match body.reader {
-        Kind::Bytes(ref bytes) => {
-            let len = bytes.len();
-            ::hyper::client::Body::BufBody(bytes, len)
-        }
-        Kind::Reader(ref mut reader, len_opt) => {
-            match len_opt {
-                Some(len) => ::hyper::client::Body::SizedBody(reader, len),
-                None => ::hyper::client::Body::ChunkedBody(reader),
+impl Sender {
+    pub fn send(self) -> ::Result<()> {
+        use std::cmp;
+        use bytes::{BufMut, BytesMut};
+
+        let cap = cmp::min(self.body.1.unwrap_or(8192), 8192);
+        let mut buf = BytesMut::with_capacity(cap as usize);
+        let mut body = self.body.0;
+        let mut tx = self.tx;
+        loop {
+            println!("reading");
+            match body.read(unsafe { buf.bytes_mut() }) {
+                Ok(0) => return Ok(()),
+                Ok(n) => {
+                    unsafe { buf.advance_mut(n); }
+                    println!("sending {}", n);
+                    if let Err(e) = tx.send(Ok(buf.take().freeze().into())) {
+                        if let wait::Waited::Err(_) = e {
+                            let epipe = io::Error::new(io::ErrorKind::BrokenPipe, "broken pipe");
+                            return Err(::error::from(epipe));
+                        } else {
+                            return Err(::error::timedout(None));
+                        }
+                    }
+                    if buf.remaining_mut() == 0 {
+                        buf.reserve(8192);
+                    }
+                }
+                Err(e) => {
+                    let ret = io::Error::new(e.kind(), e.to_string());
+                    let _ = tx.send(Err(e.into()));
+                    return Err(::error::from(ret));
+                }
             }
         }
     }
 }
 
-pub fn can_reset(body: &Body) -> bool {
+#[inline]
+pub fn async(body: Body) -> (Option<Sender>, async_impl::Body, Option<u64>) {
     match body.reader {
-        Kind::Bytes(_) => true,
-        Kind::Reader(..) => false,
+        Kind::Reader(read, len) => {
+            let (tx, rx) = hyper::Body::pair();
+            let tx = Sender {
+                body: (read, len),
+                tx: wait::sink(tx, None),
+            };
+            (Some(tx), async_impl::body::wrap(rx), len)
+        },
+        Kind::Bytes(chunk) => {
+            let len = chunk.len() as u64;
+            (None, async_impl::body::reusable(chunk), Some(len))
+        }
     }
 }

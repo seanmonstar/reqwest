@@ -10,17 +10,33 @@ license = "MIT/Apache-2.0"
 categories = ["web-programming::http-client"]
 
 [dependencies]
-hyper = "0.10.12"
-hyper-native-tls = "0.2.4"
-libc = "0.2"
+bytes = "0.4"
+futures = "0.1.14"
+hyper = "0.11"
+hyper-tls = "0.1"
+libflate = "0.1.5"
 log = "0.3"
+native-tls = "0.1"
 serde = "1.0"
 serde_json = "1.0"
 serde_urlencoded = "0.5"
+tokio-core = "0.1.6"
 url = "1.2"
-libflate = "0.1.5"
 
 [dev-dependencies]
 env_logger = "0.4"
 serde_derive = "1.0"
 error-chain = "0.10"
+
+[features]
+unstable = []
+
+
+[[example]]
+name = "simple"
+path = "examples/simple.rs"
+
+[[example]]
+name = "async"
+path = "examples/async.rs"
+required-features = ["unstable"]
