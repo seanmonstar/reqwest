@@ -7,7 +7,7 @@ use futures::sync::{mpsc, oneshot};
 
 use request::{self, Request, RequestBuilder};
 use response::{self, Response};
-use {async_impl, Certificate, Method, IntoUrl, RedirectPolicy, wait};
+use {async_impl, Certificate, Method, IntoUrl, Proxy, RedirectPolicy, wait};
 
 /// A `Client` to make Requests with.
 ///
@@ -138,6 +138,13 @@ impl ClientBuilder {
     pub fn gzip(&mut self, enable: bool) -> &mut ClientBuilder {
         self.inner.gzip(enable);
         self.gzip = enable;
+        self
+    }
+
+    /// Add a `Proxy` to the list of proxies the `Client` will use.
+    #[inline]
+    pub fn proxy(&mut self, proxy: Proxy) -> &mut ClientBuilder {
+        self.inner.proxy(proxy);
         self
     }
 

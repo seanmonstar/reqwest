@@ -131,6 +131,7 @@ extern crate serde;
 extern crate serde_json;
 extern crate serde_urlencoded;
 extern crate tokio_core;
+extern crate tokio_io;
 extern crate url;
 
 pub use hyper::header;
@@ -144,6 +145,7 @@ pub use self::client::{Client, ClientBuilder};
 pub use self::error::{Error, Result};
 pub use self::body::Body;
 pub use self::into_url::IntoUrl;
+pub use self::proxy::Proxy;
 pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
@@ -179,9 +181,11 @@ pub mod unstable {
 
 
 mod async_impl;
+mod connect;
 mod body;
 mod client;
 mod into_url;
+mod proxy;
 mod redirect;
 mod request;
 mod response;
