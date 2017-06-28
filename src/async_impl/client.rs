@@ -22,58 +22,13 @@ use {Certificate, IntoUrl, Method, proxy, Proxy, StatusCode, Url};
 static DEFAULT_USER_AGENT: &'static str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
-/// A `Client` to make Requests with.
-///
-/// The Client has various configuration values to tweak, but the defaults
-/// are set to what is usually the most commonly desired value.
-///
-/// The `Client` holds a connection pool internally, so it is advised that
-/// you create one and reuse it.
-///
-/// # Examples
-///
-/// ```rust
-/// # use reqwest::{Error, Client};
-/// #
-/// # fn run() -> Result<(), Error> {
-/// let client = Client::new()?;
-/// let resp = client.get("http://httpbin.org/")?.send()?;
-/// #   drop(resp);
-/// #   Ok(())
-/// # }
-///
-/// ```
+/// An asynchornous `Client` to make Requests with.
 #[derive(Clone)]
 pub struct Client {
     inner: Arc<ClientRef>,
 }
 
 /// A `ClientBuilder` can be used to create a `Client` with  custom configuration:
-///
-/// - with hostname verification disabled
-/// - with one or multiple custom certificates
-///
-/// # Examples
-///
-/// ```
-/// # use std::fs::File;
-/// # use std::io::Read;
-/// # fn build_client() -> Result<(), Box<std::error::Error>> {
-/// // read a local binary DER encoded certificate
-/// let mut buf = Vec::new();
-/// File::open("my-cert.der")?.read_to_end(&mut buf)?;
-///
-/// // create a certificate
-/// let cert = reqwest::Certificate::from_der(&buf)?;
-///
-/// // get a client builder
-/// let client = reqwest::ClientBuilder::new()?
-///     .add_root_certificate(cert)?
-///     .build()?;
-/// # drop(client);
-/// # Ok(())
-/// # }
-/// ```
 pub struct ClientBuilder {
     config: Option<Config>,
 }
@@ -124,20 +79,16 @@ impl ClientBuilder {
 
         let tls = try_!(config.tls.build());
 
-        /*
-        let mut tls_client = NativeTlsClient::from(tls_connector);
-        if !config.hostname_verification {
-            tls_client.danger_disable_hostname_verification(true);
-        }
-        */
-
         let proxies = Arc::new(config.proxies);
 
-        let hyper_client = create_hyper_client(tls, proxies.clone(), handle);
-        //let mut hyper_client = create_hyper_client(tls_client);
+        let mut connector = Connector::new(tls, proxies.clone(), handle);
+        if !config.hostname_verification {
+            connector.danger_disable_hostname_verification();
+        }
 
-        //hyper_client.set_read_timeout(config.timeout);
-        //hyper_client.set_write_timeout(config.timeout);
+        let hyper_client = ::hyper::Client::configure()
+            .connector(connector)
+            .build(handle);
 
         Ok(Client {
             inner: Arc::new(ClientRef {

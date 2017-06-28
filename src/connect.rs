@@ -30,6 +30,10 @@ impl Connector {
             proxies: proxies,
         }
     }
+
+    pub fn danger_disable_hostname_verification(&mut self) {
+        self.https.danger_disable_hostname_verification(true);
+    }
 }
 
 impl Service for Connector {
