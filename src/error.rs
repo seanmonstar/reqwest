@@ -263,15 +263,7 @@ impl From<::hyper::Error> for Kind {
     fn from(err: ::hyper::Error) -> Kind {
         match err {
             ::hyper::Error::Io(err) => Kind::Io(err),
-            /*
-            ::hyper::Error::Uri(err) => Kind::Url(err),
-            ::hyper::Error::Ssl(err) => {
-                match err.downcast() {
-                    Ok(tls) => Kind::Tls(*tls),
-                    Err(ssl) => Kind::Http(::hyper::Error::Ssl(ssl)),
-                }
-            }
-            */
+            //::hyper::Error::Uri(err) => Kind::Url(err),
             other => Kind::Http(other),
         }
     }
