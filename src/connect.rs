@@ -50,13 +50,10 @@ impl Service for Connector {
             if let Some(puri) = proxy::proxies(prox, &uri) {
                 if uri.scheme() == Some("https") {
                     let host = uri.host().unwrap().to_owned();
-                    let port = match uri.port(){
-                        Some(port) => port.to_string(),
-                        None => 443.to_string()
-                    }.to_owned();
+                    let port = uri.port().unwrap_or(443);
                     let tls = self.tls.clone();
                     return Box::new(self.https.call(puri).and_then(move |conn| {
-                        tunnel(conn, host.clone(), port.clone())
+                        tunnel(conn, host.clone(), port)
                             .and_then(move |tunneled| {
                                 tls.connect_async(&host, tunneled)
                                     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
@@ -141,7 +138,7 @@ impl AsyncWrite for Conn {
     }
 }
 
-fn tunnel<T>(conn: T, host: String, port: String) -> Tunnel<T> {
+fn tunnel<T>(conn: T, host: String, port: u16) -> Tunnel<T> {
      let buf = format!("\
         CONNECT {0}:{1} HTTP/1.1\r\n\
         Host: {0}:{1}\r\n\
@@ -179,15 +176,15 @@ where T: AsyncRead + AsyncWrite {
                     self.state = TunnelState::Reading;
                     self.buf.get_mut().truncate(0);
                 } else if n == 0 {
-                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof while tunneling"));
+                    return Err(tunnel_eof());
                 }
             } else {
                 let n = try_ready!(self.conn.as_mut().unwrap().read_buf(&mut self.buf.get_mut()));
                 let read = &self.buf.get_ref()[..];
                 if n == 0 {
-                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof while tunneling"));
+                    return Err(tunnel_eof());
                 } else if read.len() > 12 {
-                    if read.starts_with(b"HTTP/1.1 200") || read.starts_with(b"HTTP/1.0 200"){
+                    if read.starts_with(b"HTTP/1.1 200") || read.starts_with(b"HTTP/1.0 200") {
                         if read.ends_with(b"\r\n\r\n") {
                             return Ok(Async::Ready(self.conn.take().unwrap()));
                         }
@@ -199,6 +196,14 @@ where T: AsyncRead + AsyncWrite {
             }
         }
     }
+}
+
+#[inline]
+fn tunnel_eof() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::UnexpectedEof,
+        "unexpected eof while tunneling"
+    )
 }
 
 #[cfg(test)]
@@ -247,7 +252,7 @@ mod tests {
         let mut core = Core::new().unwrap();
         let work = TcpStream::connect(&addr, &core.handle());
         let host = addr.ip().to_string();
-        let port = addr.port().to_string();
+        let port = addr.port();
         let work = work.and_then(|tcp| {
             tunnel(tcp, host, port)
         });
@@ -262,7 +267,7 @@ mod tests {
         let mut core = Core::new().unwrap();
         let work = TcpStream::connect(&addr, &core.handle());
         let host = addr.ip().to_string();
-        let port = addr.port().to_string();
+        let port = addr.port();
         let work = work.and_then(|tcp| {
             tunnel(tcp, host, port)
         });
@@ -277,7 +282,7 @@ mod tests {
         let mut core = Core::new().unwrap();
         let work = TcpStream::connect(&addr, &core.handle());
         let host = addr.ip().to_string();
-        let port = addr.port().to_string();
+        let port = addr.port();
         let work = work.and_then(|tcp| {
             tunnel(tcp, host, port)
         });
