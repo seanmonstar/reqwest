@@ -49,10 +49,14 @@ impl Service for Connector {
         for prox in self.proxies.iter() {
             if let Some(puri) = proxy::proxies(prox, &uri) {
                 if uri.scheme() == Some("https") {
-                    let host = uri.authority().unwrap().to_owned();
+                    let host = uri.host().unwrap().to_owned();
+                    let port = match uri.port(){
+                        Some(port) => port.to_string(),
+                        None => 443.to_string()
+                    }.to_owned();
                     let tls = self.tls.clone();
                     return Box::new(self.https.call(puri).and_then(move |conn| {
-                        tunnel(conn, host.clone())
+                        tunnel(conn, host.clone(), port.clone())
                             .and_then(move |tunneled| {
                                 tls.connect_async(&host, tunneled)
                                     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
@@ -137,12 +141,12 @@ impl AsyncWrite for Conn {
     }
 }
 
-fn tunnel<T>(conn: T, host: String) -> Tunnel<T> {
+fn tunnel<T>(conn: T, host: String, port: String) -> Tunnel<T> {
      let buf = format!("\
-        CONNECT {0} HTTP/1.1\r\n\
-        Host: {0}\r\n\
+        CONNECT {0}:{1} HTTP/1.1\r\n\
+        Host: {0}:{1}\r\n\
         \r\n\
-    ", host).into_bytes();
+    ", host, port).into_bytes();
 
      Tunnel {
         buf: buf.into_buf(),
@@ -183,7 +187,7 @@ where T: AsyncRead + AsyncWrite {
                 if n == 0 {
                     return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof while tunneling"));
                 } else if read.len() > 12 {
-                    if read.starts_with(b"HTTP/1.1 200") {
+                    if read.starts_with(b"HTTP/1.1 200") || read.starts_with(b"HTTP/1.0 200"){
                         if read.ends_with(b"\r\n\r\n") {
                             return Ok(Async::Ready(self.conn.take().unwrap()));
                         }
@@ -219,10 +223,10 @@ mod tests {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let addr = listener.local_addr().unwrap();
             let connect_expected = format!("\
-                CONNECT {0} HTTP/1.1\r\n\
-                Host: {0}\r\n\
+                CONNECT {0}:{1} HTTP/1.1\r\n\
+                Host: {0}:{1}\r\n\
                 \r\n\
-            ", addr).into_bytes();
+            ", addr.ip(), addr.port()).into_bytes();
 
             thread::spawn(move || {
                 let (mut sock, _) = listener.accept().unwrap();
@@ -242,9 +246,10 @@ mod tests {
 
         let mut core = Core::new().unwrap();
         let work = TcpStream::connect(&addr, &core.handle());
-        let host = addr.to_string();
+        let host = addr.ip().to_string();
+        let port = addr.port().to_string();
         let work = work.and_then(|tcp| {
-            tunnel(tcp, host)
+            tunnel(tcp, host, port)
         });
 
         core.run(work).unwrap();
@@ -256,9 +261,10 @@ mod tests {
 
         let mut core = Core::new().unwrap();
         let work = TcpStream::connect(&addr, &core.handle());
-        let host = addr.to_string();
+        let host = addr.ip().to_string();
+        let port = addr.port().to_string();
         let work = work.and_then(|tcp| {
-            tunnel(tcp, host)
+            tunnel(tcp, host, port)
         });
 
         core.run(work).unwrap_err();
@@ -270,9 +276,10 @@ mod tests {
 
         let mut core = Core::new().unwrap();
         let work = TcpStream::connect(&addr, &core.handle());
-        let host = addr.to_string();
+        let host = addr.ip().to_string();
+        let port = addr.port().to_string();
         let work = work.and_then(|tcp| {
-            tunnel(tcp, host)
+            tunnel(tcp, host, port)
         });
 
         core.run(work).unwrap_err();

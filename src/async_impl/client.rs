@@ -335,7 +335,9 @@ impl Client {
         });
 
         if proxy::is_proxied(&self.inner.proxies, &uri) {
-            req.set_proxy(true);
+            if uri.scheme() == Some("http") {
+                req.set_proxy(true);
+            }
         }
 
         let in_flight = self.inner.hyper.request(req);
@@ -451,7 +453,9 @@ impl Future for Pending {
                                 req.set_body(body.clone());
                             }
                             if proxy::is_proxied(&self.client.proxies, &uri) {
-                                req.set_proxy(true);
+                                if uri.scheme() == Some("http") {
+                                    req.set_proxy(true);
+                                }
                             }
                             self.in_flight = self.client.hyper.request(req);
                             continue;
