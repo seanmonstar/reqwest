@@ -1,13 +1,14 @@
-use bytes::{BufMut, IntoBuf};
+use bytes::{Buf, BufMut, IntoBuf};
 use futures::{Async, Future, Poll};
 use hyper::client::{HttpConnector, Service};
 use hyper::Uri;
-use hyper_tls::{/*HttpsConnecting,*/ HttpsConnector, MaybeHttpsStream};
+use hyper_tls::{HttpsConnector, MaybeHttpsStream};
 use native_tls::TlsConnector;
 use tokio_core::reactor::Handle;
 use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_tls::{TlsConnectorExt, TlsStream};
 
-use std::io::{self, Cursor};
+use std::io::{self, Cursor, Read, Write};
 use std::sync::Arc;
 
 use {proxy, Proxy};
@@ -17,17 +18,19 @@ use {proxy, Proxy};
 pub struct Connector {
     https: HttpsConnector<HttpConnector>,
     proxies: Arc<Vec<Proxy>>,
+    tls: TlsConnector,
 }
 
 impl Connector {
     pub fn new(tls: TlsConnector, proxies: Arc<Vec<Proxy>>, handle: &Handle) -> Connector {
         let mut http = HttpConnector::new(4, handle);
         http.enforce_http(false);
-        let https = HttpsConnector::from((http, tls));
+        let https = HttpsConnector::from((http, tls.clone()));
 
         Connector {
             https: https,
             proxies: proxies,
+            tls: tls,
         }
     }
 
@@ -47,19 +50,92 @@ impl Service for Connector {
             if let Some(puri) = proxy::proxies(prox, &uri) {
                 if uri.scheme() == Some("https") {
                     let host = uri.authority().unwrap().to_owned();
-                    return Box::new(self.https.call(puri).and_then(|conn| {
-                        tunnel(conn, host)
+                    let tls = self.tls.clone();
+                    return Box::new(self.https.call(puri).and_then(move |conn| {
+                        tunnel(conn, host.clone())
+                            .and_then(move |tunneled| {
+                                tls.connect_async(&host, tunneled)
+                                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+                            })
+                            .map(|io| Conn::Proxied(io))
                     }));
                 }
-                return Box::new(self.https.call(puri));
+                return Box::new(self.https.call(puri).map(|io| Conn::Normal(io)));
             }
         }
-        Box::new(self.https.call(uri))
+        Box::new(self.https.call(uri).map(|io| Conn::Normal(io)))
     }
 }
 
-pub type Conn = MaybeHttpsStream<<HttpConnector as Service>::Response>;
+type HttpStream = <HttpConnector as Service>::Response;
+type HttpsStream = MaybeHttpsStream<HttpStream>;
+
 pub type Connecting = Box<Future<Item=Conn, Error=io::Error>>;
+
+pub enum Conn {
+    Normal(HttpsStream),
+    Proxied(TlsStream<MaybeHttpsStream<HttpStream>>),
+}
+
+impl Read for Conn {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match *self {
+            Conn::Normal(ref mut s) => s.read(buf),
+            Conn::Proxied(ref mut s) => s.read(buf),
+        }
+    }
+}
+
+impl Write for Conn {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match *self {
+            Conn::Normal(ref mut s) => s.write(buf),
+            Conn::Proxied(ref mut s) => s.write(buf),
+        }
+    }
+
+    #[inline]
+    fn flush(&mut self) -> io::Result<()> {
+        match *self {
+            Conn::Normal(ref mut s) => s.flush(),
+            Conn::Proxied(ref mut s) => s.flush(),
+        }
+    }
+}
+
+impl AsyncRead for Conn {
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        match *self {
+            Conn::Normal(ref s) => s.prepare_uninitialized_buffer(buf),
+            Conn::Proxied(ref s) => s.prepare_uninitialized_buffer(buf),
+        }
+    }
+
+    fn read_buf<B: BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
+        match *self {
+            Conn::Normal(ref mut s) => s.read_buf(buf),
+            Conn::Proxied(ref mut s) => s.read_buf(buf),
+        }
+    }
+}
+
+impl AsyncWrite for Conn {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        match *self {
+            Conn::Normal(ref mut s) => s.shutdown(),
+            Conn::Proxied(ref mut s) => s.shutdown(),
+        }
+    }
+
+    fn write_buf<B: Buf>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
+        match *self {
+            Conn::Normal(ref mut s) => s.write_buf(buf),
+            Conn::Proxied(ref mut s) => s.write_buf(buf),
+        }
+    }
+}
 
 fn tunnel<T>(conn: T, host: String) -> Tunnel<T> {
      let buf = format!("\
