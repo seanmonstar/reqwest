@@ -37,6 +37,26 @@ impl Stream for Body {
     }
 }
 
+impl From<Bytes> for Body {
+    #[inline]
+    fn from(bytes: Bytes) -> Body {
+        reusable(bytes)
+    }
+}
+
+impl From<Vec<u8>> for Body {
+    #[inline]
+    fn from(vec: Vec<u8>) -> Body {
+        reusable(vec.into())
+    }
+}
+
+impl From<String> for Body {
+    #[inline]
+    fn from(s: String) -> Body {
+        reusable(s.into())
+    }
+}
 
 /// A chunk of bytes for a `Body`.
 ///
