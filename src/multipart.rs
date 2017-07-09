@@ -175,7 +175,14 @@ impl MultipartField {
                 None => "".to_string(),
             },
             match self.mime {
-                Some(ref mime) => format!("\r\n{}", ::header::ContentType(mime.clone())),
+                Some(ref mime) => {
+                    format!(
+                        // TODO: Apparently I still have to write out Content-Type here?!
+                        // I thought header would format itself that way on its own
+                        "\r\nContent-Type: {}",
+                        ::header::ContentType(mime.clone())
+                    )
+                }
                 None => "".to_string(),
             }
         )
@@ -204,8 +211,7 @@ impl Filename {
 
 pub struct RequestReader {
     request: MultipartRequest,
-    field_position: usize,
-    active_reader: Box<Read + Send>,
+    active_reader: Option<Box<Read + Send>>,
 }
 
 // TODO: MultipartField cannot derive debug because active_reader is not Debug
@@ -249,25 +255,32 @@ impl RequestReader {
     fn new(request: MultipartRequest) -> RequestReader {
         let mut reader = RequestReader {
             request: request,
-            field_position: 0,
-            active_reader: Box::new(std::io::empty()),
+            active_reader: None,
         };
-        reader.update_reader();
+        reader.next_reader();
         reader
     }
-    fn update_reader(&mut self) {
-        self.active_reader = if self.field_position < self.request.fields.len() {
+    fn next_reader(&mut self) {
+        self.active_reader = if self.request.fields.len() != 0 {
             // We need to move out of the vector here because we are consuming the field's reader
-            let field = self.request.fields.remove(self.field_position);
-            Box::new(
-                BytesReader::new(format!(
-                    "\r\n--{}\r\n{}\r\n\r\n",
-                    self.request.boundary,
-                    field.header()
-                )).chain(field.value),
-            )
+            let field = self.request.fields.remove(0);
+            let reader = BytesReader::new(format!(
+                "--{}\r\n{}\r\n\r\n",
+                self.request.boundary,
+                field.header()
+            )).chain(field.value)
+                .chain(BytesReader::new("\r\n"));
+            // According to https://tools.ietf.org/html/rfc2046#section-5.1.1
+            // the very last field has a special boundary
+            if self.request.fields.len() != 0 {
+                Some(Box::new(reader))
+            } else {
+                Some(Box::new(
+                    reader.chain(BytesReader::new(format!("--{}--", self.request.boundary))),
+                ))
+            }
         } else {
-            Box::new(std::io::empty())
+            None
         }
     }
 }
@@ -275,24 +288,21 @@ impl RequestReader {
 impl Read for RequestReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let mut total_bytes_read = 0usize;
+        let mut last_read_bytes;
         loop {
-            if self.field_position < self.request.fields.len() {
-                // unwrap because the range is always valid
-                total_bytes_read += self.active_reader
-                    .read(buf.get_mut(total_bytes_read..).unwrap())?;
-                if total_bytes_read == buf.len() {
-                    // buffer is full
-                    // reader might or might not be done
-                    // (in case reader had exactly buf.len() bytes left)
-                    return Ok(total_bytes_read);
-                } else {
-                    // active_reader did not fill the buffer, so it must be done
-                    // switch to the next reader
-                    self.field_position += 1;
-                    self.update_reader();
+            match self.active_reader {
+                Some(ref mut reader) => {
+                    // unwrap because the range is always valid
+                    last_read_bytes = reader.read(buf.get_mut(total_bytes_read..).unwrap())?;
+                    total_bytes_read += last_read_bytes;
+                    if total_bytes_read == buf.len() {
+                        return Ok(total_bytes_read);
+                    }
                 }
-            } else {
-                return Ok(0);
+                None => return Ok(total_bytes_read),
+            };
+            if last_read_bytes == 0 && buf.len() != 0 {
+                self.next_reader();
             }
         }
     }
@@ -339,5 +349,56 @@ mod tests {
         assert_eq!(reader.read(&mut output[2..]).unwrap(), 8);
         assert_eq!(reader.read(&mut output[10..11]).unwrap(), 0);
         assert_eq!(output[..10], input);
+    }
+
+    #[test]
+    fn multipart_request_empty() {
+        let mut output = Vec::new();
+        MultipartRequest::new()
+            .reader()
+            .read_to_end(&mut output)
+            .unwrap();
+        assert_eq!(output, b"");
+    }
+
+    #[test]
+    fn multipart_request_read_to_end() {
+        let mut output = Vec::new();
+        let mut a = MultipartRequest::new()
+            .field(MultipartField::reader("reader1", std::io::empty()))
+            .field(MultipartField::param("key1", "value1"))
+            .field(
+                MultipartField::param("key2", "value2").mime(Some(::mime::IMAGE_BMP)),
+            )
+            .field(MultipartField::reader("reader2", std::io::empty()))
+            .field(
+                MultipartField::param("key3", "value3").filename(Some("filename")),
+            );
+        a.boundary = "boundary".to_string();
+        let expected = "\
+                        --boundary\r\n\
+                        Content-Disposition: form-data; name=\"reader1\"\r\n\r\n\
+                        \r\n\
+                        --boundary\r\n\
+                        Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
+                        value1\r\n\
+                        --boundary\r\n\
+                        Content-Disposition: form-data; name=\"key2\"\r\n\
+                        Content-Type: image/bmp\r\n\r\n\
+                        value2\r\n\
+                        --boundary\r\n\
+                        Content-Disposition: form-data; name=\"reader2\"\r\n\r\n\
+                        \r\n\
+                        --boundary\r\n\
+                        Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
+                        value3\r\n--boundary--";
+        a.reader().read_to_end(&mut output).unwrap();
+        // These prints are for debug purposes in case the test fails
+        println!(
+            "START REAL\n{}\nEND REAL",
+            std::str::from_utf8(&output).unwrap()
+        );
+        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
+        assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
     }
 }
