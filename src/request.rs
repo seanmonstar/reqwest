@@ -269,7 +269,7 @@ impl RequestBuilder {
         Ok(self)
     }
 
-    /// Send a multipart/formdata body.
+    /// Sends a multipart/formdata body.
     ///
     /// ```no_run
     /// use reqwest::mime;

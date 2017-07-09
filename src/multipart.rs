@@ -4,9 +4,9 @@ use std;
 use std::io::Read;
 use hyper::mime::Mime;
 
-// TODO: Should all these Strings be String, &str or Cow?
-
 // TODO: error management
+// I dont know if I need to tie in with error.rs since currently the errors are limited to this
+// module and will not appear anywhere else (RequestBuilder::multipart does not error).
 #[derive(Debug)]
 pub enum Error {
     Io(std::io::Error),
@@ -141,7 +141,7 @@ impl MultipartField {
             filename: filename,
         })
     }
-    /// Set the mime, builder style
+    /// Sets the mime, builder style.
     ///
     /// ```
     /// use reqwest::mime;
