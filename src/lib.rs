@@ -152,7 +152,7 @@ pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
 pub use self::tls::Certificate;
-pub use self::multipart::MultipartRequest;
+pub use self::multipart::{MultipartRequest, MultipartField};
 
 
 // this module must be first because of the `try_` macro

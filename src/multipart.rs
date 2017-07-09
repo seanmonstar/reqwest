@@ -1,4 +1,5 @@
 extern crate uuid;
+
 use std;
 use std::io::Read;
 use hyper::mime::Mime;
@@ -35,81 +36,97 @@ impl std::error::Error for Error {
     }
 }
 
-/// A multi/formdata request.
-/// TODO: better documentation
+/// A multipart/form-data request.
 #[derive(Debug)]
 pub struct MultipartRequest {
-    /// The boundary used in the request
     boundary: String,
-    fields: Vec<Field>,
+    fields: Vec<MultipartField>,
 }
 
 impl MultipartRequest {
-    /// Create a new MultipartRequest without any content
+    /// Creates a new MultipartRequest without any content.
     pub fn new() -> MultipartRequest {
         MultipartRequest {
             boundary: format!("{}", uuid::Uuid::new_v4().simple()),
             fields: Vec::new(),
         }
     }
-    /// Add a field, builder style
-    pub fn field(&mut self, field: Field) -> &mut MultipartRequest {
+    /// Adds a field, builder style.
+    pub fn field(mut self, field: MultipartField) -> MultipartRequest {
         self.fields.push(field);
         self
     }
-    /// Add multiple fields
-    pub fn fields(&mut self, mut fields: Vec<Field>) {
+    /// Adds multiple fields.
+    pub fn fields(&mut self, mut fields: Vec<MultipartField>) {
         self.fields.append(&mut fields);
     }
-    /// Turn this MultipartRequest into a RequestReader which implements the Read trait
+    /// Turns this MultipartRequest into a RequestReader which implements the Read trait.
     pub fn reader(self) -> RequestReader {
         RequestReader::new(self)
     }
-    /// Get the automatically chosen boundary
+    /// Gets the automatically chosen boundary.
     pub fn boundary(&self) -> &str {
         return &self.boundary;
     }
 }
 
 /// A field in a multipart request.
-pub struct Field {
+pub struct MultipartField {
     name: String,
     value: Box<Read + Send>,
     mime: Option<Mime>,
     filename: Option<Filename>,
 }
 
-// TODO: Field cannot derive debug because value is not Debug
+// TODO: MultipartField cannot derive debug because value is not Debug
 // Not sure how to best resolve this...
-impl std::fmt::Debug for Field {
+impl std::fmt::Debug for MultipartField {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "")
     }
 }
 
-impl Field {
-    /// Add a String parameter
-    pub fn param<T: Into<String>, U: Into<String>>(name: T, value: U) -> Field {
-        Field {
+impl MultipartField {
+    /// Makes a String parameter.
+    ///
+    /// ```
+    /// reqwest::MultipartField::param("key", "value");
+    /// ```
+    ///
+    pub fn param<T: Into<String>, U: Into<String>>(name: T, value: U) -> MultipartField {
+        MultipartField {
             name: name.into(),
             value: Box::new(BytesReader::new(value.into())),
             mime: None,
             filename: None,
         }
     }
-    /// Add a generic reader
-    pub fn reader<T: Into<String>>(name: T, value: Box<Read + Send>) -> Field {
-        Field {
+    /// Adds a generic reader.
+    ///
+    /// ```
+    /// use std::io::empty;
+    /// let reader = empty();
+    /// reqwest::MultipartField::reader("key", reader);
+    /// ```
+    ///
+    pub fn reader<T: Into<String>, U: Read + Send + 'static>(name: T, value: U) -> MultipartField {
+        MultipartField {
             name: name.into(),
-            value: value,
+            value: Box::from(value),
             mime: None,
             filename: None,
         }
     }
-    /// Add a file
+    /// Makes a file parameter.
+    /// Defaults to mime type application/octet-stream.
+    ///
+    /// ```no_run
+    /// reqwest::MultipartField::file("key", "/path/to/file");
+    /// ```
+    ///
     /// # Errors
     /// Errors when the file cannot be opened.
-    pub fn file<T: Into<String>, U: AsRef<std::path::Path>>(&mut self, name: T, path: U) -> Result<Field> {
+    pub fn file<T: Into<String>, U: AsRef<std::path::Path>>(name: T, path: U) -> Result<MultipartField> {
         // This turns the path into a filename if possible.
         // TODO: If the path's OsStr cannot be converted to a String it will result in None
         // instead of Filename::Bytes because I found no waz to convert an OsStr into bytes.
@@ -117,7 +134,7 @@ impl Field {
             .file_name()
             .and_then(|filename| filename.to_str())
             .and_then(|filename| Some(Filename::Utf8(filename.to_string())));
-        Ok(Field {
+        Ok(MultipartField {
             name: name.into(),
             value: Box::new(std::fs::File::open(path)?),
             mime: Some(::hyper::mime::APPLICATION_OCTET_STREAM),
@@ -125,12 +142,23 @@ impl Field {
         })
     }
     /// Set the mime, builder style
-    pub fn mime(&mut self, mime: Option<Mime>) -> &mut Field {
+    ///
+    /// ```
+    /// use reqwest::mime;
+    /// reqwest::MultipartField::param("key", "value").mime(Some(mime::IMAGE_BMP));
+    /// ```
+    ///
+    pub fn mime(mut self, mime: Option<Mime>) -> MultipartField {
         self.mime = mime;
         self
     }
-    /// Set the filename, builder style
-    pub fn filename<T: Into<String>>(&mut self, filename: Option<T>) -> &mut Field {
+    /// Sets the filename, builder style.
+    ///
+    /// ```
+    /// reqwest::MultipartField::param("key", "value").filename(Some("filename"));
+    /// ```
+    ///
+    pub fn filename<T: Into<String>>(mut self, filename: Option<T>) -> MultipartField {
         self.filename = filename.and_then(|filename| Some(Filename::Utf8(filename.into())));
         self
     }
@@ -180,7 +208,7 @@ pub struct RequestReader {
     active_reader: Box<Read + Send>,
 }
 
-// TODO: Field cannot derive debug because active_reader is not Debug
+// TODO: MultipartField cannot derive debug because active_reader is not Debug
 // Not sure how to best resolve this...
 impl std::fmt::Debug for RequestReader {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -203,15 +231,6 @@ impl<T> BytesReader<T> {
     }
 }
 
-#[derive(Debug)]
-struct EmptyReader;
-
-impl Read for EmptyReader {
-    fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
-        Ok(0)
-    }
-}
-
 impl<T: AsRef<[u8]>> Read for BytesReader<T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let bytes = self.bytes.as_ref();
@@ -231,7 +250,7 @@ impl RequestReader {
         let mut reader = RequestReader {
             request: request,
             field_position: 0,
-            active_reader: Box::new(EmptyReader),
+            active_reader: Box::new(std::io::empty()),
         };
         reader.update_reader();
         reader
@@ -248,7 +267,7 @@ impl RequestReader {
                 )).chain(field.value),
             )
         } else {
-            Box::new(EmptyReader)
+            Box::new(std::io::empty())
         }
     }
 }
@@ -282,14 +301,6 @@ impl Read for RequestReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn empty_reader_is_empty() {
-        let mut reader = EmptyReader;
-        let mut output = Vec::new();
-        assert_eq!(reader.read_to_end(&mut output).unwrap(), 0);
-        assert_eq!(output.len(), 0);
-    }
 
     #[test]
     fn bytes_reader_empty() {

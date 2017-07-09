@@ -270,17 +270,38 @@ impl RequestBuilder {
     }
 
     /// Send a multipart/formdata body.
-    /// TODO: better documentation
-    pub fn multipart(&mut self, multipart: MultipartRequest) -> ::Result<&mut RequestBuilder> {
+    ///
+    /// ```no_run
+    /// use reqwest::mime;
+    /// use reqwest::{MultipartRequest, MultipartField};
+    ///
+    /// let client = reqwest::Client::new().unwrap();
+    /// let response = client.post("your url").unwrap()
+    ///     .multipart(
+    ///         MultipartRequest::new()
+    ///         .field(MultipartField::param("key", "value"))
+    ///         .field(MultipartField::param("json", "{ \"number\": 5 }")
+    ///             .mime(Some(mime::APPLICATION_JSON)))
+    ///         .field(MultipartField::file("file", "/path/to/file")
+    ///             .expect("File could not be opened"))
+    ///     ).send();
+    ///
+    /// ```
+    ///
+    pub fn multipart(&mut self, multipart: MultipartRequest) -> &mut RequestBuilder {
         {
             let mut req = self.request_mut();
             // TODO: I tried to define the mimetype in code only, without parse() but could not
             // find a way to set the boundary parameter. Is there a way to do that?
-            req.headers_mut().set(::header::ContentType(format!("multipart/form-data; boundary={}", multipart.boundary()).parse().unwrap()));
+            req.headers_mut().set(
+                ::header::ContentType(format!("multipart/form-data; boundary={}",multipart.boundary())
+                    .parse().unwrap()
+                )
+            );
             let reader = multipart.reader();
             *req.body_mut() = Some(Body::new(reader));
         }
-        Ok(self)
+        self
     }
 
     /// Build a `Request`, which can be inspected, modified and executed with
