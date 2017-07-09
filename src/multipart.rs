@@ -86,7 +86,7 @@ impl MultipartRequest {
         Ok(self.custom(
             name,
             Box::new(std::fs::File::open(path)?),
-            None,
+            Some(::hyper::mime::APPLICATION_OCTET_STREAM),
             filename,
         ))
     }
