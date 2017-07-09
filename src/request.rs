@@ -276,7 +276,7 @@ impl RequestBuilder {
             let mut req = self.request_mut();
             // TODO: I tried to define the mimetype in code only, without parse() but could not
             // find a way to set the boundary parameter. Is there a way to do that?
-            req.headers_mut().set(::header::ContentType(format!("multipart/form-data; boundary={}", multipart.boundary).parse().unwrap()));
+            req.headers_mut().set(::header::ContentType(format!("multipart/form-data; boundary={}", multipart.boundary()).parse().unwrap()));
             let reader = multipart.reader();
             *req.body_mut() = Some(Body::new(reader));
         }

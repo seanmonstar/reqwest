@@ -31,7 +31,7 @@ impl std::error::Error for Error {
 #[derive(Debug)]
 pub struct MultipartRequest {
     /// The boundary used in the request
-    pub boundary: String,
+    boundary: String,
     fields: Vec<Field>,
 }
 
@@ -47,6 +47,10 @@ impl MultipartRequest {
     /// Turn this MultipartRequest into a RequestReader which implemetns the Read trait
     pub fn reader(self) -> RequestReader {
         RequestReader::new(self)
+    }
+    /// Get the automatically chosen boundary
+    pub fn boundary(&self) -> &str {
+        return &self.boundary
     }
 }
 
