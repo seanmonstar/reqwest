@@ -207,3 +207,55 @@ impl Read for RequestReader {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_reader_is_empty() {
+        let mut reader = EmptyReader;
+        let mut output = Vec::new();
+        assert_eq!(reader.read_to_end(&mut output).unwrap(), 0);
+        assert_eq!(output.len(), 0);
+    }
+
+    #[test]
+    fn bytes_reader_empty() {
+        let mut reader = BytesReader::new(Vec::new());
+        let mut output = Vec::new();
+        assert_eq!(reader.read_to_end(&mut output).unwrap(), 0);
+        assert_eq!(output.len(), 0);
+    }
+
+    #[test]
+    fn bytes_reader_empty_0_read() {
+        let mut reader = BytesReader::new(Vec::new());
+        let mut output = [];
+        // Read into 0 length buffer twice
+        assert_eq!(reader.read(&mut output).unwrap(), 0);
+        assert_eq!(reader.read(&mut output).unwrap(), 0);
+    }
+
+    #[test]
+    fn bytes_reader_read_to_end() {
+        let input = [0,1];
+        let mut reader = BytesReader::new(input.clone());
+        let mut output = Vec::new();
+        assert_eq!(reader.read_to_end(&mut output).unwrap(), 2);
+        assert_eq!(output, input);
+    }
+
+    #[test]
+    fn bytes_reader_multiple_reads() {
+        let input = [0,1,2,3,4,5,6,7,8,9];
+        let mut reader = BytesReader::new(input.clone());
+        let mut output = [0,0,0,0,0,0,0,0,0,0,0];
+        assert_eq!(reader.read(&mut output[0..0]).unwrap(), 0);
+        assert_eq!(reader.read(&mut output[0..2]).unwrap(), 2);
+        assert_eq!(reader.read(&mut output[0..0]).unwrap(), 0);
+        assert_eq!(reader.read(&mut output[2..]).unwrap(), 8);
+        assert_eq!(reader.read(&mut output[10..11]).unwrap(), 0);
+        assert_eq!(output[..10], input);
+    }
+}
