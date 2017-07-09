@@ -117,6 +117,7 @@ impl Error {
             Kind::Io(ref e) => Some(e),
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
+            Kind::Multipart(ref e) => Some(e),
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
             Kind::ClientError(_) |
@@ -195,6 +196,7 @@ impl fmt::Display for Error {
             Kind::Io(ref e) => fmt::Display::fmt(e, f),
             Kind::UrlEncoded(ref e) => fmt::Display::fmt(e, f),
             Kind::Json(ref e) => fmt::Display::fmt(e, f),
+            Kind::Multipart(ref e) => fmt::Display::fmt(e, f),
             Kind::TooManyRedirects => f.write_str("Too many redirects"),
             Kind::RedirectLoop => f.write_str("Infinite redirect loop"),
             Kind::ClientError(ref code) => {
@@ -218,6 +220,7 @@ impl StdError for Error {
             Kind::Io(ref e) => e.description(),
             Kind::UrlEncoded(ref e) => e.description(),
             Kind::Json(ref e) => e.description(),
+            Kind::Multipart(ref e) => e.description(),
             Kind::TooManyRedirects => "Too many redirects",
             Kind::RedirectLoop => "Infinite redirect loop",
             Kind::ClientError(_) => "Client Error",
@@ -233,6 +236,7 @@ impl StdError for Error {
             Kind::Io(ref e) => e.cause(),
             Kind::UrlEncoded(ref e) => e.cause(),
             Kind::Json(ref e) => e.cause(),
+            Kind::Multipart(ref e) => e.cause(),
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
             Kind::ClientError(_) |
@@ -251,6 +255,7 @@ pub enum Kind {
     Io(io::Error),
     UrlEncoded(::serde_urlencoded::ser::Error),
     Json(::serde_json::Error),
+    Multipart(::multipart::Error),
     TooManyRedirects,
     RedirectLoop,
     ClientError(StatusCode),
@@ -294,6 +299,12 @@ impl From<::serde_json::Error> for Kind {
     #[inline]
     fn from(err: ::serde_json::Error) -> Kind {
         Kind::Json(err)
+    }
+}
+
+impl From<::multipart::Error> for Kind {
+    fn from(err: ::multipart::Error) -> Kind {
+        Kind::Multipart(err)
     }
 }
 

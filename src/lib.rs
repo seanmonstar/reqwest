@@ -134,6 +134,7 @@ extern crate tokio_core;
 extern crate tokio_io;
 extern crate tokio_tls;
 extern crate url;
+extern crate uuid;
 
 pub use hyper::header;
 pub use hyper::mime;
@@ -151,6 +152,7 @@ pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
 pub use self::tls::Certificate;
+pub use self::multipart::MultipartRequest;
 
 
 // this module must be first because of the `try_` macro
@@ -192,6 +194,7 @@ mod request;
 mod response;
 mod tls;
 mod wait;
+mod multipart;
 
 
 /// Shortcut method to quickly make a `GET` request.

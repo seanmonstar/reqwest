@@ -7,7 +7,7 @@ use serde_urlencoded;
 
 use body::{self, Body};
 use header::Headers;
-use {async_impl, Client, Method, Url};
+use {async_impl, Client, Method, MultipartRequest, Url};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -265,6 +265,21 @@ impl RequestBuilder {
             let body = try_!(serde_json::to_vec(json));
             req.headers_mut().set(ContentType::json());
             *req.body_mut() = Some(body.into());
+        }
+        Ok(self)
+    }
+
+    /// Send a multipart/formdata body.
+    /// TODO: better documentation
+    pub fn multipart(&mut self, multipart: MultipartRequest) -> ::Result<&mut RequestBuilder> {
+        {
+            let mut req = self.request_mut();
+            // TODO: I tried to define the mimetype in code only, without parse() but
+            // could not get it work
+            // I think it should be possible but I dont know how
+            req.headers_mut().set(::header::ContentType(format!("multipart/form-data; boundary={}", multipart.boundary).parse().unwrap()));
+            let reader = multipart.reader();
+            *req.body_mut() = Some(Body::new(reader));
         }
         Ok(self)
     }
