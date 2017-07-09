@@ -66,10 +66,11 @@ impl std::fmt::Debug for Field {
 }
 
 impl Field {
-    // TODO: This should use the hyper::Header infrastructure
     fn header(&self) -> String {
         // TODO: The RFC says name can be any utf8 but
         // wouldnt it be a problem if name or filename contained a " (quoation mark)here?
+        // TODO: I would use hyper's ContentDisposition header here, but it doesnt seem to have the
+        // form-data type
         format!(
             "Content-Disposition: form-data; name=\"{}\"{}{}",
             self.name,
@@ -78,7 +79,7 @@ impl Field {
                 None => "".to_string(),
             },
             match self.mime {
-                Some(ref mime) => format!("\r\nContent-Type: {}", mime),
+                Some(ref mime) => format!("\r\n{}", ::header::ContentType(mime.clone())),
                 None => "".to_string(),
             }
         )
