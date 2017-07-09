@@ -111,7 +111,7 @@ pub struct RequestReader {
     active_reader: Box<Read + Send>,
 }
 
-// TODO: Field cannot derive debug because value is not Debug
+// TODO: Field cannot derive debug because active_reader is not Debug
 // Not sure how to best resolve this...
 impl std::fmt::Debug for RequestReader {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
