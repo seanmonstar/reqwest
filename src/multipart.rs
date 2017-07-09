@@ -87,6 +87,7 @@ impl Field {
 
 // TODO: Is any utf8 even allowed here?
 // The RFC makes it sound like only ascii excluding control sequences is allowed
+#[allow(dead_code)] // TODO: Remove this. Added so project compiles since warnings=errors
 #[derive(Debug)]
 pub enum Filename {
     Utf8(String),
@@ -98,7 +99,7 @@ impl Filename {
         match self {
             &Filename::Utf8(ref name) => name.clone(),
             // TODO: implement percent encoding
-            &Filename::Binary(ref name) => unimplemented!(),
+            &Filename::Binary(_) => unimplemented!(),
         }
     }
 }
