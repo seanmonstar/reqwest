@@ -277,6 +277,42 @@ impl RequestBuilder {
         Ok(self)
     }
 
+    /// Sends a multipart/form-data body.
+    ///
+    /// ```
+    /// use reqwest::mime;
+    /// # use reqwest::Error;
+    ///
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// let client = reqwest::Client::new()?;
+    /// let form = reqwest::multipart::Form::new()
+    ///     .text("key3", "value3")
+    ///     .file("file", "/path/to/field")?;
+    ///
+    /// let response = client.post("your url")?
+    ///     .multipart(form)
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// See [`multipart`](multipart/) for more examples.
+    pub fn multipart(&mut self, mut multipart: ::multipart::Form) -> &mut RequestBuilder {
+        {
+            let req = self.request_mut();
+            req.headers_mut().set(
+                ::header::ContentType(format!("multipart/form-data; boundary={}", ::multipart_::boundary(&multipart))
+                    .parse().unwrap()
+                )
+            );
+            *req.body_mut() = Some(match ::multipart_::compute_length(&mut multipart) {
+                Some(length) => Body::sized(::multipart_::reader(multipart), length),
+                None => Body::new(::multipart_::reader(multipart)),
+            })
+        }
+        self
+    }
+
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
     ///
