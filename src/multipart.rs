@@ -8,7 +8,16 @@ use hyper::mime::Mime;
 // TODO: error management
 #[derive(Debug)]
 pub enum Error {
+    Io(std::io::Error),
 }
+
+impl std::convert::From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Error {
+        Error::Io(err)
+    }
+}
+
+type Result<T> = std::result::Result<T, Error>;
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -43,14 +52,51 @@ impl MultipartRequest {
             fields: Vec::new(),
         }
     }
-    // TODO: ergonomic methods like add_param, add_file, ...
-    /// Turn this MultipartRequest into a RequestReader which implemetns the Read trait
+    /// Add a custom field
+    pub fn custom(
+        &mut self,
+        name: String,
+        value: Box<Read + Send>,
+        mime: Option<Mime>,
+        filename: Option<Filename>,
+    ) -> &mut MultipartRequest {
+        self.fields.push(Field {
+            name: name,
+            value: value,
+            mime: mime,
+            filename: filename,
+        });
+        self
+    }
+    /// Add a String parameter
+    pub fn param(&mut self, name: String, value: String) -> &mut MultipartRequest {
+        self.custom(name, Box::new(BytesReader::new(value)), None, None)
+    }
+    /// Add a file
+    /// # Errors
+    ///  Errors when the file cannot be opened.
+    pub fn file<T: AsRef<std::path::Path>>(&mut self, name: String, path: T) -> Result<&mut MultipartRequest> {
+        // This turns the path into a filename if possible.
+        // TODO: If the path's OsStr cannot be converted to a String it will result in None
+        // instead of Filename::Bytes because I found no waz to convert an OsStr into bytes.
+        let filename = path.as_ref()
+            .file_name()
+            .and_then(|filename| filename.to_str())
+            .and_then(|filename| Some(Filename::Utf8(filename.to_string())));
+        Ok(self.custom(
+            name,
+            Box::new(std::fs::File::open(path)?),
+            None,
+            filename,
+        ))
+    }
+    /// Turn this MultipartRequest into a RequestReader which implements the Read trait
     pub fn reader(self) -> RequestReader {
         RequestReader::new(self)
     }
     /// Get the automatically chosen boundary
     pub fn boundary(&self) -> &str {
-        return &self.boundary
+        return &self.boundary;
     }
 }
 
@@ -92,11 +138,10 @@ impl Field {
 
 // TODO: Is any utf8 even allowed here?
 // The RFC makes it sound like only ascii excluding control sequences is allowed
-#[allow(dead_code)] // TODO: Remove this. Added so project compiles since warnings=errors
 #[derive(Debug)]
 pub enum Filename {
     Utf8(String),
-    Binary(Vec<u8>),
+    Bytes(Vec<u8>),
 }
 
 impl Filename {
@@ -104,7 +149,7 @@ impl Filename {
         match self {
             &Filename::Utf8(ref name) => name.clone(),
             // TODO: implement percent encoding
-            &Filename::Binary(_) => unimplemented!(),
+            &Filename::Bytes(_) => unimplemented!(),
         }
     }
 }
@@ -245,7 +290,7 @@ mod tests {
 
     #[test]
     fn bytes_reader_read_to_end() {
-        let input = [0,1];
+        let input = [0, 1];
         let mut reader = BytesReader::new(input.clone());
         let mut output = Vec::new();
         assert_eq!(reader.read_to_end(&mut output).unwrap(), 2);
@@ -254,9 +299,9 @@ mod tests {
 
     #[test]
     fn bytes_reader_multiple_reads() {
-        let input = [0,1,2,3,4,5,6,7,8,9];
+        let input = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         let mut reader = BytesReader::new(input.clone());
-        let mut output = [0,0,0,0,0,0,0,0,0,0,0];
+        let mut output = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         assert_eq!(reader.read(&mut output[0..0]).unwrap(), 0);
         assert_eq!(reader.read(&mut output[0..2]).unwrap(), 2);
         assert_eq!(reader.read(&mut output[0..0]).unwrap(), 0);
