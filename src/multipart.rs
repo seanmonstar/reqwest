@@ -35,7 +35,7 @@ impl std::error::Error for Error {
     }
 }
 
-/// A multi/formdata request
+/// A multi/formdata request.
 /// TODO: better documentation
 #[derive(Debug)]
 pub struct MultipartRequest {
@@ -52,43 +52,14 @@ impl MultipartRequest {
             fields: Vec::new(),
         }
     }
-    /// Add a custom field
-    pub fn custom(
-        &mut self,
-        name: String,
-        value: Box<Read + Send>,
-        mime: Option<Mime>,
-        filename: Option<Filename>,
-    ) -> &mut MultipartRequest {
-        self.fields.push(Field {
-            name: name,
-            value: value,
-            mime: mime,
-            filename: filename,
-        });
+    /// Add a field, builder style
+    pub fn field(&mut self, field: Field) -> &mut MultipartRequest {
+        self.fields.push(field);
         self
     }
-    /// Add a String parameter
-    pub fn param(&mut self, name: String, value: String) -> &mut MultipartRequest {
-        self.custom(name, Box::new(BytesReader::new(value)), None, None)
-    }
-    /// Add a file
-    /// # Errors
-    ///  Errors when the file cannot be opened.
-    pub fn file<T: AsRef<std::path::Path>>(&mut self, name: String, path: T) -> Result<&mut MultipartRequest> {
-        // This turns the path into a filename if possible.
-        // TODO: If the path's OsStr cannot be converted to a String it will result in None
-        // instead of Filename::Bytes because I found no waz to convert an OsStr into bytes.
-        let filename = path.as_ref()
-            .file_name()
-            .and_then(|filename| filename.to_str())
-            .and_then(|filename| Some(Filename::Utf8(filename.to_string())));
-        Ok(self.custom(
-            name,
-            Box::new(std::fs::File::open(path)?),
-            Some(::hyper::mime::APPLICATION_OCTET_STREAM),
-            filename,
-        ))
+    /// Add multiple fields
+    pub fn fields(&mut self, mut fields: Vec<Field>) {
+        self.fields.append(&mut fields);
     }
     /// Turn this MultipartRequest into a RequestReader which implements the Read trait
     pub fn reader(self) -> RequestReader {
@@ -100,7 +71,8 @@ impl MultipartRequest {
     }
 }
 
-struct Field {
+/// A field in a multipart request.
+pub struct Field {
     name: String,
     value: Box<Read + Send>,
     mime: Option<Mime>,
@@ -116,11 +88,57 @@ impl std::fmt::Debug for Field {
 }
 
 impl Field {
+    /// Add a String parameter
+    pub fn param<T: Into<String>, U: Into<String>>(name: T, value: U) -> Field {
+        Field {
+            name: name.into(),
+            value: Box::new(BytesReader::new(value.into())),
+            mime: None,
+            filename: None,
+        }
+    }
+    /// Add a generic reader
+    pub fn reader<T: Into<String>>(name: T, value: Box<Read + Send>) -> Field {
+        Field {
+            name: name.into(),
+            value: value,
+            mime: None,
+            filename: None,
+        }
+    }
+    /// Add a file
+    /// # Errors
+    /// Errors when the file cannot be opened.
+    pub fn file<T: Into<String>, U: AsRef<std::path::Path>>(&mut self, name: T, path: U) -> Result<Field> {
+        // This turns the path into a filename if possible.
+        // TODO: If the path's OsStr cannot be converted to a String it will result in None
+        // instead of Filename::Bytes because I found no waz to convert an OsStr into bytes.
+        let filename = path.as_ref()
+            .file_name()
+            .and_then(|filename| filename.to_str())
+            .and_then(|filename| Some(Filename::Utf8(filename.to_string())));
+        Ok(Field {
+            name: name.into(),
+            value: Box::new(std::fs::File::open(path)?),
+            mime: Some(::hyper::mime::APPLICATION_OCTET_STREAM),
+            filename: filename,
+        })
+    }
+    /// Set the mime, builder style
+    pub fn mime(&mut self, mime: Option<Mime>) -> &mut Field {
+        self.mime = mime;
+        self
+    }
+    /// Set the filename, builder style
+    pub fn filename<T: Into<String>>(&mut self, filename: Option<T>) -> &mut Field {
+        self.filename = filename.and_then(|filename| Some(Filename::Utf8(filename.into())));
+        self
+    }
     fn header(&self) -> String {
-        // TODO: The RFC says name can be any utf8 but
-        // wouldnt it be a problem if name or filename contained a " (quoation mark)here?
-        // TODO: I would use hyper's ContentDisposition header here, but it doesnt seem to have the
-        // form-data type
+        // TODO: The RFC says name can be any utf8 but wouldnt it be a problem if name or filename
+        // contained a " (quoation mark)here?
+        // TODO: I would use hyper's ContentDisposition header here, but it doesnt seem to have
+        // the form-data type
         format!(
             "Content-Disposition: form-data; name=\"{}\"{}{}",
             self.name,
@@ -136,11 +154,13 @@ impl Field {
     }
 }
 
-// TODO: Is any utf8 even allowed here?
-// The RFC makes it sound like only ascii excluding control sequences is allowed
 #[derive(Debug)]
 pub enum Filename {
+    // TODO: Is any utf8 even allowed here?
+    // The RFC makes it sound like only ascii excluding control sequences is allowed
     Utf8(String),
+    // TODO: Currently unused because we never construct it
+    #[allow(dead_code)]
     Bytes(Vec<u8>),
 }
 
