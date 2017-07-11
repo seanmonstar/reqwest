@@ -96,7 +96,7 @@ impl MultipartField {
     pub fn param<T: Into<String>, U: Into<String>>(name: T, value: U) -> MultipartField {
         MultipartField {
             name: name.into(),
-            value: Box::new(BytesReader::new(value.into())),
+            value: Box::new(std::io::Cursor::new(value.into())),
             mime: None,
             filename: None,
         }
@@ -222,35 +222,6 @@ impl std::fmt::Debug for RequestReader {
     }
 }
 
-#[derive(Debug)]
-struct BytesReader<T> {
-    position: usize,
-    bytes: T,
-}
-
-impl<T> BytesReader<T> {
-    fn new(bytes: T) -> BytesReader<T> {
-        BytesReader {
-            position: 0,
-            bytes: bytes,
-        }
-    }
-}
-
-impl<T: AsRef<[u8]>> Read for BytesReader<T> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let bytes = self.bytes.as_ref();
-        let bytes_remaining = bytes.len() - self.position;
-        let bytes_to_write = std::cmp::min(bytes_remaining, buf.len());
-        // unwrap because the range is always valid
-        buf.get_mut(0..bytes_to_write)
-            .unwrap()
-            .copy_from_slice(&bytes[self.position..self.position + bytes_to_write]);
-        self.position += bytes_to_write;
-        Ok(bytes_to_write)
-    }
-}
-
 impl RequestReader {
     fn new(request: MultipartRequest) -> RequestReader {
         let mut reader = RequestReader {
@@ -264,19 +235,19 @@ impl RequestReader {
         self.active_reader = if self.request.fields.len() != 0 {
             // We need to move out of the vector here because we are consuming the field's reader
             let field = self.request.fields.remove(0);
-            let reader = BytesReader::new(format!(
+            let reader = std::io::Cursor::new(format!(
                 "--{}\r\n{}\r\n\r\n",
                 self.request.boundary,
                 field.header()
             )).chain(field.value)
-                .chain(BytesReader::new("\r\n"));
+                .chain(std::io::Cursor::new("\r\n"));
             // According to https://tools.ietf.org/html/rfc2046#section-5.1.1
             // the very last field has a special boundary
             if self.request.fields.len() != 0 {
                 Some(Box::new(reader))
             } else {
                 Some(Box::new(
-                    reader.chain(BytesReader::new(format!("--{}--", self.request.boundary))),
+                    reader.chain(std::io::Cursor::new(format!("--{}--", self.request.boundary))),
                 ))
             }
         } else {
@@ -311,45 +282,6 @@ impl Read for RequestReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn bytes_reader_empty() {
-        let mut reader = BytesReader::new(Vec::new());
-        let mut output = Vec::new();
-        assert_eq!(reader.read_to_end(&mut output).unwrap(), 0);
-        assert_eq!(output.len(), 0);
-    }
-
-    #[test]
-    fn bytes_reader_empty_0_read() {
-        let mut reader = BytesReader::new(Vec::new());
-        let mut output = [];
-        // Read into 0 length buffer twice
-        assert_eq!(reader.read(&mut output).unwrap(), 0);
-        assert_eq!(reader.read(&mut output).unwrap(), 0);
-    }
-
-    #[test]
-    fn bytes_reader_read_to_end() {
-        let input = [0, 1];
-        let mut reader = BytesReader::new(input.clone());
-        let mut output = Vec::new();
-        assert_eq!(reader.read_to_end(&mut output).unwrap(), 2);
-        assert_eq!(output, input);
-    }
-
-    #[test]
-    fn bytes_reader_multiple_reads() {
-        let input = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-        let mut reader = BytesReader::new(input.clone());
-        let mut output = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-        assert_eq!(reader.read(&mut output[0..0]).unwrap(), 0);
-        assert_eq!(reader.read(&mut output[0..2]).unwrap(), 2);
-        assert_eq!(reader.read(&mut output[0..0]).unwrap(), 0);
-        assert_eq!(reader.read(&mut output[2..]).unwrap(), 8);
-        assert_eq!(reader.read(&mut output[10..11]).unwrap(), 0);
-        assert_eq!(output[..10], input);
-    }
 
     #[test]
     fn multipart_request_empty() {
