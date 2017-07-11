@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.6.2" # remember to update html_root_url
+version = "0.7.0" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 repository = "https://github.com/seanmonstar/reqwest"
