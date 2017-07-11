@@ -93,10 +93,15 @@ impl MultipartField {
     /// reqwest::MultipartField::param("key", "value");
     /// ```
     ///
-    pub fn param<T: Into<String>, U: Into<String>>(name: T, value: U) -> MultipartField {
+    /// ```
+    /// let string: String = String::new();
+    /// reqwest::MultipartField::param("key", string);
+    /// ```
+    ///
+    pub fn param<T: Into<String>, U: AsRef<[u8]> + Send + 'static>(name: T, value: U) -> MultipartField {
         MultipartField {
             name: name.into(),
-            value: Box::new(std::io::Cursor::new(value.into())),
+            value: Box::new(std::io::Cursor::new(value)),
             mime: None,
             filename: None,
         }
