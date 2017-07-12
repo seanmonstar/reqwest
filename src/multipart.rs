@@ -66,7 +66,34 @@ impl MultipartRequest {
     }
     /// Gets the automatically chosen boundary.
     pub fn boundary(&self) -> &str {
-        return &self.boundary;
+        &self.boundary
+    }
+    /// If predictable, computes the length the request will have
+    /// The length should be preditable if only String and file fields have been added,
+    /// but not if a generic reader has been added;
+    pub fn compute_length(&self) -> Option<u64> {
+        let mut length = 0u64;
+        for field in self.fields.iter() {
+            match field.value_length {
+                Some(value_length) => {
+                    // We are constructing the header just to get its length.
+                    // This is wasteful but it seemed liked the only way to get the correct length
+                    // for sure.
+                    let header_length = field.header().len();
+                    // The additions mimick the format string out of which the field is constructed
+                    // in RequestReader. Not the cleanest solution because if that format string is
+                    // ever changed then this formula needs to be changed too which is not an
+                    // obvious dependency in the code.
+                    length += 2 + self.boundary.len() as u64 + 2 +  header_length as u64 + 4 + value_length + 2
+                }
+                _ => return None,
+            }
+        }
+        // If there is a at least one field there is a special boundary for the very last field.
+        if self.fields.len() != 0 {
+            length += 2 + self.boundary.len() as u64 + 2
+        }
+        Some(length)
     }
 }
 
@@ -74,6 +101,7 @@ impl MultipartRequest {
 pub struct MultipartField {
     name: String,
     value: Box<Read + Send>,
+    value_length: Option<u64>,
     mime: Option<Mime>,
     filename: Option<Filename>,
 }
@@ -99,9 +127,11 @@ impl MultipartField {
     /// ```
     ///
     pub fn param<T: Into<String>, U: AsRef<[u8]> + Send + 'static>(name: T, value: U) -> MultipartField {
+        let value_length = Some(value.as_ref().len() as u64);
         MultipartField {
             name: name.into(),
             value: Box::new(std::io::Cursor::new(value)),
+            value_length: value_length,
             mime: None,
             filename: None,
         }
@@ -118,6 +148,7 @@ impl MultipartField {
         MultipartField {
             name: name.into(),
             value: Box::from(value),
+            value_length: None,
             mime: None,
             filename: None,
         }
@@ -139,9 +170,12 @@ impl MultipartField {
             .file_name()
             .and_then(|filename| filename.to_str())
             .and_then(|filename| Some(Filename::Utf8(filename.to_string())));
+        let file_length = std::fs::metadata(path.as_ref()).ok()
+            .and_then(|metadata| Some(metadata.len() as u64));
         Ok(MultipartField {
             name: name.into(),
-            value: Box::new(std::fs::File::open(path)?),
+            value: Box::new(std::fs::File::open(path.as_ref())?),
+            value_length: file_length,
             mime: Some(::hyper::mime::APPLICATION_OCTET_STREAM),
             filename: filename,
         })
@@ -291,17 +325,19 @@ mod tests {
     #[test]
     fn multipart_request_empty() {
         let mut output = Vec::new();
-        MultipartRequest::new()
-            .reader()
+        let request = MultipartRequest::new();
+        let length = request.compute_length();
+        request.reader()
             .read_to_end(&mut output)
             .unwrap();
         assert_eq!(output, b"");
+        assert_eq!(length.unwrap(), 0);
     }
 
     #[test]
     fn multipart_request_read_to_end() {
         let mut output = Vec::new();
-        let mut a = MultipartRequest::new()
+        let mut request = MultipartRequest::new()
             .field(MultipartField::reader("reader1", std::io::empty()))
             .field(MultipartField::param("key1", "value1"))
             .field(
@@ -311,7 +347,8 @@ mod tests {
             .field(
                 MultipartField::param("key3", "value3").filename(Some("filename")),
             );
-        a.boundary = "boundary".to_string();
+        request.boundary = "boundary".to_string();
+        let length = request.compute_length();
         let expected = "\
                         --boundary\r\n\
                         Content-Disposition: form-data; name=\"reader1\"\r\n\r\n\
@@ -329,7 +366,7 @@ mod tests {
                         --boundary\r\n\
                         Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
                         value3\r\n--boundary--";
-        a.reader().read_to_end(&mut output).unwrap();
+        request.reader().read_to_end(&mut output).unwrap();
         // These prints are for debug purposes in case the test fails
         println!(
             "START REAL\n{}\nEND REAL",
@@ -337,5 +374,41 @@ mod tests {
         );
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
         assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
+        assert!(length.is_none());
+    }
+
+    #[test]
+    fn multipart_request_read_to_end_with_length() {
+        let mut output = Vec::new();
+        let mut request = MultipartRequest::new()
+            .field(MultipartField::param("key1", "value1"))
+            .field(
+                MultipartField::param("key2", "value2").mime(Some(::mime::IMAGE_BMP)),
+            )
+            .field(
+                MultipartField::param("key3", "value3").filename(Some("filename")),
+            );
+        request.boundary = "boundary".to_string();
+        let length = request.compute_length();
+        let expected = "\
+                        --boundary\r\n\
+                        Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
+                        value1\r\n\
+                        --boundary\r\n\
+                        Content-Disposition: form-data; name=\"key2\"\r\n\
+                        Content-Type: image/bmp\r\n\r\n\
+                        value2\r\n\
+                        --boundary\r\n\
+                        Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
+                        value3\r\n--boundary--";
+        request.reader().read_to_end(&mut output).unwrap();
+        // These prints are for debug purposes in case the test fails
+        println!(
+            "START REAL\n{}\nEND REAL",
+            std::str::from_utf8(&output).unwrap()
+        );
+        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
+        assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
+        assert_eq!(length.unwrap(), expected.len() as u64);
     }
 }

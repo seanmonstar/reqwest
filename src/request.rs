@@ -298,8 +298,10 @@ impl RequestBuilder {
                     .parse().unwrap()
                 )
             );
-            let reader = multipart.reader();
-            *req.body_mut() = Some(Body::new(reader));
+            *req.body_mut() = Some(match multipart.compute_length() {
+                Some(length) => Body::sized(multipart.reader(), length),
+                None => Body::new(multipart.reader()),
+            })
         }
         self
     }
