@@ -47,6 +47,7 @@ pub struct Client {
 ///     .gzip(true)
 ///     .timeout(Duration::from_secs(10))
 ///     .build()?;
+/// # Ok(())
 /// # }
 /// ```
 pub struct ClientBuilder {
