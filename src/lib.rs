@@ -1,7 +1,7 @@
 #![deny(warnings)]
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.7.0")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.7.1")]
 
 //! # reqwest
 //!
@@ -13,6 +13,7 @@
 //! - Uses system-native TLS
 //! - Plain bodies, JSON, urlencoded, (TODO: multipart)
 //! - Customizable redirect policy
+//! - Proxies
 //! - (TODO: Cookies)
 //!
 //! The `reqwest::Client` is synchronous, making it a great fit for

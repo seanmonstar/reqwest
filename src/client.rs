@@ -35,29 +35,18 @@ pub struct Client {
     inner: ClientHandle,
 }
 
-/// A `ClientBuilder` can be used to create a `Client` with  custom configuration:
+/// A `ClientBuilder` can be used to create a `Client` with  custom configuration.
 ///
-/// - with hostname verification disabled
-/// - with one or multiple custom certificates
-///
-/// # Examples
+/// # Example
 ///
 /// ```
-/// # use std::fs::File;
-/// # use std::io::Read;
-/// # fn build_client() -> Result<(), Box<std::error::Error>> {
-/// // read a local binary DER encoded certificate
-/// let mut buf = Vec::new();
-/// File::open("my-cert.der")?.read_to_end(&mut buf)?;
+/// # fn run() -> Result<(), reqwest::Error> {
+/// use std::time::Duration;
 ///
-/// // create a certificate
-/// let cert = reqwest::Certificate::from_der(&buf)?;
-///
-/// // get a client builder
-/// let client = reqwest::ClientBuilder::new()?
-///     .add_root_certificate(cert)?
+/// let client = reqwest::Client::builder()?
+///     .gzip(true)
+///     .timeout(Duration::from_secs(10))
 ///     .build()?;
-/// # drop(client);
 /// # Ok(())
 /// # }
 /// ```
@@ -102,6 +91,27 @@ impl ClientBuilder {
     /// This can be used to connect to a server that has a self-signed
     /// certificate for example.
     ///
+    /// # Example
+    /// ```
+    /// # use std::fs::File;
+    /// # use std::io::Read;
+    /// # fn build_client() -> Result<(), Box<std::error::Error>> {
+    /// // read a local binary DER encoded certificate
+    /// let mut buf = Vec::new();
+    /// File::open("my-cert.der")?.read_to_end(&mut buf)?;
+    ///
+    /// // create a certificate
+    /// let cert = reqwest::Certificate::from_der(&buf)?;
+    ///
+    /// // get a client builder
+    /// let client = reqwest::ClientBuilder::new()?
+    ///     .add_root_certificate(cert)?
+    ///     .build()?;
+    /// # drop(client);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// This method fails if adding root certificate was unsuccessful.
@@ -125,6 +135,8 @@ impl ClientBuilder {
     }
 
     /// Enable hostname verification.
+    ///
+    /// Default is enabled.
     #[inline]
     pub fn enable_hostname_verification(&mut self) -> &mut ClientBuilder {
         self.inner.enable_hostname_verification();
@@ -166,7 +178,7 @@ impl ClientBuilder {
         self
     }
 
-    /// Set a timeout for both the read and write operations of a client.
+    /// Set a timeout for connect, read and write operations of a `Client`.
     #[inline]
     pub fn timeout(&mut self, timeout: Duration) -> &mut ClientBuilder {
         self.timeout = Some(timeout);

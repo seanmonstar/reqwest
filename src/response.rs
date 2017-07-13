@@ -27,6 +27,8 @@ impl fmt::Debug for Response {
 impl Response {
     /// Get the final `Url` of this `Response`.
     ///
+    /// # Example
+    ///
     /// ```rust
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
     /// let resp = reqwest::get("http://httpbin.org/redirect/1")?;
@@ -40,6 +42,8 @@ impl Response {
     }
 
     /// Get the `StatusCode` of this `Response`.
+    ///
+    /// # Examples
     ///
     /// ```rust
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
@@ -79,6 +83,10 @@ impl Response {
     }
 
     /// Get the `Headers` of this `Response`.
+    ///
+    /// # Example
+    ///
+    /// Checking the `Content-Length` header before reading the response body.
     ///
     /// ```rust
     /// # use std::io::{Read, Write};

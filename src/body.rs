@@ -7,7 +7,13 @@ use hyper::{self, Chunk};
 
 use {async_impl, wait};
 
-/// Body type for a request.
+/// The body of a `Request`.
+///
+/// In most cases, this is not needed directly, as the
+/// [`RequestBuilder.body`][builder] method uses `Into<Body>`, which allows
+/// passing many things (like a string or vector of bytes).
+///
+/// [builder]: ./struct.RequestBuilder.html#method.body
 #[derive(Debug)]
 pub struct Body {
     reader: Kind,
@@ -52,10 +58,9 @@ impl Body {
         }
     }
 
-    /// Create a `Body` from a `Reader` where we can predict the size in
-    /// advance, but where we don't want to load the data in memory.  This
-    /// is useful if we need to ensure `Content-Length` is passed with the
-    /// request.
+    /// Create a `Body` from a `Read` where the size is known in advance
+    /// advance, but the data should not be loaded in full to memory. This will
+    /// set the `Content-Length` header, and stream from the `Read`.
     ///
     /// ```rust
     /// # use std::fs::File;
