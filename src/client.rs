@@ -40,7 +40,7 @@ pub struct Client {
 /// # Example
 ///
 /// ```
-/// # fn run() -> Result<(), Error> {
+/// # fn run() -> Result<(), reqwest::Error> {
 /// use std::time::Duration;
 ///
 /// let client = reqwest::Client::builder()?
