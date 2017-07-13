@@ -156,6 +156,10 @@ impl RequestBuilder {
 
     /// Set the request body.
     ///
+    /// # Examples
+    ///
+    /// Using a string:
+    ///
     /// ```rust
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
     /// let client = reqwest::Client::new()?;
@@ -165,6 +169,8 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// Using a `File`:
     ///
     /// ```rust
     /// # use std::fs;
@@ -177,6 +183,8 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// Using arbitrary bytes:
     ///
     /// ```rust
     /// # use std::fs;
