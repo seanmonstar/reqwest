@@ -160,12 +160,10 @@ impl Sender {
         let mut body = self.body.0;
         let mut tx = self.tx;
         loop {
-            println!("reading");
             match body.read(unsafe { buf.bytes_mut() }) {
                 Ok(0) => return Ok(()),
                 Ok(n) => {
                     unsafe { buf.advance_mut(n); }
-                    println!("sending {}", n);
                     if let Err(e) = tx.send(Ok(buf.take().freeze().into())) {
                         if let wait::Waited::Err(_) = e {
                             let epipe = io::Error::new(io::ErrorKind::BrokenPipe, "broken pipe");
