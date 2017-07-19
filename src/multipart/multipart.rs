@@ -1,6 +1,7 @@
 extern crate uuid;
 
 use std;
+use std::borrow::Cow;
 use std::io::Read;
 use hyper::mime::Mime;
 
@@ -99,7 +100,7 @@ impl MultipartRequest {
 
 /// A field in a multipart request.
 pub struct MultipartField {
-    name: String,
+    name: Cow<'static, str>,
     value: Box<Read + Send>,
     value_length: Option<u64>,
     mime: Option<Mime>,
@@ -126,7 +127,7 @@ impl MultipartField {
     /// reqwest::MultipartField::param("key", string);
     /// ```
     ///
-    pub fn param<T: Into<String>, U: AsRef<[u8]> + Send + 'static>(name: T, value: U) -> MultipartField {
+    pub fn param<T: Into<Cow<'static, str>>, U: AsRef<[u8]> + Send + 'static> (name: T, value: U) -> MultipartField {
         let value_length = Some(value.as_ref().len() as u64);
         MultipartField {
             name: name.into(),
@@ -144,7 +145,7 @@ impl MultipartField {
     /// reqwest::MultipartField::reader("key", reader);
     /// ```
     ///
-    pub fn reader<T: Into<String>, U: Read + Send + 'static>(name: T, value: U) -> MultipartField {
+    pub fn reader<T: Into<Cow<'static, str>>, U: Read + Send + 'static>(name: T, value: U) -> MultipartField {
         MultipartField {
             name: name.into(),
             value: Box::from(value),
@@ -162,7 +163,7 @@ impl MultipartField {
     ///
     /// # Errors
     /// Errors when the file cannot be opened.
-    pub fn file<T: Into<String>, U: AsRef<std::path::Path>>(name: T, path: U) -> Result<MultipartField> {
+    pub fn file<T: Into<Cow<'static, str>>, U: AsRef<std::path::Path>>(name: T, path: U) -> Result<MultipartField> {
         // This turns the path into a filename if possible.
         // TODO: If the path's OsStr cannot be converted to a String it will result in None
         // instead of Filename::Bytes because I found no waz to convert an OsStr into bytes.
@@ -320,7 +321,9 @@ impl Read for RequestReader {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use super::*;
+    use multipart::ser::to_multipart;
 
     #[test]
     fn multipart_request_empty() {
@@ -349,23 +352,23 @@ mod tests {
             );
         request.boundary = "boundary".to_string();
         let length = request.compute_length();
-        let expected = "\
-                        --boundary\r\n\
-                        Content-Disposition: form-data; name=\"reader1\"\r\n\r\n\
-                        \r\n\
-                        --boundary\r\n\
-                        Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
-                        value1\r\n\
-                        --boundary\r\n\
-                        Content-Disposition: form-data; name=\"key2\"\r\n\
-                        Content-Type: image/bmp\r\n\r\n\
-                        value2\r\n\
-                        --boundary\r\n\
-                        Content-Disposition: form-data; name=\"reader2\"\r\n\r\n\
-                        \r\n\
-                        --boundary\r\n\
-                        Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
-                        value3\r\n--boundary--";
+        let expected =
+            "--boundary\r\n\
+             Content-Disposition: form-data; name=\"reader1\"\r\n\r\n\
+             \r\n\
+             --boundary\r\n\
+             Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
+             value1\r\n\
+             --boundary\r\n\
+             Content-Disposition: form-data; name=\"key2\"\r\n\
+             Content-Type: image/bmp\r\n\r\n\
+             value2\r\n\
+             --boundary\r\n\
+             Content-Disposition: form-data; name=\"reader2\"\r\n\r\n\
+             \r\n\
+             --boundary\r\n\
+             Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
+             value3\r\n--boundary--";
         request.reader().read_to_end(&mut output).unwrap();
         // These prints are for debug purposes in case the test fails
         println!(
@@ -390,17 +393,17 @@ mod tests {
             );
         request.boundary = "boundary".to_string();
         let length = request.compute_length();
-        let expected = "\
-                        --boundary\r\n\
-                        Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
-                        value1\r\n\
-                        --boundary\r\n\
-                        Content-Disposition: form-data; name=\"key2\"\r\n\
-                        Content-Type: image/bmp\r\n\r\n\
-                        value2\r\n\
-                        --boundary\r\n\
-                        Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
-                        value3\r\n--boundary--";
+        let expected =
+            "--boundary\r\n\
+             Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
+             value1\r\n\
+             --boundary\r\n\
+             Content-Disposition: form-data; name=\"key2\"\r\n\
+             Content-Type: image/bmp\r\n\r\n\
+             value2\r\n\
+             --boundary\r\n\
+             Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
+             value3\r\n--boundary--";
         request.reader().read_to_end(&mut output).unwrap();
         // These prints are for debug purposes in case the test fails
         println!(
@@ -410,5 +413,60 @@ mod tests {
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
         assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
         assert_eq!(length.unwrap(), expected.len() as u64);
+    }
+
+    const EXPECTED_SERIALIZE: &str =
+        "--boundary\r\n\
+         Content-Disposition: form-data; name=\"name\"\r\n\r\n\
+         Sean\r\n\
+         --boundary\r\n\
+         Content-Disposition: form-data; name=\"age\"\r\n\r\n\
+         5\r\n\
+         --boundary--";
+
+    #[test]
+    fn multipart_serializer_struct() {
+        #[derive(Serialize)]
+        struct A {
+            name: &'static str,
+            age: u8
+        };
+
+        let mut request = to_multipart(A{ name: "Sean", age: 5 }).unwrap();
+        request.boundary = "boundary".to_string();
+
+        let mut output = String::new();
+        request.reader().read_to_string(&mut output).unwrap();
+
+        assert_eq!(output.as_str(), EXPECTED_SERIALIZE);
+    }
+
+    #[test]
+    fn multipart_serializer_list() {
+        let mut request = to_multipart(&[("name", "Sean"), ("age", "5")]).unwrap();
+        request.boundary = "boundary".to_string();
+
+        let mut output = String::new();
+        request.reader().read_to_string(&mut output).unwrap();
+
+        assert_eq!(output.as_str(), EXPECTED_SERIALIZE);
+    }
+
+    #[test]
+    fn multipart_serializer_map() {
+        let mut map = HashMap::new();
+        map.insert("name", "Sean");
+        map.insert("age", "5");
+
+        let mut request = to_multipart(&map).unwrap();
+        request.boundary = "boundary".to_string();
+
+        let mut output = String::new();
+        request.reader().read_to_string(&mut output).unwrap();
+
+        // Can't do equals comparison here because the HashMap is unordered and might yield the
+        // parameters in a different order than expected
+        assert!(output.as_str().contains("name=\"name\"\r\n\r\nSean\r\n"));
+        assert!(output.as_str().contains("name=\"age\"\r\n\r\n5\r\n"));
     }
 }

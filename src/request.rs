@@ -281,13 +281,15 @@ impl RequestBuilder {
     ///
     /// ```no_run
     /// use reqwest::mime;
-    /// use reqwest::{MultipartRequest, MultipartField};
+    /// use reqwest::{MultipartRequest, MultipartField, to_multipart};
     ///
     /// let client = reqwest::Client::new().unwrap();
     /// let response = client.post("your url").unwrap()
     ///     .multipart(
-    ///         MultipartRequest::new()
-    ///         .field(MultipartField::param("key", "value"))
+    ///         // Add fields from anything serializable
+    ///         to_multipart(&[("key", "value"), ("key2", "value2")]).unwrap()
+    ///         // Add fields builder style
+    ///         .field(MultipartField::param("key3", "value3"))
     ///         .field(MultipartField::param("json", "{ \"number\": 5 }")
     ///             .mime(Some(mime::APPLICATION_JSON)))
     ///         .field(MultipartField::file("file", "/path/to/file")
@@ -296,6 +298,8 @@ impl RequestBuilder {
     ///
     /// ```
     ///
+    /// See [`to_multipart`](fn.to_multipart.html), [`MultipartRequest`](struct.MultipartRequest.html)
+    /// and [`MultipartField`](struct.MultipartField.html) for more examples.
     pub fn multipart(&mut self, multipart: MultipartRequest) -> &mut RequestBuilder {
         {
             let mut req = self.request_mut();
