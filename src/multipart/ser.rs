@@ -82,7 +82,7 @@ impl ser::Error for Error {
 /// # Errors
 /// Errors if the input cannot be converted.
 pub fn to_multipart<T: Serialize>(data: T) -> Result<MultipartRequest, Error> {
-    data.serialize(Serializer {} )
+    data.serialize(Serializer {})
 }
 
 #[derive(Debug)]
@@ -144,68 +144,56 @@ impl ser::Serializer for Serializer {
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         Err(Error::top_level())
     }
-    fn serialize_some<T: ?Sized>(
-        self,
-        value: &T
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize {
+        T: Serialize,
+    {
         value.serialize(self)
     }
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         Err(Error::top_level())
     }
-    fn serialize_unit_struct(
-        self,
-        _: &'static str
-    ) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(self, _: &'static str) -> Result<Self::Ok, Self::Error> {
         Err(Error::top_level())
     }
-    fn serialize_unit_variant(
-        self,
-        _: &'static str,
-        _: u32,
-        _: &'static str
-    ) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_variant(self, _: &'static str, _: u32, _: &'static str) -> Result<Self::Ok, Self::Error> {
         Err(Error::top_level())
     }
-    fn serialize_newtype_struct<T: ?Sized>(
-        self,
-        _: &'static str,
-        value: &T
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_newtype_struct<T: ?Sized>(self, _: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize {
-            value.serialize(self)
+        T: Serialize,
+    {
+        value.serialize(self)
     }
     fn serialize_newtype_variant<T: ?Sized>(
         self,
         _: &'static str,
         _: u32,
         _: &'static str,
-        _: &T
+        _: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize {
-            Err(Error::top_level())
+        T: Serialize,
+    {
+        Err(Error::top_level())
     }
-    fn serialize_seq(
-        self,
-        _: Option<usize>
-    ) -> Result<Self::SerializeSeq, Self::Error> {
-        Ok(SeqSerializer {pair_serializer: PairSerializer {current_key: None, output: MultipartRequest::new()}})
+    fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+        Ok(SeqSerializer {
+            pair_serializer: PairSerializer {
+                current_key: None,
+                output: MultipartRequest::new(),
+            },
+        })
     }
-    fn serialize_tuple(
-        self,
-        _: usize
-    ) -> Result<Self::SerializeTuple, Self::Error> {
-        Ok(SeqSerializer {pair_serializer: PairSerializer {current_key: None, output: MultipartRequest::new()}})
+    fn serialize_tuple(self, _: usize) -> Result<Self::SerializeTuple, Self::Error> {
+        Ok(SeqSerializer {
+            pair_serializer: PairSerializer {
+                current_key: None,
+                output: MultipartRequest::new(),
+            },
+        })
     }
-    fn serialize_tuple_struct(
-        self,
-        _: &'static str,
-        _: usize
-    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+    fn serialize_tuple_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         Err(Error::top_level())
     }
     fn serialize_tuple_variant(
@@ -213,29 +201,25 @@ impl ser::Serializer for Serializer {
         _: &'static str,
         _: u32,
         _: &'static str,
-        _: usize
+        _: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
         Err(Error::top_level())
     }
-    fn serialize_map(
-        self,
-        _: Option<usize>
-    ) -> Result<Self::SerializeMap, Self::Error> {
-        Ok(MapSerializer {current_key: None, output: MultipartRequest::new()})
+    fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+        Ok(MapSerializer {
+            current_key: None,
+            output: MultipartRequest::new(),
+        })
     }
-    fn serialize_struct(
-        self,
-        _: &'static str,
-        _: usize
-    ) -> Result<Self::SerializeStruct, Self::Error> {
-        Ok(StructSerializer {output: MultipartRequest::new()})
+    fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeStruct, Self::Error> {
+        Ok(StructSerializer { output: MultipartRequest::new() })
     }
     fn serialize_struct_variant(
         self,
         _: &'static str,
         _: u32,
         _: &'static str,
-        _: usize
+        _: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         Err(Error::top_level())
     }
@@ -249,7 +233,10 @@ impl ser::SerializeSeq for SeqSerializer {
     type Ok = MultipartRequest;
     type Error = Error;
 
-    fn serialize_element<T: ?Sized>(&mut self, value: &T ) -> Result<(), Self::Error>  where T: Serialize{
+    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    where
+        T: Serialize,
+    {
         value.serialize(&mut self.pair_serializer)
     }
     fn end(self) -> Result<Self::Ok, Self::Error> {
@@ -260,7 +247,10 @@ impl ser::SerializeTuple for SeqSerializer {
     type Ok = MultipartRequest;
     type Error = Error;
 
-    fn serialize_element<T: ?Sized>(&mut self, value: &T ) -> Result<(), Self::Error>  where T: Serialize{
+    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    where
+        T: Serialize,
+    {
         value.serialize(&mut self.pair_serializer)
     }
     fn end(self) -> Result<Self::Ok, Self::Error> {
@@ -275,14 +265,16 @@ struct StructSerializer {
 impl ser::SerializeStruct for StructSerializer {
     type Ok = MultipartRequest;
     type Error = Error;
-    fn serialize_field<T: ?Sized>(
-        &mut self,
-        key: &'static str,
-        value: &T
-    ) -> Result<(), Self::Error>
+    fn serialize_field<T: ?Sized>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
-        T: Serialize {
-        self.output.fields(vec![MultipartField::param(key, value.serialize(ValueSerializer {})?.into_owned())]);
+        T: Serialize,
+    {
+        self.output.fields(vec![
+            MultipartField::param(
+                key,
+                value.serialize(ValueSerializer {})?.into_owned()
+            ),
+        ]);
         Ok(())
     }
     fn end(self) -> Result<Self::Ok, Self::Error> {
@@ -295,22 +287,26 @@ struct MapSerializer {
     current_key: Option<Cow<'static, str>>,
     output: MultipartRequest,
 }
-impl ser::SerializeMap for MapSerializer{
+impl ser::SerializeMap for MapSerializer {
     type Ok = MultipartRequest;
     type Error = Error;
     fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
     where
-        T: Serialize {
+        T: Serialize,
+    {
         self.current_key = Some(key.serialize(KeySerializer {})?);
         Ok(())
     }
-    fn serialize_value<T: ?Sized>(
-        &mut self,
-        value: &T
-    ) -> Result<(), Self::Error>
+    fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-        T: Serialize {
-        self.output.fields(vec![MultipartField::param(self.current_key.take().unwrap(), value.serialize(ValueSerializer {})?.into_owned())]);
+        T: Serialize,
+    {
+        self.output.fields(vec![
+            MultipartField::param(
+                self.current_key.take().unwrap(),
+                value.serialize(ValueSerializer {})?.into_owned()
+            ),
+        ]);
         Ok(())
     }
     fn end(self) -> Result<Self::Ok, Self::Error> {
@@ -327,10 +323,18 @@ impl<'a> ser::SerializeTuple for &'a mut PairSerializer {
     type Ok = ();
     type Error = Error;
 
-    fn serialize_element<T: ?Sized>(&mut self, value: &T ) -> Result<(), Self::Error>  where T: Serialize {
+    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    where
+        T: Serialize,
+    {
         self.current_key = match self.current_key.take() {
             Some(key) => {
-                self.output.fields(vec![MultipartField::param(key, value.serialize(ValueSerializer {})?.into_owned())]);
+                self.output.fields(vec![
+                    MultipartField::param(
+                        key,
+                        value.serialize(ValueSerializer {})?.into_owned()
+                    ),
+                ]);
                 None
             }
             None => Some(value.serialize(KeySerializer {})?),
@@ -345,7 +349,7 @@ impl<'a> ser::SerializeTuple for &'a mut PairSerializer {
     }
 }
 impl<'a> ser::Serializer for &'a mut PairSerializer {
-	type Ok = ();
+    type Ok = ();
     type Error = Error;
     type SerializeSeq = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTuple = Self;
@@ -355,7 +359,7 @@ impl<'a> ser::Serializer for &'a mut PairSerializer {
     type SerializeStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
-	fn serialize_bool(self, _: bool) -> Result<Self::Ok, Self::Error> {
+    fn serialize_bool(self, _: bool) -> Result<Self::Ok, Self::Error> {
         Err(Error::not_tuple())
     }
     fn serialize_i8(self, _: i8) -> Result<Self::Ok, Self::Error> {
@@ -400,38 +404,25 @@ impl<'a> ser::Serializer for &'a mut PairSerializer {
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         Err(Error::not_tuple())
     }
-    fn serialize_some<T: ?Sized>(
-        self,
-        _: &T
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_some<T: ?Sized>(self, _: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize {
+        T: Serialize,
+    {
         Err(Error::not_tuple())
     }
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         Err(Error::not_tuple())
     }
-    fn serialize_unit_struct(
-        self,
-        _: &'static str
-    ) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(self, _: &'static str) -> Result<Self::Ok, Self::Error> {
         Err(Error::not_tuple())
     }
-    fn serialize_unit_variant(
-        self,
-        _: &'static str,
-        _: u32,
-        _: &'static str
-    ) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_variant(self, _: &'static str, _: u32, _: &'static str) -> Result<Self::Ok, Self::Error> {
         Err(Error::not_tuple())
     }
-    fn serialize_newtype_struct<T: ?Sized>(
-        self,
-        _: &'static str,
-        _: &T
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_newtype_struct<T: ?Sized>(self, _: &'static str, _: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize {
+        T: Serialize,
+    {
         Err(Error::not_tuple())
     }
     fn serialize_newtype_variant<T: ?Sized>(
@@ -439,33 +430,24 @@ impl<'a> ser::Serializer for &'a mut PairSerializer {
         _: &'static str,
         _: u32,
         _: &'static str,
-        _: &T
+        _: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize {
+        T: Serialize,
+    {
         Err(Error::not_tuple())
     }
-    fn serialize_seq(
-        self,
-        _: Option<usize>
-    ) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         Err(Error::not_tuple())
     }
-    fn serialize_tuple(
-        self,
-        len: usize
-    ) -> Result<Self::SerializeTuple, Self::Error> {
+    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         if len == 2 {
             Ok(self)
         } else {
             Err(Error::tuple_is_not_pair())
         }
     }
-    fn serialize_tuple_struct(
-        self,
-        _: &'static str,
-        _: usize
-    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+    fn serialize_tuple_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         Err(Error::not_tuple())
     }
     fn serialize_tuple_variant(
@@ -473,21 +455,14 @@ impl<'a> ser::Serializer for &'a mut PairSerializer {
         _: &'static str,
         _: u32,
         _: &'static str,
-        _: usize
+        _: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
         Err(Error::not_tuple())
     }
-    fn serialize_map(
-        self,
-        _: Option<usize>
-    ) -> Result<Self::SerializeMap, Self::Error> {
+    fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         Err(Error::not_tuple())
     }
-    fn serialize_struct(
-        self,
-        _: &'static str,
-        _: usize
-    ) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeStruct, Self::Error> {
         Err(Error::not_tuple())
     }
     fn serialize_struct_variant(
@@ -495,7 +470,7 @@ impl<'a> ser::Serializer for &'a mut PairSerializer {
         _: &'static str,
         _: u32,
         _: &'static str,
-        _: usize
+        _: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         Err(Error::not_tuple())
     }
@@ -505,7 +480,7 @@ impl<'a> ser::Serializer for &'a mut PairSerializer {
 #[derive(Debug)]
 struct KeySerializer {}
 impl ser::Serializer for KeySerializer {
-	type Ok = Cow<'static, str>;
+    type Ok = Cow<'static, str>;
     type Error = Error;
     type SerializeSeq = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTuple = ser::Impossible<Self::Ok, Self::Error>;
@@ -515,7 +490,7 @@ impl ser::Serializer for KeySerializer {
     type SerializeStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
-	fn serialize_bool(self, _: bool) -> Result<Self::Ok, Self::Error> {
+    fn serialize_bool(self, _: bool) -> Result<Self::Ok, Self::Error> {
         Err(Error::not_key())
     }
     fn serialize_i8(self, _: i8) -> Result<Self::Ok, Self::Error> {
@@ -561,38 +536,25 @@ impl ser::Serializer for KeySerializer {
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         Err(Error::not_key())
     }
-    fn serialize_some<T: ?Sized>(
-        self,
-        _: &T
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_some<T: ?Sized>(self, _: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize {
+        T: Serialize,
+    {
         Err(Error::not_key())
     }
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         Err(Error::not_key())
     }
-    fn serialize_unit_struct(
-        self,
-        _: &'static str
-    ) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(self, _: &'static str) -> Result<Self::Ok, Self::Error> {
         Err(Error::not_key())
     }
-    fn serialize_unit_variant(
-        self,
-        _: &'static str,
-        _: u32,
-        _: &'static str
-    ) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_variant(self, _: &'static str, _: u32, _: &'static str) -> Result<Self::Ok, Self::Error> {
         Err(Error::not_key())
     }
-    fn serialize_newtype_struct<T: ?Sized>(
-        self,
-        _: &'static str,
-        _: &T
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_newtype_struct<T: ?Sized>(self, _: &'static str, _: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize {
+        T: Serialize,
+    {
         Err(Error::not_key())
     }
     fn serialize_newtype_variant<T: ?Sized>(
@@ -600,29 +562,20 @@ impl ser::Serializer for KeySerializer {
         _: &'static str,
         _: u32,
         _: &'static str,
-        _: &T
+        _: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize {
+        T: Serialize,
+    {
         Err(Error::not_key())
     }
-    fn serialize_seq(
-        self,
-        _: Option<usize>
-    ) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         Err(Error::not_key())
     }
-    fn serialize_tuple(
-        self,
-        _: usize
-    ) -> Result<Self::SerializeTuple, Self::Error> {
+    fn serialize_tuple(self, _: usize) -> Result<Self::SerializeTuple, Self::Error> {
         Err(Error::not_key())
     }
-    fn serialize_tuple_struct(
-        self,
-        _: &'static str,
-        _: usize
-    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+    fn serialize_tuple_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         Err(Error::not_key())
     }
     fn serialize_tuple_variant(
@@ -630,21 +583,14 @@ impl ser::Serializer for KeySerializer {
         _: &'static str,
         _: u32,
         _: &'static str,
-        _: usize
+        _: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
         Err(Error::not_key())
     }
-    fn serialize_map(
-        self,
-        _: Option<usize>
-    ) -> Result<Self::SerializeMap, Self::Error> {
+    fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         Err(Error::not_key())
     }
-    fn serialize_struct(
-        self,
-        _: &'static str,
-        _: usize
-    ) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeStruct, Self::Error> {
         Err(Error::not_key())
     }
     fn serialize_struct_variant(
@@ -652,7 +598,7 @@ impl ser::Serializer for KeySerializer {
         _: &'static str,
         _: u32,
         _: &'static str,
-        _: usize
+        _: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         Err(Error::not_key())
     }
@@ -662,7 +608,7 @@ impl ser::Serializer for KeySerializer {
 struct ValueSerializer {}
 
 impl ser::Serializer for ValueSerializer {
-	type Ok = Cow<'static, [u8]>;
+    type Ok = Cow<'static, [u8]>;
     type Error = Error;
     type SerializeSeq = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTuple = ser::Impossible<Self::Ok, Self::Error>;
@@ -672,7 +618,7 @@ impl ser::Serializer for ValueSerializer {
     type SerializeStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
-	fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
+    fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         Ok(Cow::from(v.to_string().into_bytes()))
     }
     fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
@@ -718,38 +664,25 @@ impl ser::Serializer for ValueSerializer {
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         Ok(Cow::from(Vec::new()))
     }
-    fn serialize_some<T: ?Sized>(
-        self,
-        value: &T
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize {
+        T: Serialize,
+    {
         value.serialize(ValueSerializer {})
     }
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         Ok(Cow::from(Vec::new()))
     }
-    fn serialize_unit_struct(
-        self,
-        _: &'static str
-    ) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(self, _: &'static str) -> Result<Self::Ok, Self::Error> {
         Err(Error::not_value())
     }
-    fn serialize_unit_variant(
-        self,
-        _: &'static str,
-        _: u32,
-        _: &'static str
-    ) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_variant(self, _: &'static str, _: u32, _: &'static str) -> Result<Self::Ok, Self::Error> {
         Err(Error::not_value())
     }
-    fn serialize_newtype_struct<T: ?Sized>(
-        self,
-        _: &'static str,
-        value: &T
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_newtype_struct<T: ?Sized>(self, _: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize {
+        T: Serialize,
+    {
         value.serialize(ValueSerializer {})
     }
     fn serialize_newtype_variant<T: ?Sized>(
@@ -757,29 +690,20 @@ impl ser::Serializer for ValueSerializer {
         _: &'static str,
         _: u32,
         _: &'static str,
-        _: &T
+        _: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize {
+        T: Serialize,
+    {
         Err(Error::not_value())
     }
-    fn serialize_seq(
-        self,
-        _: Option<usize>
-    ) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         Err(Error::not_value())
     }
-    fn serialize_tuple(
-        self,
-        _: usize
-    ) -> Result<Self::SerializeTuple, Self::Error> {
+    fn serialize_tuple(self, _: usize) -> Result<Self::SerializeTuple, Self::Error> {
         Err(Error::not_value())
     }
-    fn serialize_tuple_struct(
-        self,
-        _: &'static str,
-        _: usize
-    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+    fn serialize_tuple_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         Err(Error::not_value())
     }
     fn serialize_tuple_variant(
@@ -787,21 +711,14 @@ impl ser::Serializer for ValueSerializer {
         _: &'static str,
         _: u32,
         _: &'static str,
-        _: usize
+        _: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
         Err(Error::not_value())
     }
-    fn serialize_map(
-        self,
-        _: Option<usize>
-    ) -> Result<Self::SerializeMap, Self::Error> {
+    fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         Err(Error::not_value())
     }
-    fn serialize_struct(
-        self,
-        _: &'static str,
-        _: usize
-    ) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeStruct, Self::Error> {
         Err(Error::not_value())
     }
     fn serialize_struct_variant(
@@ -809,7 +726,7 @@ impl ser::Serializer for ValueSerializer {
         _: &'static str,
         _: u32,
         _: &'static str,
-        _: usize
+        _: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         Err(Error::not_value())
     }
@@ -836,12 +753,12 @@ impl Error {
         Error::Custom(msg.into())
     }
 
-	fn not_tuple() -> Self {
+    fn not_tuple() -> Self {
         let msg = "tried to serialize sequence containing non tuples";
         Error::Custom(msg.into())
     }
 
-	fn tuple_is_not_pair() -> Self {
+    fn tuple_is_not_pair() -> Self {
         let msg = "tuple has to contain exactly 2 elements";
         Error::Custom(msg.into())
     }

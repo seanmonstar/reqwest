@@ -85,7 +85,7 @@ impl MultipartRequest {
                     // in RequestReader. Not the cleanest solution because if that format string is
                     // ever changed then this formula needs to be changed too which is not an
                     // obvious dependency in the code.
-                    length += 2 + self.boundary.len() as u64 + 2 +  header_length as u64 + 4 + value_length + 2
+                    length += 2 + self.boundary.len() as u64 + 2 + header_length as u64 + 4 + value_length + 2
                 }
                 _ => return None,
             }
@@ -127,7 +127,7 @@ impl MultipartField {
     /// reqwest::MultipartField::param("key", string);
     /// ```
     ///
-    pub fn param<T: Into<Cow<'static, str>>, U: AsRef<[u8]> + Send + 'static> (name: T, value: U) -> MultipartField {
+    pub fn param<T: Into<Cow<'static, str>>, U: AsRef<[u8]> + Send + 'static>(name: T, value: U) -> MultipartField {
         let value_length = Some(value.as_ref().len() as u64);
         MultipartField {
             name: name.into(),
@@ -171,8 +171,9 @@ impl MultipartField {
             .file_name()
             .and_then(|filename| filename.to_str())
             .and_then(|filename| Some(Filename::Utf8(filename.to_string())));
-        let file_length = std::fs::metadata(path.as_ref()).ok()
-            .and_then(|metadata| Some(metadata.len() as u64));
+        let file_length = std::fs::metadata(path.as_ref()).ok().and_then(|metadata| {
+            Some(metadata.len() as u64)
+        });
         Ok(MultipartField {
             name: name.into(),
             value: Box::new(std::fs::File::open(path.as_ref())?),
@@ -286,9 +287,9 @@ impl RequestReader {
             if self.request.fields.len() != 0 {
                 Some(Box::new(reader))
             } else {
-                Some(Box::new(
-                    reader.chain(std::io::Cursor::new(format!("--{}--", self.request.boundary))),
-                ))
+                Some(Box::new(reader.chain(std::io::Cursor::new(
+                    format!("--{}--", self.request.boundary),
+                ))))
             }
         } else {
             None
@@ -330,9 +331,7 @@ mod tests {
         let mut output = Vec::new();
         let request = MultipartRequest::new();
         let length = request.compute_length();
-        request.reader()
-            .read_to_end(&mut output)
-            .unwrap();
+        request.reader().read_to_end(&mut output).unwrap();
         assert_eq!(output, b"");
         assert_eq!(length.unwrap(), 0);
     }
@@ -343,17 +342,16 @@ mod tests {
         let mut request = MultipartRequest::new()
             .field(MultipartField::reader("reader1", std::io::empty()))
             .field(MultipartField::param("key1", "value1"))
-            .field(
-                MultipartField::param("key2", "value2").mime(Some(::mime::IMAGE_BMP)),
-            )
+            .field(MultipartField::param("key2", "value2").mime(Some(
+                ::mime::IMAGE_BMP,
+            )))
             .field(MultipartField::reader("reader2", std::io::empty()))
-            .field(
-                MultipartField::param("key3", "value3").filename(Some("filename")),
-            );
+            .field(MultipartField::param("key3", "value3").filename(
+                Some("filename"),
+            ));
         request.boundary = "boundary".to_string();
         let length = request.compute_length();
-        let expected =
-            "--boundary\r\n\
+        let expected = "--boundary\r\n\
              Content-Disposition: form-data; name=\"reader1\"\r\n\r\n\
              \r\n\
              --boundary\r\n\
@@ -385,16 +383,15 @@ mod tests {
         let mut output = Vec::new();
         let mut request = MultipartRequest::new()
             .field(MultipartField::param("key1", "value1"))
-            .field(
-                MultipartField::param("key2", "value2").mime(Some(::mime::IMAGE_BMP)),
-            )
-            .field(
-                MultipartField::param("key3", "value3").filename(Some("filename")),
-            );
+            .field(MultipartField::param("key2", "value2").mime(Some(
+                ::mime::IMAGE_BMP,
+            )))
+            .field(MultipartField::param("key3", "value3").filename(
+                Some("filename"),
+            ));
         request.boundary = "boundary".to_string();
         let length = request.compute_length();
-        let expected =
-            "--boundary\r\n\
+        let expected = "--boundary\r\n\
              Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
              value1\r\n\
              --boundary\r\n\
@@ -415,8 +412,7 @@ mod tests {
         assert_eq!(length.unwrap(), expected.len() as u64);
     }
 
-    const EXPECTED_SERIALIZE: &str =
-        "--boundary\r\n\
+    const EXPECTED_SERIALIZE: &str = "--boundary\r\n\
          Content-Disposition: form-data; name=\"name\"\r\n\r\n\
          Sean\r\n\
          --boundary\r\n\
@@ -429,10 +425,13 @@ mod tests {
         #[derive(Serialize)]
         struct A {
             name: &'static str,
-            age: u8
+            age: u8,
         };
 
-        let mut request = to_multipart(A{ name: "Sean", age: 5 }).unwrap();
+        let mut request = to_multipart(A {
+            name: "Sean",
+            age: 5,
+        }).unwrap();
         request.boundary = "boundary".to_string();
 
         let mut output = String::new();
