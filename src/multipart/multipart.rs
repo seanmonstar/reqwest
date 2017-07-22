@@ -3,39 +3,8 @@ extern crate uuid;
 use std;
 use std::borrow::Cow;
 use std::io::Read;
+use std::ascii::AsciiExt;
 use hyper::mime::Mime;
-
-// TODO: error management
-// I dont know if I need to tie in with error.rs since currently the errors are limited to this
-// module and will not appear anywhere else (RequestBuilder::multipart does not error).
-#[derive(Debug)]
-pub enum Error {
-    Io(std::io::Error),
-}
-
-impl std::convert::From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Error {
-        Error::Io(err)
-    }
-}
-
-type Result<T> = std::result::Result<T, Error>;
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "")
-    }
-}
-
-impl std::error::Error for Error {
-    fn description(&self) -> &str {
-        ""
-    }
-
-    fn cause(&self) -> Option<&std::error::Error> {
-        None
-    }
-}
 
 /// A multipart/form-data request.
 #[derive(Debug)]
@@ -77,9 +46,12 @@ impl MultipartRequest {
         for field in self.fields.iter() {
             match field.value_length {
                 Some(value_length) => {
-                    // We are constructing the header just to get its length.
-                    // This is wasteful but it seemed liked the only way to get the correct length
-                    // for sure.
+                    // We are constructing the header just to get its length. This is wasteful
+                    // but it seemed liked the only way to get the correct length for sure.
+                    // TODO: Should we instead cache the computed header for when it is used again
+                    // when sending the request? This would use more memory as all headers would be
+                    // held in memory as opposed to only the current one but it would only compute
+                    // each header once.
                     let header_length = field.header().len();
                     // The additions mimick the format string out of which the field is constructed
                     // in RequestReader. Not the cleanest solution because if that format string is
@@ -104,7 +76,7 @@ pub struct MultipartField {
     value: Box<Read + Send>,
     value_length: Option<u64>,
     mime: Option<Mime>,
-    filename: Option<Filename>,
+    file_name: Option<Cow<'static, str>>,
 }
 
 // TODO: MultipartField cannot derive debug because value is not Debug
@@ -123,8 +95,9 @@ impl MultipartField {
     /// ```
     ///
     /// ```
-    /// let string: String = String::new();
-    /// reqwest::MultipartField::param("key", string);
+    /// let key: String = "key".to_string();
+    /// let value: String = "value".to_string();
+    /// reqwest::MultipartField::param(key, value);
     /// ```
     ///
     pub fn param<T: Into<Cow<'static, str>>, U: AsRef<[u8]> + Send + 'static>(name: T, value: U) -> MultipartField {
@@ -134,7 +107,7 @@ impl MultipartField {
             value: Box::new(std::io::Cursor::new(value)),
             value_length: value_length,
             mime: None,
-            filename: None,
+            file_name: None,
         }
     }
     /// Adds a generic reader.
@@ -151,7 +124,7 @@ impl MultipartField {
             value: Box::from(value),
             value_length: None,
             mime: None,
-            filename: None,
+            file_name: None,
         }
     }
     /// Makes a file parameter.
@@ -163,23 +136,25 @@ impl MultipartField {
     ///
     /// # Errors
     /// Errors when the file cannot be opened.
-    pub fn file<T: Into<Cow<'static, str>>, U: AsRef<std::path::Path>>(name: T, path: U) -> Result<MultipartField> {
+    pub fn file<T: Into<Cow<'static, str>>, U: AsRef<std::path::Path>>(
+        name: T,
+        path: U,
+    ) -> std::io::Result<MultipartField> {
         // This turns the path into a filename if possible.
         // TODO: If the path's OsStr cannot be converted to a String it will result in None
         // instead of Filename::Bytes because I found no waz to convert an OsStr into bytes.
-        let filename = path.as_ref()
-            .file_name()
-            .and_then(|filename| filename.to_str())
-            .and_then(|filename| Some(Filename::Utf8(filename.to_string())));
-        let file_length = std::fs::metadata(path.as_ref()).ok().and_then(|metadata| {
-            Some(metadata.len() as u64)
+        let file_name = path.as_ref().file_name().and_then(|filename| {
+            Some(Cow::from(filename.to_string_lossy().into_owned()))
         });
+        let file_length = std::fs::metadata(path.as_ref())
+            .ok()
+            .and_then(|metadata| Some(metadata.len() as u64));
         Ok(MultipartField {
             name: name.into(),
             value: Box::new(std::fs::File::open(path.as_ref())?),
             value_length: file_length,
             mime: Some(::hyper::mime::APPLICATION_OCTET_STREAM),
-            filename: filename,
+            file_name: file_name,
         })
     }
     /// Sets the mime, builder style.
@@ -196,23 +171,61 @@ impl MultipartField {
     /// Sets the filename, builder style.
     ///
     /// ```
-    /// reqwest::MultipartField::param("key", "value").filename(Some("filename"));
+    /// reqwest::MultipartField::param("key", "value").file_name(Some("filename"));
     /// ```
     ///
-    pub fn filename<T: Into<String>>(mut self, filename: Option<T>) -> MultipartField {
-        self.filename = filename.and_then(|filename| Some(Filename::Utf8(filename.into())));
+    /// ```
+    /// let file_name = "file_name".to_string();
+    /// reqwest::MultipartField::param("key", "value").file_name(Some(file_name));
+    /// ```
+    ///
+    pub fn file_name<T: Into<Cow<'static, str>>>(mut self, filename: Option<T>) -> MultipartField {
+        self.file_name = filename.and_then(|filename| Some(filename.into()));
         self
     }
     fn header(&self) -> String {
-        // TODO: The RFC says name can be any utf8 but wouldnt it be a problem if name or filename
-        // contained a " (quoation mark)here?
-        // TODO: I would use hyper's ContentDisposition header here, but it doesnt seem to have
-        // the form-data type
+        fn percent_encode(input: &str) -> String {
+            let mut result = String::with_capacity(input.len());
+            for character in input.chars() {
+                match character {
+                    // check for illegal ascii
+                    '%' => result.push_str("%25"),
+                    '"' => result.push_str("%22"),
+                    '\'' => result.push_str("%27"),
+                    '\r' => result.push_str("%0D"),
+                    '\n' => result.push_str("%0A"),
+                    // check for legal ascii
+                    other if other.is_ascii() => result.push(other),
+                    // must be non-ascii utf8
+                    other => {
+                        let mut buffer = [0; 4];
+                        for byte in other.encode_utf8(&mut buffer).bytes() {
+                            result.push_str(&format!("%{:X}", byte));
+                        }
+                    }
+                }
+            }
+            result
+        }
+
+        fn format_parameter(name: &str, value: &str) -> String {
+            let legal_value = percent_encode(value);
+            if value.len() == legal_value.len() {
+                // nothing has been percent encoded
+                format!("{}=\"{}\"", name, value)
+            } else {
+                // something has been percent encoded
+                format!("{}*=utf-8''{}", name, legal_value)
+            }
+        }
+
         format!(
-            "Content-Disposition: form-data; name=\"{}\"{}{}",
-            self.name,
-            match self.filename {
-                Some(ref filename) => format!("; filename=\"{}\"", filename.encode()),
+            // TODO: I would use hyper's ContentDisposition header here, but it doesnt seem to have
+            // the form-data type
+            "Content-Disposition: form-data; {}{}{}",
+            format_parameter("name", self.name.as_ref()),
+            match self.file_name {
+                Some(ref file_name) => format!("; {}", format_parameter("filename", file_name)),
                 None => "".to_string(),
             },
             match self.mime {
@@ -230,32 +243,12 @@ impl MultipartField {
     }
 }
 
-#[derive(Debug)]
-pub enum Filename {
-    // TODO: Is any utf8 even allowed here?
-    // The RFC makes it sound like only ascii excluding control sequences is allowed
-    Utf8(String),
-    // TODO: Currently unused because we never construct it
-    #[allow(dead_code)]
-    Bytes(Vec<u8>),
-}
-
-impl Filename {
-    fn encode(&self) -> String {
-        match self {
-            &Filename::Utf8(ref name) => name.clone(),
-            // TODO: implement percent encoding
-            &Filename::Bytes(_) => unimplemented!(),
-        }
-    }
-}
-
 pub struct RequestReader {
     request: MultipartRequest,
     active_reader: Option<Box<Read + Send>>,
 }
 
-// TODO: MultipartField cannot derive debug because active_reader is not Debug
+// TODO: RequestReader cannot derive debug because active_reader is not Debug
 // Not sure how to best resolve this...
 impl std::fmt::Debug for RequestReader {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -342,31 +335,31 @@ mod tests {
         let mut request = MultipartRequest::new()
             .field(MultipartField::reader("reader1", std::io::empty()))
             .field(MultipartField::param("key1", "value1"))
-            .field(MultipartField::param("key2", "value2").mime(Some(
-                ::mime::IMAGE_BMP,
-            )))
+            .field(
+                MultipartField::param("key2", "value2").mime(Some(::mime::IMAGE_BMP)),
+            )
             .field(MultipartField::reader("reader2", std::io::empty()))
-            .field(MultipartField::param("key3", "value3").filename(
-                Some("filename"),
-            ));
+            .field(
+                MultipartField::param("key3", "value3").file_name(Some("filename")),
+            );
         request.boundary = "boundary".to_string();
         let length = request.compute_length();
         let expected = "--boundary\r\n\
-             Content-Disposition: form-data; name=\"reader1\"\r\n\r\n\
-             \r\n\
-             --boundary\r\n\
-             Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
-             value1\r\n\
-             --boundary\r\n\
-             Content-Disposition: form-data; name=\"key2\"\r\n\
-             Content-Type: image/bmp\r\n\r\n\
-             value2\r\n\
-             --boundary\r\n\
-             Content-Disposition: form-data; name=\"reader2\"\r\n\r\n\
-             \r\n\
-             --boundary\r\n\
-             Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
-             value3\r\n--boundary--";
+                        Content-Disposition: form-data; name=\"reader1\"\r\n\r\n\
+                        \r\n\
+                        --boundary\r\n\
+                        Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
+                        value1\r\n\
+                        --boundary\r\n\
+                        Content-Disposition: form-data; name=\"key2\"\r\n\
+                        Content-Type: image/bmp\r\n\r\n\
+                        value2\r\n\
+                        --boundary\r\n\
+                        Content-Disposition: form-data; name=\"reader2\"\r\n\r\n\
+                        \r\n\
+                        --boundary\r\n\
+                        Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
+                        value3\r\n--boundary--";
         request.reader().read_to_end(&mut output).unwrap();
         // These prints are for debug purposes in case the test fails
         println!(
@@ -383,24 +376,24 @@ mod tests {
         let mut output = Vec::new();
         let mut request = MultipartRequest::new()
             .field(MultipartField::param("key1", "value1"))
-            .field(MultipartField::param("key2", "value2").mime(Some(
-                ::mime::IMAGE_BMP,
-            )))
-            .field(MultipartField::param("key3", "value3").filename(
-                Some("filename"),
-            ));
+            .field(
+                MultipartField::param("key2", "value2").mime(Some(::mime::IMAGE_BMP)),
+            )
+            .field(
+                MultipartField::param("key3", "value3").file_name(Some("filename")),
+            );
         request.boundary = "boundary".to_string();
         let length = request.compute_length();
         let expected = "--boundary\r\n\
-             Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
-             value1\r\n\
-             --boundary\r\n\
-             Content-Disposition: form-data; name=\"key2\"\r\n\
-             Content-Type: image/bmp\r\n\r\n\
-             value2\r\n\
-             --boundary\r\n\
-             Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
-             value3\r\n--boundary--";
+                        Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
+                        value1\r\n\
+                        --boundary\r\n\
+                        Content-Disposition: form-data; name=\"key2\"\r\n\
+                        Content-Type: image/bmp\r\n\r\n\
+                        value2\r\n\
+                        --boundary\r\n\
+                        Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
+                        value3\r\n--boundary--";
         request.reader().read_to_end(&mut output).unwrap();
         // These prints are for debug purposes in case the test fails
         println!(
@@ -413,12 +406,20 @@ mod tests {
     }
 
     const EXPECTED_SERIALIZE: &str = "--boundary\r\n\
-         Content-Disposition: form-data; name=\"name\"\r\n\r\n\
-         Sean\r\n\
-         --boundary\r\n\
-         Content-Disposition: form-data; name=\"age\"\r\n\r\n\
-         5\r\n\
-         --boundary--";
+                                      Content-Disposition: form-data; name=\"name\"\r\n\r\n\
+                                      Sean\r\n\
+                                      --boundary\r\n\
+                                      Content-Disposition: form-data; name=\"age\"\r\n\r\n\
+                                      5\r\n\
+                                      --boundary--";
+
+    #[test]
+    fn multipart_header_percent_encoding() {
+        let field = MultipartField::param("start%'\"\r\nßend", "");
+        let expected = "Content-Disposition: form-data; name*=utf-8''start%25%27%22%0D%0A%C3%9Fend";
+
+        assert_eq!(field.header(), expected);
+    }
 
     #[test]
     fn multipart_serializer_struct() {

@@ -212,7 +212,9 @@ impl ser::Serializer for Serializer {
         })
     }
     fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeStruct, Self::Error> {
-        Ok(StructSerializer { output: MultipartRequest::new() })
+        Ok(StructSerializer {
+            output: MultipartRequest::new(),
+        })
     }
     fn serialize_struct_variant(
         self,
@@ -270,10 +272,7 @@ impl ser::SerializeStruct for StructSerializer {
         T: Serialize,
     {
         self.output.fields(vec![
-            MultipartField::param(
-                key,
-                value.serialize(ValueSerializer {})?.into_owned()
-            ),
+            MultipartField::param(key, value.serialize(ValueSerializer {})?.into_owned()),
         ]);
         Ok(())
     }
@@ -304,7 +303,7 @@ impl ser::SerializeMap for MapSerializer {
         self.output.fields(vec![
             MultipartField::param(
                 self.current_key.take().unwrap(),
-                value.serialize(ValueSerializer {})?.into_owned()
+                value.serialize(ValueSerializer {})?.into_owned(),
             ),
         ]);
         Ok(())
@@ -330,10 +329,7 @@ impl<'a> ser::SerializeTuple for &'a mut PairSerializer {
         self.current_key = match self.current_key.take() {
             Some(key) => {
                 self.output.fields(vec![
-                    MultipartField::param(
-                        key,
-                        value.serialize(ValueSerializer {})?.into_owned()
-                    ),
+                    MultipartField::param(key, value.serialize(ValueSerializer {})?.into_owned()),
                 ]);
                 None
             }
