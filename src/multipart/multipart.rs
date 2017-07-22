@@ -140,9 +140,6 @@ impl MultipartField {
         name: T,
         path: U,
     ) -> std::io::Result<MultipartField> {
-        // This turns the path into a filename if possible.
-        // TODO: If the path's OsStr cannot be converted to a String it will result in None
-        // instead of Filename::Bytes because I found no waz to convert an OsStr into bytes.
         let file_name = path.as_ref().file_name().and_then(|filename| {
             Some(Cow::from(filename.to_string_lossy().into_owned()))
         });
