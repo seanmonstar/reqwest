@@ -328,10 +328,10 @@ impl Client {
         let uri = to_uri(&url);
         let mut req = ::hyper::Request::new(method.clone(), uri.clone());
         *req.headers_mut() = headers.clone();
-        let body = body.and_then(|body| {
-            let (resuable, body) = body::into_hyper(body);
+        let body = body.map(|body| {
+            let (reusable, body) = body::into_hyper(body);
             req.set_body(body);
-            resuable
+            reusable
         });
 
         if proxy::is_proxied(&self.inner.proxies, &uri) {
@@ -386,7 +386,7 @@ pub struct Pending {
     method: Method,
     url: Url,
     headers: Headers,
-    body: Option<Bytes>,
+    body: Option<Option<Bytes>>,
 
     urls: Vec<Url>,
 
@@ -419,8 +419,9 @@ impl Future for Pending {
                     true
                 },
                 StatusCode::TemporaryRedirect |
-                StatusCode::PermanentRedirect => {
-                    self.body.is_some()
+                StatusCode::PermanentRedirect => match self.body {
+                    Some(Some(_)) | None => true,
+                    Some(None) => false,
                 },
                 _ => false,
             };
@@ -449,7 +450,7 @@ impl Future for Pending {
                                 uri.clone()
                             );
                             *req.headers_mut() = self.headers.clone();
-                            if let Some(ref body) = self.body {
+                            if let Some(Some(ref body)) = self.body {
                                 req.set_body(body.clone());
                             }
                             if proxy::is_proxied(&self.client.proxies, &uri) {
