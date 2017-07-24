@@ -419,9 +419,7 @@ impl Future for Pending {
                     true
                 },
                 StatusCode::TemporaryRedirect |
-                StatusCode::PermanentRedirect => {
-                    self.body.is_some()
-                },
+                StatusCode::PermanentRedirect => true,
                 _ => false,
             };
             if should_redirect {
