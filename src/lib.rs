@@ -1,7 +1,7 @@
 #![deny(warnings)]
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.7.1")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.7.2")]
 
 //! # reqwest
 //!
