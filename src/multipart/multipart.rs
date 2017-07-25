@@ -167,12 +167,11 @@ impl MultipartField {
         let file_name = path.as_ref().file_name().and_then(|filename| {
             Some(Cow::from(filename.to_string_lossy().into_owned()))
         });
-        let file_length = std::fs::metadata(path.as_ref())
-            .ok()
-            .and_then(|metadata| Some(metadata.len() as u64));
+        let file = std::fs::File::open(path)?;
+        let file_length = file.metadata().ok().map(|meta| meta.len());
         Ok(MultipartField {
             name: name.into(),
-            value: Box::new(std::fs::File::open(path.as_ref())?),
+            value: Box::new(file),
             value_length: file_length,
             mime: Some(::hyper::mime::APPLICATION_OCTET_STREAM),
             file_name: file_name,
