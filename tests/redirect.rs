@@ -59,6 +59,59 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
 }
 
 #[test]
+fn test_redirect_307_and_308_tries_to_get_again() {
+    let client = reqwest::Client::new().unwrap();
+    let codes = [307, 308];
+    for code in codes.iter() {
+        let redirect = server! {
+            request: format!("\
+                GET /{} HTTP/1.1\r\n\
+                Host: $HOST\r\n\
+                User-Agent: $USERAGENT\r\n\
+                Accept: */*\r\n\
+                Accept-Encoding: gzip\r\n\
+                \r\n\
+                ", code),
+            response: format!("\
+                HTTP/1.1 {} reason\r\n\
+                Server: test-redirect\r\n\
+                Content-Length: 0\r\n\
+                Location: /dst\r\n\
+                Connection: close\r\n\
+                \r\n\
+                ", code),
+
+            request: format!("\
+                GET /dst HTTP/1.1\r\n\
+                Host: $HOST\r\n\
+                User-Agent: $USERAGENT\r\n\
+                Accept: */*\r\n\
+                Accept-Encoding: gzip\r\n\
+                Referer: http://$HOST/{}\r\n\
+                \r\n\
+                ", code),
+            response: b"\
+                HTTP/1.1 200 OK\r\n\
+                Server: test-dst\r\n\
+                Content-Length: 0\r\n\
+                \r\n\
+                "
+        };
+
+        let url = format!("http://{}/{}", redirect.addr(), code);
+        let dst = format!("http://{}/{}", redirect.addr(), "dst");
+        let res = client.get(&url)
+            .unwrap()
+            .send()
+            .unwrap();
+        assert_eq!(res.url().as_str(), dst);
+        assert_eq!(res.status(), reqwest::StatusCode::Ok);
+        assert_eq!(res.headers().get(),
+                   Some(&reqwest::header::Server::new("test-dst".to_string())));
+    }
+}
+
+#[test]
 fn test_redirect_307_and_308_tries_to_post_again() {
     let client = reqwest::Client::new().unwrap();
     let codes = [307, 308];
@@ -116,7 +169,6 @@ fn test_redirect_307_and_308_tries_to_post_again() {
     }
 }
 
-/*
 #[test]
 fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
     let client = reqwest::Client::new().unwrap();
@@ -127,7 +179,7 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
                 POST /{} HTTP/1.1\r\n\
                 Host: $HOST\r\n\
                 User-Agent: $USERAGENT\r\n\
-                Accept: * / *\r\n\
+                Accept: */*\r\n\
                 Accept-Encoding: gzip\r\n\
                 Transfer-Encoding: chunked\r\n\
                 \r\n\
@@ -156,7 +208,8 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
         assert_eq!(res.status(), reqwest::StatusCode::try_from(code).unwrap());
     }
 }
-*/
+
+
 
 #[test]
 fn test_redirect_removes_sensitive_headers() {

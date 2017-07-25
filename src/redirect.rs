@@ -1,6 +1,6 @@
 use std::fmt;
 
-use hyper::header::{Headers, Authorization, Cookie};
+use hyper::header::{Headers};
 
 use Url;
 
@@ -198,8 +198,8 @@ pub fn remove_sensitive_headers(headers: &mut Headers, next: &Url, previous: &[U
         let cross_host = next.host_str() != previous.host_str() ||
                          next.port_or_known_default() != previous.port_or_known_default();
         if cross_host {
-            headers.remove::<Authorization<String>>();
-            headers.remove::<Cookie>();
+            headers.remove_raw("authorization");
+            headers.remove_raw("cookie");
             headers.remove_raw("cookie2");
             headers.remove_raw("www-authenticate");
         }
@@ -260,7 +260,7 @@ fn test_redirect_policy_custom() {
 
 #[test]
 fn test_remove_sensitive_headers() {
-    use hyper::header::Accept;
+    use hyper::header::{Accept, Authorization, Cookie};
 
     let mut headers = Headers::new();
     headers.set(Accept::star());
