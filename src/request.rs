@@ -277,42 +277,44 @@ impl RequestBuilder {
         Ok(self)
     }
 
+    // TODO: error.rs integration to remove unwraps in to_multipart and MultipartField::file
     /// Sends a multipart/formdata body.
     ///
-    /// ```no_run
+    /// ```
     /// use reqwest::mime;
+    /// # use reqwest::Error;
     /// use reqwest::{MultipartRequest, MultipartField, to_multipart};
     ///
-    /// let client = reqwest::Client::new().unwrap();
-    /// let response = client.post("your url").unwrap()
+    /// # fn run() -> Result<(), Error> {
+    /// let client = reqwest::Client::new()?;
+    /// let response = client.post("your url")?
     ///     .multipart(
     ///         // Add fields from anything serializable
     ///         to_multipart(&[("key", "value"), ("key2", "value2")]).unwrap()
     ///         // Add fields builder style
     ///         .field(MultipartField::param("key3", "value3"))
     ///         .field(MultipartField::param("json", "{ \"number\": 5 }")
-    ///             .mime(Some(mime::APPLICATION_JSON)))
-    ///         .field(MultipartField::file("file", "/path/to/file")
-    ///             .expect("File could not be opened"))
-    ///     ).send();
-    ///
+    ///             .mime(mime::APPLICATION_JSON))
+    ///         .field(MultipartField::file("file", "/path/to/file").unwrap())
+    ///     ).send()?;
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// See [`to_multipart`](fn.to_multipart.html), [`MultipartRequest`](struct.MultipartRequest.html)
     /// and [`MultipartField`](struct.MultipartField.html) for more examples.
+    // TODO: better signature to take serialize directly? but then how to call builders...
     pub fn multipart(&mut self, multipart: MultipartRequest) -> &mut RequestBuilder {
         {
             let mut req = self.request_mut();
-            // TODO: I tried to define the mimetype in code only, without parse() but could not
-            // find a way to set the boundary parameter. Is there a way to do that?
             req.headers_mut().set(
-                ::header::ContentType(format!("multipart/form-data; boundary={}",multipart.boundary())
+                ::header::ContentType(format!("multipart/form-data; boundary={}", multipart.boundary())
                     .parse().unwrap()
                 )
             );
-            *req.body_mut() = Some(match multipart.compute_length() {
-                Some(length) => Body::sized(multipart.reader(), length),
-                None => Body::new(multipart.reader()),
+            *req.body_mut() = Some(match ::multipart::compute_length(&multipart) {
+                Some(length) => Body::sized(::multipart::reader(multipart), length),
+                None => Body::new(::multipart::reader(multipart)),
             })
         }
         self

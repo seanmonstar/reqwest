@@ -1,4 +1,4 @@
-pub use self::multipart::{MultipartRequest, MultipartField};
+pub use self::multipart::{MultipartRequest, MultipartField, reader, compute_length};
 pub use self::ser::to_multipart;
 
 mod multipart;
