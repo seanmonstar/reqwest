@@ -11,6 +11,7 @@ use hyper::mime::Mime;
 pub struct MultipartRequest {
     boundary: String,
     fields: Vec<MultipartField>,
+    headers: Vec<String>,
 }
 
 impl MultipartRequest {
@@ -19,6 +20,7 @@ impl MultipartRequest {
         MultipartRequest {
             boundary: format!("{}", uuid::Uuid::new_v4().simple()),
             fields: Vec::new(),
+            headers: Vec::new(),
         }
     }
 
@@ -42,18 +44,16 @@ impl MultipartRequest {
         &self.boundary
     }
 
-    fn compute_length(&self) -> Option<u64> {
+    fn compute_length(&mut self) -> Option<u64> {
         let mut length = 0u64;
         for field in self.fields.iter() {
             match field.value_length {
                 Some(value_length) => {
-                    // We are constructing the header just to get its length. This is wasteful
-                    // but it seemed liked the only way to get the correct length for sure.
-                    // TODO: Should we instead cache the computed header for when it is used again
-                    // when sending the request? This would use more memory as all headers would be
-                    // held in memory as opposed to only the current one but it would only compute
-                    // each header once.
-                    let header_length = field.header().len();
+                    // We are constructing the header just to get its length. To not have to
+                    // construct it again when the request is sent we cache these headers.
+                    let header = field.header();
+                    let header_length = header.len();
+                    self.headers.push(header);
                     // The additions mimick the format string out of which the field is constructed
                     // in MultipartReader. Not the cleanest solution because if that format string is
                     // ever changed then this formula needs to be changed too which is not an
@@ -79,7 +79,7 @@ pub fn reader(request: MultipartRequest) -> MultipartReader {
 /// If predictable, computes the length the request will have
 /// The length should be preditable if only String and file fields have been added,
 /// but not if a generic reader has been added;
-pub fn compute_length(request: &MultipartRequest) -> Option<u64> {
+pub fn compute_length(request: &mut MultipartRequest) -> Option<u64> {
     request.compute_length()
 }
 
@@ -105,6 +105,7 @@ impl std::fmt::Debug for MultipartField {
 
 impl MultipartField {
     /// Makes a String parameter.
+    /// Does not set mime or file name.
     ///
     /// ```
     /// reqwest::MultipartField::param("key", "value");
@@ -128,6 +129,7 @@ impl MultipartField {
     }
 
     /// Adds a generic reader.
+    /// Does not set mime or file name.
     ///
     /// ```
     /// use std::io::empty;
@@ -151,8 +153,31 @@ impl MultipartField {
         }
     }
 
+    /// Adds a generic reader with known length.
+    /// Does not set mime or file name.
+    ///
+    /// ```
+    /// use std::io::empty;
+    /// let reader = empty();
+    /// reqwest::MultipartField::reader_with_length("key", reader, 0);
+    /// ```
+    ///
+    pub fn reader_with_length<T: Into<Cow<'static, str>>, U: Read + Send + 'static>(
+        name: T,
+        value: U,
+        length: u64,
+    ) -> MultipartField {
+        MultipartField {
+            name: name.into(),
+            value: Box::from(value),
+            value_length: Some(length),
+            mime: None,
+            file_name: None,
+        }
+    }
+
     /// Makes a file parameter.
-    /// Defaults to mime type application/octet-stream.
+    /// Sets mime to `application/octet-stream` and file name to the file's name.
     ///
     /// ```no_run
     /// reqwest::MultipartField::file("key", "/path/to/file");
@@ -198,23 +223,30 @@ impl MultipartField {
     /// Sets the filename, builder style.
     ///
     /// ```
-    /// reqwest::MultipartField::param("key", "value").file_name(Some("filename"));
+    /// reqwest::MultipartField::param("key", "value").file_name("filename");
     /// ```
     ///
     /// ```
     /// let file_name = "file_name".to_string();
-    /// reqwest::MultipartField::param("key", "value").file_name(Some(file_name));
+    /// reqwest::MultipartField::param("key", "value").file_name(file_name);
     /// ```
     ///
-    pub fn file_name<T: Into<Cow<'static, str>>>(mut self, filename: Option<T>) -> MultipartField {
-        self.file_name = filename.and_then(|filename| Some(filename.into()));
+    /// ```
+    /// // Specifying `None` is a bit more work due to generics.
+    /// reqwest::MultipartField::param("key", "value").file_name::<&str, _>(None);
+    /// ```
+    ///
+    pub fn file_name<T: Into<Cow<'static, str>>, U: Into<Option<T>>>(mut self, filename: U) -> MultipartField {
+        self.file_name = filename.into().and_then(|filename| Some(filename.into()));
         self
     }
 
     fn header(&self) -> String {
         fn format_parameter(name: &str, value: &str) -> String {
             // let legal_value = percent_encode(value);
-            let legal_value = url::percent_encoding::utf8_percent_encode(value, url::percent_encoding::PATH_SEGMENT_ENCODE_SET).to_string();
+            let legal_value =
+                url::percent_encoding::utf8_percent_encode(value, url::percent_encoding::PATH_SEGMENT_ENCODE_SET)
+                    .to_string();
             if value.len() == legal_value.len() {
                 // nothing has been percent encoded
                 format!("{}=\"{}\"", name, value)
@@ -232,9 +264,7 @@ impl MultipartField {
                 None => String::new(),
             },
             match self.mime {
-                Some(ref mime) => {
-                    format!("\r\nContent-Type: {}", mime)
-                }
+                Some(ref mime) => format!("\r\nContent-Type: {}", mime),
                 None => "".to_string(),
             }
         )
@@ -271,7 +301,12 @@ impl MultipartReader {
             let reader = std::io::Cursor::new(format!(
                 "--{}\r\n{}\r\n\r\n",
                 self.request.boundary,
-                field.header()
+                // Try to use cached headers created by compute_length
+                if self.request.headers.len() > 0 {
+                    self.request.headers.remove(0)
+                } else {
+                    field.header()
+                }
             )).chain(field.value)
                 .chain(std::io::Cursor::new("\r\n"));
             // According to https://tools.ietf.org/html/rfc2046#section-5.1.1
@@ -321,7 +356,7 @@ mod tests {
     #[test]
     fn multipart_request_empty() {
         let mut output = Vec::new();
-        let request = MultipartRequest::new();
+        let mut request = MultipartRequest::new();
         let length = request.compute_length();
         request.reader().read_to_end(&mut output).unwrap();
         assert_eq!(output, b"");
@@ -339,7 +374,7 @@ mod tests {
             )
             .field(MultipartField::reader("reader2", std::io::empty()))
             .field(
-                MultipartField::param("key3", "value3").file_name(Some("filename")),
+                MultipartField::param("key3", "value3").file_name("filename"),
             );
         request.boundary = "boundary".to_string();
         let length = request.compute_length();
@@ -379,7 +414,7 @@ mod tests {
                 MultipartField::param("key2", "value2").mime(Some(::mime::IMAGE_BMP)),
             )
             .field(
-                MultipartField::param("key3", "value3").file_name(Some("filename")),
+                MultipartField::param("key3", "value3").file_name("filename"),
             );
         request.boundary = "boundary".to_string();
         let length = request.compute_length();

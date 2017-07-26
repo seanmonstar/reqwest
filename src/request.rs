@@ -304,7 +304,7 @@ impl RequestBuilder {
     /// See [`to_multipart`](fn.to_multipart.html), [`MultipartRequest`](struct.MultipartRequest.html)
     /// and [`MultipartField`](struct.MultipartField.html) for more examples.
     // TODO: better signature to take serialize directly? but then how to call builders...
-    pub fn multipart(&mut self, multipart: MultipartRequest) -> &mut RequestBuilder {
+    pub fn multipart(&mut self, mut multipart: MultipartRequest) -> &mut RequestBuilder {
         {
             let mut req = self.request_mut();
             req.headers_mut().set(
@@ -312,7 +312,7 @@ impl RequestBuilder {
                     .parse().unwrap()
                 )
             );
-            *req.body_mut() = Some(match ::multipart::compute_length(&multipart) {
+            *req.body_mut() = Some(match ::multipart::compute_length(&mut multipart) {
                 Some(length) => Body::sized(::multipart::reader(multipart), length),
                 None => Body::new(::multipart::reader(multipart)),
             })
