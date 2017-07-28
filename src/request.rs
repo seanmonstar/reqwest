@@ -277,7 +277,6 @@ impl RequestBuilder {
         Ok(self)
     }
 
-    // TODO: error.rs integration to remove unwraps in to_multipart and MultipartField::file
     /// Sends a multipart/formdata body.
     ///
     /// ```
@@ -285,17 +284,17 @@ impl RequestBuilder {
     /// # use reqwest::Error;
     /// use reqwest::{MultipartRequest, MultipartField, to_multipart};
     ///
-    /// # fn run() -> Result<(), Error> {
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
     /// let client = reqwest::Client::new()?;
     /// let response = client.post("your url")?
     ///     .multipart(
     ///         // Add fields from anything serializable
-    ///         to_multipart(&[("key", "value"), ("key2", "value2")]).unwrap()
+    ///         to_multipart(&[("key", "value"), ("key2", "value2")])?
     ///         // Add fields builder style
     ///         .field(MultipartField::param("key3", "value3"))
     ///         .field(MultipartField::param("json", "{ \"number\": 5 }")
     ///             .mime(mime::APPLICATION_JSON))
-    ///         .field(MultipartField::file("file", "/path/to/file").unwrap())
+    ///         .field(MultipartField::file("file", "/path/to/file")?)
     ///     ).send()?;
     /// # Ok(())
     /// # }
