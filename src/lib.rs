@@ -151,7 +151,7 @@ pub use self::proxy::Proxy;
 pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
-pub use self::tls::Certificate;
+pub use self::tls::{Certificate, Pkcs12};
 
 
 // this module must be first because of the `try_` macro
