@@ -17,7 +17,7 @@ use super::response::{self, Response};
 use connect::Connector;
 use into_url::to_uri;
 use redirect::{self, RedirectPolicy, check_redirect, remove_sensitive_headers};
-use {Certificate, IntoUrl, Method, proxy, Proxy, StatusCode, Url};
+use {Certificate, Identity, IntoUrl, Method, proxy, Proxy, StatusCode, Url};
 
 static DEFAULT_USER_AGENT: &'static str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -112,6 +112,20 @@ impl ClientBuilder {
     pub fn add_root_certificate(&mut self, cert: Certificate) -> ::Result<&mut ClientBuilder> {
         let cert = ::tls::cert(cert);
         try_!(self.config_mut().tls.add_root_certificate(cert));
+        Ok(self)
+    }
+
+    /// Sets the identity to be used for client certificate authentication.
+    ///
+    /// This can be used in mutual authentication scenarios to identify to a server
+    /// with a Pkcs12 archive containing a certificate and private key for example.
+    ///
+    /// # Errors
+    ///
+    /// This method fails if adding client identity was unsuccessful.
+    pub fn identity(&mut self, identity: Identity) -> ::Result<&mut ClientBuilder> {
+        let pkcs12 = ::tls::pkcs12(identity);
+        try_!(self.config_mut().tls.identity(pkcs12));
         Ok(self)
     }
 
