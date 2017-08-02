@@ -47,7 +47,7 @@ impl Service for Connector {
 
     fn call(&self, uri: Uri) -> Self::Future {
         for prox in self.proxies.iter() {
-            if let Some(puri) = proxy::proxies(prox, &uri) {
+            if let Some(puri) = proxy::intercept(prox, &uri) {
                 if uri.scheme() == Some("https") {
                     let host = uri.host().unwrap().to_owned();
                     let port = uri.port().unwrap_or(443);

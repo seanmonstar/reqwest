@@ -334,7 +334,7 @@ impl Client {
             reusable
         });
 
-        if proxy::is_proxied(&self.inner.proxies, &uri) {
+        if proxy::is_proxied(&self.inner.proxies, &url) {
             if uri.scheme() == Some("http") {
                 req.set_proxy(true);
             }
@@ -453,7 +453,7 @@ impl Future for Pending {
                             if let Some(Some(ref body)) = self.body {
                                 req.set_body(body.clone());
                             }
-                            if proxy::is_proxied(&self.client.proxies, &uri) {
+                            if proxy::is_proxied(&self.client.proxies, &self.url) {
                                 if uri.scheme() == Some("http") {
                                     req.set_proxy(true);
                                 }
