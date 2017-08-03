@@ -16,7 +16,6 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
                 User-Agent: $USERAGENT\r\n\
                 Accept: */*\r\n\
                 Accept-Encoding: gzip\r\n\
-                Content-Length: 0\r\n\
                 \r\n\
                 ", code),
             response: format!("\

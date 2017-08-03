@@ -1,3 +1,4 @@
+#![deny(warnings)]
 extern crate futures;
 extern crate reqwest;
 extern crate tokio_core;
