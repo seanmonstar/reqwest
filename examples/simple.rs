@@ -1,3 +1,4 @@
+#![deny(warnings)]
 //! `cargo run --example simple`
 extern crate reqwest;
 extern crate env_logger;
