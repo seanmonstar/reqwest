@@ -137,6 +137,7 @@ extern crate tokio_tls;
 extern crate url;
 
 pub use hyper::header;
+pub use hyper::HttpVersion;
 pub use hyper::mime;
 pub use hyper::Method;
 pub use hyper::StatusCode;
