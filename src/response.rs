@@ -8,6 +8,7 @@ use serde_json;
 
 use client::KeepCoreThreadAlive;
 use header::{Headers, ContentEncoding, ContentLength, Encoding, TransferEncoding};
+use HttpVersion;
 use {async_impl, StatusCode, Url, wait};
 
 
@@ -80,6 +81,35 @@ impl Response {
     #[inline]
     pub fn status(&self) -> StatusCode {
         self.inner.status()
+    }
+
+    /// Get the `HttpVersion` of this `Response`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use reqwest::Client;
+    /// use reqwest::HttpVersion::{Http09, Http10, Http11, H2, H2c};
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let resp = reqwest::get("http://httpbin.org/get")?;
+    /// match resp.version() {
+    ///   Http09 => {
+    ///     println!("HTTP0.9!");
+    ///   }
+    ///   Http10 | Http11 => {
+    ///     println!("HTTP1!");
+    ///   }
+    ///   H2 | H2c => {
+    ///     println!("HTTP2!");
+    ///   }
+    ///   s => println!("Received response version: {:?}", s),
+    /// };
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[inline]
+    pub fn version(&self) -> HttpVersion {
+        self.inner.version()
     }
 
     /// Get the `Headers` of this `Response`.

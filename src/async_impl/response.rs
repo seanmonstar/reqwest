@@ -8,6 +8,7 @@ use hyper::StatusCode;
 use serde::de::DeserializeOwned;
 use serde_json;
 use url::Url;
+use HttpVersion;
 
 use super::{body, Body};
 
@@ -18,6 +19,7 @@ pub struct Response {
     headers: Headers,
     url: Url,
     body: Body,
+    version: HttpVersion,
 }
 
 impl Response {
@@ -31,6 +33,12 @@ impl Response {
     #[inline]
     pub fn status(&self) -> StatusCode {
         self.status
+    }
+
+    /// Get the `HttpVersion` of this `Response`.
+    #[inline]
+    pub fn version(&self) -> HttpVersion {
+        self.version
     }
 
     /// Get the `Headers` of this `Response`.
@@ -135,6 +143,7 @@ pub fn new(mut res: ::hyper::client::Response, url: Url, _gzip: bool) -> Respons
 
     let status = res.status();
     let headers = mem::replace(res.headers_mut(), Headers::new());
+    let version = res.version();
     let body = res.body();
     info!("Response: '{}' for {}", status, url);
     Response {
@@ -142,5 +151,6 @@ pub fn new(mut res: ::hyper::client::Response, url: Url, _gzip: bool) -> Respons
         headers: headers,
         url: url,
         body: super::body::wrap(body),
+        version: version,
     }
 }
