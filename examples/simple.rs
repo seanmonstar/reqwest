@@ -1,5 +1,4 @@
-#![deny(warnings)]
-#![allow(unused_doc_comment)] // remove when error_chain is fixed
+#![allow(warnings)] // remove when error_chain is fixed
 
 //! `cargo run --example simple`
 
