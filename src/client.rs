@@ -1,6 +1,7 @@
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
+use std::thread;
 
 use futures::{Future, Stream};
 use futures::sync::{mpsc, oneshot};
@@ -313,21 +314,20 @@ impl fmt::Debug for ClientBuilder {
 struct ClientHandle {
     gzip: bool,
     timeout: Option<Duration>,
-    tx: Arc<ThreadSender>
+    tx: Option<Arc<ThreadSender>>,
+    handle: Option<Arc<thread::JoinHandle<()>>>
 }
 
 type ThreadSender = mpsc::UnboundedSender<(async_impl::Request, oneshot::Sender<::Result<async_impl::Response>>)>;
 
 impl ClientHandle {
     fn new(builder: &mut ClientBuilder) -> ::Result<ClientHandle> {
-        use std::thread;
-
         let gzip = builder.gzip;
         let timeout = builder.timeout;
         let mut builder = async_impl::client::take_builder(&mut builder.inner);
         let (tx, rx) = mpsc::unbounded();
         let (spawn_tx, spawn_rx) = oneshot::channel::<::Result<()>>();
-        try_!(thread::Builder::new().name("reqwest-internal-sync-core".into()).spawn(move || {
+        let handle = try_!(thread::Builder::new().name("reqwest-internal-sync-core".into()).spawn(move || {
             use tokio_core::reactor::Core;
 
             let built = (|| {
@@ -367,7 +367,8 @@ impl ClientHandle {
         Ok(ClientHandle {
             gzip: gzip,
             timeout: timeout,
-            tx: Arc::new(tx),
+            tx: Some(Arc::new(tx)),
+            handle: Some(Arc::new(handle))
         })
     }
 
@@ -375,7 +376,7 @@ impl ClientHandle {
         let (tx, rx) = oneshot::channel();
         let (req, body) = request::async(req);
         let url = req.url().clone();
-        self.tx.send((req, tx)).expect("core thread panicked");
+        self.tx.as_ref().expect("core thread panicked").send((req, tx)).expect("core thread panicked");
 
         if let Some(body) = body {
             try_!(body.send(), &url);
@@ -394,8 +395,19 @@ impl ClientHandle {
             }
         };
         res.map(|res| {
-            response::new(res, self.gzip, self.timeout, KeepCoreThreadAlive(self.tx.clone()))
+            response::new(res, self.gzip, self.timeout, KeepCoreThreadAlive(self.tx.as_ref().expect("core thread panicked").clone()))
         })
+    }
+}
+
+impl Drop for ClientHandle {
+    fn drop(&mut self) {
+        self.tx.take();
+        if let Some(handle) = self.handle.take() {
+            if let Ok(handle) = Arc::try_unwrap(handle) {
+                handle.join().unwrap();
+            }
+        }
     }
 }
 
