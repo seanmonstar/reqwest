@@ -233,7 +233,7 @@ impl RequestBuilder {
 
         {
             // check request_mut() before running serde
-            let mut req = self.request_mut();
+            let req = self.request_mut();
             let body = try_!(serde_urlencoded::to_string(form));
             req.headers_mut().set(ContentType::form_url_encoded());
             *req.body_mut() = Some(body.into());
@@ -269,7 +269,7 @@ impl RequestBuilder {
     pub fn json<T: Serialize>(&mut self, json: &T) -> ::Result<&mut RequestBuilder> {
         {
             // check request_mut() before running serde
-            let mut req = self.request_mut();
+            let req = self.request_mut();
             let body = try_!(serde_json::to_vec(json));
             req.headers_mut().set(ContentType::json());
             *req.body_mut() = Some(body.into());

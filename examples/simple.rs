@@ -1,5 +1,8 @@
 #![deny(warnings)]
+#![allow(unused_doc_comment)] // remove when error_chain is fixed
+
 //! `cargo run --example simple`
+
 extern crate reqwest;
 extern crate env_logger;
 #[macro_use]
