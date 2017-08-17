@@ -136,7 +136,7 @@ pub fn new(mut res: ::hyper::client::Response, url: Url, _gzip: bool) -> Respons
     let status = res.status();
     let headers = mem::replace(res.headers_mut(), Headers::new());
     let body = res.body();
-    info!("Response: '{}' for {}", status, url);
+    debug!("Response: '{}' for {}", status, url);
     Response {
         status: status,
         headers: headers,

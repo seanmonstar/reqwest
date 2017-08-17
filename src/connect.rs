@@ -48,11 +48,13 @@ impl Service for Connector {
     fn call(&self, uri: Uri) -> Self::Future {
         for prox in self.proxies.iter() {
             if let Some(puri) = proxy::intercept(prox, &uri) {
+                trace!("proxy({:?}) intercepts {:?}", puri, uri);
                 if uri.scheme() == Some("https") {
                     let host = uri.host().unwrap().to_owned();
                     let port = uri.port().unwrap_or(443);
                     let tls = self.tls.clone();
                     return Box::new(self.https.call(puri).and_then(move |conn| {
+                        trace!("tunneling HTTPS over proxy");
                         tunnel(conn, host.clone(), port)
                             .and_then(move |tunneled| {
                                 tls.connect_async(&host, tunneled)
