@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 
 use futures::{Async, Future, Poll, Stream};
 use futures::stream::Concat2;
-use header::Headers;
 use hyper::StatusCode;
 use serde::de::DeserializeOwned;
 use serde_json;
@@ -11,6 +10,9 @@ use url::Url;
 
 use super::{body, Body};
 
+use std::io::{self, Read};
+use libflate::gzip::Decoder;
+use header::{Headers, ContentEncoding, ContentLength, Encoding, TransferEncoding};
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -49,6 +51,36 @@ impl Response {
     #[inline]
     pub fn body_mut(&mut self) -> &mut Body {
         &mut self.body
+    }
+
+    /// Resolve to response body.
+    #[inline]
+    pub fn body_resolved(&mut self) -> BodyFuture {
+        let content_encoding_gzip: bool;
+        let mut is_gzip = {
+            content_encoding_gzip = self.headers()
+                .get::<ContentEncoding>()
+                .map_or(false, |encs| encs.contains(&Encoding::Gzip));
+            content_encoding_gzip ||
+            self.headers()
+                .get::<TransferEncoding>()
+                .map_or(false, |encs| encs.contains(&Encoding::Gzip))
+        };
+        if is_gzip {
+            if let Some(content_length) = self.headers().get::<ContentLength>() {
+                if content_length.0 == 0 {
+                    warn!("GZipped response with content-length of 0");
+                    is_gzip = false;
+                }
+            }
+        }
+
+        trace!("is_gzip: {}", is_gzip);
+
+        BodyFuture {
+            concat: body::take(self.body_mut()).concat2(),
+            is_gzip: is_gzip,
+        }
     }
 
     /// Try to deserialize the response body as JSON using `serde`.
@@ -105,6 +137,37 @@ impl fmt::Debug for Response {
             .finish()
     }
 }
+
+pub struct BodyFuture {
+    concat: Concat2<Body>,
+    is_gzip: bool,
+}
+
+impl Future for BodyFuture {
+    type Item = Vec<u8>;
+    type Error = ::Error;
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let bytes = try_ready!(self.concat.poll());
+
+        if !self.is_gzip {
+            return Ok(Async::Ready(bytes.to_vec()))
+        }
+        let mut buffer = Vec::new();
+
+        let mut decoder = try_!(Decoder::new(&*bytes));
+        try_!(io::copy(&mut decoder, &mut buffer));
+
+        Ok(Async::Ready(buffer))
+    }
+}
+
+impl fmt::Debug for BodyFuture {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("BodyFuture")
+            .finish()
+    }
+}
+
 
 pub struct Json<T> {
     concat: Concat2<Body>,
