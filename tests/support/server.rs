@@ -36,6 +36,9 @@ pub fn spawn(txns: Vec<Txn>) -> Server {
             let mut expected = txn.request;
             let reply = txn.response;
             let (mut socket, _addr) = listener.accept().unwrap();
+
+            socket.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+
             replace_expected_vars(&mut expected, addr.to_string().as_ref(), DEFAULT_USER_AGENT.as_ref());
 
             if let Some(dur) = txn.read_timeout {
@@ -43,7 +46,12 @@ pub fn spawn(txns: Vec<Txn>) -> Server {
             }
 
             let mut buf = [0; 4096];
-            let n = socket.read(&mut buf).unwrap();
+            assert!(buf.len() >= expected.len());
+
+            let mut n = 0;
+            while n < expected.len() {
+                n += socket.read(&mut buf).unwrap();
+            }
 
             match (::std::str::from_utf8(&expected), ::std::str::from_utf8(&buf[..n])) {
                 (Ok(expected), Ok(received)) => assert_eq!(expected, received),
