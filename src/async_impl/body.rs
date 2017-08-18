@@ -122,6 +122,20 @@ pub fn take(body: &mut Body) -> Body {
 }
 
 #[inline]
+pub fn empty() -> Body {
+    Body {
+        inner: Inner::Hyper(::hyper::Body::empty()),
+    }
+}
+
+#[inline]
+pub fn chunk(chunk: Bytes) -> Chunk {
+    Chunk {
+        inner: ::hyper::Chunk::from(chunk)
+    }
+}
+
+#[inline]
 pub fn reusable(chunk: Bytes) -> Body {
     Body {
         inner: Inner::Reusable(chunk),

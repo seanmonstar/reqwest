@@ -23,6 +23,7 @@ pub struct Txn {
     pub read_timeout: Option<Duration>,
     pub response_timeout: Option<Duration>,
     pub write_timeout: Option<Duration>,
+    pub chunk_size: Option<usize>,
 }
 
 static DEFAULT_USER_AGENT: &'static str =
@@ -55,10 +56,21 @@ pub fn spawn(txns: Vec<Txn>) -> Server {
             }
 
             if let Some(dur) = txn.write_timeout {
-                let headers_end = ::std::str::from_utf8(&reply).unwrap().find("\r\n\r\n").unwrap() + 4;
+                let headers_end = b"\r\n\r\n";
+                let headers_end = reply.windows(headers_end.len()).position(|w| w == headers_end).unwrap() + 4;
                 socket.write_all(&reply[..headers_end]).unwrap();
-                thread::park_timeout(dur);
-                socket.write_all(&reply[headers_end..]).unwrap();
+
+                let body = &reply[headers_end..];
+
+                if let Some(chunk_size) = txn.chunk_size {
+                    for content in body.chunks(chunk_size) {
+                        thread::park_timeout(dur);
+                        socket.write_all(&content).unwrap();
+                    }
+                } else {
+                    thread::park_timeout(dur);
+                    socket.write_all(&body).unwrap();
+                }
             } else {
                 socket.write_all(&reply).unwrap();
             }
