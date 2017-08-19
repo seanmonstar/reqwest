@@ -172,6 +172,7 @@ pub mod unstable {
         pub use ::async_impl::{
             Body,
             Chunk,
+            Decoder,
             Client,
             ClientBuilder,
             Request,

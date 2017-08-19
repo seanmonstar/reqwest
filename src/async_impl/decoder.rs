@@ -82,6 +82,19 @@ impl fmt::Debug for Decoder {
 }
 
 impl Decoder {
+    /// An empty decoder.
+    /// 
+    /// This decoder will produce a single 0 byte chunk.
+    #[inline]
+    pub fn empty() -> Decoder {
+        Decoder {
+            inner: Inner::PlainText(body::empty())
+        }
+    }
+
+    /// A plain text decoder.
+    /// 
+    /// This decoder will emit the underlying chunks as-is.
     #[inline]
     fn plain_text(body: Body) -> Decoder {
         Decoder {
@@ -89,6 +102,9 @@ impl Decoder {
         }
     }
 
+    /// A gzip decoder.
+    /// 
+    /// This decoder will buffer and decompress chunks that are gzipped.
     #[inline]
     fn gzip(mut body: Body) -> Decoder {
         Decoder {
@@ -384,14 +400,6 @@ impl<S> ReadableChunks<S>
 }
 
 // pub(crate)
-
-#[inline]
-pub fn take(decoder: &mut Decoder) -> Decoder {
-    let inner = mem::replace(&mut decoder.inner, Inner::PlainText(body::empty()));
-    Decoder {
-        inner: inner,
-    }
-}
 
 /// Constructs a Decoder from a hyper request.
 ///

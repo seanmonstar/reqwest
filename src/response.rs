@@ -1,3 +1,4 @@
+use std::mem;
 use std::fmt;
 use std::io::{self, Read};
 use std::time::Duration;
@@ -182,7 +183,7 @@ impl Response {
     /// ```
     #[inline]
     pub fn error_for_status(self) -> ::Result<Self> {
-        let Response { inner, body, _thread_handle } = self;
+        let Response { body, inner, _thread_handle } = self;
         inner.error_for_status().map(move |inner| {
             Response {
                 inner: inner,
@@ -227,8 +228,9 @@ impl Stream for WaitBody {
 // pub(crate)
 
 pub fn new(mut res: async_impl::Response, timeout: Option<Duration>, thread: KeepCoreThreadAlive) -> Response {
+    let body = mem::replace(res.body_mut(), async_impl::Decoder::empty());
     let body = async_impl::ReadableChunks::new(WaitBody {
-        inner: wait::stream(res.body(), timeout)
+        inner: wait::stream(body, timeout)
     });
 
     Response {

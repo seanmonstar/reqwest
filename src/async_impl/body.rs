@@ -66,6 +66,13 @@ pub struct Chunk {
     inner: ::hyper::Chunk,
 }
 
+impl AsRef<[u8]> for Chunk {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        &*self
+    }
+}
+
 impl ::std::ops::Deref for Chunk {
     type Target = [u8];
     #[inline]

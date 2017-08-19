@@ -63,17 +63,17 @@ impl Response {
     /// 
     /// This function will replace the body on the response with an empty one.
     #[inline]
-    pub fn body(&mut self) -> Decoder {
-        decoder::take(&mut self.body)
+    pub fn body(&self) -> &Decoder {
+        &self.body
     }
 
     /// Try to deserialize the response body as JSON using `serde`.
     #[inline]
     pub fn json<T: DeserializeOwned>(&mut self) -> Json<T> {
-        let body = self.body().concat2();
-
+        let body = mem::replace(&mut self.body, Decoder::empty());
+        
         Json {
-            concat: body,
+            concat: body.concat2(),
             _marker: PhantomData,
         }
     }
