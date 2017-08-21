@@ -9,8 +9,9 @@ use mime_guess;
 use url::percent_encoding;
 use uuid::Uuid;
 
+use {Body};
+
 /// A multipart/form-data request.
-#[derive(Debug)]
 pub struct Form {
     boundary: String,
     fields: Vec<(Cow<'static, str>, Part)>,
@@ -27,6 +28,12 @@ impl Form {
         }
     }
 
+    /// Get the boundary that this form will use.
+    #[inline]
+    pub fn boundary(&self) -> &str {
+        &self.boundary
+    }
+
     /// Add a data field with supplied name and value.
     ///
     /// # Examples
@@ -38,7 +45,7 @@ impl Form {
     /// ```
     pub fn text<T, U>(self, name: T, value: U) -> Form
     where T: Into<Cow<'static, str>>,
-          U: AsRef<[u8]> + Send + 'static
+          U: Into<Cow<'static, str>>,
     {
         self.part(name, Part::text(value))
     }
@@ -84,7 +91,7 @@ impl Form {
     fn compute_length(&mut self) -> Option<u64> {
         let mut length = 0u64;
         for &(ref name, ref field) in self.fields.iter() {
-            match field.value_length {
+            match ::body::len(&field.value) {
                 Some(value_length) => {
                     // We are constructing the header just to get its length. To not have to
                     // construct it again when the request is sent we cache these headers.
@@ -108,38 +115,47 @@ impl Form {
     }
 }
 
+impl fmt::Debug for Form {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Form")
+            .field("boundary", &self.boundary)
+            .field("parts", &self.fields)
+            .finish()
+    }
+}
+
 
 /// A field in a multipart form.
 pub struct Part {
-    value: Box<Read + Send>,
-    value_length: Option<u64>,
+    value: Body,
     mime: Option<Mime>,
     file_name: Option<Cow<'static, str>>,
 }
 
 impl Part {
     /// Makes a text parameter.
-    pub fn text<T: AsRef<[u8]> + Send + 'static>(value: T) -> Part {
-        let value_length = Some(value.as_ref().len() as u64);
-        let mut field = Part::new(Box::new(Cursor::new(value)));
-        field.value_length = value_length;
-        field
+    pub fn text<T>(value: T) -> Part
+    where T: Into<Cow<'static, str>>,
+    {
+        let body = match value.into() {
+            Cow::Borrowed(slice) => Body::from(slice),
+            Cow::Owned(string) => Body::from(string),
+        };
+        Part::new(body)
     }
 
     /// Adds a generic reader.
     ///
     /// Does not set filename or mime.
     pub fn reader<T: Read + Send + 'static>(value: T) -> Part {
-        Part::new(Box::from(value))
+        Part::new(Body::new(value))
     }
 
     /// Adds a generic reader with known length.
     ///
     /// Does not set filename or mime.
     pub fn reader_with_length<T: Read + Send + 'static>(value: T, length: u64) -> Part {
-        let mut field = Part::new(Box::new(value));
-        field.value_length = Some(length);
-        field
+        Part::new(Body::sized(value, length))
     }
 
     /// Makes a file parameter.
@@ -157,18 +173,15 @@ impl Part {
             .unwrap_or("");
         let mime = mime_guess::get_mime_type(ext);
         let file = File::open(path)?;
-        let file_length = file.metadata().ok().map(|meta| meta.len());
-        let mut field = Part::new(Box::new(file));
-        field.value_length = file_length;
+        let mut field = Part::new(Body::from(file));
         field.mime = Some(mime);
         field.file_name = file_name;
         Ok(field)
     }
 
-    fn new(value: Box<Read + Send + 'static>) -> Part {
+    fn new(value: Body) -> Part {
         Part {
             value: value,
-            value_length: None,
             mime: None,
             file_name: None,
         }
@@ -190,7 +203,7 @@ impl Part {
 impl fmt::Debug for Part {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Part")
-            .field("value_length", &self.value_length)
+            .field("value", &self.value)
             .field("mime", &self.mime)
             .field("file_name", &self.file_name)
             .finish()
@@ -251,7 +264,7 @@ impl Reader {
                 } else {
                     header(&name, &field)
                 }
-            )).chain(field.value)
+            )).chain(::body::reader(field.value))
                 .chain(Cursor::new("\r\n"));
             // According to https://tools.ietf.org/html/rfc2046#section-5.1.1
             // the very last field has a special boundary
@@ -326,9 +339,9 @@ mod tests {
     #[test]
     fn form_empty() {
         let mut output = Vec::new();
-        let mut request = Form::new();
-        let length = request.compute_length();
-        request.reader().read_to_end(&mut output).unwrap();
+        let mut form = Form::new();
+        let length = form.compute_length();
+        form.reader().read_to_end(&mut output).unwrap();
         assert_eq!(output, b"");
         assert_eq!(length.unwrap(), 0);
     }
@@ -336,7 +349,7 @@ mod tests {
     #[test]
     fn read_to_end() {
         let mut output = Vec::new();
-        let mut request = Form::new()
+        let mut form = Form::new()
             .part("reader1", Part::reader(::std::io::empty()))
             .part("key1", Part::text("value1"))
             .part(
@@ -348,8 +361,8 @@ mod tests {
                 "key3",
                 Part::text("value3").file_name("filename"),
             );
-        request.boundary = "boundary".to_string();
-        let length = request.compute_length();
+        form.boundary = "boundary".to_string();
+        let length = form.compute_length();
         let expected = "--boundary\r\n\
                         Content-Disposition: form-data; name=\"reader1\"\r\n\r\n\
                         \r\n\
@@ -366,7 +379,7 @@ mod tests {
                         --boundary\r\n\
                         Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
                         value3\r\n--boundary--";
-        request.reader().read_to_end(&mut output).unwrap();
+        form.reader().read_to_end(&mut output).unwrap();
         // These prints are for debug purposes in case the test fails
         println!(
             "START REAL\n{}\nEND REAL",
@@ -380,7 +393,7 @@ mod tests {
     #[test]
     fn read_to_end_with_length() {
         let mut output = Vec::new();
-        let mut request = Form::new()
+        let mut form = Form::new()
             .text("key1", "value1")
             .part(
                 "key2",
@@ -390,8 +403,8 @@ mod tests {
                 "key3",
                 Part::text("value3").file_name("filename"),
             );
-        request.boundary = "boundary".to_string();
-        let length = request.compute_length();
+        form.boundary = "boundary".to_string();
+        let length = form.compute_length();
         let expected = "--boundary\r\n\
                         Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
                         value1\r\n\
@@ -402,7 +415,7 @@ mod tests {
                         --boundary\r\n\
                         Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
                         value3\r\n--boundary--";
-        request.reader().read_to_end(&mut output).unwrap();
+        form.reader().read_to_end(&mut output).unwrap();
         // These prints are for debug purposes in case the test fails
         println!(
             "START REAL\n{}\nEND REAL",

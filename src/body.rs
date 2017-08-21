@@ -1,6 +1,6 @@
-use std::io::{self, Read};
 use std::fs::File;
 use std::fmt;
+use std::io::{self, Cursor, Read};
 
 use bytes::Bytes;
 use hyper::{self, Chunk};
@@ -16,7 +16,7 @@ use {async_impl, wait};
 /// [builder]: ./struct.RequestBuilder.html#method.body
 #[derive(Debug)]
 pub struct Body {
-    reader: Kind,
+    kind: Kind,
 }
 
 impl Body {
@@ -54,7 +54,7 @@ impl Body {
     /// ```
     pub fn new<R: Read + Send + 'static>(reader: R) -> Body {
         Body {
-            reader: Kind::Reader(Box::new(reader), None),
+            kind: Kind::Reader(Box::from(reader), None),
         }
     }
 
@@ -74,21 +74,11 @@ impl Body {
     /// ```
     pub fn sized<R: Read + Send + 'static>(reader: R, len: u64) -> Body {
         Body {
-            reader: Kind::Reader(Box::new(reader), Some(len)),
+            kind: Kind::Reader(Box::from(reader), Some(len)),
         }
     }
 }
 
-// useful for tests, but not publicly exposed
-#[cfg(test)]
-pub fn read_to_string(mut body: Body) -> ::std::io::Result<String> {
-    let mut s = String::new();
-    match body.reader {
-            Kind::Reader(ref mut reader, _) => reader.read_to_string(&mut s),
-            Kind::Bytes(ref mut bytes) => (&**bytes).read_to_string(&mut s),
-        }
-        .map(|_| s)
-}
 
 enum Kind {
     Reader(Box<Read + Send>, Option<u64>),
@@ -99,7 +89,7 @@ impl From<Vec<u8>> for Body {
     #[inline]
     fn from(v: Vec<u8>) -> Body {
         Body {
-            reader: Kind::Bytes(v.into()),
+            kind: Kind::Bytes(v.into()),
         }
     }
 }
@@ -116,7 +106,7 @@ impl From<&'static [u8]> for Body {
     #[inline]
     fn from(s: &'static [u8]) -> Body {
         Body {
-            reader: Kind::Bytes(Bytes::from_static(s)),
+            kind: Kind::Bytes(Bytes::from_static(s)),
         }
     }
 }
@@ -133,7 +123,7 @@ impl From<File> for Body {
     fn from(f: File) -> Body {
         let len = f.metadata().map(|m| m.len()).ok();
         Body {
-            reader: Kind::Reader(Box::new(f), len),
+            kind: Kind::Reader(Box::new(f), len),
         }
     }
 }
@@ -141,14 +131,56 @@ impl From<File> for Body {
 impl fmt::Debug for Kind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Kind::Reader(_, ref v) => f.debug_tuple("Kind::Reader").field(&"_").field(v).finish(),
-            Kind::Bytes(ref v) => f.debug_tuple("Kind::Bytes").field(v).finish(),
+            Kind::Reader(_, ref v) => f.debug_struct("Reader")
+                .field("length", &DebugLength(v))
+                .finish(),
+            Kind::Bytes(ref v) => fmt::Debug::fmt(v, f),
+        }
+    }
+}
+
+struct DebugLength<'a>(&'a Option<u64>);
+
+impl<'a> fmt::Debug for DebugLength<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self.0 {
+            Some(ref len) => fmt::Debug::fmt(len, f),
+            None => f.write_str("Unknown"),
         }
     }
 }
 
 
 // pub(crate)
+
+pub fn len(body: &Body) -> Option<u64> {
+    match body.kind {
+        Kind::Reader(_, len) => len,
+        Kind::Bytes(ref bytes) => Some(bytes.len() as u64),
+    }
+}
+
+pub enum Reader {
+    Reader(Box<Read + Send>),
+    Bytes(Cursor<Bytes>),
+}
+
+#[inline]
+pub fn reader(body: Body) -> Reader {
+    match body.kind {
+        Kind::Reader(r, _) => Reader::Reader(r),
+        Kind::Bytes(b) => Reader::Bytes(Cursor::new(b)),
+    }
+}
+
+impl Read for Reader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match *self {
+            Reader::Reader(ref mut rdr) => rdr.read(buf),
+            Reader::Bytes(ref mut rdr) => rdr.read(buf),
+        }
+    }
+}
 
 pub struct Sender {
     body: (Box<Read + Send>, Option<u64>),
@@ -193,7 +225,7 @@ impl Sender {
 
 #[inline]
 pub fn async(body: Body) -> (Option<Sender>, async_impl::Body, Option<u64>) {
-    match body.reader {
+    match body.kind {
         Kind::Reader(read, len) => {
             let (tx, rx) = hyper::Body::pair();
             let tx = Sender {
@@ -207,4 +239,15 @@ pub fn async(body: Body) -> (Option<Sender>, async_impl::Body, Option<u64>) {
             (None, async_impl::body::reusable(chunk), Some(len))
         }
     }
+}
+
+// useful for tests, but not publicly exposed
+#[cfg(test)]
+pub fn read_to_string(mut body: Body) -> io::Result<String> {
+    let mut s = String::new();
+    match body.kind {
+            Kind::Reader(ref mut reader, _) => reader.read_to_string(&mut s),
+            Kind::Bytes(ref mut bytes) => (&**bytes).read_to_string(&mut s),
+        }
+        .map(|_| s)
 }
