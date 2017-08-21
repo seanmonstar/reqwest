@@ -66,6 +66,13 @@ pub struct Chunk {
     inner: ::hyper::Chunk,
 }
 
+impl AsRef<[u8]> for Chunk {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        &*self
+    }
+}
+
 impl ::std::ops::Deref for Chunk {
     type Target = [u8];
     #[inline]
@@ -118,6 +125,20 @@ pub fn take(body: &mut Body) -> Body {
     let inner = mem::replace(&mut body.inner, Inner::Hyper(::hyper::Body::empty()));
     Body {
         inner: inner,
+    }
+}
+
+#[inline]
+pub fn empty() -> Body {
+    Body {
+        inner: Inner::Hyper(::hyper::Body::empty()),
+    }
+}
+
+#[inline]
+pub fn chunk(chunk: Bytes) -> Chunk {
+    Chunk {
+        inner: ::hyper::Chunk::from(chunk)
     }
 }
 
