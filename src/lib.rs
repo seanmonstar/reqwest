@@ -11,7 +11,7 @@
 //! to do for them.
 //!
 //! - Uses system-native TLS
-//! - Plain bodies, JSON, urlencoded, (TODO: multipart)
+//! - Plain bodies, JSON, urlencoded, multipart
 //! - Customizable redirect policy
 //! - Proxies
 //! - (TODO: Cookies)
@@ -129,12 +129,14 @@ extern crate log;
 extern crate libflate;
 extern crate native_tls;
 extern crate serde;
+#[cfg(test)] #[macro_use] extern crate serde_derive;
 extern crate serde_json;
 extern crate serde_urlencoded;
 extern crate tokio_core;
 extern crate tokio_io;
 extern crate tokio_tls;
 extern crate url;
+extern crate uuid;
 
 pub use hyper::header;
 pub use hyper::mime;
@@ -152,6 +154,7 @@ pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
 pub use self::tls::Certificate;
+pub use self::multipart::{MultipartRequest, MultipartField, to_multipart};
 
 
 // this module must be first because of the `try_` macro
@@ -194,6 +197,7 @@ mod request;
 mod response;
 mod tls;
 mod wait;
+mod multipart;
 
 
 /// Shortcut method to quickly make a `GET` request.

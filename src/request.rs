@@ -7,7 +7,7 @@ use serde_urlencoded;
 
 use body::{self, Body};
 use header::Headers;
-use {async_impl, Client, Method, Url};
+use {async_impl, Client, Method, MultipartRequest, Url};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -275,6 +275,48 @@ impl RequestBuilder {
             *req.body_mut() = Some(body.into());
         }
         Ok(self)
+    }
+
+    /// Sends a multipart/formdata body.
+    ///
+    /// ```
+    /// use reqwest::mime;
+    /// # use reqwest::Error;
+    /// use reqwest::{MultipartRequest, MultipartField, to_multipart};
+    ///
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// let client = reqwest::Client::new()?;
+    /// let response = client.post("your url")?
+    ///     .multipart(
+    ///         // Add fields from anything serializable
+    ///         to_multipart(&[("key", "value"), ("key2", "value2")])?
+    ///         // Add fields builder style
+    ///         .field(MultipartField::param("key3", "value3"))
+    ///         .field(MultipartField::param("json", "{ \"number\": 5 }")
+    ///             .mime(mime::APPLICATION_JSON))
+    ///         .field(MultipartField::file("file", "/path/to/file")?)
+    ///     ).send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// See [`to_multipart`](fn.to_multipart.html), [`MultipartRequest`](struct.MultipartRequest.html)
+    /// and [`MultipartField`](struct.MultipartField.html) for more examples.
+    // TODO: better signature to take serialize directly? but then how to call builders...
+    pub fn multipart(&mut self, mut multipart: MultipartRequest) -> &mut RequestBuilder {
+        {
+            let mut req = self.request_mut();
+            req.headers_mut().set(
+                ::header::ContentType(format!("multipart/form-data; boundary={}", multipart.boundary())
+                    .parse().unwrap()
+                )
+            );
+            *req.body_mut() = Some(match ::multipart::compute_length(&mut multipart) {
+                Some(length) => Body::sized(::multipart::reader(multipart), length),
+                None => Body::new(::multipart::reader(multipart)),
+            })
+        }
+        self
     }
 
     /// Build a `Request`, which can be inspected, modified and executed with
