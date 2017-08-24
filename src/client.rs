@@ -387,7 +387,11 @@ impl ClientHandle {
         let (tx, rx) = oneshot::channel();
         let (req, body) = request::async(req);
         let url = req.url().clone();
-        self.inner.tx.as_ref().expect("core thread exited early").send((req, tx)).expect("core thread panicked");
+        self.inner.tx
+            .as_ref()
+            .expect("core thread exited early")
+            .unbounded_send((req, tx))
+            .expect("core thread panicked");
 
         if let Some(body) = body {
             try_!(body.send(), &url);
