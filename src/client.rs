@@ -8,7 +8,7 @@ use futures::sync::{mpsc, oneshot};
 
 use request::{self, Request, RequestBuilder};
 use response::{self, Response};
-use {async_impl, Certificate, Method, IntoUrl, Proxy, RedirectPolicy, wait};
+use {async_impl, Certificate, Pkcs12, Method, IntoUrl, Proxy, RedirectPolicy, wait};
 
 /// A `Client` to make Requests with.
 ///
@@ -118,6 +118,41 @@ impl ClientBuilder {
         self.inner.add_root_certificate(cert)?;
         Ok(self)
     }
+
+    /// Sets the identity to be used for client certificate authentication.
+    ///
+    /// This can be used in mutual authentication scenarios to identify to a server
+    /// with a Pkcs12 archive containing a certificate and private key for example.
+    ///
+    /// # Example
+    /// ```
+    /// # use std::fs::File;
+    /// # use std::io::Read;
+    /// # fn build_client() -> Result<(), Box<std::error::Error>> {
+    /// // read a local PKCS12 bundle
+    /// let mut buf = Vec::new();
+    /// File::open("my-ident.pfx")?.read_to_end(&mut buf)?;
+    ///
+    /// // create a Pkcs12 instance
+    /// let pkcs12 = reqwest::Pkcs12::from_der(&buf, "my-privkey-password")?;
+    ///
+    /// // get a client builder
+    /// let client = reqwest::ClientBuilder::new()?
+    ///     .identity(pkcs12)?
+    ///     .build()?;
+    /// # drop(client);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This method fails if adding client identity was unsuccessful.
+    pub fn identity(&mut self, pkcs12: Pkcs12) -> ::Result<&mut ClientBuilder> {
+        self.inner.identity(pkcs12)?;
+        Ok(self)
+    }
+
 
     /// Disable hostname verification.
     ///
