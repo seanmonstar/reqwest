@@ -53,7 +53,7 @@ pub struct Client {
 /// ```
 pub struct ClientBuilder {
     inner: async_impl::ClientBuilder,
-    timeout: Option<Duration>,
+    timeout: Timeout,
 }
 
 impl ClientBuilder {
@@ -65,7 +65,7 @@ impl ClientBuilder {
     pub fn new() -> ::Result<ClientBuilder> {
         async_impl::ClientBuilder::new().map(|builder| ClientBuilder {
             inner: builder,
-            timeout: None,
+            timeout: Timeout::default(),
         })
     }
 
@@ -212,9 +212,15 @@ impl ClientBuilder {
     }
 
     /// Set a timeout for connect, read and write operations of a `Client`.
+    ///
+    /// Default is 30 seconds.
+    ///
+    /// Pass `None` to disable timeout.
     #[inline]
-    pub fn timeout(&mut self, timeout: Duration) -> &mut ClientBuilder {
-        self.timeout = Some(timeout);
+    pub fn timeout<T>(&mut self, timeout: T) -> &mut ClientBuilder
+    where T: Into<Option<Duration>>,
+    {
+        self.timeout = Timeout(timeout.into());
         self
     }
 }
@@ -344,7 +350,7 @@ impl fmt::Debug for ClientBuilder {
 
 #[derive(Clone)]
 struct ClientHandle {
-    timeout: Option<Duration>,
+    timeout: Timeout,
     inner: Arc<InnerClientHandle>
 }
 
@@ -404,7 +410,7 @@ impl ClientHandle {
             let _ = core.run(work);
         }));
 
-        wait::timeout(spawn_rx, timeout).expect("core thread cancelled")?;
+        wait::timeout(spawn_rx, timeout.0).expect("core thread cancelled")?;
 
         let inner_handle = Arc::new(InnerClientHandle {
             tx: Some(tx),
@@ -432,7 +438,7 @@ impl ClientHandle {
             try_!(body.send(), &url);
         }
 
-        let res = match wait::timeout(rx, self.timeout) {
+        let res = match wait::timeout(rx, self.timeout.0) {
             Ok(res) => res,
             Err(wait::Waited::TimedOut) => return Err(::error::timedout(Some(url))),
             Err(wait::Waited::Err(_canceled)) => {
@@ -445,8 +451,19 @@ impl ClientHandle {
             }
         };
         res.map(|res| {
-            response::new(res, self.timeout, KeepCoreThreadAlive(self.inner.clone()))
+            response::new(res, self.timeout.0, KeepCoreThreadAlive(self.inner.clone()))
         })
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Timeout(Option<Duration>);
+
+impl Default for Timeout {
+    #[inline]
+    fn default() -> Timeout {
+        // default mentioned in ClientBuilder::timeout() doc comment
+        Timeout(Some(Duration::from_secs(30)))
     }
 }
 
