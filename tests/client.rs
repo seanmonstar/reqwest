@@ -62,9 +62,7 @@ fn test_post() {
 
     let url = format!("http://{}/2", server.addr());
     let mut res = reqwest::Client::new()
-        .unwrap()
         .post(&url)
-        .unwrap()
         .body("Hello")
         .send()
         .unwrap();

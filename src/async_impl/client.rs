@@ -31,6 +31,7 @@ pub struct Client {
 /// A `ClientBuilder` can be used to create a `Client` with  custom configuration:
 pub struct ClientBuilder {
     config: Option<Config>,
+    err: Option<::Error>,
 }
 
 struct Config {
@@ -45,23 +46,25 @@ struct Config {
 
 impl ClientBuilder {
     /// Constructs a new `ClientBuilder`
-    ///
-    /// # Errors
-    ///
-    /// This method fails if native TLS backend cannot be created.
-    pub fn new() -> ::Result<ClientBuilder> {
-        let tls_connector_builder = try_!(TlsConnector::builder());
-        Ok(ClientBuilder {
-            config: Some(Config {
-                gzip: true,
-                hostname_verification: true,
-                proxies: Vec::new(),
-                redirect_policy: RedirectPolicy::default(),
-                referer: true,
-                timeout: None,
-                tls: tls_connector_builder,
-            })
-        })
+    pub fn new() -> ClientBuilder {
+        match TlsConnector::builder() {
+            Ok(tls_connector_builder) => ClientBuilder {
+                config: Some(Config {
+                    gzip: true,
+                    hostname_verification: true,
+                    proxies: Vec::new(),
+                    redirect_policy: RedirectPolicy::default(),
+                    referer: true,
+                    timeout: None,
+                    tls: tls_connector_builder,
+                }),
+                err: None,
+            },
+            Err(e) => ClientBuilder {
+                config: None,
+                err: Some(::error::from(e)),
+            }
+        }
     }
 
     /// Returns a `Client` that uses this `ClientBuilder` configuration.
@@ -75,7 +78,12 @@ impl ClientBuilder {
     /// This method consumes the internal state of the builder.
     /// Trying to use this builder again after calling `build` will panic.
     pub fn build(&mut self, handle: &Handle) -> ::Result<Client> {
-        let config = self.take_config();
+        if let Some(err) = self.err.take() {
+            return Err(err);
+        }
+        let config = self.config
+            .take()
+            .expect("ClientBuilder cannot be reused after building a Client");
 
         let tls = try_!(config.tls.build());
 
@@ -105,28 +113,25 @@ impl ClientBuilder {
     ///
     /// This can be used to connect to a server that has a self-signed
     /// certificate for example.
-    ///
-    /// # Errors
-    ///
-    /// This method fails if adding root certificate was unsuccessful.
-    pub fn add_root_certificate(&mut self, cert: Certificate) -> ::Result<&mut ClientBuilder> {
-        let cert = ::tls::cert(cert);
-        try_!(self.config_mut().tls.add_root_certificate(cert));
-        Ok(self)
+    pub fn add_root_certificate(&mut self, cert: Certificate) -> &mut ClientBuilder {
+        if let Some(config) = config_mut(&mut self.config, &self.err) {
+            let cert = ::tls::cert(cert);
+            if let Err(e) = config.tls.add_root_certificate(cert) {
+                self.err = Some(::error::from(e));
+            }
+        }
+        self
     }
 
     /// Sets the identity to be used for client certificate authentication.
-    ///
-    /// This can be used in mutual authentication scenarios to identify to a server
-    /// with a Pkcs12 archive containing a certificate and private key for example.
-    ///
-    /// # Errors
-    ///
-    /// This method fails if adding client identity was unsuccessful.
-    pub fn identity(&mut self, identity: Identity) -> ::Result<&mut ClientBuilder> {
-        let pkcs12 = ::tls::pkcs12(identity);
-        try_!(self.config_mut().tls.identity(pkcs12));
-        Ok(self)
+    pub fn identity(&mut self, identity: Identity) -> &mut ClientBuilder {
+        if let Some(config) = config_mut(&mut self.config, &self.err) {
+            let pkcs12 = ::tls::pkcs12(identity);
+            if let Err(e) = config.tls.identity(pkcs12) {
+                self.err = Some(::error::from(e));
+            }
+        }
+        self
     }
 
     /// Disable hostname verification.
@@ -139,14 +144,19 @@ impl ClientBuilder {
     /// significant vulnerability to man-in-the-middle attacks.
     #[inline]
     pub fn danger_disable_hostname_verification(&mut self) -> &mut ClientBuilder {
-        self.config_mut().hostname_verification = false;
+
+        if let Some(config) = config_mut(&mut self.config, &self.err) {
+            config.hostname_verification = false;
+        }
         self
     }
 
     /// Enable hostname verification.
     #[inline]
     pub fn enable_hostname_verification(&mut self) -> &mut ClientBuilder {
-        self.config_mut().hostname_verification = true;
+        if let Some(config) = config_mut(&mut self.config, &self.err) {
+            config.hostname_verification = true;
+        }
         self
     }
 
@@ -155,14 +165,18 @@ impl ClientBuilder {
     /// Default is enabled.
     #[inline]
     pub fn gzip(&mut self, enable: bool) -> &mut ClientBuilder {
-        self.config_mut().gzip = enable;
+        if let Some(config) = config_mut(&mut self.config, &self.err) {
+            config.gzip = enable;
+        }
         self
     }
 
     /// Add a `Proxy` to the list of proxies the `Client` will use.
     #[inline]
     pub fn proxy(&mut self, proxy: Proxy) -> &mut ClientBuilder {
-        self.config_mut().proxies.push(proxy);
+        if let Some(config) = config_mut(&mut self.config, &self.err) {
+            config.proxies.push(proxy);
+        }
         self
     }
 
@@ -171,7 +185,9 @@ impl ClientBuilder {
     /// Default will follow redirects up to a maximum of 10.
     #[inline]
     pub fn redirect(&mut self, policy: RedirectPolicy) -> &mut ClientBuilder {
-        self.config_mut().redirect_policy = policy;
+        if let Some(config) = config_mut(&mut self.config, &self.err) {
+            config.redirect_policy = policy;
+        }
         self
     }
 
@@ -180,28 +196,27 @@ impl ClientBuilder {
     /// Default is `true`.
     #[inline]
     pub fn referer(&mut self, enable: bool) -> &mut ClientBuilder {
-        self.config_mut().referer = enable;
+        if let Some(config) = config_mut(&mut self.config, &self.err) {
+            config.referer = enable;
+        }
         self
     }
 
     /// Set a timeout for both the read and write operations of a client.
     #[inline]
     pub fn timeout(&mut self, timeout: Duration) -> &mut ClientBuilder {
-        self.config_mut().timeout = Some(timeout);
+        if let Some(config) = config_mut(&mut self.config, &self.err) {
+            config.timeout = Some(timeout);
+        }
         self
     }
+}
 
-    // private
-    fn config_mut(&mut self) -> &mut Config {
-        self.config
-            .as_mut()
-            .expect("ClientBuilder cannot be reused after building a Client")
-    }
-
-    fn take_config(&mut self) -> Config {
-        self.config
-            .take()
-            .expect("ClientBuilder cannot be reused after building a Client")
+fn config_mut<'a>(config: &'a mut Option<Config>, err: &Option<::Error>) -> Option<&'a mut Config> {
+    if err.is_some() {
+        None
+    } else {
+        config.as_mut()
     }
 }
 
@@ -216,21 +231,21 @@ fn create_hyper_client(tls: TlsConnector, proxies: Arc<Vec<Proxy>>, handle: &Han
 impl Client {
     /// Constructs a new `Client`.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// This method fails if native TLS backend cannot be created or initialized.
+    /// This method panics if native TLS backend cannot be created or
+    /// initialized. Use `Client::builder()` if you wish to handle the failure
+    /// as an `Error` instead of panicking.
     #[inline]
-    pub fn new(handle: &Handle) -> ::Result<Client> {
-        ClientBuilder::new()?.build(handle)
+    pub fn new(handle: &Handle) -> Client {
+        ClientBuilder::new()
+            .build(handle)
+            .expect("TLS failed to initialize")
     }
 
     /// Creates a `ClientBuilder` to configure a `Client`.
-    ///
-    /// # Errors
-    ///
-    /// This method fails if native TLS backend cannot be created.
     #[inline]
-    pub fn builder() -> ::Result<ClientBuilder> {
+    pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }
 
@@ -239,7 +254,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
-    pub fn get<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
+    pub fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Get, url)
     }
 
@@ -248,7 +263,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
-    pub fn post<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
+    pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Post, url)
     }
 
@@ -257,7 +272,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
-    pub fn put<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
+    pub fn put<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Put, url)
     }
 
@@ -266,7 +281,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
-    pub fn patch<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
+    pub fn patch<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Patch, url)
     }
 
@@ -275,7 +290,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
-    pub fn delete<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
+    pub fn delete<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Delete, url)
     }
 
@@ -284,7 +299,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
-    pub fn head<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
+    pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Head, url)
     }
 
@@ -296,9 +311,12 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
-    pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> ::Result<RequestBuilder> {
-        let url = try_!(url.into_url());
-        Ok(request::builder(self.clone(), Request::new(method, url)))
+    pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
+        let req = match url.into_url() {
+            Ok(url) => Ok(Request::new(method, url)),
+            Err(err) => Err(::error::from(err)),
+        };
+        request::builder(self.clone(), req)
     }
 
     /// Executes a `Request`.
@@ -357,16 +375,18 @@ impl Client {
         let in_flight = self.inner.hyper.request(req);
 
         Pending {
-            method: method,
-            url: url,
-            headers: headers,
-            body: body,
+            inner: PendingInner::Request(PendingRequest {
+                method: method,
+                url: url,
+                headers: headers,
+                body: body,
 
-            urls: Vec::new(),
+                urls: Vec::new(),
 
-            client: self.inner.clone(),
+                client: self.inner.clone(),
 
-            in_flight: in_flight,
+                in_flight: in_flight,
+            }),
         }
     }
 }
@@ -397,6 +417,15 @@ struct ClientRef {
 }
 
 pub struct Pending {
+    inner: PendingInner,
+}
+
+enum PendingInner {
+    Request(PendingRequest),
+    Error(Option<::Error>),
+}
+
+pub struct PendingRequest {
     method: Method,
     url: Url,
     headers: Headers,
@@ -409,7 +438,20 @@ pub struct Pending {
     in_flight: FutureResponse,
 }
 
+
 impl Future for Pending {
+    type Item = Response;
+    type Error = ::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match self.inner {
+            PendingInner::Request(ref mut req) => req.poll(),
+            PendingInner::Error(ref mut err) => Err(err.take().expect("Pending error polled more than once")),
+        }
+    }
+}
+
+impl Future for PendingRequest {
     type Item = Response;
     type Error = ::Error;
 
@@ -497,10 +539,19 @@ impl Future for Pending {
 
 impl fmt::Debug for Pending {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Pending")
-            .field("method", &self.method)
-            .field("url", &self.url)
-            .finish()
+        match self.inner {
+            PendingInner::Request(ref req) => {
+                f.debug_struct("Pending")
+                    .field("method", &req.method)
+                    .field("url", &req.url)
+                    .finish()
+            },
+            PendingInner::Error(ref err) => {
+                f.debug_struct("Pending")
+                    .field("error", err)
+                    .finish()
+            }
+        }
     }
 }
 
@@ -520,5 +571,11 @@ fn make_referer(next: &Url, previous: &Url) -> Option<Referer> {
 
 pub fn take_builder(builder: &mut ClientBuilder) -> ClientBuilder {
     use std::mem;
-    mem::replace(builder, ClientBuilder { config: None })
+    mem::replace(builder, ClientBuilder { config: None, err: None })
+}
+
+pub fn pending_err(err: ::Error) -> Pending {
+    Pending {
+        inner: PendingInner::Error(Some(err)),
+    }
 }

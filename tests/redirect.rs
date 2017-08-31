@@ -5,7 +5,7 @@ mod support;
 
 #[test]
 fn test_redirect_301_and_302_and_303_changes_post_to_get() {
-    let client = reqwest::Client::new().unwrap();
+    let client = reqwest::Client::new();
     let codes = [301, 302, 303];
 
     for code in codes.iter() {
@@ -47,7 +47,6 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
         let url = format!("http://{}/{}", redirect.addr(), code);
         let dst = format!("http://{}/{}", redirect.addr(), "dst");
         let res = client.post(&url)
-            .unwrap()
             .send()
             .unwrap();
         assert_eq!(res.url().as_str(), dst);
@@ -59,7 +58,7 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
 
 #[test]
 fn test_redirect_307_and_308_tries_to_get_again() {
-    let client = reqwest::Client::new().unwrap();
+    let client = reqwest::Client::new();
     let codes = [307, 308];
     for code in codes.iter() {
         let redirect = server! {
@@ -100,7 +99,6 @@ fn test_redirect_307_and_308_tries_to_get_again() {
         let url = format!("http://{}/{}", redirect.addr(), code);
         let dst = format!("http://{}/{}", redirect.addr(), "dst");
         let res = client.get(&url)
-            .unwrap()
             .send()
             .unwrap();
         assert_eq!(res.url().as_str(), dst);
@@ -112,7 +110,7 @@ fn test_redirect_307_and_308_tries_to_get_again() {
 
 #[test]
 fn test_redirect_307_and_308_tries_to_post_again() {
-    let client = reqwest::Client::new().unwrap();
+    let client = reqwest::Client::new();
     let codes = [307, 308];
     for code in codes.iter() {
         let redirect = server! {
@@ -157,7 +155,6 @@ fn test_redirect_307_and_308_tries_to_post_again() {
         let url = format!("http://{}/{}", redirect.addr(), code);
         let dst = format!("http://{}/{}", redirect.addr(), "dst");
         let res = client.post(&url)
-            .unwrap()
             .body("Hello")
             .send()
             .unwrap();
@@ -170,7 +167,7 @@ fn test_redirect_307_and_308_tries_to_post_again() {
 
 #[test]
 fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
-    let client = reqwest::Client::new().unwrap();
+    let client = reqwest::Client::new();
     let codes = [307, 308];
     for &code in codes.iter() {
         let redirect = server! {
@@ -199,7 +196,6 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
         let url = format!("http://{}/{}", redirect.addr(), code);
         let res = client
             .post(&url)
-            .unwrap()
             .body(reqwest::Body::new(&b"Hello"[..]))
             .send()
             .unwrap();
@@ -251,12 +247,10 @@ fn test_redirect_removes_sensitive_headers() {
     let mut cookie = reqwest::header::Cookie::new();
     cookie.set("foo", "bar");
     reqwest::Client::builder()
-        .unwrap()
         .referer(false)
         .build()
         .unwrap()
         .get(&format!("http://{}/sensitive", mid_server.addr()))
-        .unwrap()
         .header(cookie)
         .send()
         .unwrap();
@@ -309,12 +303,10 @@ fn test_redirect_policy_can_stop_redirects_without_an_error() {
     let url = format!("http://{}/no-redirect", server.addr());
 
     let res = reqwest::Client::builder()
-        .unwrap()
         .redirect(reqwest::RedirectPolicy::none())
         .build()
         .unwrap()
         .get(&url)
-        .unwrap()
         .send()
         .unwrap();
 
@@ -359,12 +351,12 @@ fn test_referer_is_not_set_if_disabled() {
             \r\n\
             "
     };
-    reqwest::Client::builder().unwrap()
+    reqwest::Client::builder()
         .referer(false)
-        .build().unwrap()
+        .build()
+        .unwrap()
         //client
         .get(&format!("http://{}/no-refer", server.addr()))
-        .unwrap()
         .send()
         .unwrap();
 }

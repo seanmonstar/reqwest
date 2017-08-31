@@ -74,7 +74,7 @@ impl RedirectPolicy {
     ///         attempt.follow()
     ///     }
     /// });
-    /// let client = reqwest::Client::builder()?
+    /// let client = reqwest::Client::builder()
     ///     .redirect(custom)
     ///     .build()?;
     /// # Ok(())

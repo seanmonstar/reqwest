@@ -38,9 +38,7 @@ fn test_multipart() {
     let url = format!("http://{}/multipart/1", server.addr());
 
     let res = reqwest::Client::new()
-        .unwrap()
         .post(&url)
-        .unwrap()
         .multipart(form)
         .send()
         .unwrap();

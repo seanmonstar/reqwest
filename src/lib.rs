@@ -58,8 +58,8 @@
 //! # use reqwest::Error;
 //! #
 //! # fn run() -> Result<(), Error> {
-//! let client = reqwest::Client::new()?;
-//! let res = client.post("http://httpbin.org/post")?
+//! let client = reqwest::Client::new();
+//! let res = client.post("http://httpbin.org/post")
 //!     .body("the exact body that is sent")
 //!     .send()?;
 //! # Ok(())
@@ -80,9 +80,9 @@
 //! # fn run() -> Result<(), Error> {
 //! // This will POST a body of `foo=bar&baz=quux`
 //! let params = [("foo", "bar"), ("baz", "quux")];
-//! let client = reqwest::Client::new()?;
-//! let res = client.post("http://httpbin.org/post")?
-//!     .form(&params)?
+//! let client = reqwest::Client::new();
+//! let res = client.post("http://httpbin.org/post")
+//!     .form(&params)
 //!     .send()?;
 //! # Ok(())
 //! # }
@@ -104,9 +104,9 @@
 //! map.insert("lang", "rust");
 //! map.insert("body", "json");
 //!
-//! let client = reqwest::Client::new()?;
-//! let res = client.post("http://httpbin.org/post")?
-//!     .json(&map)?
+//! let client = reqwest::Client::new();
+//! let res = client.post("http://httpbin.org/post")
+//!     .json(&map)
 //!     .send()?;
 //! # Ok(())
 //! # }
@@ -228,8 +228,8 @@ pub mod unstable {
 /// - redirect loop was detected
 /// - redirect limit was exhausted
 pub fn get<T: IntoUrl>(url: T) -> ::Result<Response> {
-    Client::new()?
-        .get(url)?
+    Client::new()
+        .get(url)
         .send()
 }
 

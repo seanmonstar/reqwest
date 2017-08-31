@@ -63,8 +63,8 @@ impl Response {
     /// use reqwest::Client;
     /// use reqwest::StatusCode;
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let client = Client::new()?;
-    /// let resp = client.post("http://httpbin.org/post")?
+    /// let client = Client::new();
+    /// let resp = client.post("http://httpbin.org/post")
     ///             .body("possibly too large")
     ///             .send()?;
     /// match resp.status() {
@@ -94,8 +94,8 @@ impl Response {
     /// # use reqwest::header::ContentLength;
     /// #
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let client = Client::new()?;
-    /// let mut resp = client.head("http://httpbin.org/bytes/3000")?.send()?;
+    /// let client = Client::new();
+    /// let mut resp = client.head("http://httpbin.org/bytes/3000").send()?;
     /// if resp.status().is_success() {
     ///     let len = resp.headers().get::<ContentLength>()
     ///                 .map(|ct_len| **ct_len)

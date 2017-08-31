@@ -61,10 +61,9 @@ fn test_gzip(response_size: usize, chunk_size: usize) {
 
     let mut core = Core::new().unwrap();
 
-    let client = Client::new(&core.handle()).unwrap();
+    let client = Client::new(&core.handle());
 
     let res_future = client.get(&format!("http://{}/gzip", server.addr()))
-        .unwrap()
         .send()
         .and_then(|mut res| {
             let body = mem::replace(res.body_mut(), Decoder::empty());

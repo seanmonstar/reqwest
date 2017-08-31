@@ -68,10 +68,9 @@ fn test_gzip_empty_body() {
             \r\n"
     };
 
-    let client = reqwest::Client::new().unwrap();
+    let client = reqwest::Client::new();
     let mut res = client
         .head(&format!("http://{}/gzip", server.addr()))
-        .unwrap()
         .send()
         .unwrap();
 
@@ -127,11 +126,10 @@ fn test_accept_header_is_not_changed_if_set() {
             \r\n\
             "
     };
-    let client = reqwest::Client::new().unwrap();
+    let client = reqwest::Client::new();
 
     let res = client
         .get(&format!("http://{}/accept", server.addr()))
-        .unwrap()
         .header(reqwest::header::Accept::json())
         .send()
         .unwrap();
@@ -157,10 +155,9 @@ fn test_accept_encoding_header_is_not_changed_if_set() {
             \r\n\
             "
     };
-    let client = reqwest::Client::new().unwrap();
+    let client = reqwest::Client::new();
 
     let res = client.get(&format!("http://{}/accept-encoding", server.addr()))
-        .unwrap()
         .header(reqwest::header::AcceptEncoding(
             vec![reqwest::header::qitem(reqwest::header::Encoding::Identity)]
         ))

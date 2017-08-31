@@ -26,12 +26,10 @@ fn test_http_proxy() {
 
     let url = "http://hyper.rs/prox";
     let res = reqwest::Client::builder()
-        .unwrap()
         .proxy(reqwest::Proxy::http(&proxy).unwrap())
         .build()
         .unwrap()
         .get(url)
-        .unwrap()
         .send()
         .unwrap();
 
