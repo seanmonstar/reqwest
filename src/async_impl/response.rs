@@ -51,27 +51,27 @@ impl Response {
         &mut self.headers
     }
 
-    /// Get a readable response body.
-    /// 
-    /// The response will be decoded.
-    #[inline]
-    pub fn body_mut(&mut self) -> &mut Decoder {
-        &mut self.body
-    }
-
-    /// Get a readable response body.
-    /// 
-    /// This function will replace the body on the response with an empty one.
+    /// Get a reference to the response body.
     #[inline]
     pub fn body(&self) -> &Decoder {
         &self.body
     }
 
+    /// Get a mutable reference to the response body.
+    ///
+    /// The chunks from the body may be decoded, depending on the `gzip`
+    /// option on the `ClientBuilder`.
+    #[inline]
+    pub fn body_mut(&mut self) -> &mut Decoder {
+        &mut self.body
+    }
+
+
     /// Try to deserialize the response body as JSON using `serde`.
     #[inline]
     pub fn json<T: DeserializeOwned>(&mut self) -> Json<T> {
         let body = mem::replace(&mut self.body, Decoder::empty());
-        
+
         Json {
             concat: body.concat2(),
             _marker: PhantomData,
@@ -79,28 +79,28 @@ impl Response {
     }
 
     /// Turn a response into an error if the server returned an error.
-    // XXX: example disabled since rustdoc still tries to run it
-    // when the 'unstable' feature isn't active, making the import
-    // fail.
-    //
-    // # Example
-    //
-    // ```
-    // # use reqwest::unstable::async::Response;
-    // fn on_response(res: Response) {
-    //     match res.error_for_status() {
-    //         Ok(_res) => (),
-    //         Err(err) => {
-    //             // asserting a 400 as an example
-    //             // it could be any status between 400...599
-    //             assert_eq!(
-    //                 err.status(),
-    //                 Some(reqwest::StatusCode::BadRequest)
-    //             );
-    //         }
-    //     }
-    // }
-    // ```
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # #[cfg(feature="unstable")]
+    /// # use reqwest::unstable::async::Response;
+    /// # #[cfg(feature="unstable")]
+    /// fn on_response(res: Response) {
+    ///     match res.error_for_status() {
+    ///         Ok(_res) => (),
+    ///         Err(err) => {
+    ///             // asserting a 400 as an example
+    ///             // it could be any status between 400...599
+    ///             assert_eq!(
+    ///                 err.status(),
+    ///                 Some(reqwest::StatusCode::BadRequest)
+    ///             );
+    ///         }
+    ///     }
+    /// }
+    /// # fn main() {}
+    /// ```
     #[inline]
     pub fn error_for_status(self) -> ::Result<Self> {
         if self.status.is_client_error() {

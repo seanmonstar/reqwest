@@ -44,3 +44,6 @@ path = "examples/simple.rs"
 name = "async"
 path = "examples/async.rs"
 required-features = ["unstable"]
+
+[package.metadata.docs.rs]
+features = ["unstable"]

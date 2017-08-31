@@ -23,6 +23,33 @@ static DEFAULT_USER_AGENT: &'static str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 /// An asynchornous `Client` to make Requests with.
+///
+/// The Client has various configuration values to tweak, but the defaults
+/// are set to what is usually the most commonly desired value.
+///
+/// The `Client` holds a connection pool internally, so it is advised that
+/// you create one and **reuse** it.
+///
+/// # Examples
+///
+/// ```rust
+/// # #[cfg(features = "unstable")]
+/// # fn run() -> Result<(), Box<::std::error::Error>> {
+/// # extern crate tokio_core;
+/// # extern crate futures;
+/// use futures::Future;
+/// use tokio_core::reactor::Core;
+/// use reqwest::unstable::async::Client;
+///
+/// let mut core = Core::new()?;
+/// let client = Client::new(&core.handle());
+/// let fut = client.get("http://httpbin.org/").send();
+/// core.run(fut)?;
+/// #   Ok(())
+/// # }
+/// # fn main() {}
+/// ```
+
 #[derive(Clone)]
 pub struct Client {
     inner: Arc<ClientRef>,
