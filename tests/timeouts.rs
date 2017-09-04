@@ -30,12 +30,10 @@ fn test_write_timeout() {
 
     let url = format!("http://{}/write-timeout", server.addr());
     let err = reqwest::Client::builder()
-        .unwrap()
         .timeout(Duration::from_millis(500))
         .build()
         .unwrap()
         .post(&url)
-        .unwrap()
         .header(reqwest::header::ContentLength(5))
         .body(reqwest::Body::new(&b"Hello"[..]))
         .send()
@@ -66,12 +64,10 @@ fn test_response_timeout() {
 
     let url = format!("http://{}/response-timeout", server.addr());
     let err = reqwest::Client::builder()
-        .unwrap()
         .timeout(Duration::from_millis(500))
         .build()
         .unwrap()
         .get(&url)
-        .unwrap()
         .send()
         .unwrap_err();
 
@@ -101,12 +97,10 @@ fn test_read_timeout() {
 
     let url = format!("http://{}/read-timeout", server.addr());
     let mut res = reqwest::Client::builder()
-        .unwrap()
         .timeout(Duration::from_millis(500))
         .build()
         .unwrap()
         .get(&url)
-        .unwrap()
         .send()
         .unwrap();
 

@@ -18,11 +18,11 @@ error_chain! {
     }
 }
 
-fn main() {
-    let mut core = tokio_core::reactor::Core::new().unwrap();
-    let client = Client::new(&core.handle()).unwrap();
+fn run() -> Result<()> {
+    let mut core = tokio_core::reactor::Core::new()?;
+    let client = Client::new(&core.handle());
 
-    let work = client.get("https://hyper.rs").unwrap()
+    let work = client.get("https://hyper.rs")
         .send()
         .map_err(|e| Error::from(e))
         .and_then(|mut res| {
@@ -36,5 +36,8 @@ fn main() {
             io::copy(&mut body, &mut io::stdout()).map_err(Into::into)
         });
 
-    core.run(work).unwrap();
+    core.run(work)?;
+    Ok(())
 }
+
+quick_main!(run);

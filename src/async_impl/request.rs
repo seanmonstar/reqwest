@@ -5,7 +5,7 @@ use serde_json;
 use serde_urlencoded;
 
 use super::body::{self, Body};
-use super::client::{Client, Pending};
+use super::client::{Client, Pending, pending_err};
 use header::{ContentType, Headers};
 use {Method, Url};
 
@@ -21,6 +21,7 @@ pub struct Request {
 pub struct RequestBuilder {
     client: Client,
     request: Option<Request>,
+    err: Option<::Error>,
 }
 
 impl Request {
@@ -90,14 +91,18 @@ impl RequestBuilder {
     where
         H: ::header::Header,
     {
-        self.request_mut().headers.set(header);
+        if let Some(req) = request_mut(&mut self.request, &self.err) {
+            req.headers_mut().set(header);
+        }
         self
     }
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
     pub fn headers(&mut self, headers: ::header::Headers) -> &mut RequestBuilder {
-        self.request_mut().headers.extend(headers.iter());
+        if let Some(req) = request_mut(&mut self.request, &self.err) {
+            req.headers_mut().extend(headers.iter());
+        }
         self
     }
 
@@ -115,20 +120,24 @@ impl RequestBuilder {
 
     /// Set the request body.
     pub fn body<T: Into<Body>>(&mut self, body: T) -> &mut RequestBuilder {
-        self.request_mut().body = Some(body.into());
+        if let Some(req) = request_mut(&mut self.request, &self.err) {
+            *req.body_mut() = Some(body.into());
+        }
         self
     }
 
     /// Send a form body.
-    pub fn form<T: Serialize>(&mut self, form: &T) -> ::Result<&mut RequestBuilder> {
-        {
-            // check request_mut() before running serde
-            let mut req = self.request_mut();
-            let body = try_!(serde_urlencoded::to_string(form));
-            req.headers.set(ContentType::form_url_encoded());
-            req.body = Some(body::reusable(body.into()));
+    pub fn form<T: Serialize>(&mut self, form: &T) -> &mut RequestBuilder {
+        if let Some(req) = request_mut(&mut self.request, &self.err) {
+            match serde_urlencoded::to_string(form) {
+                Ok(body) => {
+                    req.headers_mut().set(ContentType::form_url_encoded());
+                    *req.body_mut() = Some(body.into());
+                },
+                Err(err) => self.err = Some(::error::from(err)),
+            }
         }
-        Ok(self)
+        self
     }
 
     /// Send a JSON body.
@@ -137,15 +146,17 @@ impl RequestBuilder {
     ///
     /// Serialization can fail if `T`'s implementation of `Serialize` decides to
     /// fail, or if `T` contains a map with non-string keys.
-    pub fn json<T: Serialize>(&mut self, json: &T) -> ::Result<&mut RequestBuilder> {
-        {
-            // check request_mut() before running serde
-            let mut req = self.request_mut();
-            let body = try_!(serde_json::to_vec(json));
-            req.headers.set(ContentType::json());
-            req.body = Some(body::reusable(body.into()));
+    pub fn json<T: Serialize>(&mut self, json: &T) -> &mut RequestBuilder {
+        if let Some(req) = request_mut(&mut self.request, &self.err) {
+            match serde_json::to_vec(json) {
+                Ok(body) => {
+                    req.headers_mut().set(ContentType::json());
+                    *req.body_mut() = Some(body.into());
+                },
+                Err(err) => self.err = Some(::error::from(err)),
+            }
         }
-        Ok(self)
+        self
     }
 
     /// Build a `Request`, which can be inspected, modified and executed with
@@ -155,10 +166,14 @@ impl RequestBuilder {
     ///
     /// This method consumes builder internal state. It panics on an attempt to
     /// reuse already consumed builder.
-    pub fn build(&mut self) -> Request {
-        self.request
-            .take()
-            .expect("RequestBuilder cannot be reused after builder a Request")
+    pub fn build(&mut self) -> ::Result<Request> {
+        if let Some(err) = self.err.take() {
+            Err(err)
+        } else {
+            Ok(self.request
+                .take()
+                .expect("RequestBuilder cannot be reused after builder a Request"))
+        }
     }
 
     /// Constructs the Request and sends it the target URL, returning a Response.
@@ -168,16 +183,18 @@ impl RequestBuilder {
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
     pub fn send(&mut self) -> Pending {
-        let request = self.build();
-        self.client.execute(request)
+        match self.build() {
+            Ok(req) => self.client.execute(req),
+            Err(err) => pending_err(err),
+        }
     }
+}
 
-    // private
-
-    fn request_mut(&mut self) -> &mut Request {
-        self.request
-            .as_mut()
-            .expect("RequestBuilder cannot be reused after builder a Request")
+fn request_mut<'a>(req: &'a mut Option<Request>, err: &Option<::Error>) -> Option<&'a mut Request> {
+    if err.is_some() {
+        None
+    } else {
+        req.as_mut()
     }
 }
 
@@ -210,10 +227,18 @@ fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>, req: &Request
 // pub(crate)
 
 #[inline]
-pub fn builder(client: Client, req: Request) -> RequestBuilder {
-    RequestBuilder {
-        client: client,
-        request: Some(req),
+pub fn builder(client: Client, req: ::Result<Request>) -> RequestBuilder {
+    match req {
+        Ok(req) => RequestBuilder {
+            client: client,
+            request: Some(req),
+            err: None,
+        },
+        Err(err) => RequestBuilder {
+            client: client,
+            request: None,
+            err: Some(err)
+        },
     }
 }
 

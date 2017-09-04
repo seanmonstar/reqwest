@@ -16,7 +16,7 @@ use {async_impl, Certificate, Identity, Method, IntoUrl, Proxy, RedirectPolicy, 
 /// are set to what is usually the most commonly desired value.
 ///
 /// The `Client` holds a connection pool internally, so it is advised that
-/// you create one and reuse it.
+/// you create one and **reuse** it.
 ///
 /// # Examples
 ///
@@ -24,8 +24,8 @@ use {async_impl, Certificate, Identity, Method, IntoUrl, Proxy, RedirectPolicy, 
 /// # use reqwest::{Error, Client};
 /// #
 /// # fn run() -> Result<(), Error> {
-/// let client = Client::new()?;
-/// let resp = client.get("http://httpbin.org/")?.send()?;
+/// let client = Client::new();
+/// let resp = client.get("http://httpbin.org/").send()?;
 /// #   drop(resp);
 /// #   Ok(())
 /// # }
@@ -44,7 +44,7 @@ pub struct Client {
 /// # fn run() -> Result<(), reqwest::Error> {
 /// use std::time::Duration;
 ///
-/// let client = reqwest::Client::builder()?
+/// let client = reqwest::Client::builder()
 ///     .gzip(true)
 ///     .timeout(Duration::from_secs(10))
 ///     .build()?;
@@ -58,15 +58,11 @@ pub struct ClientBuilder {
 
 impl ClientBuilder {
     /// Constructs a new `ClientBuilder`
-    ///
-    /// # Errors
-    ///
-    /// This method fails if native TLS backend cannot be created.
-    pub fn new() -> ::Result<ClientBuilder> {
-        async_impl::ClientBuilder::new().map(|builder| ClientBuilder {
-            inner: builder,
+    pub fn new() -> ClientBuilder {
+        ClientBuilder {
+            inner: async_impl::ClientBuilder::new(),
             timeout: Timeout::default(),
-        })
+        }
     }
 
     /// Returns a `Client` that uses this `ClientBuilder` configuration.
@@ -103,8 +99,8 @@ impl ClientBuilder {
     /// let cert = reqwest::Certificate::from_der(&buf)?;
     ///
     /// // get a client builder
-    /// let client = reqwest::ClientBuilder::new()?
-    ///     .add_root_certificate(cert)?
+    /// let client = reqwest::Client::builder()
+    ///     .add_root_certificate(cert)
     ///     .build()?;
     /// # drop(client);
     /// # Ok(())
@@ -114,17 +110,15 @@ impl ClientBuilder {
     /// # Errors
     ///
     /// This method fails if adding root certificate was unsuccessful.
-    pub fn add_root_certificate(&mut self, cert: Certificate) -> ::Result<&mut ClientBuilder> {
-        self.inner.add_root_certificate(cert)?;
-        Ok(self)
+    pub fn add_root_certificate(&mut self, cert: Certificate) -> &mut ClientBuilder {
+        self.inner.add_root_certificate(cert);
+        self
     }
 
     /// Sets the identity to be used for client certificate authentication.
     ///
-    /// This can be used in mutual authentication scenarios to identify to a server
-    /// with a PKCS#12 archive containing a certificate and private key for example.
-    ///
     /// # Example
+    ///
     /// ```
     /// # use std::fs::File;
     /// # use std::io::Read;
@@ -137,20 +131,16 @@ impl ClientBuilder {
     /// let pkcs12 = reqwest::Identity::from_pkcs12_der(&buf, "my-privkey-password")?;
     ///
     /// // get a client builder
-    /// let client = reqwest::ClientBuilder::new()?
-    ///     .identity(pkcs12)?
+    /// let client = reqwest::Client::builder()
+    ///     .identity(pkcs12)
     ///     .build()?;
     /// # drop(client);
     /// # Ok(())
     /// # }
     /// ```
-    ///
-    /// # Errors
-    ///
-    /// This method fails if adding client identity was unsuccessful.
-    pub fn identity(&mut self, identity: Identity) -> ::Result<&mut ClientBuilder> {
-        self.inner.identity(identity)?;
-        Ok(self)
+    pub fn identity(&mut self, identity: Identity) -> &mut ClientBuilder {
+        self.inner.identity(identity);
+        self
     }
 
 
@@ -229,21 +219,21 @@ impl ClientBuilder {
 impl Client {
     /// Constructs a new `Client`.
     ///
-    /// # Errors
+    /// # Panic
     ///
-    /// This method fails if native TLS backend cannot be created or initialized.
+    /// This method panics if native TLS backend cannot be created or
+    /// initialized. Use `Client::builder()` if you wish to handle the failure
+    /// as an `Error` instead of panicking.
     #[inline]
-    pub fn new() -> ::Result<Client> {
-        ClientBuilder::new()?.build()
+    pub fn new() -> Client {
+        ClientBuilder::new()
+            .build()
+            .expect("Client failed to initialize")
     }
 
     /// Creates a `ClientBuilder` to configure a `Client`.
-    ///
-    /// # Errors
-    ///
-    /// This method fails if native TLS backend cannot be created.
     #[inline]
-    pub fn builder() -> ::Result<ClientBuilder> {
+    pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }
 
@@ -252,7 +242,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
-    pub fn get<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
+    pub fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Get, url)
     }
 
@@ -261,7 +251,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
-    pub fn post<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
+    pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Post, url)
     }
 
@@ -270,7 +260,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
-    pub fn put<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
+    pub fn put<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Put, url)
     }
 
@@ -279,7 +269,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
-    pub fn patch<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
+    pub fn patch<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Patch, url)
     }
 
@@ -288,7 +278,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
-    pub fn delete<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
+    pub fn delete<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Delete, url)
     }
 
@@ -297,7 +287,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
-    pub fn head<U: IntoUrl>(&self, url: U) -> ::Result<RequestBuilder> {
+    pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::Head, url)
     }
 
@@ -309,9 +299,12 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
-    pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> ::Result<RequestBuilder> {
-        let url = try_!(url.into_url());
-        Ok(request::builder(self.clone(), Request::new(method, url)))
+    pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
+        let req = match url.into_url() {
+            Ok(url) => Ok(Request::new(method, url)),
+            Err(err) => Err(::error::from(err)),
+        };
+        request::builder(self.clone(), req)
     }
 
     /// Executes a `Request`.

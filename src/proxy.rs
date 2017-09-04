@@ -43,7 +43,7 @@ impl Proxy {
     /// ```
     /// # extern crate reqwest;
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let client = reqwest::Client::builder()?
+    /// let client = reqwest::Client::builder()
     ///     .proxy(reqwest::Proxy::http("https://my.prox")?)
     ///     .build()?;
     /// # Ok(())
@@ -62,7 +62,7 @@ impl Proxy {
     /// ```
     /// # extern crate reqwest;
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let client = reqwest::Client::builder()?
+    /// let client = reqwest::Client::builder()
     ///     .proxy(reqwest::Proxy::https("https://example.prox:4545")?)
     ///     .build()?;
     /// # Ok(())
@@ -81,7 +81,7 @@ impl Proxy {
     /// ```
     /// # extern crate reqwest;
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let client = reqwest::Client::builder()?
+    /// let client = reqwest::Client::builder()
     ///     .proxy(reqwest::Proxy::all("http://pro.xy")?)
     ///     .build()?;
     /// # Ok(())
@@ -101,7 +101,7 @@ impl Proxy {
     /// # extern crate reqwest;
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
     /// let target = reqwest::Url::parse("https://my.prox")?;
-    /// let client = reqwest::Client::builder()?
+    /// let client = reqwest::Client::builder()
     ///     .proxy(reqwest::Proxy::custom(move |url| {
     ///         if url.host_str() == Some("hyper.rs") {
     ///             Some(target.clone())

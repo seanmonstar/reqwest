@@ -19,6 +19,7 @@ pub struct Request {
 pub struct RequestBuilder {
     client: Client,
     request: Option<Request>,
+    err: Option<::Error>,
 }
 
 impl Request {
@@ -87,8 +88,8 @@ impl RequestBuilder {
     /// use reqwest::header::UserAgent;
     ///
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let client = reqwest::Client::new()?;
-    /// let res = client.get("https://www.rust-lang.org")?
+    /// let client = reqwest::Client::new();
+    /// let res = client.get("https://www.rust-lang.org")
     ///     .header(UserAgent::new("foo"))
     ///     .send()?;
     /// # Ok(())
@@ -98,7 +99,9 @@ impl RequestBuilder {
     where
         H: ::header::Header,
     {
-        self.request_mut().headers_mut().set(header);
+        if let Some(req) = request_mut(&mut self.request, &self.err) {
+            req.headers_mut().set(header);
+        }
         self
     }
 
@@ -119,8 +122,8 @@ impl RequestBuilder {
     ///
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
     /// let file = fs::File::open("much_beauty.png")?;
-    /// let client = reqwest::Client::new()?;
-    /// let res = client.post("http://httpbin.org/post")?
+    /// let client = reqwest::Client::new();
+    /// let res = client.post("http://httpbin.org/post")
     ///     .headers(construct_headers())
     ///     .body(file)
     ///     .send()?;
@@ -128,7 +131,9 @@ impl RequestBuilder {
     /// # }
     /// ```
     pub fn headers(&mut self, headers: ::header::Headers) -> &mut RequestBuilder {
-        self.request_mut().headers_mut().extend(headers.iter());
+        if let Some(req) = request_mut(&mut self.request, &self.err) {
+            req.headers_mut().extend(headers.iter());
+        }
         self
     }
 
@@ -136,8 +141,8 @@ impl RequestBuilder {
     ///
     /// ```rust
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let client = reqwest::Client::new()?;
-    /// let resp = client.delete("http://httpbin.org/delete")?
+    /// let client = reqwest::Client::new();
+    /// let resp = client.delete("http://httpbin.org/delete")
     ///     .basic_auth("admin", Some("good password"))
     ///     .send()?;
     /// # Ok(())
@@ -162,8 +167,8 @@ impl RequestBuilder {
     ///
     /// ```rust
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let client = reqwest::Client::new()?;
-    /// let res = client.post("http://httpbin.org/post")?
+    /// let client = reqwest::Client::new();
+    /// let res = client.post("http://httpbin.org/post")
     ///     .body("from a &str!")
     ///     .send()?;
     /// # Ok(())
@@ -176,8 +181,8 @@ impl RequestBuilder {
     /// # use std::fs;
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
     /// let file = fs::File::open("from_a_file.txt")?;
-    /// let client = reqwest::Client::new()?;
-    /// let res = client.post("http://httpbin.org/post")?
+    /// let client = reqwest::Client::new();
+    /// let res = client.post("http://httpbin.org/post")
     ///     .body(file)
     ///     .send()?;
     /// # Ok(())
@@ -191,15 +196,17 @@ impl RequestBuilder {
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
     /// // from bytes!
     /// let bytes: Vec<u8> = vec![1, 10, 100];
-    /// let client = reqwest::Client::new()?;
-    /// let res = client.post("http://httpbin.org/post")?
+    /// let client = reqwest::Client::new();
+    /// let res = client.post("http://httpbin.org/post")
     ///     .body(bytes)
     ///     .send()?;
     /// # Ok(())
     /// # }
     /// ```
     pub fn body<T: Into<Body>>(&mut self, body: T) -> &mut RequestBuilder {
-        *self.request_mut().body_mut() = Some(body.into());
+        if let Some(req) = request_mut(&mut self.request, &self.err) {
+            *req.body_mut() = Some(body.into());
+        }
         self
     }
 
@@ -217,9 +224,9 @@ impl RequestBuilder {
     /// let mut params = HashMap::new();
     /// params.insert("lang", "rust");
     ///
-    /// let client = reqwest::Client::new()?;
-    /// let res = client.post("http://httpbin.org")?
-    ///     .form(&params)?
+    /// let client = reqwest::Client::new();
+    /// let res = client.post("http://httpbin.org")
+    ///     .form(&params)
     ///     .send()?;
     /// # Ok(())
     /// # }
@@ -229,16 +236,17 @@ impl RequestBuilder {
     ///
     /// This method fails if the passed value cannot be serialized into
     /// url encoded format
-    pub fn form<T: Serialize>(&mut self, form: &T) -> ::Result<&mut RequestBuilder> {
-
-        {
-            // check request_mut() before running serde
-            let req = self.request_mut();
-            let body = try_!(serde_urlencoded::to_string(form));
-            req.headers_mut().set(ContentType::form_url_encoded());
-            *req.body_mut() = Some(body.into());
+    pub fn form<T: Serialize>(&mut self, form: &T) -> &mut RequestBuilder {
+        if let Some(req) = request_mut(&mut self.request, &self.err) {
+            match serde_urlencoded::to_string(form) {
+                Ok(body) => {
+                    req.headers_mut().set(ContentType::form_url_encoded());
+                    *req.body_mut() = Some(body.into());
+                },
+                Err(err) => self.err = Some(::error::from(err)),
+            }
         }
-        Ok(self)
+        self
     }
 
     /// Send a JSON body.
@@ -254,9 +262,9 @@ impl RequestBuilder {
     /// let mut map = HashMap::new();
     /// map.insert("lang", "rust");
     ///
-    /// let client = reqwest::Client::new()?;
-    /// let res = client.post("http://httpbin.org")?
-    ///     .json(&map)?
+    /// let client = reqwest::Client::new();
+    /// let res = client.post("http://httpbin.org")
+    ///     .json(&map)
     ///     .send()?;
     /// # Ok(())
     /// # }
@@ -266,15 +274,17 @@ impl RequestBuilder {
     ///
     /// Serialization can fail if `T`'s implementation of `Serialize` decides to
     /// fail, or if `T` contains a map with non-string keys.
-    pub fn json<T: Serialize>(&mut self, json: &T) -> ::Result<&mut RequestBuilder> {
-        {
-            // check request_mut() before running serde
-            let req = self.request_mut();
-            let body = try_!(serde_json::to_vec(json));
-            req.headers_mut().set(ContentType::json());
-            *req.body_mut() = Some(body.into());
+    pub fn json<T: Serialize>(&mut self, json: &T) -> &mut RequestBuilder {
+        if let Some(req) = request_mut(&mut self.request, &self.err) {
+            match serde_json::to_vec(json) {
+                Ok(body) => {
+                    req.headers_mut().set(ContentType::json());
+                    *req.body_mut() = Some(body.into());
+                },
+                Err(err) => self.err = Some(::error::from(err)),
+            }
         }
-        Ok(self)
+        self
     }
 
     /// Sends a multipart/form-data body.
@@ -284,12 +294,12 @@ impl RequestBuilder {
     /// # use reqwest::Error;
     ///
     /// # fn run() -> Result<(), Box<std::error::Error>> {
-    /// let client = reqwest::Client::new()?;
+    /// let client = reqwest::Client::new();
     /// let form = reqwest::multipart::Form::new()
     ///     .text("key3", "value3")
     ///     .file("file", "/path/to/field")?;
     ///
-    /// let response = client.post("your url")?
+    /// let response = client.post("your url")
     ///     .multipart(form)
     ///     .send()?;
     /// # Ok(())
@@ -298,8 +308,7 @@ impl RequestBuilder {
     ///
     /// See [`multipart`](multipart/) for more examples.
     pub fn multipart(&mut self, mut multipart: ::multipart::Form) -> &mut RequestBuilder {
-        {
-            let req = self.request_mut();
+        if let Some(req) = request_mut(&mut self.request, &self.err) {
             req.headers_mut().set(
                 ::header::ContentType(format!("multipart/form-data; boundary={}", ::multipart_::boundary(&multipart))
                     .parse().unwrap()
@@ -320,10 +329,14 @@ impl RequestBuilder {
     ///
     /// This method consumes builder internal state. It panics on an attempt to
     /// reuse already consumed builder.
-    pub fn build(&mut self) -> Request {
-        self.request
-            .take()
-            .expect("RequestBuilder cannot be reused after builder a Request")
+    pub fn build(&mut self) -> ::Result<Request> {
+        if let Some(err) = self.err.take() {
+            Err(err)
+        } else {
+            Ok(self.request
+                .take()
+                .expect("RequestBuilder cannot be reused after builder a Request"))
+        }
     }
 
     /// Constructs the Request and sends it the target URL, returning a Response.
@@ -333,16 +346,18 @@ impl RequestBuilder {
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
     pub fn send(&mut self) -> ::Result<::Response> {
-        let request = self.build();
+        let request = self.build()?;
         self.client.execute(request)
     }
 
-    // private
+}
 
-    fn request_mut(&mut self) -> &mut Request {
-        self.request
-            .as_mut()
-            .expect("RequestBuilder cannot be reused after builder a Request")
+
+fn request_mut<'a>(req: &'a mut Option<Request>, err: &Option<::Error>) -> Option<&'a mut Request> {
+    if err.is_some() {
+        None
+    } else {
+        req.as_mut()
     }
 }
 
@@ -375,10 +390,18 @@ fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>, req: &Request
 // pub(crate)
 
 #[inline]
-pub fn builder(client: Client, req: Request) -> RequestBuilder {
-    RequestBuilder {
-        client: client,
-        request: Some(req),
+pub fn builder(client: Client, req: ::Result<Request>) -> RequestBuilder {
+    match req {
+        Ok(req) => RequestBuilder {
+            client: client,
+            request: Some(req),
+            err: None,
+        },
+        Err(err) => RequestBuilder {
+            client: client,
+            request: None,
+            err: Some(err)
+        },
     }
 }
 
@@ -408,9 +431,9 @@ mod tests {
 
     #[test]
     fn basic_get_request() {
-        let client = Client::new().unwrap();
+        let client = Client::new();
         let some_url = "https://google.com/";
-        let r = client.get(some_url).unwrap().build();
+        let r = client.get(some_url).build().unwrap();
 
         assert_eq!(r.method(), &Method::Get);
         assert_eq!(r.url().as_str(), some_url);
@@ -418,9 +441,9 @@ mod tests {
 
     #[test]
     fn basic_head_request() {
-        let client = Client::new().unwrap();
+        let client = Client::new();
         let some_url = "https://google.com/";
-        let r = client.head(some_url).unwrap().build();
+        let r = client.head(some_url).build().unwrap();
 
         assert_eq!(r.method(), &Method::Head);
         assert_eq!(r.url().as_str(), some_url);
@@ -428,9 +451,9 @@ mod tests {
 
     #[test]
     fn basic_post_request() {
-        let client = Client::new().unwrap();
+        let client = Client::new();
         let some_url = "https://google.com/";
-        let r = client.post(some_url).unwrap().build();
+        let r = client.post(some_url).build().unwrap();
 
         assert_eq!(r.method(), &Method::Post);
         assert_eq!(r.url().as_str(), some_url);
@@ -438,9 +461,9 @@ mod tests {
 
     #[test]
     fn basic_put_request() {
-        let client = Client::new().unwrap();
+        let client = Client::new();
         let some_url = "https://google.com/";
-        let r = client.put(some_url).unwrap().build();
+        let r = client.put(some_url).build().unwrap();
 
         assert_eq!(r.method(), &Method::Put);
         assert_eq!(r.url().as_str(), some_url);
@@ -448,9 +471,9 @@ mod tests {
 
     #[test]
     fn basic_patch_request() {
-        let client = Client::new().unwrap();
+        let client = Client::new();
         let some_url = "https://google.com/";
-        let r = client.patch(some_url).unwrap().build();
+        let r = client.patch(some_url).build().unwrap();
 
         assert_eq!(r.method(), &Method::Patch);
         assert_eq!(r.url().as_str(), some_url);
@@ -458,9 +481,9 @@ mod tests {
 
     #[test]
     fn basic_delete_request() {
-        let client = Client::new().unwrap();
+        let client = Client::new();
         let some_url = "https://google.com/";
-        let r = client.delete(some_url).unwrap().build();
+        let r = client.delete(some_url).build().unwrap();
 
         assert_eq!(r.method(), &Method::Delete);
         assert_eq!(r.url().as_str(), some_url);
@@ -468,14 +491,14 @@ mod tests {
 
     #[test]
     fn add_header() {
-        let client = Client::new().unwrap();
+        let client = Client::new();
         let some_url = "https://google.com/";
-        let mut r = client.post(some_url).unwrap();
+        let mut r = client.post(some_url);
 
         let header = Host::new("google.com", None);
 
         // Add a copy of the header to the request builder
-        let r = r.header(header.clone()).build();
+        let r = r.header(header.clone()).build().unwrap();
 
         // then check it was actually added
         assert_eq!(r.headers().get::<Host>(), Some(&header));
@@ -483,9 +506,9 @@ mod tests {
 
     #[test]
     fn add_headers() {
-        let client = Client::new().unwrap();
+        let client = Client::new();
         let some_url = "https://google.com/";
-        let mut r = client.post(some_url).unwrap();
+        let mut r = client.post(some_url);
 
         let header = Host::new("google.com", None);
 
@@ -493,7 +516,7 @@ mod tests {
         headers.set(header);
 
         // Add a copy of the headers to the request builder
-        let r = r.headers(headers.clone()).build();
+        let r = r.headers(headers.clone()).build().unwrap();
 
         // then make sure they were added correctly
         assert_eq!(r.headers(), &headers);
@@ -501,13 +524,13 @@ mod tests {
 
     #[test]
     fn add_body() {
-        let client = Client::new().unwrap();
+        let client = Client::new();
         let some_url = "https://google.com/";
-        let mut r = client.post(some_url).unwrap();
+        let mut r = client.post(some_url);
 
         let body = "Some interesting content";
 
-        let mut r = r.body(body).build();
+        let mut r = r.body(body).build().unwrap();
 
         let buf = body::read_to_string(r.body_mut().take().unwrap()).unwrap();
 
@@ -516,14 +539,14 @@ mod tests {
 
     #[test]
     fn add_form() {
-        let client = Client::new().unwrap();
+        let client = Client::new();
         let some_url = "https://google.com/";
-        let mut r = client.post(some_url).unwrap();
+        let mut r = client.post(some_url);
 
         let mut form_data = HashMap::new();
         form_data.insert("foo", "bar");
 
-        let mut r = r.form(&form_data).unwrap().build();
+        let mut r = r.form(&form_data).build().unwrap();
 
         // Make sure the content type was set
         assert_eq!(r.headers().get::<ContentType>(),
@@ -537,14 +560,14 @@ mod tests {
 
     #[test]
     fn add_json() {
-        let client = Client::new().unwrap();
+        let client = Client::new();
         let some_url = "https://google.com/";
-        let mut r = client.post(some_url).unwrap();
+        let mut r = client.post(some_url);
 
         let mut json_data = HashMap::new();
         json_data.insert("foo", "bar");
 
-        let mut r = r.json(&json_data).unwrap().build();
+        let mut r = r.json(&json_data).build().unwrap();
 
         // Make sure the content type was set
         assert_eq!(r.headers().get::<ContentType>(), Some(&ContentType::json()));
@@ -568,10 +591,10 @@ mod tests {
                 }
         }
 
-        let client = Client::new().unwrap();
+        let client = Client::new();
         let some_url = "https://google.com/";
-        let mut r = client.post(some_url).unwrap();
+        let mut r = client.post(some_url);
         let json_data = MyStruct;
-        assert!(r.json(&json_data).unwrap_err().is_serialization());
+        assert!(r.json(&json_data).build().unwrap_err().is_serialization());
     }
 }
