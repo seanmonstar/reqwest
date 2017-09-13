@@ -52,7 +52,7 @@ use {StatusCode, Url};
 /// ```
 #[derive(Debug)]
 pub struct Error {
-    kind: Kind,
+    kind: ErrorKind,
     url: Option<Url>,
 }
 
@@ -80,6 +80,32 @@ impl Error {
     #[inline]
     pub fn url(&self) -> Option<&Url> {
         self.url.as_ref()
+    }
+
+    /// Returns the corresponding `ErrorKind` for this error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// extern crate url;
+    ///
+    /// # extern crate reqwest;
+    /// # use reqwest::ErrorKind;
+    /// #
+    /// # fn run() {
+    /// if let Err(e) = reqwest::get("http://") {
+    ///     match *e.kind() {
+    ///         ErrorKind::RedirectLoop => println!("encountered redirect loop"),
+    ///         ErrorKind::Json(_) => println!("json serialization error"),
+    ///         _ => println!("some other, unhandled error"),
+    ///     }
+    /// }
+    /// # }
+    /// # fn main() { }
+    /// ```
+    #[inline]
+    pub fn kind(&self) -> &ErrorKind {
+        &self.kind
     }
 
     /// Returns a reference to the internal error, if available.
@@ -111,16 +137,16 @@ impl Error {
     #[inline]
     pub fn get_ref(&self) -> Option<&(StdError + Send + Sync + 'static)> {
         match self.kind {
-            Kind::Http(ref e) => Some(e),
-            Kind::Url(ref e) => Some(e),
-            Kind::Tls(ref e) => Some(e),
-            Kind::Io(ref e) => Some(e),
-            Kind::UrlEncoded(ref e) => Some(e),
-            Kind::Json(ref e) => Some(e),
-            Kind::TooManyRedirects |
-            Kind::RedirectLoop |
-            Kind::ClientError(_) |
-            Kind::ServerError(_) => None,
+            ErrorKind::Http(ref e) => Some(e),
+            ErrorKind::Url(ref e) => Some(e),
+            ErrorKind::Tls(ref e) => Some(e),
+            ErrorKind::Io(ref e) => Some(e),
+            ErrorKind::UrlEncoded(ref e) => Some(e),
+            ErrorKind::Json(ref e) => Some(e),
+            ErrorKind::TooManyRedirects |
+            ErrorKind::RedirectLoop |
+            ErrorKind::ClientError(_) |
+            ErrorKind::ServerError(_) => None,
         }
     }
 
@@ -128,7 +154,7 @@ impl Error {
     #[inline]
     pub fn is_http(&self) -> bool {
         match self.kind {
-            Kind::Http(_) => true,
+            ErrorKind::Http(_) => true,
             _ => false,
         }
     }
@@ -137,8 +163,8 @@ impl Error {
     #[inline]
     pub fn is_serialization(&self) -> bool {
         match self.kind {
-            Kind::Json(_) |
-            Kind::UrlEncoded(_) => true,
+            ErrorKind::Json(_) |
+            ErrorKind::UrlEncoded(_) => true,
             _ => false,
         }
     }
@@ -147,8 +173,8 @@ impl Error {
     #[inline]
     pub fn is_redirect(&self) -> bool {
         match self.kind {
-            Kind::TooManyRedirects |
-            Kind::RedirectLoop => true,
+            ErrorKind::TooManyRedirects |
+            ErrorKind::RedirectLoop => true,
             _ => false,
         }
     }
@@ -157,7 +183,7 @@ impl Error {
     #[inline]
     pub fn is_client_error(&self) -> bool {
         match self.kind {
-            Kind::ClientError(_) => true,
+            ErrorKind::ClientError(_) => true,
             _ => false,
         }
     }
@@ -166,7 +192,7 @@ impl Error {
     #[inline]
     pub fn is_server_error(&self) -> bool {
         match self.kind {
-            Kind::ServerError(_) => true,
+            ErrorKind::ServerError(_) => true,
             _ => false,
         }
     }
@@ -175,8 +201,8 @@ impl Error {
     #[inline]
     pub fn status(&self) -> Option<StatusCode> {
         match self.kind {
-            Kind::ClientError(code) |
-            Kind::ServerError(code) => Some(code),
+            ErrorKind::ClientError(code) |
+            ErrorKind::ServerError(code) => Some(code),
             _ => None,
         }
     }
@@ -189,19 +215,19 @@ impl fmt::Display for Error {
             try!(f.write_str(": "));
         }
         match self.kind {
-            Kind::Http(ref e) => fmt::Display::fmt(e, f),
-            Kind::Url(ref e) => fmt::Display::fmt(e, f),
-            Kind::Tls(ref e) => fmt::Display::fmt(e, f),
-            Kind::Io(ref e) => fmt::Display::fmt(e, f),
-            Kind::UrlEncoded(ref e) => fmt::Display::fmt(e, f),
-            Kind::Json(ref e) => fmt::Display::fmt(e, f),
-            Kind::TooManyRedirects => f.write_str("Too many redirects"),
-            Kind::RedirectLoop => f.write_str("Infinite redirect loop"),
-            Kind::ClientError(ref code) => {
+            ErrorKind::Http(ref e) => fmt::Display::fmt(e, f),
+            ErrorKind::Url(ref e) => fmt::Display::fmt(e, f),
+            ErrorKind::Tls(ref e) => fmt::Display::fmt(e, f),
+            ErrorKind::Io(ref e) => fmt::Display::fmt(e, f),
+            ErrorKind::UrlEncoded(ref e) => fmt::Display::fmt(e, f),
+            ErrorKind::Json(ref e) => fmt::Display::fmt(e, f),
+            ErrorKind::TooManyRedirects => f.write_str("Too many redirects"),
+            ErrorKind::RedirectLoop => f.write_str("Infinite redirect loop"),
+            ErrorKind::ClientError(ref code) => {
                 f.write_str("Client Error: ")?;
                 fmt::Display::fmt(code, f)
             }
-            Kind::ServerError(ref code) => {
+            ErrorKind::ServerError(ref code) => {
                 f.write_str("Server Error: ")?;
                 fmt::Display::fmt(code, f)
             }
@@ -212,100 +238,112 @@ impl fmt::Display for Error {
 impl StdError for Error {
     fn description(&self) -> &str {
         match self.kind {
-            Kind::Http(ref e) => e.description(),
-            Kind::Url(ref e) => e.description(),
-            Kind::Tls(ref e) => e.description(),
-            Kind::Io(ref e) => e.description(),
-            Kind::UrlEncoded(ref e) => e.description(),
-            Kind::Json(ref e) => e.description(),
-            Kind::TooManyRedirects => "Too many redirects",
-            Kind::RedirectLoop => "Infinite redirect loop",
-            Kind::ClientError(_) => "Client Error",
-            Kind::ServerError(_) => "Server Error",
+            ErrorKind::Http(ref e) => e.description(),
+            ErrorKind::Url(ref e) => e.description(),
+            ErrorKind::Tls(ref e) => e.description(),
+            ErrorKind::Io(ref e) => e.description(),
+            ErrorKind::UrlEncoded(ref e) => e.description(),
+            ErrorKind::Json(ref e) => e.description(),
+            ErrorKind::TooManyRedirects => "Too many redirects",
+            ErrorKind::RedirectLoop => "Infinite redirect loop",
+            ErrorKind::ClientError(_) => "Client Error",
+            ErrorKind::ServerError(_) => "Server Error",
         }
     }
 
     fn cause(&self) -> Option<&StdError> {
         match self.kind {
-            Kind::Http(ref e) => e.cause(),
-            Kind::Url(ref e) => e.cause(),
-            Kind::Tls(ref e) => e.cause(),
-            Kind::Io(ref e) => e.cause(),
-            Kind::UrlEncoded(ref e) => e.cause(),
-            Kind::Json(ref e) => e.cause(),
-            Kind::TooManyRedirects |
-            Kind::RedirectLoop |
-            Kind::ClientError(_) |
-            Kind::ServerError(_) => None,
+            ErrorKind::Http(ref e) => e.cause(),
+            ErrorKind::Url(ref e) => e.cause(),
+            ErrorKind::Tls(ref e) => e.cause(),
+            ErrorKind::Io(ref e) => e.cause(),
+            ErrorKind::UrlEncoded(ref e) => e.cause(),
+            ErrorKind::Json(ref e) => e.cause(),
+            ErrorKind::TooManyRedirects |
+            ErrorKind::RedirectLoop |
+            ErrorKind::ClientError(_) |
+            ErrorKind::ServerError(_) => None,
         }
     }
 }
 
-// pub(crate)
 
+/// An exhaustive list of errors that may be encountered when using reqwest.
+///
+/// This list is intended to grow over time.
 #[derive(Debug)]
-pub enum Kind {
+pub enum ErrorKind {
+    /// todo: pending pr comments
     Http(::hyper::Error),
+    /// todo: pending pr comments
     Url(::url::ParseError),
+    /// todo: pending pr comments
     Tls(::native_tls::Error),
+    /// todo: pending pr comments
     Io(io::Error),
+    /// todo: pending pr comments
     UrlEncoded(::serde_urlencoded::ser::Error),
+    /// todo: pending pr comments
     Json(::serde_json::Error),
+    /// todo: pending pr comments
     TooManyRedirects,
+    /// todo: pending pr comments
     RedirectLoop,
+    /// todo: pending pr comments
     ClientError(StatusCode),
+    /// todo: pending pr comments
     ServerError(StatusCode),
 }
 
 
-impl From<::hyper::Error> for Kind {
+impl From<::hyper::Error> for ErrorKind {
     #[inline]
-    fn from(err: ::hyper::Error) -> Kind {
+    fn from(err: ::hyper::Error) -> ErrorKind {
         match err {
-            ::hyper::Error::Io(err) => Kind::Io(err),
-            //::hyper::Error::Uri(err) => Kind::Url(err),
-            other => Kind::Http(other),
+            ::hyper::Error::Io(err) => ErrorKind::Io(err),
+            //::hyper::Error::Uri(err) => ErrorKind::Url(err),
+            other => ErrorKind::Http(other),
         }
     }
 }
 
-impl From<io::Error> for Kind {
+impl From<io::Error> for ErrorKind {
     #[inline]
-    fn from(err: io::Error) -> Kind {
-        Kind::Io(err)
+    fn from(err: io::Error) -> ErrorKind {
+        ErrorKind::Io(err)
     }
 }
 
-impl From<::url::ParseError> for Kind {
+impl From<::url::ParseError> for ErrorKind {
     #[inline]
-    fn from(err: ::url::ParseError) -> Kind {
-        Kind::Url(err)
+    fn from(err: ::url::ParseError) -> ErrorKind {
+        ErrorKind::Url(err)
     }
 }
 
-impl From<::serde_urlencoded::ser::Error> for Kind {
+impl From<::serde_urlencoded::ser::Error> for ErrorKind {
     #[inline]
-    fn from(err: ::serde_urlencoded::ser::Error) -> Kind {
-        Kind::UrlEncoded(err)
+    fn from(err: ::serde_urlencoded::ser::Error) -> ErrorKind {
+        ErrorKind::UrlEncoded(err)
     }
 }
 
-impl From<::serde_json::Error> for Kind {
+impl From<::serde_json::Error> for ErrorKind {
     #[inline]
-    fn from(err: ::serde_json::Error) -> Kind {
-        Kind::Json(err)
+    fn from(err: ::serde_json::Error) -> ErrorKind {
+        ErrorKind::Json(err)
     }
 }
 
-impl From<::native_tls::Error> for Kind {
-    fn from(err: ::native_tls::Error) -> Kind {
-        Kind::Tls(err)
+impl From<::native_tls::Error> for ErrorKind {
+    fn from(err: ::native_tls::Error) -> ErrorKind {
+        ErrorKind::Tls(err)
     }
 }
 
-impl<T> From<::wait::Waited<T>> for Kind
-where T: Into<Kind> {
-    fn from(err: ::wait::Waited<T>) -> Kind {
+impl<T> From<::wait::Waited<T>> for ErrorKind
+where T: Into<ErrorKind> {
+    fn from(err: ::wait::Waited<T>) -> ErrorKind {
         match err {
             ::wait::Waited::TimedOut =>  io_timeout().into(),
             ::wait::Waited::Err(e) => e.into(),
@@ -339,7 +377,7 @@ impl From<InternalFrom<Error>> for Error {
 #[doc(hidden)] // https://github.com/rust-lang/rust/issues/42323
 impl<T> From<InternalFrom<T>> for Error
 where
-    T: Into<Kind>,
+    T: Into<ErrorKind>,
 {
     #[inline]
     fn from(other: InternalFrom<T>) -> Error {
@@ -353,7 +391,7 @@ where
 #[inline]
 pub fn from<T>(err: T) -> Error
 where
-    T: Into<Kind>,
+    T: Into<ErrorKind>,
 {
     InternalFrom(err, None).into()
 }
@@ -361,7 +399,7 @@ where
 #[inline]
 pub fn into_io(e: Error) -> io::Error {
     match e.kind {
-        Kind::Io(io) => io,
+        ErrorKind::Io(io) => io,
         _ => io::Error::new(io::ErrorKind::Other, e),
     }
 }
@@ -389,7 +427,7 @@ macro_rules! try_ {
 #[inline]
 pub fn loop_detected(url: Url) -> Error {
     Error {
-        kind: Kind::RedirectLoop,
+        kind: ErrorKind::RedirectLoop,
         url: Some(url),
     }
 }
@@ -397,7 +435,7 @@ pub fn loop_detected(url: Url) -> Error {
 #[inline]
 pub fn too_many_redirects(url: Url) -> Error {
     Error {
-        kind: Kind::TooManyRedirects,
+        kind: ErrorKind::TooManyRedirects,
         url: Some(url),
     }
 }
@@ -405,7 +443,7 @@ pub fn too_many_redirects(url: Url) -> Error {
 #[inline]
 pub fn timedout(url: Option<Url>) -> Error {
     Error {
-        kind: Kind::Io(io_timeout()),
+        kind: ErrorKind::Io(io_timeout()),
         url: url,
     }
 }
@@ -413,7 +451,7 @@ pub fn timedout(url: Option<Url>) -> Error {
 #[inline]
 pub fn client_error(url: Url, status: StatusCode) -> Error {
     Error {
-        kind: Kind::ClientError(status),
+        kind: ErrorKind::ClientError(status),
         url: Some(url),
     }
 }
@@ -421,7 +459,7 @@ pub fn client_error(url: Url, status: StatusCode) -> Error {
 #[inline]
 pub fn server_error(url: Url, status: StatusCode) -> Error {
     Error {
-        kind: Kind::ServerError(status),
+        kind: ErrorKind::ServerError(status),
         url: Some(url),
     }
 }
@@ -481,7 +519,7 @@ mod tests {
 
         let root = Chain(None::<Error>);
         let io = ::std::io::Error::new(::std::io::ErrorKind::Other, root);
-        let err = Error { kind: Kind::Io(io), url: None };
+        let err = Error { kind: ErrorKind::Io(io), url: None };
         assert!(err.cause().is_none());
         assert_eq!(err.to_string(), "root");
 
@@ -489,7 +527,7 @@ mod tests {
         let root = ::std::io::Error::new(::std::io::ErrorKind::Other, Chain(None::<Error>));
         let link = Chain(Some(root));
         let io = ::std::io::Error::new(::std::io::ErrorKind::Other, link);
-        let err = Error { kind: Kind::Io(io), url: None };
+        let err = Error { kind: ErrorKind::Io(io), url: None };
         assert!(err.cause().is_some());
         assert_eq!(err.to_string(), "chain: root");
     }
