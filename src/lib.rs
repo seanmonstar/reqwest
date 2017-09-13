@@ -116,7 +116,7 @@
 //! [client]: ./struct.Client.html
 //! [response]: ./struct.Response.html
 //! [get]: ./fn.get.html
-//! [builder]: ./client/struct.RequestBuilder.html
+//! [builder]: ./struct.RequestBuilder.html
 //! [serde]: http://serde.rs
 
 extern crate bytes;
