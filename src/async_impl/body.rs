@@ -51,10 +51,24 @@ impl From<Vec<u8>> for Body {
     }
 }
 
+impl From<&'static [u8]> for Body {
+    #[inline]
+    fn from(s: &'static [u8]) -> Body {
+        reusable(Bytes::from_static(s))
+    }
+}
+
 impl From<String> for Body {
     #[inline]
     fn from(s: String) -> Body {
         reusable(s.into())
+    }
+}
+
+impl From<&'static str> for Body {
+    #[inline]
+    fn from(s: &'static str) -> Body {
+        s.as_bytes().into()
     }
 }
 
