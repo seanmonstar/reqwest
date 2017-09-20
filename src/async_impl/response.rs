@@ -51,6 +51,11 @@ impl Response {
         &mut self.headers
     }
 
+    /// Consumes the response, returning the body
+    pub fn into_body(self) -> Decoder {
+        self.body
+    }
+
     /// Get a reference to the response body.
     #[inline]
     pub fn body(&self) -> &Decoder {
