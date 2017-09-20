@@ -8,8 +8,7 @@ extern crate libflate;
 #[macro_use]
 mod support;
 
-use std::mem;
-use reqwest::unstable::async::{Client, Decoder};
+use reqwest::unstable::async::Client;
 use futures::{Future, Stream};
 use tokio_core::reactor::Core;
 use std::io::Write;
@@ -64,8 +63,8 @@ fn test_gzip(response_size: usize, chunk_size: usize) {
 
     let res_future = client.get(&format!("http://{}/gzip", server.addr()))
         .send()
-        .and_then(|mut res| {
-            let body = mem::replace(res.body_mut(), Decoder::empty());
+        .and_then(|res| {
+            let body = res.into_body();
             body.concat2()
         })
         .and_then(|buf| {
