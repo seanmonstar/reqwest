@@ -1,3 +1,28 @@
+# v0.8.0
+
+### Features
+
+- Client TLS Certificates (#43)
+- GZIP decoding has been added to the **async** Client (#161)
+- `ClientBuilder` and `RequestBuilder` hold their errors till consumed (#189)
+- `async::Response::body()` now returns a reference to the body instead of consuming the `Response`
+- A default timeout for `reqwest::Client` is used set to 30 seconds (#181)
+
+### Breaking Changes
+
+- `Client::new` no longer returns a `Result`.
+
+  To handle any panics that come from `Client::new`, the builder can be used instead.
+- `ClientBuilder` and `RequestBuilder` hold their errors till consumed (#189).
+
+  This means a bunch of `?` will be going away, but means using the builders will be far easier now. Any error encountered inside the builders will now be returned when the builder is consumed.
+
+  To get errors back immediately, the `Request` type can be used directly, by building pieces separately and calling setters.
+- `async::Response::body()` now returns a reference to the body instead of consuming the `Response`.
+- A default timeout for `reqwest::Client` is used set to 30 seconds (#181)
+
+  For uses where the timeout is too short, it can be changed on the `ClientBuilder`, using the `timeout` method. Passing `None` will disable the timeout, reverting to the pre-0.8 behavior.
+
 ## v0.7.3
 
 ### Features
