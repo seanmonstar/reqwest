@@ -14,7 +14,12 @@
 //! - Plain bodies, JSON, urlencoded, multipart
 //! - Customizable redirect policy
 //! - Proxies
-//! - (TODO: Cookies)
+//! - Cookies (only rudimentary support, full support is TODO)
+//!
+//! The rudimentary cookie support means that the cookies need to be manually
+//! configured for every single request. In other words, there's no cookie jar
+//! support as of now. The tracking issue for this feature is available
+//! [on GitHub][cookiejar_issue].
 //!
 //! The `reqwest::Client` is synchronous, making it a great fit for
 //! applications that only require a few HTTP requests, and wish to handle
@@ -118,6 +123,7 @@
 //! [get]: ./fn.get.html
 //! [builder]: ./struct.RequestBuilder.html
 //! [serde]: http://serde.rs
+//! [cookiejar_issue]: https://github.com/seanmonstar/reqwest/issues/14
 
 extern crate bytes;
 #[macro_use]
