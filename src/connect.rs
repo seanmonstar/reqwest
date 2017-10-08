@@ -22,8 +22,8 @@ pub struct Connector {
 }
 
 impl Connector {
-    pub fn new(tls: TlsConnector, proxies: Arc<Vec<Proxy>>, handle: &Handle) -> Connector {
-        let mut http = HttpConnector::new(4, handle);
+    pub fn new(threads: usize, tls: TlsConnector, proxies: Arc<Vec<Proxy>>, handle: &Handle) -> Connector {
+        let mut http = HttpConnector::new(threads, handle);
         http.enforce_http(false);
         let https = HttpsConnector::from((http, tls.clone()));
 
