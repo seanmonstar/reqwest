@@ -69,6 +69,7 @@ struct Config {
     referer: bool,
     timeout: Option<Duration>,
     tls: TlsConnectorBuilder,
+    dns_threads: usize,
 }
 
 impl ClientBuilder {
@@ -84,6 +85,7 @@ impl ClientBuilder {
                     referer: true,
                     timeout: None,
                     tls: tls_connector_builder,
+                    dns_threads: 4,
                 }),
                 err: None,
             },
@@ -116,7 +118,7 @@ impl ClientBuilder {
 
         let proxies = Arc::new(config.proxies);
 
-        let mut connector = Connector::new(tls, proxies.clone(), handle);
+        let mut connector = Connector::new(config.dns_threads, tls, proxies.clone(), handle);
         if !config.hostname_verification {
             connector.danger_disable_hostname_verification();
         }
@@ -237,6 +239,15 @@ impl ClientBuilder {
         }
         self
     }
+
+    /// Set number of DNS threads.
+    #[inline]
+    pub fn dns_threads(&mut self, threads: usize) -> &mut ClientBuilder {
+        if let Some(config) = config_mut(&mut self.config, &self.err) {
+            config.dns_threads = threads;
+        }
+        self
+    }
 }
 
 fn config_mut<'a>(config: &'a mut Option<Config>, err: &Option<::Error>) -> Option<&'a mut Config> {
@@ -248,12 +259,6 @@ fn config_mut<'a>(config: &'a mut Option<Config>, err: &Option<::Error>) -> Opti
 }
 
 type HyperClient = ::hyper::Client<Connector>;
-
-fn create_hyper_client(tls: TlsConnector, proxies: Arc<Vec<Proxy>>, handle: &Handle) -> HyperClient {
-    ::hyper::Client::configure()
-        .connector(Connector::new(tls, proxies, handle))
-        .build(handle)
-}
 
 impl Client {
     /// Constructs a new `Client`.
