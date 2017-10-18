@@ -165,6 +165,32 @@ impl Response {
         serde_json::from_reader(self).map_err(::error::from)
     }
 
+    /// Copy the response body into a writer.
+    ///
+    /// This function internally uses [`std::io::copy`] and hence will continuously read data from
+    /// the body and then write it into writer in a streaming fashion until EOF is met.
+    ///
+    /// On success, the total number of bytes that were copied to `writer` is returned.
+    /// [`std::io::copy`]: https://doc.rust-lang.org/std/io/fn.copy.html
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let mut resp = reqwest::get("http://httpbin.org/range/5")?;
+    /// let mut buf: Vec<u8> = vec![];
+    /// resp.copy_to(&mut buf)?;
+    /// assert_eq!(b"abcde", buf.as_slice());
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[inline]
+    pub fn copy_to<W: ?Sized>(&mut self, w: &mut W) -> io::Result<u64>
+        where W: io::Write
+    {
+        io::copy(self, w)
+    }
+
     /// Turn a response into an error if the server returned an error.
     ///
     /// # Example
