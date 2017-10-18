@@ -32,4 +32,4 @@ cache:
 
 script:
   - cargo build $FEATURES
-  - cargo test $FEATURES
+  - cargo test -v $FEATURES
