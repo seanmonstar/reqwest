@@ -63,6 +63,7 @@ pub struct ClientBuilder {
 
 struct Config {
     gzip: bool,
+    headers: Headers,
     hostname_verification: bool,
     proxies: Vec<Proxy>,
     redirect_policy: RedirectPolicy,
@@ -76,18 +77,25 @@ impl ClientBuilder {
     /// Constructs a new `ClientBuilder`
     pub fn new() -> ClientBuilder {
         match TlsConnector::builder() {
-            Ok(tls_connector_builder) => ClientBuilder {
-                config: Some(Config {
-                    gzip: true,
-                    hostname_verification: true,
-                    proxies: Vec::new(),
-                    redirect_policy: RedirectPolicy::default(),
-                    referer: true,
-                    timeout: None,
-                    tls: tls_connector_builder,
-                    dns_threads: 4,
-                }),
-                err: None,
+            Ok(tls_connector_builder) => {
+                let mut headers = Headers::with_capacity(2);
+                headers.set(UserAgent::new(DEFAULT_USER_AGENT));
+                headers.set(Accept::star());
+
+                ClientBuilder {
+                    config: Some(Config {
+                        gzip: true,
+                        headers: headers,
+                        hostname_verification: true,
+                        proxies: Vec::new(),
+                        redirect_policy: RedirectPolicy::default(),
+                        referer: true,
+                        timeout: None,
+                        tls: tls_connector_builder,
+                        dns_threads: 4,
+                    }),
+                    err: None,
+                }
             },
             Err(e) => ClientBuilder {
                 config: None,
@@ -131,6 +139,7 @@ impl ClientBuilder {
             inner: Arc::new(ClientRef {
                 gzip: config.gzip,
                 hyper: hyper_client,
+                headers: config.headers,
                 proxies: proxies,
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
@@ -185,6 +194,15 @@ impl ClientBuilder {
     pub fn enable_hostname_verification(&mut self) -> &mut ClientBuilder {
         if let Some(config) = config_mut(&mut self.config, &self.err) {
             config.hostname_verification = true;
+        }
+        self
+    }
+
+    /// Sets the default headers for every request.
+    #[inline]
+    pub fn default_headers(&mut self, headers: Headers) -> &mut ClientBuilder {
+        if let Some(config) = config_mut(&mut self.config, &self.err) {
+            config.headers.extend(headers.iter());
         }
         self
     }
@@ -372,17 +390,13 @@ impl Client {
         let (
             method,
             url,
-            mut headers,
+            user_headers,
             body
         ) = request::pieces(req);
 
-        if !headers.has::<UserAgent>() {
-            headers.set(UserAgent::new(DEFAULT_USER_AGENT));
-        }
+        let mut headers = self.inner.headers.clone(); // default headers
+        headers.extend(user_headers.iter());
 
-        if !headers.has::<Accept>() {
-            headers.set(Accept::star());
-        }
         if self.inner.gzip &&
             !headers.has::<AcceptEncoding>() &&
             !headers.has::<Range>() {
@@ -442,6 +456,7 @@ impl fmt::Debug for ClientBuilder {
 
 struct ClientRef {
     gzip: bool,
+    headers: Headers,
     hyper: HyperClient,
     proxies: Arc<Vec<Proxy>>,
     redirect_policy: RedirectPolicy,

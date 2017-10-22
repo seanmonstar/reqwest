@@ -8,7 +8,7 @@ use futures::sync::{mpsc, oneshot};
 
 use request::{self, Request, RequestBuilder};
 use response::{self, Response};
-use {async_impl, Certificate, Identity, Method, IntoUrl, Proxy, RedirectPolicy, wait};
+use {async_impl, header, Certificate, Identity, Method, IntoUrl, Proxy, RedirectPolicy, wait};
 
 /// A `Client` to make Requests with.
 ///
@@ -164,6 +164,50 @@ impl ClientBuilder {
     #[inline]
     pub fn enable_hostname_verification(&mut self) -> &mut ClientBuilder {
         self.inner.enable_hostname_verification();
+        self
+    }
+
+    /// Sets the default headers for every request.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use reqwest::header;
+    /// # fn build_client() -> Result<(), Box<std::error::Error>> {
+    /// let mut headers = header::Headers::new();
+    /// headers.set(header::Authorization("secret".to_string()));
+    ///
+    /// // get a client builder
+    /// let client = reqwest::Client::builder()
+    ///     .default_headers(headers)
+    ///     .build()?;
+    /// let res = client.get("https://www.rust-lang.org").send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// Override the default headers:
+    ///
+    /// ```rust
+    /// use reqwest::header;
+    /// # fn build_client() -> Result<(), Box<std::error::Error>> {
+    /// let mut headers = header::Headers::new();
+    /// headers.set(header::Authorization("secret".to_string()));
+    ///
+    /// // get a client builder
+    /// let client = reqwest::Client::builder()
+    ///     .default_headers(headers)
+    ///     .build()?;
+    /// let res = client
+    ///     .get("https://www.rust-lang.org")
+    ///     .header(header::Authorization("token".to_string()))
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[inline]
+    pub fn default_headers(&mut self, headers: header::Headers) -> &mut ClientBuilder {
+        self.inner.default_headers(headers);
         self
     }
 
