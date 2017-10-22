@@ -114,8 +114,8 @@ fn test_accept_header_is_not_changed_if_set() {
         request: b"\
             GET /accept HTTP/1.1\r\n\
             Host: $HOST\r\n\
-            Accept: application/json\r\n\
             User-Agent: $USERAGENT\r\n\
+            Accept: application/json\r\n\
             Accept-Encoding: gzip\r\n\
             \r\n\
             ",
@@ -143,9 +143,9 @@ fn test_accept_encoding_header_is_not_changed_if_set() {
         request: b"\
             GET /accept-encoding HTTP/1.1\r\n\
             Host: $HOST\r\n\
-            Accept-Encoding: identity\r\n\
             User-Agent: $USERAGENT\r\n\
             Accept: */*\r\n\
+            Accept-Encoding: identity\r\n\
             \r\n\
             ",
         response: b"\
