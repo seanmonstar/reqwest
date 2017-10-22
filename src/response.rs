@@ -165,6 +165,26 @@ impl Response {
         serde_json::from_reader(self).map_err(::error::from)
     }
 
+    /// Get the response text.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # extern crate reqwest;
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let content = reqwest::get("http://httpbin.org/range/26")?.text()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn text(&mut self) -> io::Result<String> {
+        let len = self.headers().get::<::header::ContentLength>()
+            .map(|ct_len| **ct_len)
+            .unwrap_or(0);
+        let mut content = String::with_capacity(len as usize);
+        self.read_to_string(&mut content)?;
+        Ok(content)
+    }
+
     /// Copy the response body into a writer.
     ///
     /// This function internally uses [`std::io::copy`] and hence will continuously read data from
