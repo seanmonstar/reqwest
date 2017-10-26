@@ -32,4 +32,4 @@ cache:
 
 script:
   - cargo build $FEATURES
-  - cargo test -v $FEATURES
+  - RUST_LOG=hyper,reqwest cargo test -v $FEATURES

@@ -1,3 +1,4 @@
+extern crate env_logger;
 extern crate reqwest;
 
 #[macro_use]
@@ -5,6 +6,8 @@ mod support;
 
 #[test]
 fn test_multipart() {
+    let _ = env_logger::init();
+
     let form = reqwest::multipart::Form::new()
         .text("foo", "bar");
 
