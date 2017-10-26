@@ -13,13 +13,11 @@ use {into_url, IntoUrl, Url};
 ///
 /// For instance, let's look at `Proxy::http`:
 ///
-/// ```
-/// # extern crate reqwest;
+/// ```rust
 /// # fn run() -> Result<(), Box<::std::error::Error>> {
 /// let proxy = reqwest::Proxy::http("https://secure.example")?;
 /// # Ok(())
 /// # }
-/// # fn main() {}
 /// ```
 ///
 /// This proxy will intercept all HTTP requests, and make use of the proxy
