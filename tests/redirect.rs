@@ -117,9 +117,9 @@ fn test_redirect_307_and_308_tries_to_post_again() {
             request: format!("\
                 POST /{} HTTP/1.1\r\n\
                 Host: $HOST\r\n\
-                Content-Length: 5\r\n\
                 User-Agent: $USERAGENT\r\n\
                 Accept: */*\r\n\
+                Content-Length: 5\r\n\
                 Accept-Encoding: gzip\r\n\
                 \r\n\
                 Hello\
@@ -136,9 +136,9 @@ fn test_redirect_307_and_308_tries_to_post_again() {
             request: format!("\
                 POST /dst HTTP/1.1\r\n\
                 Host: $HOST\r\n\
-                Content-Length: 5\r\n\
                 User-Agent: $USERAGENT\r\n\
                 Accept: */*\r\n\
+                Content-Length: 5\r\n\
                 Accept-Encoding: gzip\r\n\
                 Referer: http://$HOST/{}\r\n\
                 \r\n\
@@ -229,9 +229,9 @@ fn test_redirect_removes_sensitive_headers() {
         request: b"\
             GET /sensitive HTTP/1.1\r\n\
             Host: $HOST\r\n\
-            Cookie: foo=bar\r\n\
             User-Agent: $USERAGENT\r\n\
             Accept: */*\r\n\
+            Cookie: foo=bar\r\n\
             Accept-Encoding: gzip\r\n\
             \r\n\
             ",
