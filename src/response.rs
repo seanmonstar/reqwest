@@ -176,12 +176,12 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn text(&mut self) -> io::Result<String> {
+    pub fn text(&mut self) -> ::Result<String> {
         let len = self.headers().get::<::header::ContentLength>()
             .map(|ct_len| **ct_len)
             .unwrap_or(0);
         let mut content = String::with_capacity(len as usize);
-        self.read_to_string(&mut content)?;
+        self.read_to_string(&mut content).map_err(::error::from)?;
         Ok(content)
     }
 
@@ -205,10 +205,10 @@ impl Response {
     /// # }
     /// ```
     #[inline]
-    pub fn copy_to<W: ?Sized>(&mut self, w: &mut W) -> io::Result<u64>
+    pub fn copy_to<W: ?Sized>(&mut self, w: &mut W) -> ::Result<u64>
         where W: io::Write
     {
-        io::copy(self, w)
+        io::copy(self, w).map_err(::error::from)
     }
 
     /// Turn a response into an error if the server returned an error.
