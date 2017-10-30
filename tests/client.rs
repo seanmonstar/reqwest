@@ -6,6 +6,39 @@ mod support;
 use std::io::Read;
 
 #[test]
+fn test_response_text() {
+    let server = server! {
+        request: b"\
+            GET /text HTTP/1.1\r\n\
+            Host: $HOST\r\n\
+            User-Agent: $USERAGENT\r\n\
+            Accept: */*\r\n\
+            Accept-Encoding: gzip\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Server: test\r\n\
+            Content-Length: 5\r\n\
+            \r\n\
+            Hello\
+            "
+    };
+
+    let url = format!("http://{}/text", server.addr());
+    let mut res = reqwest::get(&url).unwrap();
+    assert_eq!(res.url().as_str(), &url);
+    assert_eq!(res.status(), reqwest::StatusCode::Ok);
+    assert_eq!(res.headers().get(),
+               Some(&reqwest::header::Server::new("test".to_string())));
+    assert_eq!(res.headers().get(),
+               Some(&reqwest::header::ContentLength(5)));
+
+    let body = res.text().unwrap();
+    assert_eq!(b"Hello", body.as_bytes());
+}
+
+#[test]
 fn test_response_copy_to() {
     let server = server! {
         request: b"\
