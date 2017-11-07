@@ -1,3 +1,12 @@
+## v0.8.1
+
+### Features
+
+- Add `ClientBuilder::default_headers` to set headers used for every request.
+- Add `async::ClientBuilder::dns_threads` to set number of threads use for DNS.
+- Add `Response::text` as shortcut to read the full body into a `String`.
+- Add `Response::copy_to` as shortcut for `std::io::copy`.
+
 # v0.8.0
 
 ### Features
