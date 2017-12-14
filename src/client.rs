@@ -115,6 +115,19 @@ impl ClientBuilder {
         self
     }
 
+    /// Specifies whether to trust invalid certificates.
+    ///
+    /// # Warning
+    ///
+    /// You should think very carefully before using this method. If invalid
+    /// certificates are trusted, *any* certificate for *any* site will be
+    /// trusted for use. This includes expired certificates. This introduces
+    /// significant vulnerabilities, and should only be used as a last resort.
+    pub fn danger_disable_certificate_validation_entirely(&mut self) -> &mut ClientBuilder {
+        self.inner.danger_disable_certificate_validation_entirely();
+        self
+    }
+
     /// Sets the identity to be used for client certificate authentication.
     ///
     /// # Example

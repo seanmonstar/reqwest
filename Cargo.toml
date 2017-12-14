@@ -13,17 +13,17 @@ categories = ["web-programming::http-client"]
 bytes = "0.4"
 futures = "0.1.15"
 hyper = "0.11"
-hyper-tls = "0.1.2"
+hyper-tls = { git = "https://github.com/scottschroeder/hyper-tls", branch = "noverify" }
 libflate = "0.1.11"
 log = "0.3"
 mime_guess = "2.0.0-alpha.2"
-native-tls = "0.1.3"
+native-tls = { git = "https://github.com/scottschroeder/rust-native-tls", branch = "noverify" }
 serde = "1.0"
 serde_json = "1.0"
 serde_urlencoded = "0.5"
 tokio-core = "0.1.6"
 tokio-io = "0.1"
-tokio-tls = "0.1"
+tokio-tls = { git = "https://github.com/scottschroeder/tokio-tls", branch = "noverify" }
 url = "1.2"
 uuid = { version = "0.5", features = ["v4"] }
 
