@@ -33,13 +33,15 @@
 //! use std::io::Read;
 //! # use reqwest::{Error, Response};
 //!
-//! # fn run() -> Result<Response, Error> {
+//! # fn run() -> Result<(), Error> {
 //! let mut resp = reqwest::get("https://www.rust-lang.org")?;
+//!
 //! assert!(resp.status().is_success());
 //!
-//! let mut content = String::new();
-//! resp.read_to_string(&mut content);
-//! # Ok(resp)
+//! let body = resp.text()?;
+//!
+//! println!("body = {:?}", body);
+//! # Ok(())
 //! # }
 //! ```
 //!
@@ -48,8 +50,9 @@
 //! have convenience methods that take a `Response` anywhere `T: Read` is
 //! acceptable.
 //!
-//! If you plan to perform multiple requests, it is best to create a [`Client`][client]
-//! and reuse it, taking advantage of keep-alive connection pooling.
+//! **NOTE**: If you plan to perform multiple requests, it is best to create a
+//! [`Client`][client] and reuse it, taking advantage of keep-alive connection
+//! pooling.
 //!
 //! ## Making POST requests (or setting request bodies)
 //!
@@ -212,15 +215,16 @@ pub mod unstable {
 /// See also the methods on the [`reqwest::Response`](./struct.Response.html)
 /// type.
 ///
+/// **NOTE**: This function creates a new internal `Client` on each call,
+/// and so should not be used if making many requests. Create a
+/// [`Client`](./struct.Client.html) instead.
+///
 /// # Examples
 ///
 /// ```rust
-/// use std::io::Read;
-///
-/// # fn run() -> Result<(), Box<::std::error::Error>> {
-/// let mut result = String::new();
-/// reqwest::get("https://www.rust-lang.org")?
-///     .read_to_string(&mut result)?;
+/// # fn run() -> Result<(), reqwest::Error> {
+/// let body = reqwest::get("https://www.rust-lang.org")?
+///     .text()?;
 /// # Ok(())
 /// # }
 /// # fn main() { }
