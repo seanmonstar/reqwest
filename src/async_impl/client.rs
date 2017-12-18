@@ -7,6 +7,7 @@ use futures::{Async, Future, Poll};
 use hyper::client::{Connect, FutureResponse, HttpConnector};
 use hyper::header::{Headers, Location, Referer, UserAgent, Accept, Encoding,
                     AcceptEncoding, Range, qitem};
+use hyper_proxy::Intercept;
 use hyper_tls::HttpsConnector;
 use native_tls::{TlsConnector, TlsConnectorBuilder};
 use tokio_core::reactor::Handle;
@@ -128,6 +129,7 @@ impl ClientBuilder {
         if !config.hostname_verification {
             https_connector.danger_disable_hostname_verification(true);
         }
+        let intercept = config.proxy.inner.intercept().clone();
         let mut connector = config.proxy.inner.with_connector(https_connector);
         let tls = try_!(config.tls.build());
         connector.set_tls(Some(tls));
@@ -140,6 +142,7 @@ impl ClientBuilder {
             inner: Arc::new(ClientRef {
                 gzip: config.gzip,
                 hyper: hyper_client,
+                intercept: intercept,
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
@@ -412,6 +415,9 @@ impl Client {
             reusable
         });
 
+        if self.inner.intercept.matches(&uri) && uri.scheme() == Some("http") {
+            req.set_proxy(true);
+        }
         let in_flight = self.inner.hyper.request(req);
 
         Pending {
@@ -451,6 +457,7 @@ impl fmt::Debug for ClientBuilder {
 struct ClientRef {
     gzip: bool,
     headers: Headers,
+    intercept: Intercept,
     hyper: HyperClient,
     redirect_policy: RedirectPolicy,
     referer: bool,
@@ -548,6 +555,9 @@ impl Future for PendingRequest {
                             *req.headers_mut() = self.headers.clone();
                             if let Some(Some(ref body)) = self.body {
                                 req.set_body(body.clone());
+                            }
+                            if self.client.intercept.matches(&uri) && uri.scheme() == Some("http") {
+                                req.set_proxy(true);
                             }
                             self.in_flight = self.client.hyper.request(req);
                             continue;

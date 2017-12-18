@@ -113,7 +113,7 @@ impl Proxy {
     /// # fn main() {}
     pub fn custom<F, U: IntoUrl>(fun: F, url: U) -> ::Result<Proxy>
     where F: Fn(&Uri) -> bool + 'static + Send + Sync {
-        Proxy::new(Intercept::Custom(Box::new(fun)), url)
+        Proxy::new(Intercept::Custom(fun.into()), url)
     }
 
     /*
