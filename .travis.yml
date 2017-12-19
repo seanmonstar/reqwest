@@ -15,7 +15,7 @@ matrix:
           env: FEATURES=""
 
         # minimum version
-        - rust: 1.17.0
+        - rust: 1.18.0
 
         - rust: stable
           env: FEATURES="--features unstable"
