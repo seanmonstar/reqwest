@@ -57,7 +57,6 @@ pub fn spawn(txns: Vec<Txn>) -> Server {
                     Ok(nread) => n += nread,
                 }
             }
-
             match (::std::str::from_utf8(&expected), ::std::str::from_utf8(&buf[..n])) {
                 (Ok(expected), Ok(received)) => assert_eq!(expected, received),
                 _ => assert_eq!(expected, &buf[..n]),

@@ -100,13 +100,8 @@ impl Proxy {
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
     /// let target = reqwest::Url::parse("https://my.prox")?;
     /// let client = reqwest::Client::builder()
-    ///     .proxy(reqwest::Proxy::custom(move |url| {
-    ///         if url.host_str() == Some("hyper.rs") {
-    ///             Some(target.clone())
-    ///         } else {
-    ///             None
-    ///         }
-    ///     }))
+    ///     .proxy(reqwest::Proxy::custom(|url| url.host() == Some("hyper.rs"),
+    ///                                   "http://proxy.custom")?)
     ///     .build()?;
     /// # Ok(())
     /// # }

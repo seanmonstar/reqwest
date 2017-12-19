@@ -19,14 +19,15 @@ fn test_http_proxy() {
             Server: proxied\r\n\
             Content-Length: 0\r\n\
             \r\n\
-            "
+            ";
     };
 
-    let proxy = format!("http://{}", server.addr());
+    let proxy_uri = format!("http://{}", server.addr());
+    let proxy = reqwest::Proxy::http(&proxy_uri).unwrap();
 
     let url = "http://hyper.rs/prox";
     let res = reqwest::Client::builder()
-        .proxy(reqwest::Proxy::http(&proxy).unwrap())
+        .proxy(proxy)
         .build()
         .unwrap()
         .get(url)
