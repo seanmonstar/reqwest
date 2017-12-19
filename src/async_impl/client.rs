@@ -133,6 +133,7 @@ impl ClientBuilder {
 
         let hyper_client = ::hyper::Client::configure()
             .connector(connector)
+            .no_proto()
             .build(handle);
 
         Ok(Client {
