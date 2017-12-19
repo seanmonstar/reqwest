@@ -1,4 +1,6 @@
+use std::any::Any;
 use hyper::Uri;
+use hyper::header::{Scheme};
 use {IntoUrl};
 use hyper_proxy::Intercept;
 use hyper_proxy::Proxy as HyperProxy;
@@ -14,11 +16,13 @@ use hyper_proxy::Proxy as HyperProxy;
 ///
 /// ```rust
 /// # fn run() -> Result<(), Box<::std::error::Error>> {
+/// use reqwest::header::Basic;
+///
 /// let mut proxy = reqwest::Proxy::http("https://secure.example")?;
-/// // proxy.set_authorization(Basic {
-/// //     username: "John Doe".into(),
-/// //     password: Some("Agent1234".into()),
-/// // });
+/// proxy.set_authorization(Basic {
+///     username: "John Doe".into(),
+///     password: Some("Agent1234".into()),
+/// });
 /// # Ok(())
 /// # }
 /// ```
@@ -109,6 +113,11 @@ impl Proxy {
     pub fn custom<F, U: IntoUrl>(fun: F, url: U) -> ::Result<Proxy>
     where F: Fn(&Uri) -> bool + 'static + Send + Sync {
         Proxy::new(Intercept::Custom(fun.into()), url)
+    }
+
+    /// Set proxy authorization
+    pub fn set_authorization<S: Scheme + Any>(&mut self, scheme: S) {
+        self.inner.set_authorization(scheme);
     }
 
     /*
