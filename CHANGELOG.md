@@ -1,3 +1,9 @@
+## v0.8.2
+
+### Fixes
+
+- Enable hyper's `no_proto` config, fixing several bugs in hyper.
+
 ## v0.8.1
 
 ### Features
