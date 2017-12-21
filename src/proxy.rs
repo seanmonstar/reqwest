@@ -37,7 +37,7 @@ use hyper_proxy::Proxy as HyperProxy;
 /// would prevent a `Proxy` later in the list from ever working, so take care.
 #[derive(Debug)]
 pub struct Proxy {
-    pub(crate) inner: HyperProxy<()>,
+    pub(crate) inner: HyperProxy,
 }
 
 impl Proxy {
@@ -112,7 +112,7 @@ impl Proxy {
     /// # fn main() {}
     pub fn custom<F, U: IntoUrl>(fun: F, url: U) -> ::Result<Proxy>
     where F: Fn(&Uri) -> bool + 'static + Send + Sync {
-        Proxy::new(Intercept::Custom(fun.into()), url)
+        Proxy::new(fun, url)
     }
 
     /// Set proxy authorization
@@ -126,13 +126,8 @@ impl Proxy {
     }
     */
 
-    /// Get a new empty proxy which will never intercept Uris
-    pub(crate) fn empty() -> Proxy {
-        Proxy { inner: HyperProxy::unsecured((), Intercept::None, Uri::default()) }
-    }
-
-    fn new<U: IntoUrl>(intercept: Intercept, url: U) -> ::Result<Proxy> {
+    fn new<U: IntoUrl, I: Into<Intercept>>(intercept: I, url: U) -> ::Result<Proxy> {
         let uri = ::into_url::to_uri(&try_!(url.into_url()));
-        Ok(Proxy { inner: try_!(HyperProxy::new((), intercept, uri)) })
+        Ok(Proxy { inner: HyperProxy::new(intercept, uri) })
     }
 }

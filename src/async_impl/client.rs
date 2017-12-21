@@ -7,6 +7,7 @@ use futures::{Async, Future, Poll};
 use hyper::client::{Connect, FutureResponse, HttpConnector};
 use hyper::header::{Headers, Location, Referer, UserAgent, Accept, Encoding,
                     AcceptEncoding, Range, qitem};
+use hyper_proxy::ProxyConnector;
 use hyper_proxy::Proxy as HyperProxy;
 use hyper_tls::HttpsConnector;
 use native_tls::{TlsConnector, TlsConnectorBuilder};
@@ -66,8 +67,7 @@ struct Config {
     gzip: bool,
     headers: Headers,
     hostname_verification: bool,
-    // TODO: investigate Vec<Proxy> as before
-    proxy: Proxy,
+    proxies: Vec<Proxy>,
     redirect_policy: RedirectPolicy,
     referer: bool,
     timeout: Option<Duration>,
@@ -89,7 +89,7 @@ impl ClientBuilder {
                         gzip: true,
                         headers: headers,
                         hostname_verification: true,
-                        proxy: Proxy::empty(),
+                        proxies: Vec::new(),
                         redirect_policy: RedirectPolicy::default(),
                         referer: true,
                         timeout: None,
@@ -129,19 +129,24 @@ impl ClientBuilder {
         if !config.hostname_verification {
             https_connector.danger_disable_hostname_verification(true);
         }
-        let mut connector = config.proxy.inner.clone().with_connector(https_connector);
+        let mut connector = ProxyConnector::unsecured(https_connector);
         let tls = try_!(config.tls.build());
         connector.set_tls(Some(tls));
+        connector.extend_proxies(config.proxies.iter().map(|p| p.inner.clone()));
 
         let hyper_client = ::hyper::Client::configure()
             .connector(connector)
             .build(handle);
 
+        // save proxies for http request
+        let mut proxy = ProxyConnector::unsecured(());
+        proxy.extend_proxies(config.proxies.into_iter().map(|p| p.inner));
+
         Ok(Client {
             inner: Arc::new(ClientRef {
                 gzip: config.gzip,
                 hyper: hyper_client,
-                proxy: config.proxy.inner,
+                proxy: proxy,
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
@@ -224,7 +229,7 @@ impl ClientBuilder {
     #[inline]
     pub fn proxy(&mut self, proxy: Proxy) -> &mut ClientBuilder {
         if let Some(config) = config_mut(&mut self.config, &self.err) {
-            config.proxy = proxy;
+            config.proxies.push(proxy);
         }
         self
     }
@@ -278,7 +283,7 @@ fn config_mut<'a>(config: &'a mut Option<Config>, err: &Option<::Error>) -> Opti
     }
 }
 
-type HyperClient = ::hyper::Client<::hyper_proxy::Proxy<HttpsConnector<HttpConnector>>>;
+type HyperClient = ::hyper::Client<::hyper_proxy::ProxyConnector<HttpsConnector<HttpConnector>>>;
 
 impl Client {
     /// Constructs a new `Client`.
@@ -414,9 +419,9 @@ impl Client {
             reusable
         });
 
-        if self.inner.proxy.intercept().matches(&uri) && uri.scheme() == Some("http") {
+        if let Some(headers) = self.inner.proxy.http_headers(&uri) {
             req.set_proxy(true);
-            req.headers_mut().extend(self.inner.proxy.headers().iter());
+            req.headers_mut().extend(headers.iter());
         }
         let in_flight = self.inner.hyper.request(req);
 
@@ -457,7 +462,7 @@ impl fmt::Debug for ClientBuilder {
 struct ClientRef {
     gzip: bool,
     headers: Headers,
-    proxy: HyperProxy<()>,
+    proxy: ProxyConnector<()>,
     hyper: HyperClient,
     redirect_policy: RedirectPolicy,
     referer: bool,
@@ -556,9 +561,9 @@ impl Future for PendingRequest {
                             if let Some(Some(ref body)) = self.body {
                                 req.set_body(body.clone());
                             }
-                            if self.client.proxy.intercept().matches(&uri) && uri.scheme() == Some("http") {
+                            if let Some(headers) = self.client.proxy.http_headers(&uri) {
                                 req.set_proxy(true);
-                                req.headers_mut().extend(self.client.proxy.headers().iter());
+                                req.headers_mut().extend(headers.iter());
                             }
                             self.in_flight = self.client.hyper.request(req);
                             continue;
