@@ -35,7 +35,7 @@ use hyper_proxy::Proxy as HyperProxy;
 /// check each `Proxy` in the order it was added. This could mean that a
 /// `Proxy` added first with eager intercept rules, such as `Proxy::all`,
 /// would prevent a `Proxy` later in the list from ever working, so take care.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Proxy {
     pub(crate) inner: HyperProxy,
 }
