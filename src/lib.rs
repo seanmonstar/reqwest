@@ -139,6 +139,9 @@ extern crate libflate;
 extern crate mime_guess;
 extern crate native_tls;
 extern crate serde;
+#[cfg(test)]
+#[macro_use]
+extern crate serde_derive;
 extern crate serde_json;
 extern crate serde_urlencoded;
 extern crate tokio_core;
