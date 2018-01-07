@@ -59,8 +59,8 @@ impl Body {
     }
 
     /// Create a `Body` from a `Read` where the size is known in advance
-    /// advance, but the data should not be loaded in full to memory. This will
-    /// set the `Content-Length` header, and stream from the `Read`.
+    /// but the data should not be fully loaded into memory. This will
+    /// set the `Content-Length` header and stream from the `Read`.
     ///
     /// ```rust
     /// # use std::fs::File;
