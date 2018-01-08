@@ -52,7 +52,8 @@ use {StatusCode, Url};
 /// ```
 #[derive(Debug)]
 pub struct Error {
-    kind: Kind,
+    /// Underlying error kind
+    pub kind: Kind,
     url: Option<Url>,
 }
 
@@ -243,17 +244,28 @@ impl StdError for Error {
 
 // pub(crate)
 
+/// Kind wraps possible errors
 #[derive(Debug)]
 pub enum Kind {
+    /// Hyper errors
     Http(::hyper::Error),
+    /// Url parse errors
     Url(::url::ParseError),
+    /// SSL errors
     Tls(::native_tls::Error),
+    /// IO errors
     Io(io::Error),
+    /// Serde URL encoding errors
     UrlEncoded(::serde_urlencoded::ser::Error),
+    /// Serde JSON errors
     Json(::serde_json::Error),
+    /// Too many redirects error
     TooManyRedirects,
+    /// Redirect loop error
     RedirectLoop,
+    /// Client error
     ClientError(StatusCode),
+    /// Server error
     ServerError(StatusCode),
 }
 
