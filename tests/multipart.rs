@@ -6,7 +6,7 @@ mod support;
 
 #[test]
 fn test_multipart() {
-    let _ = env_logger::init();
+    let _ = env_logger::try_init();
 
     let form = reqwest::multipart::Form::new()
         .text("foo", "bar");
