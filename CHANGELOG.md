@@ -1,3 +1,9 @@
+## v0.8.4
+
+### Features
+
+- Add `RequestBuilder::query` to easily adjust query parameters of requests.
+
 ## v0.8.3
 
 ### Features
