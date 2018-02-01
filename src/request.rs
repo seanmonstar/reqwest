@@ -240,7 +240,7 @@ impl RequestBuilder {
     /// # Errors
     /// This method will fail if the object you provide cannot be serialized
     /// into a query string.
-    pub fn query<T: Serialize>(&mut self, query: &T) -> &mut RequestBuilder {
+    pub fn query<T: Serialize + ?Sized>(&mut self, query: &T) -> &mut RequestBuilder {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
             let url = req.url_mut();
             let mut pairs = url.query_pairs_mut();
@@ -279,7 +279,7 @@ impl RequestBuilder {
     ///
     /// This method fails if the passed value cannot be serialized into
     /// url encoded format
-    pub fn form<T: Serialize>(&mut self, form: &T) -> &mut RequestBuilder {
+    pub fn form<T: Serialize + ?Sized>(&mut self, form: &T) -> &mut RequestBuilder {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
             match serde_urlencoded::to_string(form) {
                 Ok(body) => {
@@ -317,7 +317,7 @@ impl RequestBuilder {
     ///
     /// Serialization can fail if `T`'s implementation of `Serialize` decides to
     /// fail, or if `T` contains a map with non-string keys.
-    pub fn json<T: Serialize>(&mut self, json: &T) -> &mut RequestBuilder {
+    pub fn json<T: Serialize + ?Sized>(&mut self, json: &T) -> &mut RequestBuilder {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
             match serde_json::to_vec(json) {
                 Ok(body) => {
