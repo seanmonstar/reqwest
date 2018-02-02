@@ -42,6 +42,10 @@ name = "simple"
 path = "examples/simple.rs"
 
 [[example]]
+name = "form"
+path = "examples/form.rs"
+
+[[example]]
 name = "async"
 path = "examples/async.rs"
 required-features = ["unstable"]
