@@ -29,6 +29,32 @@ impl Certificate {
         let inner = try_!(native_tls::Certificate::from_der(der));
         Ok(Certificate(inner))
     }
+
+
+    /// Create a `Certificate` from a PEM encoded certificate
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::fs::File;
+    /// # use std::io::Read;
+    /// # fn cert() -> Result<(), Box<std::error::Error>> {
+    /// let mut buf = Vec::new();
+    /// File::open("my_cert.pem")?
+    ///     .read_to_end(&mut buf)?;
+    /// let cert = reqwest::Certificate::from_pem(&buf)?;
+    /// # drop(cert);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// If the provided buffer is not valid PEM, an error will be returned.
+    pub fn from_pem(der: &[u8]) -> ::Result<Certificate> {
+        let inner = try_!(native_tls::Certificate::from_pem(der));
+        Ok(Certificate(inner))
+    }
 }
 
 impl fmt::Debug for Certificate {
