@@ -177,12 +177,9 @@ impl Response {
     /// # }
     /// ```
     pub fn text(&mut self) -> ::Result<String> {
-        let len = self.headers().get::<::header::ContentLength>()
-            .map(|ct_len| **ct_len)
-            .unwrap_or(0);
-        let mut content = String::with_capacity(len as usize);
-        self.read_to_string(&mut content).map_err(::error::from)?;
-        Ok(content)
+        let mut content = vec![];
+        self.read_to_end(&mut content).map_err(::error::from)?;
+        Ok(content.iter().map(|&c| c as char).collect())
     }
 
     /// Copy the response body into a writer.
