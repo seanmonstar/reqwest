@@ -3,9 +3,11 @@ use std::fmt;
 use std::io::{self, Read};
 use std::time::Duration;
 
+use encoding_rs::{Encoding, UTF_8};
 use futures::{Async, Poll, Stream};
 use serde::de::DeserializeOwned;
 use serde_json;
+use uchardet;
 
 use client::KeepCoreThreadAlive;
 use header::Headers;
@@ -180,9 +182,12 @@ impl Response {
         let len = self.headers().get::<::header::ContentLength>()
             .map(|ct_len| **ct_len)
             .unwrap_or(0);
-        let mut content = String::with_capacity(len as usize);
-        self.read_to_string(&mut content).map_err(::error::from)?;
-        Ok(content)
+        let mut content = Vec::with_capacity(len as usize);
+        self.read_to_end(&mut content).map_err(::error::from)?;
+        let encoding_name = uchardet::detect_encoding_name(&content).unwrap_or_else(|_| "utf-8".to_string());
+        let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);
+        let (text, _, _) = encoding.decode(&content);
+        Ok(text.to_string())
     }
 
     /// Copy the response body into a writer.

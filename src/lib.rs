@@ -129,6 +129,7 @@
 //! [cookiejar_issue]: https://github.com/seanmonstar/reqwest/issues/14
 
 extern crate bytes;
+extern crate encoding_rs;
 #[macro_use]
 extern crate futures;
 extern crate hyper;
@@ -150,6 +151,7 @@ extern crate tokio_io;
 extern crate tokio_tls;
 extern crate url;
 extern crate uuid;
+extern crate uchardet;
 
 pub use hyper::header;
 pub use hyper::mime;
