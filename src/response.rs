@@ -184,7 +184,15 @@ impl Response {
             .unwrap_or(0);
         let mut content = Vec::with_capacity(len as usize);
         self.read_to_end(&mut content).map_err(::error::from)?;
-        let encoding_name = uchardet::detect_encoding_name(&content).unwrap_or_else(|_| "utf-8".to_string());
+        let encoding_name = self.headers().get::<::header::ContentType>()
+            .and_then(|content_type| {
+                content_type.get_param("charset")
+                    .map(|charset| charset.as_str().to_string())
+            })
+            .unwrap_or_else(|| {
+                uchardet::detect_encoding_name(&content)
+                    .unwrap_or_else(|_| "utf-8".to_string())
+            });
         let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);
         let (text, _, _) = encoding.decode(&content);
         Ok(text.to_string())
