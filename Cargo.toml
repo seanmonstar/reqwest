@@ -28,7 +28,6 @@ tokio-tls = "0.1"
 url = "1.2"
 uuid = { version = "0.5", features = ["v4"] }
 hyper-proxy = "0.4.0"
-uchardet = "2.0"
 
 [dev-dependencies]
 env_logger = "0.5"

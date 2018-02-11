@@ -7,7 +7,6 @@ use encoding_rs::{Encoding, UTF_8};
 use futures::{Async, Poll, Stream};
 use serde::de::DeserializeOwned;
 use serde_json;
-use uchardet;
 
 use client::KeepCoreThreadAlive;
 use header::Headers;
@@ -189,10 +188,7 @@ impl Response {
                 content_type.get_param("charset")
                     .map(|charset| charset.as_str().to_string())
             })
-            .unwrap_or_else(|| {
-                uchardet::detect_encoding_name(&content)
-                    .unwrap_or_else(|_| "utf-8".to_string())
-            });
+            .unwrap_or_else(|| "utf-8".to_string());
         let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);
         let (text, _, _) = encoding.decode(&content);
         Ok(text.to_string())

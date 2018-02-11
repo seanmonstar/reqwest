@@ -151,7 +151,6 @@ extern crate tokio_io;
 extern crate tokio_tls;
 extern crate url;
 extern crate uuid;
-extern crate uchardet;
 
 pub use hyper::header;
 pub use hyper::mime;
