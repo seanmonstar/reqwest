@@ -1,7 +1,5 @@
 extern crate reqwest;
 
-use reqwest::header::Bearer;
-
 #[macro_use]
 mod support;
 
@@ -14,7 +12,6 @@ fn test_http_proxy() {
             User-Agent: $USERAGENT\r\n\
             Accept: */*\r\n\
             Accept-Encoding: gzip\r\n\
-            Authorization: Bearer MY_SECRET_TOKEN\r\n\
             \r\n\
             ",
         response: b"\
@@ -22,16 +19,14 @@ fn test_http_proxy() {
             Server: proxied\r\n\
             Content-Length: 0\r\n\
             \r\n\
-            ";
+            "
     };
 
-    let proxy_uri = format!("http://{}", server.addr());
-    let mut proxy = reqwest::Proxy::http(&proxy_uri).unwrap();
-    proxy.set_authorization(Bearer { token: "MY_SECRET_TOKEN".to_string() });
+    let proxy = format!("http://{}", server.addr());
 
     let url = "http://hyper.rs/prox";
     let res = reqwest::Client::builder()
-        .proxy(proxy)
+        .proxy(reqwest::Proxy::http(&proxy).unwrap())
         .build()
         .unwrap()
         .get(url)
