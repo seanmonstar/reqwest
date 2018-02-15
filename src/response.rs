@@ -2,7 +2,9 @@ use std::mem;
 use std::fmt;
 use std::io::{self, Read};
 use std::time::Duration;
+use std::borrow::Cow;
 
+use encoding_rs::{Encoding, UTF_8};
 use futures::{Async, Poll, Stream};
 use serde::de::DeserializeOwned;
 use serde_json;
@@ -167,6 +169,11 @@ impl Response {
 
     /// Get the response text.
     ///
+    /// This method decodes the response body with BOM sniffing
+    /// and with malformed sequences replaced with the REPLACEMENT CHARACTER.
+    /// Encoding is determinated from the `charset` parameter of `Content-Type` header,
+    /// and defaults to `utf-8` if not presented.
+    ///
     /// # Example
     ///
     /// ```rust
@@ -180,9 +187,28 @@ impl Response {
         let len = self.headers().get::<::header::ContentLength>()
             .map(|ct_len| **ct_len)
             .unwrap_or(0);
-        let mut content = String::with_capacity(len as usize);
-        self.read_to_string(&mut content).map_err(::error::from)?;
-        Ok(content)
+        let mut content = Vec::with_capacity(len as usize);
+        self.read_to_end(&mut content).map_err(::error::from)?;
+        let encoding_name = self.headers().get::<::header::ContentType>()
+            .and_then(|content_type| {
+                content_type.get_param("charset")
+                    .map(|charset| charset.as_str())
+            })
+            .unwrap_or("utf-8");
+        let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);
+        // a block because of borrow checker
+        {
+            let (text, _, _) = encoding.decode(&content);
+            match text {
+                Cow::Owned(s) => return Ok(s),
+                _ => (),
+            }
+        }
+        unsafe {
+            // decoding returned Cow::Borrowed, meaning these bytes
+            // are already valid utf8
+            Ok(String::from_utf8_unchecked(content))
+        }
     }
 
     /// Copy the response body into a writer.
