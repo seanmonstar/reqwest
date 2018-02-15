@@ -1,3 +1,12 @@
+## v0.8.5
+
+### Features
+
+- Try to auto-detect encoding in `Response::text()`.
+- Add `Certificate::from_pem` to load PEM encoded client certificates.
+- Allow unsized types in `query`, `form`, and `json`.
+- Add `unstable::async::RequestBuilder::query`, mirroring the stable builder method.
+
 ## v0.8.4
 
 ### Features

@@ -1,7 +1,7 @@
 #![deny(warnings)]
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.8.4")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.8.5")]
 
 //! # reqwest
 //!
@@ -30,22 +30,18 @@
 //! For a single request, you can use the [`get`][get] shortcut method.
 //!
 //! ```rust
-//! use std::io::Read;
 //! # use reqwest::{Error, Response};
 //!
 //! # fn run() -> Result<(), Error> {
-//! let mut resp = reqwest::get("https://www.rust-lang.org")?;
-//!
-//! assert!(resp.status().is_success());
-//!
-//! let body = resp.text()?;
+//! let text = reqwest::get("https://www.rust-lang.org")?
+//!     .text()?;
 //!
 //! println!("body = {:?}", body);
 //! # Ok(())
 //! # }
 //! ```
 //!
-//! As you can see, reqwest's [`Response`][response] struct implements Rust's
+//! Additionally, reqwest's [`Response`][response] struct implements Rust's
 //! `Read` trait, so many useful standard library and third party crates will
 //! have convenience methods that take a `Response` anywhere `T: Read` is
 //! acceptable.
