@@ -33,7 +33,7 @@
 //! # use reqwest::{Error, Response};
 //!
 //! # fn run() -> Result<(), Error> {
-//! let text = reqwest::get("https://www.rust-lang.org")?
+//! let body = reqwest::get("https://www.rust-lang.org")?
 //!     .text()?;
 //!
 //! println!("body = {:?}", body);
