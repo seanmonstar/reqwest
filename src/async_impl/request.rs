@@ -23,8 +23,7 @@ pub struct Request {
 /// A builder to construct the properties of a `Request`.
 pub struct RequestBuilder {
     client: Client,
-    request: Option<Request>,
-    err: Option<::Error>,
+    request: ::Result<Request>,
 }
 
 impl Request {
@@ -90,29 +89,33 @@ impl Request {
 
 impl RequestBuilder {
     /// Add a `Header` to this Request.
-    pub fn header<K, V>(&mut self, key: K, value: V) -> &mut RequestBuilder
+    pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
     where
         HeaderName: HttpTryFrom<K>,
         HeaderValue: HttpTryFrom<V>,
     {
-        if let Some(req) = request_mut(&mut self.request, &self.err) {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
             match <HeaderName as HttpTryFrom<K>>::try_from(key) {
                 Ok(key) => {
                     match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
                         Ok(value) => { req.headers_mut().append(key, value); }
-                        Err(e) => self.err = Some(::error::from(e.into())),
+                        Err(e) => error = Some(::error::from(e.into())),
                     }
                 },
-                Err(e) => self.err = Some(::error::from(e.into())),
+                Err(e) => error = Some(::error::from(e.into())),
             };
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
         }
         self
     }
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
-    pub fn headers(&mut self, headers: ::header::HeaderMap) -> &mut RequestBuilder {
-        if let Some(req) = request_mut(&mut self.request, &self.err) {
+    pub fn headers(mut self, headers: ::header::HeaderMap) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
             for (key, value) in headers.iter() {
                 req.headers_mut().insert(key, value.clone());
             }
@@ -121,7 +124,7 @@ impl RequestBuilder {
     }
 
     /// Enable HTTP basic authentication.
-    pub fn basic_auth<U, P>(&mut self, username: U, password: Option<P>) -> &mut RequestBuilder
+    pub fn basic_auth<U, P>(mut self, username: U, password: Option<P>) -> RequestBuilder
     where
         U: fmt::Display,
         P: fmt::Display,
@@ -131,12 +134,12 @@ impl RequestBuilder {
             None => format!("{}:", username)
         };
         let header_value = format!("basic {}", encode(&auth));
-        self.header(::header::AUTHORIZATION, HeaderValue::from_str(header_value.as_str()).expect(""))
+        self.header(::header::AUTHORIZATION, &*header_value)
     }
 
     /// Set the request body.
-    pub fn body<T: Into<Body>>(&mut self, body: T) -> &mut RequestBuilder {
-        if let Some(req) = request_mut(&mut self.request, &self.err) {
+    pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
             *req.body_mut() = Some(body.into());
         }
         self
@@ -160,29 +163,37 @@ impl RequestBuilder {
     /// # Errors
     /// This method will fail if the object you provide cannot be serialized
     /// into a query string.
-    pub fn query<T: Serialize + ?Sized>(&mut self, query: &T) -> &mut RequestBuilder {
-        if let Some(req) = request_mut(&mut self.request, &self.err) {
+    pub fn query<T: Serialize + ?Sized>(mut self, query: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
             let url = req.url_mut();
             let mut pairs = url.query_pairs_mut();
             let serializer = serde_urlencoded::Serializer::new(&mut pairs);
 
             if let Err(err) = query.serialize(serializer) {
-                self.err = Some(::error::from(err));
+                error = Some(::error::from(err));
             }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
         }
         self
     }
 
     /// Send a form body.
-    pub fn form<T: Serialize + ?Sized>(&mut self, form: &T) -> &mut RequestBuilder {
-        if let Some(req) = request_mut(&mut self.request, &self.err) {
+    pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
             match serde_urlencoded::to_string(form) {
                 Ok(body) => {
                     req.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str(mime::APPLICATION_WWW_FORM_URLENCODED.as_ref()).expect(""));
                     *req.body_mut() = Some(body.into());
                 },
-                Err(err) => self.err = Some(::error::from(err)),
+                Err(err) => error = Some(::error::from(err)),
             }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
         }
         self
     }
@@ -193,34 +204,27 @@ impl RequestBuilder {
     ///
     /// Serialization can fail if `T`'s implementation of `Serialize` decides to
     /// fail, or if `T` contains a map with non-string keys.
-    pub fn json<T: Serialize + ?Sized>(&mut self, json: &T) -> &mut RequestBuilder {
-        if let Some(req) = request_mut(&mut self.request, &self.err) {
+    pub fn json<T: Serialize + ?Sized>(mut self, json: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
             match serde_json::to_vec(json) {
                 Ok(body) => {
                     req.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str(mime::APPLICATION_JSON.as_ref()).expect(""));
                     *req.body_mut() = Some(body.into());
                 },
-                Err(err) => self.err = Some(::error::from(err)),
+                Err(err) => error = Some(::error::from(err)),
             }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
         }
         self
     }
 
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
-    ///
-    /// # Panics
-    ///
-    /// This method consumes builder internal state. It panics on an attempt to
-    /// reuse already consumed builder.
-    pub fn build(&mut self) -> ::Result<Request> {
-        if let Some(err) = self.err.take() {
-            Err(err)
-        } else {
-            Ok(self.request
-                .take()
-                .expect("RequestBuilder cannot be reused after builder a Request"))
-        }
+    pub fn build(self) -> ::Result<Request> {
+        self.request
     }
 
     /// Constructs the Request and sends it the target URL, returning a Response.
@@ -229,19 +233,11 @@ impl RequestBuilder {
     ///
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
-    pub fn send(&mut self) -> Pending {
-        match self.build() {
+    pub fn send(self) -> Pending {
+        match self.request {
             Ok(req) => self.client.execute(req),
             Err(err) => pending_err(err),
         }
-    }
-}
-
-fn request_mut<'a>(req: &'a mut Option<Request>, err: &Option<::Error>) -> Option<&'a mut Request> {
-    if err.is_some() {
-        None
-    } else {
-        req.as_mut()
     }
 }
 
@@ -254,13 +250,17 @@ impl fmt::Debug for Request {
 
 impl fmt::Debug for RequestBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(ref req) = self.request {
-            fmt_request_fields(&mut f.debug_struct("RequestBuilder"), req)
-                .finish()
-        } else {
-            f.debug_tuple("RequestBuilder")
-                .field(&"Consumed")
-                .finish()
+        let mut builder = f.debug_struct("RequestBuilder");
+        match self.request {
+            Ok(ref req) => {
+                fmt_request_fields(&mut builder, req)
+                    .finish()
+            },
+            Err(ref err) => {
+                builder
+                    .field("error", err)
+                    .finish()
+            }
         }
     }
 }
@@ -274,18 +274,10 @@ fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>, req: &Request
 // pub(crate)
 
 #[inline]
-pub fn builder(client: Client, req: ::Result<Request>) -> RequestBuilder {
-    match req {
-        Ok(req) => RequestBuilder {
-            client: client,
-            request: Some(req),
-            err: None,
-        },
-        Err(err) => RequestBuilder {
-            client: client,
-            request: None,
-            err: Some(err)
-        },
+pub fn builder(client: Client, request: ::Result<Request>) -> RequestBuilder {
+    RequestBuilder {
+        client,
+        request,
     }
 }
 
