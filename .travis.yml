@@ -27,12 +27,6 @@ matrix:
 sudo: false
 dist: trusty
 
-cache:
-  apt: true
-  directories:
-    - target/debug/deps
-    - target/debug/build
-
 script:
   - cargo build $FEATURES
   - cargo test -v $FEATURES
