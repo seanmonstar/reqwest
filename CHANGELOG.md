@@ -1,3 +1,30 @@
+## v0.8.5
+
+### Features
+
+- Try to auto-detect encoding in `Response::text()`.
+- Add `Certificate::from_pem` to load PEM encoded client certificates.
+- Allow unsized types in `query`, `form`, and `json`.
+- Add `unstable::async::RequestBuilder::query`, mirroring the stable builder method.
+
+## v0.8.4
+
+### Features
+
+- Add `RequestBuilder::query` to easily adjust query parameters of requests.
+
+## v0.8.3
+
+### Features
+
+- Upgrades internal log crate usage to v0.4
+
+## v0.8.2
+
+### Fixes
+
+- Enable hyper's `no_proto` config, fixing several bugs in hyper.
+
 ## v0.8.1
 
 ### Features

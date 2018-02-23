@@ -1,7 +1,7 @@
 #![deny(warnings)]
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.8.1")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.8.5")]
 
 //! # reqwest
 //!
@@ -30,26 +30,25 @@
 //! For a single request, you can use the [`get`][get] shortcut method.
 //!
 //! ```rust
-//! use std::io::Read;
 //! # use reqwest::{Error, Response};
 //!
-//! # fn run() -> Result<Response, Error> {
-//! let mut resp = reqwest::get("https://www.rust-lang.org")?;
-//! assert!(resp.status().is_success());
+//! # fn run() -> Result<(), Error> {
+//! let body = reqwest::get("https://www.rust-lang.org")?
+//!     .text()?;
 //!
-//! let mut content = String::new();
-//! resp.read_to_string(&mut content);
-//! # Ok(resp)
+//! println!("body = {:?}", body);
+//! # Ok(())
 //! # }
 //! ```
 //!
-//! As you can see, reqwest's [`Response`][response] struct implements Rust's
+//! Additionally, reqwest's [`Response`][response] struct implements Rust's
 //! `Read` trait, so many useful standard library and third party crates will
 //! have convenience methods that take a `Response` anywhere `T: Read` is
 //! acceptable.
 //!
-//! If you plan to perform multiple requests, it is best to create a [`Client`][client]
-//! and reuse it, taking advantage of keep-alive connection pooling.
+//! **NOTE**: If you plan to perform multiple requests, it is best to create a
+//! [`Client`][client] and reuse it, taking advantage of keep-alive connection
+//! pooling.
 //!
 //! ## Making POST requests (or setting request bodies)
 //!
@@ -126,6 +125,7 @@
 //! [cookiejar_issue]: https://github.com/seanmonstar/reqwest/issues/14
 
 extern crate bytes;
+extern crate encoding_rs;
 #[macro_use]
 extern crate futures;
 extern crate hyper;
@@ -136,6 +136,9 @@ extern crate libflate;
 extern crate mime_guess;
 extern crate native_tls;
 extern crate serde;
+#[cfg(test)]
+#[macro_use]
+extern crate serde_derive;
 extern crate serde_json;
 extern crate serde_urlencoded;
 extern crate tokio_core;
@@ -212,15 +215,16 @@ pub mod unstable {
 /// See also the methods on the [`reqwest::Response`](./struct.Response.html)
 /// type.
 ///
+/// **NOTE**: This function creates a new internal `Client` on each call,
+/// and so should not be used if making many requests. Create a
+/// [`Client`](./struct.Client.html) instead.
+///
 /// # Examples
 ///
 /// ```rust
-/// use std::io::Read;
-///
-/// # fn run() -> Result<(), Box<::std::error::Error>> {
-/// let mut result = String::new();
-/// reqwest::get("https://www.rust-lang.org")?
-///     .read_to_string(&mut result)?;
+/// # fn run() -> Result<(), reqwest::Error> {
+/// let body = reqwest::get("https://www.rust-lang.org")?
+///     .text()?;
 /// # Ok(())
 /// # }
 /// # fn main() { }

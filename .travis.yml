@@ -14,6 +14,9 @@ matrix:
         - rust: nightly
           env: FEATURES=""
 
+        # minimum version
+        - rust: 1.18.0
+
         - rust: stable
           env: FEATURES="--features unstable"
         - rust: beta
@@ -24,12 +27,6 @@ matrix:
 sudo: false
 dist: trusty
 
-cache:
-  apt: true
-  directories:
-    - target/debug/deps
-    - target/debug/build
-
 script:
   - cargo build $FEATURES
-  - RUST_LOG=hyper,reqwest cargo test -v $FEATURES
+  - cargo test -v $FEATURES

@@ -210,6 +210,49 @@ impl RequestBuilder {
         self
     }
 
+    /// Modify the query string of the URL.
+    ///
+    /// Modifies the URL of this request, adding the parameters provided.
+    /// This method appends and does not overwrite. This means that it can
+    /// be called multiple times and that existing query parameters are not
+    /// overwritten if the same key is used. The key will simply show up
+    /// twice in the query string.
+    /// Calling `.query(&[("foo", "a"), ("foo", "b")])` gives `"foo=a&boo=b"`.
+    ///
+    /// ```rust
+    /// # use reqwest::Error;
+    /// #
+    /// # fn run() -> Result<(), Error> {
+    /// let client = reqwest::Client::new();
+    /// let res = client.get("http://httpbin.org")
+    ///     .query(&[("lang", "rust")])
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Note
+    /// This method does not support serializing a single key-value
+    /// pair. Instead of using `.query(("key", "val"))`, use a sequence, such
+    /// as `.query(&[("key", "val")])`. It's also possible to serialize structs
+    /// and maps into a key-value pair.
+    ///
+    /// # Errors
+    /// This method will fail if the object you provide cannot be serialized
+    /// into a query string.
+    pub fn query<T: Serialize + ?Sized>(&mut self, query: &T) -> &mut RequestBuilder {
+        if let Some(req) = request_mut(&mut self.request, &self.err) {
+            let url = req.url_mut();
+            let mut pairs = url.query_pairs_mut();
+            let serializer = serde_urlencoded::Serializer::new(&mut pairs);
+
+            if let Err(err) = query.serialize(serializer) {
+                self.err = Some(::error::from(err));
+            }
+        }
+        self
+    }
+
     /// Send a form body.
     ///
     /// Sets the body to the url encoded serialization of the passed value,
@@ -236,7 +279,7 @@ impl RequestBuilder {
     ///
     /// This method fails if the passed value cannot be serialized into
     /// url encoded format
-    pub fn form<T: Serialize>(&mut self, form: &T) -> &mut RequestBuilder {
+    pub fn form<T: Serialize + ?Sized>(&mut self, form: &T) -> &mut RequestBuilder {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
             match serde_urlencoded::to_string(form) {
                 Ok(body) => {
@@ -274,7 +317,7 @@ impl RequestBuilder {
     ///
     /// Serialization can fail if `T`'s implementation of `Serialize` decides to
     /// fail, or if `T` contains a map with non-string keys.
-    pub fn json<T: Serialize>(&mut self, json: &T) -> &mut RequestBuilder {
+    pub fn json<T: Serialize + ?Sized>(&mut self, json: &T) -> &mut RequestBuilder {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
             match serde_json::to_vec(json) {
                 Ok(body) => {
@@ -425,9 +468,9 @@ pub fn async(req: Request) -> (async_impl::Request, Option<body::Sender>) {
 mod tests {
     use {body, Client, Method};
     use header::{Host, Headers, ContentType};
-    use std::collections::HashMap;
-    use serde_urlencoded;
+    use std::collections::{BTreeMap, HashMap};
     use serde_json;
+    use serde_urlencoded;
 
     #[test]
     fn basic_get_request() {
@@ -535,6 +578,67 @@ mod tests {
         let buf = body::read_to_string(r.body_mut().take().unwrap()).unwrap();
 
         assert_eq!(buf, body);
+    }
+
+    #[test]
+    fn add_query_append() {
+        let client = Client::new();
+        let some_url = "https://google.com/";
+        let mut r = client.get(some_url);
+
+        r.query(&[("foo", "bar")]);
+        r.query(&[("qux", 3)]);
+
+        let req = r.build().expect("request is valid");
+        assert_eq!(req.url().query(), Some("foo=bar&qux=3"));
+    }
+
+    #[test]
+    fn add_query_append_same() {
+        let client = Client::new();
+        let some_url = "https://google.com/";
+        let mut r = client.get(some_url);
+
+        r.query(&[("foo", "a"), ("foo", "b")]);
+
+        let req = r.build().expect("request is valid");
+        assert_eq!(req.url().query(), Some("foo=a&foo=b"));
+    }
+
+    #[test]
+    fn add_query_struct() {
+        #[derive(Serialize)]
+        struct Params {
+            foo: String,
+            qux: i32,
+        }
+
+        let client = Client::new();
+        let some_url = "https://google.com/";
+        let mut r = client.get(some_url);
+
+        let params = Params { foo: "bar".into(), qux: 3 };
+
+        r.query(&params);
+
+        let req = r.build().expect("request is valid");
+        assert_eq!(req.url().query(), Some("foo=bar&qux=3"));
+    }
+
+    #[test]
+    fn add_query_map() {
+        let mut params = BTreeMap::new();
+        params.insert("foo", "bar");
+        params.insert("qux", "three");
+
+        let client = Client::new();
+        let some_url = "https://google.com/";
+        let mut r = client.get(some_url);
+
+        r.query(&params);
+
+        let req = r.build().expect("request is valid");
+        assert_eq!(req.url().query(), Some("foo=bar&qux=three"));
     }
 
     #[test]
