@@ -8,6 +8,7 @@ use super::body::{self, Body};
 use super::client::{Client, Pending, pending_err};
 use header::{ContentType, Headers};
 use {Method, Url};
+use std::io::Read;
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -184,6 +185,24 @@ impl RequestBuilder {
                     req.headers_mut().set(ContentType::json());
                     *req.body_mut() = Some(body.into());
                 },
+                Err(err) => self.err = Some(::error::from(err)),
+            }
+        }
+        self
+    }
+
+    pub fn multipart(&mut self, mut multipart: ::multipart::Form) -> &mut RequestBuilder {
+        if let Some(req) = request_mut(&mut self.request, &self.err) {
+            req.headers_mut().set(::header::ContentType(
+                format!(
+                    "multipart/form-data; boundary={}",
+                    ::multipart_::boundary(&multipart)
+                ).parse()
+                    .unwrap(),
+            ));
+            let mut v = vec![];
+            match ::multipart_::reader(multipart).read_to_end(&mut v) {
+                Ok(_) => *req.body_mut() = Some(v.into()),
                 Err(err) => self.err = Some(::error::from(err)),
             }
         }
