@@ -100,15 +100,10 @@ fn test_multipart() {
             User-Agent: $USERAGENT\r\n\
             Accept: */*\r\n\
             Content-Type: multipart/form-data; boundary={}\r\n\
+            Content-Length: 123\r\n\
             Accept-Encoding: gzip\r\n\
-            Transfer-Encoding: chunked\r\n\
             \r\n\
-            7B\r\n\
             {}\
-            \r\n\
-            0\r\n\
-            \r\n\
-            \
             ", form.boundary(), expected_body),
         response: b"\
             HTTP/1.1 200 OK\r\n\
