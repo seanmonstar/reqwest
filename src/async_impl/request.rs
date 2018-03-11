@@ -191,6 +191,7 @@ impl RequestBuilder {
         self
     }
 
+    /// Sends a multipart/form-data body.
     pub fn multipart(&mut self, mut multipart: ::multipart::Form) -> &mut RequestBuilder {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
             req.headers_mut().set(::header::ContentType(
