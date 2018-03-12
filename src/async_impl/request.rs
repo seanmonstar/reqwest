@@ -190,6 +190,32 @@ impl RequestBuilder {
         self
     }
 
+    /// Sends a multipart/form-data body.
+    pub fn multipart(&mut self, mut multipart: ::multipart::Form) -> &mut RequestBuilder {
+        use std::io::Read;
+
+        if let Some(req) = request_mut(&mut self.request, &self.err) {
+            req.headers_mut().set(::header::ContentType(
+                format!(
+                    "multipart/form-data; boundary={}",
+                    ::multipart_::boundary(&multipart)
+                ).parse()
+                    .unwrap(),
+            ));
+
+            if let Some(length) = ::multipart_::compute_length(&mut multipart) {
+                req.headers_mut().set(::header::ContentLength(length));
+            }
+
+            let mut v = vec![];
+            match ::multipart_::reader(multipart).read_to_end(&mut v) {
+                Ok(_) => *req.body_mut() = Some(v.into()),
+                Err(err) => self.err = Some(::error::from(err)),
+            }
+        }
+        self
+    }
+
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
     ///
