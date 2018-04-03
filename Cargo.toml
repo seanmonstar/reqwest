@@ -50,5 +50,9 @@ name = "async"
 path = "examples/async.rs"
 required-features = ["unstable"]
 
+[[example]]
+name = "event-stream"
+path = "examples/event_stream.rs"
+
 [package.metadata.docs.rs]
 features = ["unstable"]
