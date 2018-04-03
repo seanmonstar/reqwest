@@ -25,6 +25,25 @@
 //! applications that only require a few HTTP requests, and wish to handle
 //! them synchronously.
 //!
+//! ## Code example structure
+//! Note that all the following examples expect to be run outside of `main` because `?` is used. Like so:
+//!
+//! ```rust
+//! use reqwest::{Error, Response};
+//!
+//! fn run() -> Result<(), Error> {
+//!     let body = reqwest::get("https://www.rust-lang.org")?
+//!         .text()?;
+//!
+//!     println!("body = {:?}", body);
+//!     Ok(())
+//! }
+//!
+//! fn main() {
+//!     run();
+//! }
+//! ```
+//!
 //! ## Making a GET request
 //!
 //! For a single request, you can use the [`get`][get] shortcut method.
