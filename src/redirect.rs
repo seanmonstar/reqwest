@@ -91,7 +91,7 @@ impl RedirectPolicy {
         }
     }
 
-    fn redirect(&self, attempt: RedirectAttempt) -> RedirectAction {
+    pub fn redirect(&self, attempt: RedirectAttempt) -> RedirectAction {
         match self.inner {
             Policy::Custom(ref custom) => custom(attempt),
             Policy::Limit(max) => {
