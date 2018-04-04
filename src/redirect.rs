@@ -91,6 +91,26 @@ impl RedirectPolicy {
         }
     }
 
+    /// Apply this policy to a given [`RedirectAttempt`] to produce a [`RedirectAction`].
+    ///
+    /// # Note
+    ///
+    /// This method can be used together with RedirectPolicy::custom()
+    /// to construct one RedirectPolicy that wraps another.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use reqwest::{Error, RedirectPolicy};
+    /// #
+    /// # fn run() -> Result<(), Error> {
+    /// let custom = RedirectPolicy::custom(|attempt| {
+    ///     eprintln!("Location: {:?}", attempt.url());
+    ///     RedirectPolicy::default().redirect(attempt)
+    /// });
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn redirect(&self, attempt: RedirectAttempt) -> RedirectAction {
         match self.inner {
             Policy::Custom(ref custom) => custom(attempt),
