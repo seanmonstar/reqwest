@@ -539,7 +539,12 @@ impl Future for PendingRequest {
                         }
                     }
                     self.urls.push(self.url.clone());
-                    let action = check_redirect(&self.client.redirect_policy, &loc, &self.urls);
+                    let action = check_redirect(
+                        &self.client.redirect_policy,
+                        res.status(),
+                        &loc,
+                        &self.urls,
+                    );
 
                     match action {
                         redirect::Action::Follow => {
