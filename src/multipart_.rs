@@ -67,11 +67,11 @@ impl Form {
     /// # Errors
     ///
     /// Errors when the file cannot be opened.
-    pub fn file<T, U>(self, name: T, path: U) -> io::Result<Form>
+    pub fn file<T, U>(self, name: T, path: U, encode: bool) -> io::Result<Form>
     where T: Into<Cow<'static, str>>,
           U: AsRef<Path>
     {
-        Ok(self.part(name, Part::file(path)?))
+        Ok(self.part(name, Part::file(path, encode)?))
     }
 
     /// Adds a customized Part.
@@ -120,6 +120,7 @@ impl fmt::Debug for Form {
         f.debug_struct("Form")
             .field("boundary", &self.boundary)
             .field("parts", &self.fields)
+            .field("headers", &self.headers)
             .finish()
     }
 }
@@ -130,6 +131,7 @@ pub struct Part {
     value: Body,
     mime: Option<Mime>,
     file_name: Option<Cow<'static, str>>,
+    encode_name: bool
 }
 
 impl Part {
@@ -163,7 +165,7 @@ impl Part {
     /// # Errors
     ///
     /// Errors when the file cannot be opened.
-    pub fn file<T: AsRef<Path>>(path: T) -> io::Result<Part> {
+    pub fn file<T: AsRef<Path>>(path: T, encode: bool) -> io::Result<Part> {
         let path = path.as_ref();
         let file_name = path.file_name().and_then(|filename| {
             Some(Cow::from(filename.to_string_lossy().into_owned()))
@@ -176,6 +178,7 @@ impl Part {
         let mut field = Part::new(Body::from(file));
         field.mime = Some(mime);
         field.file_name = file_name;
+        field.encode_name = encode;
         Ok(field)
     }
 
@@ -184,6 +187,7 @@ impl Part {
             value: value,
             mime: None,
             file_name: None,
+            encode_name: true,
         }
     }
 
@@ -309,7 +313,13 @@ fn header(name: &str, field: &Part) -> String {
         "Content-Disposition: form-data; {}{}{}",
         format_parameter("name", name),
         match field.file_name {
-            Some(ref file_name) => format!("; {}", format_parameter("filename", file_name)),
+            Some(ref file_name) => {
+                if field.encode_name {
+                    format!("; {}", format_parameter("filename", file_name))
+                } else {
+                    format!("; {}", format!("{}=\"{}\"", "filename", file_name))
+                }
+            },
             None => String::new(),
         },
         match field.mime {
@@ -324,9 +334,11 @@ fn format_parameter(name: &str, value: &str) -> String {
         percent_encoding::utf8_percent_encode(value, percent_encoding::PATH_SEGMENT_ENCODE_SET)
             .to_string();
     if value.len() == legal_value.len() {
+        println!("no percent encoded: {}", legal_value);
         // nothing has been percent encoded
         format!("{}=\"{}\"", name, value)
     } else {
+        println!("percent encded!: {}", format!("{}*=utf-8''{}", name, legal_value));
         // something has been percent encoded
         format!("{}*=utf-8''{}", name, legal_value)
     }
@@ -432,6 +444,6 @@ mod tests {
         let field = Part::text("");
         let expected = "Content-Disposition: form-data; name*=utf-8''start%25\'%22%0D%0A%C3%9Fend";
 
-        assert_eq!(header(name, &field), expected);
+        assert_eq!(header(true, name, &field), expected);
     }
 }
