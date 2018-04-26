@@ -192,9 +192,9 @@ impl Response {
         let encoding_name = self.headers().get::<::header::ContentType>()
             .and_then(|content_type| {
                 content_type.get_param("charset")
-                    .map(|charset| charset.as_str())
+                    .map(|charset| charset.to_content())
             })
-            .unwrap_or("utf-8");
+            .unwrap_or(Cow::Borrowed("utf-8"));
         let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);
         // a block because of borrow checker
         {
