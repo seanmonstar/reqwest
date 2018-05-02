@@ -50,5 +50,13 @@ name = "async"
 path = "examples/async.rs"
 required-features = ["unstable"]
 
+[[example]]
+name = "arbitrary_json"
+path = "examples/arbitrary_json.rs"
+
+[[example]]
+name = "statically_typed_json"
+path = "examples/statically_typed_json.rs"
+
 [package.metadata.docs.rs]
 features = ["unstable"]
