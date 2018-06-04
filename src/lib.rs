@@ -1,7 +1,7 @@
 #![deny(warnings)]
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.8.5")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.8.6")]
 
 //! # reqwest
 //!
@@ -24,25 +24,6 @@
 //! The `reqwest::Client` is synchronous, making it a great fit for
 //! applications that only require a few HTTP requests, and wish to handle
 //! them synchronously.
-//!
-//! ## Code example structure
-//! Note that all the following examples expect to be run outside of `main` because `?` is used. Like so:
-//!
-//! ```rust
-//! use reqwest::{Error, Response};
-//!
-//! fn run() -> Result<(), Error> {
-//!     let body = reqwest::get("https://www.rust-lang.org")?
-//!         .text()?;
-//!
-//!     println!("body = {:?}", body);
-//!     Ok(())
-//! }
-//!
-//! fn main() {
-//!     run();
-//! }
-//! ```
 //!
 //! ## Making a GET request
 //!

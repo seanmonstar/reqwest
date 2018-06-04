@@ -1,3 +1,10 @@
+## v0.8.6
+
+### Features
+
+- Add `RedirectAttempt::status` to check status code that triggered redirect.
+- Add `RedirectPolicy::redirect` method publicly, to allow composing policies.
+
 ## v0.8.5
 
 ### Features

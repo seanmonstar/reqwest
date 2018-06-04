@@ -1,6 +1,7 @@
 use std::fmt;
 
-use hyper::header::{Headers};
+use hyper::header::Headers;
+use hyper::StatusCode;
 
 use Url;
 
@@ -17,6 +18,7 @@ pub struct RedirectPolicy {
 /// in redirect chain.
 #[derive(Debug)]
 pub struct RedirectAttempt<'a> {
+    status: StatusCode,
     next: &'a Url,
     previous: &'a [Url],
 }
@@ -91,7 +93,27 @@ impl RedirectPolicy {
         }
     }
 
-    fn redirect(&self, attempt: RedirectAttempt) -> RedirectAction {
+    /// Apply this policy to a given [`RedirectAttempt`] to produce a [`RedirectAction`].
+    ///
+    /// # Note
+    ///
+    /// This method can be used together with RedirectPolicy::custom()
+    /// to construct one RedirectPolicy that wraps another.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use reqwest::{Error, RedirectPolicy};
+    /// #
+    /// # fn run() -> Result<(), Error> {
+    /// let custom = RedirectPolicy::custom(|attempt| {
+    ///     eprintln!("{}, Location: {:?}", attempt.status(), attempt.url());
+    ///     RedirectPolicy::default().redirect(attempt)
+    /// });
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn redirect(&self, attempt: RedirectAttempt) -> RedirectAction {
         match self.inner {
             Policy::Custom(ref custom) => custom(attempt),
             Policy::Limit(max) => {
@@ -115,6 +137,11 @@ impl Default for RedirectPolicy {
 }
 
 impl<'a> RedirectAttempt<'a> {
+    /// Get the type of redirect.
+    pub fn status(&self) -> StatusCode {
+        self.status
+    }
+
     /// Get the next URL to redirect to.
     pub fn url(&self) -> &Url {
         self.next
@@ -186,11 +213,19 @@ pub enum Action {
 }
 
 #[inline]
-pub fn check_redirect(policy: &RedirectPolicy, next: &Url, previous: &[Url]) -> Action {
-    policy.redirect(RedirectAttempt {
-        next: next,
-        previous: previous,
-    }).inner
+pub fn check_redirect(
+    policy: &RedirectPolicy,
+    status: StatusCode,
+    next: &Url,
+    previous: &[Url],
+) -> Action {
+    policy
+        .redirect(RedirectAttempt {
+            status: status,
+            next: next,
+            previous: previous,
+        })
+        .inner
 }
 
 pub fn remove_sensitive_headers(headers: &mut Headers, next: &Url, previous: &[Url]) {
@@ -232,13 +267,17 @@ fn test_redirect_policy_limit() {
         .map(|i| Url::parse(&format!("http://a.b/c/{}", i)).unwrap())
         .collect::<Vec<_>>();
 
-
-    assert_eq!(check_redirect(&policy, &next, &previous), Action::Follow);
+    assert_eq!(
+        check_redirect(&policy, StatusCode::Found, &next, &previous),
+        Action::Follow
+    );
 
     previous.push(Url::parse("http://a.b.d/e/33").unwrap());
 
-    assert_eq!(check_redirect(&policy, &next, &previous),
-               Action::TooManyRedirects);
+    assert_eq!(
+        check_redirect(&policy, StatusCode::Found, &next, &previous),
+        Action::TooManyRedirects
+    );
 }
 
 #[test]
@@ -252,10 +291,16 @@ fn test_redirect_policy_custom() {
     });
 
     let next = Url::parse("http://bar/baz").unwrap();
-    assert_eq!(check_redirect(&policy, &next, &[]), Action::Follow);
+    assert_eq!(
+        check_redirect(&policy, StatusCode::Found, &next, &[]),
+        Action::Follow
+    );
 
     let next = Url::parse("http://foo/baz").unwrap();
-    assert_eq!(check_redirect(&policy, &next, &[]), Action::Stop);
+    assert_eq!(
+        check_redirect(&policy, StatusCode::Found, &next, &[]),
+        Action::Stop
+    );
 }
 
 #[test]

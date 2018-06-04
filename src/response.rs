@@ -183,6 +183,11 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Note
+    ///
+    /// This consumes the body. Trying to read more, or use of `response.json()`
+    /// will return empty values.
     pub fn text(&mut self) -> ::Result<String> {
         let len = self.headers().get::<::header::ContentLength>()
             .map(|ct_len| **ct_len)
