@@ -14,7 +14,7 @@ bytes = "0.4"
 encoding_rs = "0.7"
 futures = "0.1.15"
 hyper = "0.11.22"
-hyper-tls = "0.1.2"
+hyper-tls = { git = "https://github.com/aep/hyper-tls.git", rev = "8370cde1122e1da68c3eb79ef577904dbbf37d7a" }
 libflate = "0.1.11"
 log = "0.4"
 mime_guess = "2.0.0-alpha.2"
