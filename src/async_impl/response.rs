@@ -13,7 +13,7 @@ use serde::de::DeserializeOwned;
 use serde_json;
 use url::Url;
 
-use header::{Headers, ContentEncoding, ContentLength, Encoding, TransferEncoding};
+use hyper::header::{HeaderMap, CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
 use super::{decoder, body, Body, Chunk, Decoder};
 use error;
 
@@ -21,7 +21,7 @@ use error;
 /// A Response to a submitted `Request`.
 pub struct Response {
     status: StatusCode,
-    headers: Headers,
+    headers: HeaderMap,
     url: Url,
     body: Decoder,
 }
@@ -41,13 +41,13 @@ impl Response {
 
     /// Get the `Headers` of this `Response`.
     #[inline]
-    pub fn headers(&self) -> &Headers {
+    pub fn headers(&self) -> &HeaderMap {
         &self.headers
     }
 
     /// Get a mutable reference to the `Headers` of this `Response`.
     #[inline]
-    pub fn headers_mut(&mut self) -> &mut Headers {
+    pub fn headers_mut(&mut self) -> &mut HeaderMap {
         &mut self.headers
     }
 
@@ -152,10 +152,10 @@ impl<T> fmt::Debug for Json<T> {
 
 // pub(crate)
 
-pub fn new(mut res: ::hyper::client::Response, url: Url, gzip: bool) -> Response {
+pub fn new(mut res: ::hyper::Response<::hyper::Body>, url: Url, gzip: bool) -> Response {
     let status = res.status();
-    let mut headers = mem::replace(res.headers_mut(), Headers::new());
-    let decoder = decoder::detect(&mut headers, body::wrap(res.body()), gzip);
+    let mut headers = mem::replace(res.headers_mut(), HeaderMap::new());
+    let decoder = decoder::detect(&mut headers, body::wrap(res.into_body()), gzip);
     debug!("Response: '{}' for {}", status, url);
     Response {
         status: status,

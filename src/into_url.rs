@@ -37,6 +37,6 @@ pub fn to_uri(url: &Url) -> ::hyper::Uri {
     url.as_str().parse().expect("a parsed Url should always be a valid Uri")
 }
 
-pub fn to_url(uri: &::hyper::Uri) -> Url {
-    uri.as_ref().parse().expect("reqwest Uris should only ever come from Urls")
-}
+// pub fn to_url(uri: &::hyper::Uri) -> Url {
+//     format!("{}", uri).as_str().parse().expect("reqwest Uris should only ever come from Urls")
+// }

@@ -206,7 +206,7 @@ impl ClientBuilder {
     /// # }
     /// ```
     #[inline]
-    pub fn default_headers(&mut self, headers: header::Headers) -> &mut ClientBuilder {
+    pub fn default_headers(&mut self, headers: header::HeaderMap) -> &mut ClientBuilder {
         self.inner.default_headers(headers);
         self
     }
@@ -287,7 +287,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Get, url)
+        self.request(Method::GET, url)
     }
 
     /// Convenience method to make a `POST` request to a URL.
@@ -296,7 +296,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Post, url)
+        self.request(Method::POST, url)
     }
 
     /// Convenience method to make a `PUT` request to a URL.
@@ -305,7 +305,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn put<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Put, url)
+        self.request(Method::PUT, url)
     }
 
     /// Convenience method to make a `PATCH` request to a URL.
@@ -314,7 +314,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn patch<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Patch, url)
+        self.request(Method::PATCH, url)
     }
 
     /// Convenience method to make a `DELETE` request to a URL.
@@ -323,7 +323,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn delete<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Delete, url)
+        self.request(Method::DELETE, url)
     }
 
     /// Convenience method to make a `HEAD` request to a URL.
@@ -332,7 +332,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Head, url)
+        self.request(Method::HEAD, url)
     }
 
     /// Start building a `Request` with the `Method` and `Url`.
@@ -418,7 +418,7 @@ impl ClientHandle {
             let built = (|| {
                 let core = try_!(Core::new());
                 let handle = core.handle();
-                let client = builder.build(&handle)?;
+                let client = builder.build()?;
                 Ok((core, handle, client))
             })();
 

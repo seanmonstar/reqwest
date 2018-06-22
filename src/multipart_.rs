@@ -4,8 +4,7 @@ use std::fs::File;
 use std::io::{self, Cursor, Read};
 use std::path::Path;
 
-use mime::Mime;
-use mime_guess;
+use mime_guess::{self, Mime};
 use url::percent_encoding;
 use uuid::Uuid;
 

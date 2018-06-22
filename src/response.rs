@@ -10,7 +10,7 @@ use serde::de::DeserializeOwned;
 use serde_json;
 
 use client::KeepCoreThreadAlive;
-use header::Headers;
+use hyper::header::HeaderMap;
 use {async_impl, StatusCode, Url, wait};
 
 /// A Response to a submitted `Request`.
@@ -115,7 +115,7 @@ impl Response {
     /// # }
     /// ```
     #[inline]
-    pub fn headers(&self) -> &Headers {
+    pub fn headers(&self) -> &HeaderMap {
         self.inner.headers()
     }
 
@@ -189,15 +189,18 @@ impl Response {
     /// This consumes the body. Trying to read more, or use of `response.json()`
     /// will return empty values.
     pub fn text(&mut self) -> ::Result<String> {
-        let len = self.headers().get::<::header::ContentLength>()
-            .map(|ct_len| **ct_len)
+        let len = self.headers().get(::header::CONTENT_LENGTH)
+            .and_then(|ct_len| ct_len.to_str().ok())
+            .and_then(|ct_len| ct_len.parse().ok())
             .unwrap_or(0);
         let mut content = Vec::with_capacity(len as usize);
         self.read_to_end(&mut content).map_err(::error::from)?;
-        let encoding_name = self.headers().get::<::header::ContentType>()
-            .and_then(|content_type| {
-                content_type.get_param("charset")
-                    .map(|charset| charset.as_str())
+        let encoding_name = self.headers().get(::header::CONTENT_TYPE)
+            .and_then(|_content_type| {
+                None
+                // FIXME:
+                // content_type.get_param("charset")
+                //     .map(|charset| charset.as_str())
             })
             .unwrap_or("utf-8");
         let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);

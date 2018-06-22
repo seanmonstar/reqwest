@@ -262,8 +262,6 @@ impl From<::hyper::Error> for Kind {
     #[inline]
     fn from(err: ::hyper::Error) -> Kind {
         match err {
-            ::hyper::Error::Io(err) => Kind::Io(err),
-            //::hyper::Error::Uri(err) => Kind::Url(err),
             other => Kind::Http(other),
         }
     }

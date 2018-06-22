@@ -1,12 +1,12 @@
 use std::fmt;
 
-use hyper::header::ContentType;
+use base64::encode;
 use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
 
 use body::{self, Body};
-use header::Headers;
+use header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use {async_impl, Client, Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
@@ -58,13 +58,13 @@ impl Request {
 
     /// Get the headers.
     #[inline]
-    pub fn headers(&self) -> &Headers {
+    pub fn headers(&self) -> &HeaderMap {
         self.inner.headers()
     }
 
     /// Get a mutable reference to the headers.
     #[inline]
-    pub fn headers_mut(&mut self) -> &mut Headers {
+    pub fn headers_mut(&mut self) -> &mut HeaderMap {
         self.inner.headers_mut()
     }
 
@@ -95,12 +95,12 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn header<H>(&mut self, header: H) -> &mut RequestBuilder
+    pub fn header<K>(&mut self, key: K, value: HeaderValue) -> &mut RequestBuilder
     where
-        H: ::header::Header,
+        K: ::http::header::IntoHeaderName,
     {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
-            req.headers_mut().set(header);
+            req.headers_mut().insert(key, value);
         }
         self
     }
@@ -113,8 +113,8 @@ impl RequestBuilder {
     /// use reqwest::header::{Headers, UserAgent, ContentType};
     /// # use std::fs;
     ///
-    /// fn construct_headers() -> Headers {
-    ///     let mut headers = Headers::new();
+    /// fn construct_headers() -> HeaderMap {
+    ///     let mut headers = HeaderMap::new();
     ///     headers.set(UserAgent::new("reqwest"));
     ///     headers.set(ContentType::png());
     ///     headers
@@ -130,9 +130,11 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn headers(&mut self, headers: ::header::Headers) -> &mut RequestBuilder {
+    pub fn headers(&mut self, headers: ::header::HeaderMap) -> &mut RequestBuilder {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
-            req.headers_mut().extend(headers.iter());
+            for (key, value) in headers.iter() {
+                req.headers_mut().insert(key, value.clone());
+            }
         }
         self
     }
@@ -153,10 +155,10 @@ impl RequestBuilder {
         U: Into<String>,
         P: Into<String>,
     {
-        self.header(::header::Authorization(::header::Basic {
-            username: username.into(),
-            password: password.map(|p| p.into()),
-        }))
+        let username = username.into();
+        let password = password.map(|p| p.into()).unwrap_or(String::new());
+        let header_value = format!("basic {}:{}", username, encode(&password));
+        self.header(::header::AUTHORIZATION, HeaderValue::from_str(header_value.as_str()).expect(""))
     }
 
     /// Set the request body.
@@ -283,7 +285,7 @@ impl RequestBuilder {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
             match serde_urlencoded::to_string(form) {
                 Ok(body) => {
-                    req.headers_mut().set(ContentType::form_url_encoded());
+                    req.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str(::mime::APPLICATION_WWW_FORM_URLENCODED.as_ref()).expect(""));
                     *req.body_mut() = Some(body.into());
                 },
                 Err(err) => self.err = Some(::error::from(err)),
@@ -321,7 +323,7 @@ impl RequestBuilder {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
             match serde_json::to_vec(json) {
                 Ok(body) => {
-                    req.headers_mut().set(ContentType::json());
+                    req.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str(::mime::APPLICATION_JSON.as_ref()).expect(""));
                     *req.body_mut() = Some(body.into());
                 },
                 Err(err) => self.err = Some(::error::from(err)),
@@ -352,10 +354,14 @@ impl RequestBuilder {
     /// See [`multipart`](multipart/) for more examples.
     pub fn multipart(&mut self, mut multipart: ::multipart::Form) -> &mut RequestBuilder {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
-            req.headers_mut().set(
-                ::header::ContentType(format!("multipart/form-data; boundary={}", ::multipart_::boundary(&multipart))
-                    .parse().unwrap()
-                )
+            req.headers_mut().insert(
+                ::header::CONTENT_TYPE,
+                HeaderValue::from_str(
+                    format!(
+                        "multipart/form-data; boundary={}",
+                        ::multipart_::boundary(&multipart)
+                    ).as_str()
+                ).expect("")
             );
             *req.body_mut() = Some(match ::multipart_::compute_length(&mut multipart) {
                 Some(length) => Body::sized(::multipart_::reader(multipart), length),
@@ -450,13 +456,13 @@ pub fn builder(client: Client, req: ::Result<Request>) -> RequestBuilder {
 
 #[inline]
 pub fn async(req: Request) -> (async_impl::Request, Option<body::Sender>) {
-    use header::ContentLength;
+    use header::CONTENT_LENGTH;
 
     let mut req_async = req.inner;
     let body = req.body.and_then(|body| {
         let (tx, body, len) = body::async(body);
         if let Some(len) = len {
-            req_async.headers_mut().set(ContentLength(len));
+            req_async.headers_mut().insert(CONTENT_LENGTH, HeaderValue::from_str(len.to_string().as_str()).expect(""));
         }
         *req_async.body_mut() = Some(body);
         tx
@@ -467,7 +473,7 @@ pub fn async(req: Request) -> (async_impl::Request, Option<body::Sender>) {
 #[cfg(test)]
 mod tests {
     use {body, Client, Method};
-    use header::{Host, Headers, ContentType};
+    use header::{HOST, HeaderMap, HeaderValue, CONTENT_TYPE};
     use std::collections::{BTreeMap, HashMap};
     use serde_json;
     use serde_urlencoded;
@@ -478,7 +484,7 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.get(some_url).build().unwrap();
 
-        assert_eq!(r.method(), &Method::Get);
+        assert_eq!(r.method(), &Method::GET);
         assert_eq!(r.url().as_str(), some_url);
     }
 
@@ -488,7 +494,7 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.head(some_url).build().unwrap();
 
-        assert_eq!(r.method(), &Method::Head);
+        assert_eq!(r.method(), &Method::HEAD);
         assert_eq!(r.url().as_str(), some_url);
     }
 
@@ -498,7 +504,7 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.post(some_url).build().unwrap();
 
-        assert_eq!(r.method(), &Method::Post);
+        assert_eq!(r.method(), &Method::POST);
         assert_eq!(r.url().as_str(), some_url);
     }
 
@@ -508,7 +514,7 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.put(some_url).build().unwrap();
 
-        assert_eq!(r.method(), &Method::Put);
+        assert_eq!(r.method(), &Method::PUT);
         assert_eq!(r.url().as_str(), some_url);
     }
 
@@ -518,7 +524,7 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.patch(some_url).build().unwrap();
 
-        assert_eq!(r.method(), &Method::Patch);
+        assert_eq!(r.method(), &Method::PATCH);
         assert_eq!(r.url().as_str(), some_url);
     }
 
@@ -528,7 +534,7 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.delete(some_url).build().unwrap();
 
-        assert_eq!(r.method(), &Method::Delete);
+        assert_eq!(r.method(), &Method::DELETE);
         assert_eq!(r.url().as_str(), some_url);
     }
 
@@ -538,13 +544,13 @@ mod tests {
         let some_url = "https://google.com/";
         let mut r = client.post(some_url);
 
-        let header = Host::new("google.com", None);
+        let header = HeaderValue::from_static("google.com");
 
         // Add a copy of the header to the request builder
-        let r = r.header(header.clone()).build().unwrap();
+        let r = r.header(HOST, header.clone()).build().unwrap();
 
         // then check it was actually added
-        assert_eq!(r.headers().get::<Host>(), Some(&header));
+        assert_eq!(r.headers().get(HOST), Some(&header));
     }
 
     #[test]
@@ -553,10 +559,10 @@ mod tests {
         let some_url = "https://google.com/";
         let mut r = client.post(some_url);
 
-        let header = Host::new("google.com", None);
+        let header = HeaderValue::from_static("google.com");
 
-        let mut headers = Headers::new();
-        headers.set(header);
+        let mut headers = HeaderMap::new();
+        headers.insert(HOST, header);
 
         // Add a copy of the headers to the request builder
         let r = r.headers(headers.clone()).build().unwrap();
