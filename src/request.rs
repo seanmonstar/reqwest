@@ -659,8 +659,7 @@ mod tests {
         let mut r = r.form(&form_data).build().unwrap();
 
         // Make sure the content type was set
-        assert_eq!(r.headers().get::<ContentType>(),
-                   Some(&ContentType::form_url_encoded()));
+        assert_eq!(r.headers().get(CONTENT_TYPE).unwrap(), &"application/x-www-form-urlencoded");
 
         let buf = body::read_to_string(r.body_mut().take().unwrap()).unwrap();
 
@@ -680,7 +679,7 @@ mod tests {
         let mut r = r.json(&json_data).build().unwrap();
 
         // Make sure the content type was set
-        assert_eq!(r.headers().get::<ContentType>(), Some(&ContentType::json()));
+        assert_eq!(r.headers().get(CONTENT_TYPE).unwrap(), &"application/json");
 
         let buf = body::read_to_string(r.body_mut().take().unwrap()).unwrap();
 

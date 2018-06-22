@@ -34,7 +34,7 @@ fn test_write_timeout() {
         .build()
         .unwrap()
         .post(&url)
-        .header(reqwest::header::ContentLength(5))
+        .header(reqwest::header::CONTENT_LENGTH, reqwest::header::HeaderValue::from_static("5"))
         .body(reqwest::Body::new(&b"Hello"[..]))
         .send()
         .unwrap_err();
@@ -105,9 +105,8 @@ fn test_read_timeout() {
         .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::ContentLength(5)));
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"5");
 
     let mut buf = [0; 1024];
     let err = res.read(&mut buf).unwrap_err();

@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn add_query_append() {
         let mut core = Core::new().unwrap();
-        let client = Client::new(&core.handle());
+        let client = Client::new();
         let some_url = "https://google.com/";
         let mut r = client.get(some_url);
 
@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn add_query_append_same() {
         let mut core = Core::new().unwrap();
-        let client = Client::new(&core.handle());
+        let client = Client::new();
         let some_url = "https://google.com/";
         let mut r = client.get(some_url);
 
@@ -324,7 +324,7 @@ mod tests {
         }
 
         let mut core = Core::new().unwrap();
-        let client = Client::new(&core.handle());
+        let client = Client::new();
         let some_url = "https://google.com/";
         let mut r = client.get(some_url);
 
@@ -343,7 +343,7 @@ mod tests {
         params.insert("qux", "three");
 
         let mut core = Core::new().unwrap();
-        let client = Client::new(&core.handle());
+        let client = Client::new();
         let some_url = "https://google.com/";
         let mut r = client.get(some_url);
 

@@ -429,20 +429,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_error_get_ref_downcasts() {
-        let err: Error = from(::hyper::Error::Status);
-        let cause = err.get_ref()
-            .unwrap()
-            .downcast_ref::<::hyper::Error>()
-            .unwrap();
-
-        match cause {
-            &::hyper::Error::Status => (),
-            _ => panic!("unexpected downcast: {:?}", cause),
-        }
-    }
-
-    #[test]
     fn test_cause_chain() {
         #[derive(Debug)]
         struct Chain<T>(Option<T>);
@@ -473,9 +459,6 @@ mod tests {
                 }
             }
         }
-
-        let err = from(::hyper::Error::Status);
-        assert!(err.cause().is_none());
 
         let root = Chain(None::<Error>);
         let io = ::std::io::Error::new(::std::io::ErrorKind::Other, root);

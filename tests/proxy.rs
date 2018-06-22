@@ -34,7 +34,6 @@ fn test_http_proxy() {
         .unwrap();
 
     assert_eq!(res.url().as_str(), url);
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::Server::new("proxied")));
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"proxied");
 }

@@ -130,11 +130,11 @@ fn test_accept_header_is_not_changed_if_set() {
 
     let res = client
         .get(&format!("http://{}/accept", server.addr()))
-        .header(reqwest::header::Accept::json())
+        .header(reqwest::header::ACCEPT, reqwest::header::HeaderValue::from_static("application/json"))
         .send()
         .unwrap();
 
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
 #[test]
@@ -158,11 +158,9 @@ fn test_accept_encoding_header_is_not_changed_if_set() {
     let client = reqwest::Client::new();
 
     let res = client.get(&format!("http://{}/accept-encoding", server.addr()))
-        .header(reqwest::header::AcceptEncoding(
-            vec![reqwest::header::qitem(reqwest::header::Encoding::Identity)]
-        ))
+        .header(reqwest::header::ACCEPT_ENCODING, reqwest::header::HeaderValue::from_static("identity"))
         .send()
         .unwrap();
 
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
