@@ -407,16 +407,22 @@ impl Client {
         }
 
         let uri = to_uri(&url);
-        let (body, req) = match body.map(|body| {
-            let (reusable, body) = body::into_hyper(body);
-            let req = ::hyper::Request::builder()
-                .method(method.clone())
-                .uri(uri.clone())
-                .body(body).ok();
-            (reusable, req)
-        }) {
-            Some((b, r)) => (Some(b), r),
-            None => (None, None),
+        let (body, mut req) = match body {
+            Some(body) => {
+                let (reusable, body) = body::into_hyper(body);
+                let req = ::hyper::Request::builder()
+                    .method(method.clone())
+                    .uri(uri.clone())
+                    .body(body).ok();
+                (Some(reusable), req)
+            },
+            None => {
+                let req = ::hyper::Request::builder()
+                    .method(method.clone())
+                    .uri(uri.clone())
+                    .body(::hyper::Body::empty()).ok();
+                (None, req)
+            },
         };
         let req = req.map(|mut r| {
             *r.headers_mut() = headers.clone();
