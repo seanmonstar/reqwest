@@ -6,7 +6,8 @@ use serde_json;
 use serde_urlencoded;
 
 use body::{self, Body};
-use header::{HeaderMap, HeaderValue, CONTENT_TYPE};
+use header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
+use http::HttpTryFrom;
 use {async_impl, Client, Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
@@ -95,12 +96,21 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn header<K>(&mut self, key: K, value: HeaderValue) -> &mut RequestBuilder
+    pub fn header<K, V>(&mut self, key: K, value: V) -> &mut RequestBuilder
     where
-        K: ::http::header::IntoHeaderName,
+        HeaderName: HttpTryFrom<K>,
+        HeaderValue: HttpTryFrom<V>,
     {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
-            req.headers_mut().insert(key, value);
+            match <HeaderName as HttpTryFrom<K>>::try_from(key) {
+                Ok(key) => {
+                    match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
+                        Ok(value) => { req.headers_mut().append(key, value); }
+                        Err(e) => self.err = Some(::error::from(e.into())),
+                    }
+                },
+                Err(e) => self.err = Some(::error::from(e.into())),
+            };
         }
         self
     }

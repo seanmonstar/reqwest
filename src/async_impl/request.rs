@@ -9,6 +9,7 @@ use serde_urlencoded;
 use super::body::{self, Body};
 use super::client::{Client, Pending, pending_err};
 use header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
+use http::HttpTryFrom;
 use {Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
@@ -89,12 +90,21 @@ impl Request {
 
 impl RequestBuilder {
     /// Add a `Header` to this Request.
-    pub fn header<K>(&mut self, key: K, value: ::http::header::HeaderValue) -> &mut RequestBuilder
+    pub fn header<K, V>(&mut self, key: K, value: V) -> &mut RequestBuilder
     where
-        K: ::http::header::IntoHeaderName,
+        HeaderName: HttpTryFrom<K>,
+        HeaderValue: HttpTryFrom<V>,
     {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
-            req.headers_mut().insert(key, value);
+            match <HeaderName as HttpTryFrom<K>>::try_from(key) {
+                Ok(key) => {
+                    match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
+                        Ok(value) => { req.headers_mut().append(key, value); }
+                        Err(e) => self.err = Some(::error::from(e.into())),
+                    }
+                },
+                Err(e) => self.err = Some(::error::from(e.into())),
+            };
         }
         self
     }
