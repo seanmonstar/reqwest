@@ -573,18 +573,20 @@ impl Future for PendingRequest {
                             remove_sensitive_headers(&mut self.headers, &self.url, &self.urls);
                             debug!("redirecting to {:?} '{}'", self.method, self.url);
                             let uri = to_uri(&self.url);
-                            let mut req = None;
-                            if let Some(Some(ref body)) = self.body {
-                                req = ::hyper::Request::builder()
-                                    .method(self.method.clone())
-                                    .uri(uri.clone())
-                                    .body(::hyper::Body::from(body.clone())).ok();
-                            }
+                            let body = match self.body {
+                                Some(Some(ref body)) => ::hyper::Body::from(body.clone()),
+                                _ => ::hyper::Body::empty(),
+                            };
+                            let req = ::hyper::Request::builder()
+                                .method(self.method.clone())
+                                .uri(uri.clone())
+                                .body(body).ok();
 
                             let req = req.map(|mut r| {
                                 *r.headers_mut() = self.headers.clone();
                                 r
                             });
+                            // FIXME:
                             let req = req.unwrap();
                             if proxy::is_proxied(&self.client.proxies, &self.url) {
                                 if uri.scheme_part() == Some(&::http::uri::Scheme::HTTP) {
