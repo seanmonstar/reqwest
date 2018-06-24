@@ -12,10 +12,10 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
         let redirect = server! {
             request: format!("\
                 POST /{} HTTP/1.1\r\n\
-                Host: $HOST\r\n\
-                User-Agent: $USERAGENT\r\n\
-                Accept: */*\r\n\
-                Accept-Encoding: gzip\r\n\
+                user-agent: $USERAGENT\r\n\
+                accept: */*\r\n\
+                accept-encoding: gzip\r\n\
+                host: $HOST\r\n\
                 \r\n\
                 ", code),
             response: format!("\
@@ -29,11 +29,11 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
 
             request: format!("\
                 GET /dst HTTP/1.1\r\n\
-                Host: $HOST\r\n\
-                User-Agent: $USERAGENT\r\n\
-                Accept: */*\r\n\
-                Accept-Encoding: gzip\r\n\
-                Referer: http://$HOST/{}\r\n\
+                user-agent: $USERAGENT\r\n\
+                accept: */*\r\n\
+                accept-encoding: gzip\r\n\
+                referer: http://$HOST/{}\r\n\
+                host: $HOST\r\n\
                 \r\n\
                 ", code),
             response: b"\
@@ -63,10 +63,10 @@ fn test_redirect_307_and_308_tries_to_get_again() {
         let redirect = server! {
             request: format!("\
                 GET /{} HTTP/1.1\r\n\
-                Host: $HOST\r\n\
-                User-Agent: $USERAGENT\r\n\
-                Accept: */*\r\n\
-                Accept-Encoding: gzip\r\n\
+                user-agent: $USERAGENT\r\n\
+                accept: */*\r\n\
+                accept-encoding: gzip\r\n\
+                host: $HOST\r\n\
                 \r\n\
                 ", code),
             response: format!("\
@@ -80,11 +80,11 @@ fn test_redirect_307_and_308_tries_to_get_again() {
 
             request: format!("\
                 GET /dst HTTP/1.1\r\n\
-                Host: $HOST\r\n\
-                User-Agent: $USERAGENT\r\n\
-                Accept: */*\r\n\
-                Accept-Encoding: gzip\r\n\
-                Referer: http://$HOST/{}\r\n\
+                user-agent: $USERAGENT\r\n\
+                accept: */*\r\n\
+                accept-encoding: gzip\r\n\
+                referer: http://$HOST/{}\r\n\
+                host: $HOST\r\n\
                 \r\n\
                 ", code),
             response: b"\
@@ -114,11 +114,11 @@ fn test_redirect_307_and_308_tries_to_post_again() {
         let redirect = server! {
             request: format!("\
                 POST /{} HTTP/1.1\r\n\
-                Host: $HOST\r\n\
-                User-Agent: $USERAGENT\r\n\
-                Accept: */*\r\n\
-                Content-Length: 5\r\n\
-                Accept-Encoding: gzip\r\n\
+                user-agent: $USERAGENT\r\n\
+                accept: */*\r\n\
+                content-length: 5\r\n\
+                accept-encoding: gzip\r\n\
+                host: $HOST\r\n\
                 \r\n\
                 Hello\
                 ", code),
@@ -133,12 +133,12 @@ fn test_redirect_307_and_308_tries_to_post_again() {
 
             request: format!("\
                 POST /dst HTTP/1.1\r\n\
-                Host: $HOST\r\n\
-                User-Agent: $USERAGENT\r\n\
-                Accept: */*\r\n\
-                Content-Length: 5\r\n\
-                Accept-Encoding: gzip\r\n\
-                Referer: http://$HOST/{}\r\n\
+                user-agent: $USERAGENT\r\n\
+                accept: */*\r\n\
+                content-length: 5\r\n\
+                accept-encoding: gzip\r\n\
+                referer: http://$HOST/{}\r\n\
+                host: $HOST\r\n\
                 \r\n\
                 Hello\
                 ", code),
@@ -170,11 +170,11 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
         let redirect = server! {
             request: format!("\
                 POST /{} HTTP/1.1\r\n\
-                Host: $HOST\r\n\
-                User-Agent: $USERAGENT\r\n\
-                Accept: */*\r\n\
-                Accept-Encoding: gzip\r\n\
-                Transfer-Encoding: chunked\r\n\
+                user-agent: $USERAGENT\r\n\
+                accept: */*\r\n\
+                accept-encoding: gzip\r\n\
+                host: $HOST\r\n\
+                transfer-encoding: chunked\r\n\
                 \r\n\
                 5\r\n\
                 Hello\r\n\
@@ -208,10 +208,10 @@ fn test_redirect_removes_sensitive_headers() {
     let end_server = server! {
         request: b"\
             GET /otherhost HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -225,11 +225,11 @@ fn test_redirect_removes_sensitive_headers() {
     let mid_server = server! {
         request: b"\
             GET /sensitive HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Cookie: foo=bar\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            cookie: foo=bar\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: format!("\
@@ -256,10 +256,10 @@ fn test_redirect_policy_can_return_errors() {
     let server = server! {
         request: b"\
             GET /loop HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -280,10 +280,10 @@ fn test_redirect_policy_can_stop_redirects_without_an_error() {
     let server = server! {
         request: b"\
             GET /no-redirect HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -315,10 +315,10 @@ fn test_referer_is_not_set_if_disabled() {
     let server = server! {
         request: b"\
             GET /no-refer HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -332,10 +332,10 @@ fn test_referer_is_not_set_if_disabled() {
 
         request: b"\
             GET /dst HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\

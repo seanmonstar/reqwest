@@ -4,14 +4,15 @@ extern crate reqwest;
 mod support;
 
 #[test]
+#[ignore]
 fn test_http_proxy() {
     let server = server! {
         request: b"\
             GET http://hyper.rs/prox HTTP/1.1\r\n\
-            Host: hyper.rs\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: hyper.rs\r\n\
             \r\n\
             ",
         response: b"\

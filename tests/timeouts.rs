@@ -11,11 +11,11 @@ fn test_write_timeout() {
     let server = server! {
         request: b"\
             POST /write-timeout HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            Content-Length: 5\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            content-length: 5\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             Hello\
             ",
@@ -49,10 +49,10 @@ fn test_response_timeout() {
     let server = server! {
         request: b"\
             GET /response-timeout HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -80,10 +80,10 @@ fn test_read_timeout() {
     let server = server! {
         request: b"\
             GET /read-timeout HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
