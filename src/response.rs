@@ -70,8 +70,8 @@ impl Response {
     ///             .body("possibly too large")
     ///             .send()?;
     /// match resp.status() {
-    ///     StatusCode::Ok => println!("success!"),
-    ///     StatusCode::PayloadTooLarge => {
+    ///     StatusCode::OK => println!("success!"),
+    ///     StatusCode::PAYLOAD_TOO_LARGE => {
     ///         println!("Request payload is too large!");
     ///     }
     ///     s => println!("Received response status: {:?}", s),
@@ -93,14 +93,15 @@ impl Response {
     /// ```rust
     /// # use std::io::{Read, Write};
     /// # use reqwest::Client;
-    /// # use reqwest::header::ContentLength;
+    /// # use reqwest::header::CONTENT_LENGTH;
     /// #
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
     /// let client = Client::new();
     /// let mut resp = client.head("http://httpbin.org/bytes/3000").send()?;
     /// if resp.status().is_success() {
-    ///     let len = resp.headers().get::<ContentLength>()
-    ///                 .map(|ct_len| **ct_len)
+    ///     let len = resp.headers().get(CONTENT_LENGTH)
+    ///                 .and_then(|ct_len| ct_len.to_str().ok())
+    ///                 .and_then(|ct_len| ct_len.parse().ok())
     ///                 .unwrap_or(0);
     ///     // limit 1mb response
     ///     if len <= 1_000_000 {
@@ -255,7 +256,7 @@ impl Response {
     /// let res = reqwest::get("http://httpbin.org/status/400")?
     ///     .error_for_status();
     /// if let Err(err) = res {
-    ///     assert_eq!(err.status(), Some(reqwest::StatusCode::BadRequest));
+    ///     assert_eq!(err.status(), Some(reqwest::StatusCode::BAD_REQUEST));
     /// }
     /// # Ok(())
     /// # }

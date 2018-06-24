@@ -174,8 +174,8 @@ impl ClientBuilder {
     /// ```rust
     /// use reqwest::header;
     /// # fn build_client() -> Result<(), Box<std::error::Error>> {
-    /// let mut headers = header::Headers::new();
-    /// headers.set(header::Authorization("secret".to_string()));
+    /// let mut headers = header::HeaderMap::new();
+    /// headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("secret"));
     ///
     /// // get a client builder
     /// let client = reqwest::Client::builder()
@@ -191,8 +191,8 @@ impl ClientBuilder {
     /// ```rust
     /// use reqwest::header;
     /// # fn build_client() -> Result<(), Box<std::error::Error>> {
-    /// let mut headers = header::Headers::new();
-    /// headers.set(header::Authorization("secret".to_string()));
+    /// let mut headers = header::HeaderMap::new();
+    /// headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("secret"));
     ///
     /// // get a client builder
     /// let client = reqwest::Client::builder()
@@ -200,7 +200,7 @@ impl ClientBuilder {
     ///     .build()?;
     /// let res = client
     ///     .get("https://www.rust-lang.org")
-    ///     .header(header::Authorization("token".to_string()))
+    ///     .header(header::AUTHORIZATION, "token")
     ///     .send()?;
     /// # Ok(())
     /// # }

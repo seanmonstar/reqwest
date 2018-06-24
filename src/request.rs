@@ -86,12 +86,12 @@ impl RequestBuilder {
     /// Add a `Header` to this Request.
     ///
     /// ```rust
-    /// use reqwest::header::UserAgent;
+    /// use reqwest::header::USER_AGENT;
     ///
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
     /// let client = reqwest::Client::new();
     /// let res = client.get("https://www.rust-lang.org")
-    ///     .header(UserAgent::new("foo"))
+    ///     .header(USER_AGENT, "foo")
     ///     .send()?;
     /// # Ok(())
     /// # }
@@ -120,13 +120,13 @@ impl RequestBuilder {
     /// The headers will be merged in to any already set.
     ///
     /// ```rust
-    /// use reqwest::header::{Headers, UserAgent, ContentType};
+    /// use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT, CONTENT_TYPE};
     /// # use std::fs;
     ///
     /// fn construct_headers() -> HeaderMap {
     ///     let mut headers = HeaderMap::new();
-    ///     headers.set(UserAgent::new("reqwest"));
-    ///     headers.set(ContentType::png());
+    ///     headers.insert(USER_AGENT, HeaderValue::from_static("reqwest"));
+    ///     headers.insert(CONTENT_TYPE, HeaderValue::from_static("image/png"));
     ///     headers
     /// }
     ///
@@ -345,7 +345,6 @@ impl RequestBuilder {
     /// Sends a multipart/form-data body.
     ///
     /// ```
-    /// use reqwest::mime;
     /// # use reqwest::Error;
     ///
     /// # fn run() -> Result<(), Box<std::error::Error>> {
