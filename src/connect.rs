@@ -67,10 +67,10 @@ impl Connect for Connector {
                                 tls.connect_async(&host, tunneled)
                                     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
                             })
-                            .map(|io| (Conn::Proxied(io), connected))
+                            .map(|io| (Conn::Proxied(io), connected.proxy(true)))
                     }));
                 }
-                return Box::new(self.https.connect(ndst).map(|(io, connected)| (Conn::Normal(io), connected)));
+                return Box::new(self.https.connect(ndst).map(|(io, connected)| (Conn::Normal(io), connected.proxy(true))));
             }
         }
         Box::new(self.https.connect(dst).map(|(io, connected)| (Conn::Normal(io), connected)))

@@ -4,7 +4,6 @@ extern crate reqwest;
 mod support;
 
 #[test]
-#[ignore]
 fn test_http_proxy() {
     let server = server! {
         request: b"\
