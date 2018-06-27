@@ -217,7 +217,7 @@ impl RequestBuilder {
     /// be called multiple times and that existing query parameters are not
     /// overwritten if the same key is used. The key will simply show up
     /// twice in the query string.
-    /// Calling `.query(&[("foo", "a"), ("foo", "b")])` gives `"foo=a&boo=b"`.
+    /// Calling `.query(&[("foo", "a"), ("foo", "b")])` gives `"foo=a&foo=b"`.
     ///
     /// ```rust
     /// # use reqwest::Error;
