@@ -221,8 +221,8 @@ mod tests {
     use std::net::TcpListener;
     use std::thread;
     use futures::Future;
-    use tokio_core::reactor::Core;
-    use tokio_core::net::TcpStream;
+    use tokio::runtime::current_thread::Runtime;
+    use tokio::net::TcpStream;
     use super::tunnel;
 
 
@@ -258,44 +258,44 @@ mod tests {
     fn test_tunnel() {
         let addr = mock_tunnel!();
 
-        let mut core = Core::new().unwrap();
-        let work = TcpStream::connect(&addr, &core.handle());
+        let mut rt = Runtime::new().unwrap();
+        let work = TcpStream::connect(&addr);
         let host = addr.ip().to_string();
         let port = addr.port();
         let work = work.and_then(|tcp| {
             tunnel(tcp, host, port)
         });
 
-        core.run(work).unwrap();
+        rt.block_on(work).unwrap();
     }
 
     #[test]
     fn test_tunnel_eof() {
         let addr = mock_tunnel!(b"HTTP/1.1 200 OK");
 
-        let mut core = Core::new().unwrap();
-        let work = TcpStream::connect(&addr, &core.handle());
+        let mut rt = Runtime::new().unwrap();
+        let work = TcpStream::connect(&addr);
         let host = addr.ip().to_string();
         let port = addr.port();
         let work = work.and_then(|tcp| {
             tunnel(tcp, host, port)
         });
 
-        core.run(work).unwrap_err();
+        rt.block_on(work).unwrap_err();
     }
 
     #[test]
     fn test_tunnel_bad_response() {
         let addr = mock_tunnel!(b"foo bar baz hallo");
 
-        let mut core = Core::new().unwrap();
-        let work = TcpStream::connect(&addr, &core.handle());
+        let mut rt = Runtime::new().unwrap();
+        let work = TcpStream::connect(&addr);
         let host = addr.ip().to_string();
         let port = addr.port();
         let work = work.and_then(|tcp| {
             tunnel(tcp, host, port)
         });
 
-        core.run(work).unwrap_err();
+        rt.block_on(work).unwrap_err();
     }
 }

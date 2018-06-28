@@ -412,22 +412,21 @@ impl ClientHandle {
         let mut builder = async_impl::client::take_builder(&mut builder.inner);
         let (tx, rx) = mpsc::unbounded();
         let (spawn_tx, spawn_rx) = oneshot::channel::<::Result<()>>();
-        let handle = try_!(thread::Builder::new().name("reqwest-internal-sync-core".into()).spawn(move || {
-            use tokio_core::reactor::Core;
+        let handle = try_!(thread::Builder::new().name("reqwest-internal-sync-runtime".into()).spawn(move || {
+            use tokio::runtime::current_thread::Runtime;
 
             let built = (|| {
-                let core = try_!(Core::new());
-                let handle = core.handle();
+                let rt = try_!(Runtime::new());
                 let client = builder.build()?;
-                Ok((core, handle, client))
+                Ok((rt, client))
             })();
 
-            let (mut core, handle, client) = match built {
-                Ok((a, b, c)) => {
+            let (mut rt, client) = match built {
+                Ok((rt, c)) => {
                     if let Err(_) = spawn_tx.send(Ok(())) {
                         return;
                     }
-                    (a, b, c)
+                    (rt, c)
                 },
                 Err(e) => {
                     let _ = spawn_tx.send(Err(e));
@@ -435,19 +434,22 @@ impl ClientHandle {
                 }
             };
 
-            let work = rx.for_each(|(req, tx)| {
+            let work = rx.for_each(move |(req, tx)| {
                 let tx: oneshot::Sender<::Result<async_impl::Response>> = tx;
                 let task = client.execute(req)
                     .then(move |x| tx.send(x).map_err(|_| ()));
-                handle.spawn(task);
+                ::tokio::spawn(task);
                 Ok(())
             });
 
+
             // work is Future<(), ()>, and our closure will never return Err
-            let _ = core.run(work);
+            rt.spawn(work)
+                .run()
+                .expect("runtime unexpected error");
         }));
 
-        wait::timeout(spawn_rx, timeout.0).expect("core thread cancelled")?;
+        wait::timeout(spawn_rx, timeout.0).expect("runtime thread cancelled")?;
 
         let inner_handle = Arc::new(InnerClientHandle {
             tx: Some(tx),
