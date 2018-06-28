@@ -407,27 +407,24 @@ impl Client {
         }
 
         let uri = to_uri(&url);
-        let (body, mut req) = match body {
+
+        let (reusable, body) = match body {
             Some(body) => {
                 let (reusable, body) = body::into_hyper(body);
-                let req = ::hyper::Request::builder()
-                    .method(method.clone())
-                    .uri(uri.clone())
-                    .body(body).ok();
-                (Some(reusable), req)
+                (Some(reusable), body)
             },
             None => {
-                let req = ::hyper::Request::builder()
-                    .method(method.clone())
-                    .uri(uri.clone())
-                    .body(::hyper::Body::empty()).ok();
-                (None, req)
-            },
+                (None, ::hyper::Body::empty())
+            }
         };
-        let req = req.map(|mut r| {
-            *r.headers_mut() = headers.clone();
-            r
-        });
+
+        let mut req = ::hyper::Request::builder()
+            .method(method.clone())
+            .uri(uri.clone())
+            .body(body)
+            .expect("valid request parts");
+
+        *req.headers_mut() = headers.clone();
 
         if proxy::is_proxied(&self.inner.proxies, &url) {
             if uri.scheme_part() == Some(&::http::uri::Scheme::HTTP) {
@@ -436,8 +433,6 @@ impl Client {
             }
         }
 
-        // FIXME:
-        let req = req.unwrap();
         let in_flight = self.inner.hyper.request(req);
 
         Pending {
@@ -445,7 +440,7 @@ impl Client {
                 method: method,
                 url: url,
                 headers: headers,
-                body: body,
+                body: reusable,
 
                 urls: Vec::new(),
 
@@ -577,17 +572,14 @@ impl Future for PendingRequest {
                                 Some(Some(ref body)) => ::hyper::Body::from(body.clone()),
                                 _ => ::hyper::Body::empty(),
                             };
-                            let req = ::hyper::Request::builder()
+                            let mut req = ::hyper::Request::builder()
                                 .method(self.method.clone())
                                 .uri(uri.clone())
-                                .body(body).ok();
+                                .body(body)
+                                .expect("valid request parts");
 
-                            let req = req.map(|mut r| {
-                                *r.headers_mut() = self.headers.clone();
-                                r
-                            });
-                            // FIXME:
-                            let req = req.unwrap();
+                            *req.headers_mut() = self.headers.clone();
+
                             if proxy::is_proxied(&self.client.proxies, &self.url) {
                                 if uri.scheme_part() == Some(&::http::uri::Scheme::HTTP) {
                                     // TODO: May not be needed at all now?
