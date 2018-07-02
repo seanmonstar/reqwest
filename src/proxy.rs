@@ -148,9 +148,14 @@ impl Proxy {
             Intercept::Custom(ref fun) => {
                 (fun.0)(
                     &format!(
-                        "{}://{}{}{}", uri.scheme(), uri.host(), uri.port().map(|_| ":").unwrap_or(""),
+                        "{}://{}{}{}",
+                        uri.scheme(),
+                        uri.host(),
+                        uri.port().map(|_| ":").unwrap_or(""),
                         uri.port().map(|p| p.to_string()).unwrap_or(String::new())
-                    ).as_str().parse().unwrap()
+                    )
+                        .parse()
+                        .expect("should be valid Url")
                 )
                     .map(|u| into_url::to_uri(&u) )
             },
