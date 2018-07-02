@@ -45,10 +45,10 @@ fn test_gzip(response_size: usize, chunk_size: usize) {
     let server = server! {
         request: b"\
             GET /gzip HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         chunk_size: chunk_size,
