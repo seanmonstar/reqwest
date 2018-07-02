@@ -49,13 +49,18 @@ impl Connect for Connector {
             if let Some(puri) = proxy::intercept(prox, &dst) {
                 trace!("proxy({:?}) intercepts {:?}", puri, dst);
                 let mut ndst = dst.clone();
-                if let Err(_) = ndst.set_scheme(puri.scheme_part().map(Scheme::as_str).unwrap_or("http")) {
-                    // TODO: Handle this by returning futures::failed
-                }
-                if let Err(_) = ndst.set_host(puri.host().unwrap()) {
-                    // TODO: Handle this by returning futures::failed
-                }
-                ndst.set_port(puri.port().unwrap_or(80));
+                let new_scheme = puri
+                    .scheme_part()
+                    .map(Scheme::as_str)
+                    .unwrap_or("http");
+                ndst.set_scheme(new_scheme)
+                    .expect("proxy target scheme should be valid");
+
+                ndst.set_host(puri.host().expect("proxy target should have host"))
+                    .expect("proxy target host should be valid");
+
+                ndst.set_port(puri.port());
+
                 if dst.scheme() == "https" {
                     let host = dst.host().to_owned();
                     let port = dst.port().unwrap_or(443);
