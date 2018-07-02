@@ -6,6 +6,7 @@ use std::borrow::Cow;
 
 use encoding_rs::{Encoding, UTF_8};
 use futures::{Async, Poll, Stream};
+use mime::Mime;
 use serde::de::DeserializeOwned;
 use serde_json;
 
@@ -190,18 +191,26 @@ impl Response {
     /// This consumes the body. Trying to read more, or use of `response.json()`
     /// will return empty values.
     pub fn text(&mut self) -> ::Result<String> {
+        // FIXME: get Body::content_length() instead
         let len = self.headers().get(::header::CONTENT_LENGTH)
             .and_then(|ct_len| ct_len.to_str().ok())
             .and_then(|ct_len| ct_len.parse().ok())
             .unwrap_or(0);
         let mut content = Vec::with_capacity(len as usize);
         self.read_to_end(&mut content).map_err(::error::from)?;
-        let encoding_name = self.headers().get(::header::CONTENT_TYPE)
-            .and_then(|_content_type| {
-                None
-                // FIXME:
-                // content_type.get_param("charset")
-                //     .map(|charset| charset.as_str())
+        let content_type = self.headers().get(::header::CONTENT_TYPE)
+            .and_then(|value| {
+                value.to_str().ok()
+            })
+            .and_then(|value| {
+                value.parse::<Mime>().ok()
+            });
+        let encoding_name = content_type
+            .as_ref()
+            .and_then(|mime| {
+                mime
+                    .get_param("charset")
+                    .map(|charset| charset.as_str())
             })
             .unwrap_or("utf-8");
         let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);
