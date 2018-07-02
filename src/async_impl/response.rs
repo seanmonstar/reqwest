@@ -99,7 +99,7 @@ impl Response {
     ///             // it could be any status between 400...599
     ///             assert_eq!(
     ///                 err.status(),
-    ///                 Some(reqwest::StatusCode::BadRequest)
+    ///                 Some(reqwest::StatusCode::BAD_REQUEST)
     ///             );
     ///         }
     ///     }
