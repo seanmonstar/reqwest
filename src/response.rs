@@ -18,6 +18,7 @@ use {async_impl, StatusCode, Url, wait};
 pub struct Response {
     inner: async_impl::Response,
     body: async_impl::ReadableChunks<WaitBody>,
+    content_length: Option<u64>,
     _thread_handle: KeepCoreThreadAlive,
 }
 
@@ -191,11 +192,7 @@ impl Response {
     /// This consumes the body. Trying to read more, or use of `response.json()`
     /// will return empty values.
     pub fn text(&mut self) -> ::Result<String> {
-        // FIXME: get Body::content_length() instead
-        let len = self.headers().get(::header::CONTENT_LENGTH)
-            .and_then(|ct_len| ct_len.to_str().ok())
-            .and_then(|ct_len| ct_len.parse().ok())
-            .unwrap_or(0);
+        let len = self.content_length.unwrap_or(0);
         let mut content = Vec::with_capacity(len as usize);
         self.read_to_end(&mut content).map_err(::error::from)?;
         let content_type = self.headers().get(::header::CONTENT_TYPE)
@@ -273,12 +270,13 @@ impl Response {
     /// ```
     #[inline]
     pub fn error_for_status(self) -> ::Result<Self> {
-        let Response { body, inner, _thread_handle } = self;
+        let Response { body, content_length, inner, _thread_handle } = self;
         inner.error_for_status().map(move |inner| {
             Response {
-                inner: inner,
-                body: body,
-                _thread_handle: _thread_handle,
+                inner,
+                body,
+                content_length,
+                _thread_handle,
             }
         })
     }
@@ -319,6 +317,7 @@ impl Stream for WaitBody {
 
 pub fn new(mut res: async_impl::Response, timeout: Option<Duration>, thread: KeepCoreThreadAlive) -> Response {
     let body = mem::replace(res.body_mut(), async_impl::Decoder::empty());
+    let len = body.content_length();
     let body = async_impl::ReadableChunks::new(WaitBody {
         inner: wait::stream(body, timeout)
     });
@@ -326,6 +325,7 @@ pub fn new(mut res: async_impl::Response, timeout: Option<Duration>, thread: Kee
     Response {
         inner: res,
         body: body,
+        content_length: len,
         _thread_handle: thread,
     }
 }

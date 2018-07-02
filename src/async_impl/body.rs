@@ -2,6 +2,7 @@ use std::fmt;
 
 use futures::{Stream, Poll, Async};
 use bytes::Bytes;
+use hyper::body::Payload;
 
 /// An asynchronous `Stream`.
 pub struct Body {
@@ -18,6 +19,13 @@ impl Body {
         match self.inner {
             Inner::Hyper(ref mut body) => body,
             Inner::Reusable(_) => unreachable!(),
+        }
+    }
+
+    pub(crate) fn content_length(&self) -> Option<u64> {
+        match self.inner {
+            Inner::Reusable(ref bytes) => Some(bytes.len() as u64),
+            Inner::Hyper(ref body) => body.content_length(),
         }
     }
 }
