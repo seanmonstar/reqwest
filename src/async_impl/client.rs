@@ -426,13 +426,6 @@ impl Client {
 
         *req.headers_mut() = headers.clone();
 
-        if proxy::is_proxied(&self.inner.proxies, &url) {
-            if uri.scheme_part() == Some(&::http::uri::Scheme::HTTP) {
-                // TODO: May not be needed at all
-                // req.set_proxy(true);
-            }
-        }
-
         let in_flight = self.inner.hyper.request(req);
 
         Pending {
@@ -579,13 +572,6 @@ impl Future for PendingRequest {
                                 .expect("valid request parts");
 
                             *req.headers_mut() = self.headers.clone();
-
-                            if proxy::is_proxied(&self.client.proxies, &self.url) {
-                                if uri.scheme_part() == Some(&::http::uri::Scheme::HTTP) {
-                                    // TODO: May not be needed at all now?
-                                    // req.set_proxy(true);
-                                }
-                            }
                             self.in_flight = self.client.hyper.request(req);
                             continue;
                         },
