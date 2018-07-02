@@ -210,8 +210,6 @@ impl Sender {
                 }
                 Err(e) => {
                     let ret = io::Error::new(e.kind(), e.to_string());
-                    // FIXME:
-                    // let _ = tx.send(Err(Error::new_io(e)));
                     tx.abort();
                     return Err(::error::from(ret));
                 }
