@@ -37,7 +37,6 @@ fn test_response_text() {
 }
 
 #[test]
-#[ignore]
 fn test_response_non_utf_8_text() {
     let server = server! {
         request: b"\
