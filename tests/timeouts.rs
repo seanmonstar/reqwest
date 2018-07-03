@@ -11,9 +11,9 @@ fn test_write_timeout() {
     let server = server! {
         request: b"\
             POST /write-timeout HTTP/1.1\r\n\
-            content-length: 5\r\n\
             user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
+            content-length: 5\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
             \r\n\
