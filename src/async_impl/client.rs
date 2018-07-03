@@ -9,6 +9,7 @@ use header::{HeaderMap, HeaderValue, LOCATION, USER_AGENT, REFERER, ACCEPT,
              ACCEPT_ENCODING, RANGE};
 use mime::{self};
 use native_tls::{TlsConnector, TlsConnectorBuilder};
+use tokio_tls::TlsConnectorExt;
 
 
 use super::body;
@@ -56,31 +57,23 @@ struct Config {
 impl ClientBuilder {
     /// Constructs a new `ClientBuilder`
     pub fn new() -> ClientBuilder {
-        match TlsConnector::builder() {
-            Ok(tls_connector_builder) => {
-                let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(2);
-                headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
-                headers.insert(ACCEPT, HeaderValue::from_str(mime::STAR_STAR.as_ref()).expect("unable to parse mime"));
+        let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(2);
+        headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
+        headers.insert(ACCEPT, HeaderValue::from_str(mime::STAR_STAR.as_ref()).expect("unable to parse mime"));
 
-                ClientBuilder {
-                    config: Some(Config {
-                        gzip: true,
-                        headers: headers,
-                        hostname_verification: true,
-                        proxies: Vec::new(),
-                        redirect_policy: RedirectPolicy::default(),
-                        referer: true,
-                        timeout: None,
-                        tls: tls_connector_builder,
-                        dns_threads: 4,
-                    }),
-                    err: None,
-                }
-            },
-            Err(e) => ClientBuilder {
-                config: None,
-                err: Some(::error::from(e)),
-            }
+        ClientBuilder {
+            config: Some(Config {
+                gzip: true,
+                headers: headers,
+                hostname_verification: true,
+                proxies: Vec::new(),
+                redirect_policy: RedirectPolicy::default(),
+                referer: true,
+                timeout: None,
+                tls: TlsConnector::builder(),
+                dns_threads: 4,
+            }),
+            err: None,
         }
     }
 
@@ -98,19 +91,19 @@ impl ClientBuilder {
         if let Some(err) = self.err.take() {
             return Err(err);
         }
-        let config = self.config
+
+        let mut config = self.config
             .take()
             .expect("ClientBuilder cannot be reused after building a Client");
 
-        let tls = try_!(config.tls.build());
+        let tls = try_!(config.tls
+            .danger_accept_invalid_hostnames(!config.hostname_verification)
+            .build()
+        );
 
         let proxies = Arc::new(config.proxies);
 
-        let mut connector = Connector::new(config.dns_threads, tls, proxies.clone());
-        if !config.hostname_verification {
-            connector.danger_disable_hostname_verification();
-        }
-
+        let connector = Connector::new(config.dns_threads, tls, proxies.clone());
         let hyper_client = ::hyper::Client::builder()
             .build(connector);
 
@@ -132,10 +125,7 @@ impl ClientBuilder {
     /// certificate for example.
     pub fn add_root_certificate(&mut self, cert: Certificate) -> &mut ClientBuilder {
         if let Some(config) = config_mut(&mut self.config, &self.err) {
-            let cert = ::tls::cert(cert);
-            if let Err(e) = config.tls.add_root_certificate(cert) {
-                self.err = Some(::error::from(e));
-            }
+            config.tls.add_root_certificate(::tls::cert(cert));
         }
         self
     }
@@ -143,10 +133,7 @@ impl ClientBuilder {
     /// Sets the identity to be used for client certificate authentication.
     pub fn identity(&mut self, identity: Identity) -> &mut ClientBuilder {
         if let Some(config) = config_mut(&mut self.config, &self.err) {
-            let pkcs12 = ::tls::pkcs12(identity);
-            if let Err(e) = config.tls.identity(pkcs12) {
-                self.err = Some(::error::from(e));
-            }
+            config.tls.identity(::tls::pkcs12(identity));
         }
         self
     }
@@ -161,7 +148,6 @@ impl ClientBuilder {
     /// significant vulnerability to man-in-the-middle attacks.
     #[inline]
     pub fn danger_disable_hostname_verification(&mut self) -> &mut ClientBuilder {
-
         if let Some(config) = config_mut(&mut self.config, &self.err) {
             config.hostname_verification = false;
         }

@@ -18,12 +18,12 @@ encoding_rs = "0.7"
 futures = "0.1.21"
 http = "0.1.5"
 hyper = "0.12.2"
-hyper-tls = "0.2.1"
+hyper-tls = "0.3"
 libflate = "0.1.11"
 log = "0.4"
 mime = "0.3.7"
 mime_guess = "2.0.0-alpha.4"
-native-tls = "0.1.5"
+native-tls = "0.2"
 serde = "1.0"
 serde_json = "1.0"
 serde_urlencoded = "0.5"
@@ -57,3 +57,6 @@ required-features = ["unstable"]
 
 [package.metadata.docs.rs]
 features = ["unstable"]
+
+[patch.crates-io]
+tokio-tls = { git = "https://github.com/mehcode/tokio-tls.git", rev = "df7ffe315986d33b2c16ce23524c72ccb710eac4" }
