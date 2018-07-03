@@ -43,14 +43,6 @@ where S: Stream {
     }
 }
 
-// pub fn sink<S>(sink: S, timeout: Option<Duration>) -> WaitSink<S>
-// where S: Sink {
-//     WaitSink {
-//         sink: executor::spawn(sink),
-//         timeout: timeout,
-//     }
-// }
-
 #[derive(Debug)]
 pub enum Waited<E> {
     TimedOut,
@@ -112,49 +104,6 @@ where S: Stream {
         }
     }
 }
-
-// pub struct WaitSink<S> {
-//     sink: executor::Spawn<S>,
-//     timeout: Option<Duration>,
-// }
-
-// impl<S> WaitSink<S>
-// where S: Sink {
-//     pub fn send(&mut self, mut item: S::SinkItem) -> Result<(), Waited<S::SinkError>> {
-//         if let Some(dur) = self.timeout {
-
-//             let start = Instant::now();
-//             let deadline = start + dur;
-//             let notify = Arc::new(ThreadNotify {
-//                 thread: thread::current(),
-//             });
-
-//             loop {
-//                 let now = Instant::now();
-//                 if now >= deadline {
-//                     return Err(Waited::TimedOut);
-//                 }
-//                 item = match self.sink.start_send_notify(item, &notify, 0)? {
-//                     AsyncSink::Ready => return Ok(()),
-//                     AsyncSink::NotReady(val) => val,
-//                 };
-//                 thread::park_timeout(deadline - now);
-//             }
-//         } else {
-//             let notify = Arc::new(ThreadNotify {
-//                 thread: thread::current(),
-//             });
-
-//             loop {
-//                 item = match self.sink.start_send_notify(item, &notify, 0)? {
-//                     AsyncSink::Ready => return Ok(()),
-//                     AsyncSink::NotReady(val) => val,
-//                 };
-//                 thread::park();
-//             }
-//         }
-//     }
-// }
 
 struct ThreadNotify {
     thread: thread::Thread,
