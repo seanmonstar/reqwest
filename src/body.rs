@@ -3,9 +3,9 @@ use std::fmt;
 use std::io::{self, Cursor, Read};
 
 use bytes::Bytes;
-use hyper::{self, Chunk};
+use hyper::{self};
 
-use {async_impl, wait};
+use {async_impl};
 
 /// The body of a `Request`.
 ///
@@ -184,7 +184,7 @@ impl Read for Reader {
 
 pub struct Sender {
     body: (Box<Read + Send>, Option<u64>),
-    tx: wait::WaitSink<::futures::sync::mpsc::Sender<hyper::Result<Chunk>>>,
+    tx: hyper::body::Sender,
 }
 
 impl Sender {
@@ -201,13 +201,8 @@ impl Sender {
                 Ok(0) => return Ok(()),
                 Ok(n) => {
                     unsafe { buf.advance_mut(n); }
-                    if let Err(e) = tx.send(Ok(buf.take().freeze().into())) {
-                        if let wait::Waited::Err(_) = e {
-                            let epipe = io::Error::new(io::ErrorKind::BrokenPipe, "broken pipe");
-                            return Err(::error::from(epipe));
-                        } else {
-                            return Err(::error::timedout(None));
-                        }
+                    if let Err(_) = tx.send_data(buf.take().freeze().into()) {
+                        return Err(::error::timedout(None));
                     }
                     if buf.remaining_mut() == 0 {
                         buf.reserve(8192);
@@ -215,7 +210,7 @@ impl Sender {
                 }
                 Err(e) => {
                     let ret = io::Error::new(e.kind(), e.to_string());
-                    let _ = tx.send(Err(e.into()));
+                    tx.abort();
                     return Err(::error::from(ret));
                 }
             }
@@ -227,10 +222,10 @@ impl Sender {
 pub fn async(body: Body) -> (Option<Sender>, async_impl::Body, Option<u64>) {
     match body.kind {
         Kind::Reader(read, len) => {
-            let (tx, rx) = hyper::Body::pair();
+            let (tx, rx) = hyper::Body::channel();
             let tx = Sender {
                 body: (read, len),
-                tx: wait::sink(tx, None),
+                tx: tx,
             };
             (Some(tx), async_impl::body::wrap(rx), len)
         },

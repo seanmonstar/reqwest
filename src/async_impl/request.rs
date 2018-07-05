@@ -1,19 +1,22 @@
 use std::fmt;
 
+use base64::{encode};
+use mime::{self};
 use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
 
 use super::body::{self, Body};
 use super::client::{Client, Pending, pending_err};
-use header::{ContentType, Headers};
+use header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
+use http::HttpTryFrom;
 use {Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
     method: Method,
     url: Url,
-    headers: Headers,
+    headers: HeaderMap,
     body: Option<Body>,
 }
 
@@ -31,7 +34,7 @@ impl Request {
         Request {
             method,
             url,
-            headers: Headers::new(),
+            headers: HeaderMap::new(),
             body: None,
         }
     }
@@ -62,13 +65,13 @@ impl Request {
 
     /// Get the headers.
     #[inline]
-    pub fn headers(&self) -> &Headers {
+    pub fn headers(&self) -> &HeaderMap {
         &self.headers
     }
 
     /// Get a mutable reference to the headers.
     #[inline]
-    pub fn headers_mut(&mut self) -> &mut Headers {
+    pub fn headers_mut(&mut self) -> &mut HeaderMap {
         &mut self.headers
     }
 
@@ -87,21 +90,32 @@ impl Request {
 
 impl RequestBuilder {
     /// Add a `Header` to this Request.
-    pub fn header<H>(&mut self, header: H) -> &mut RequestBuilder
+    pub fn header<K, V>(&mut self, key: K, value: V) -> &mut RequestBuilder
     where
-        H: ::header::Header,
+        HeaderName: HttpTryFrom<K>,
+        HeaderValue: HttpTryFrom<V>,
     {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
-            req.headers_mut().set(header);
+            match <HeaderName as HttpTryFrom<K>>::try_from(key) {
+                Ok(key) => {
+                    match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
+                        Ok(value) => { req.headers_mut().append(key, value); }
+                        Err(e) => self.err = Some(::error::from(e.into())),
+                    }
+                },
+                Err(e) => self.err = Some(::error::from(e.into())),
+            };
         }
         self
     }
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
-    pub fn headers(&mut self, headers: ::header::Headers) -> &mut RequestBuilder {
+    pub fn headers(&mut self, headers: ::header::HeaderMap) -> &mut RequestBuilder {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
-            req.headers_mut().extend(headers.iter());
+            for (key, value) in headers.iter() {
+                req.headers_mut().insert(key, value.clone());
+            }
         }
         self
     }
@@ -112,10 +126,10 @@ impl RequestBuilder {
         U: Into<String>,
         P: Into<String>,
     {
-        self.header(::header::Authorization(::header::Basic {
-            username: username.into(),
-            password: password.map(|p| p.into()),
-        }))
+        let username = username.into();
+        let password = password.map(|p| p.into()).unwrap_or(String::new());
+        let header_value = format!("basic {}:{}", username, encode(&password));
+        self.header(::header::AUTHORIZATION, HeaderValue::from_str(header_value.as_str()).expect(""))
     }
 
     /// Set the request body.
@@ -162,7 +176,7 @@ impl RequestBuilder {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
             match serde_urlencoded::to_string(form) {
                 Ok(body) => {
-                    req.headers_mut().set(ContentType::form_url_encoded());
+                    req.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str(mime::APPLICATION_WWW_FORM_URLENCODED.as_ref()).expect(""));
                     *req.body_mut() = Some(body.into());
                 },
                 Err(err) => self.err = Some(::error::from(err)),
@@ -181,7 +195,7 @@ impl RequestBuilder {
         if let Some(req) = request_mut(&mut self.request, &self.err) {
             match serde_json::to_vec(json) {
                 Ok(body) => {
-                    req.headers_mut().set(ContentType::json());
+                    req.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str(mime::APPLICATION_JSON.as_ref()).expect(""));
                     *req.body_mut() = Some(body.into());
                 },
                 Err(err) => self.err = Some(::error::from(err)),
@@ -274,7 +288,7 @@ pub fn builder(client: Client, req: ::Result<Request>) -> RequestBuilder {
 }
 
 #[inline]
-pub fn pieces(req: Request) -> (Method, Url, Headers, Option<Body>) {
+pub fn pieces(req: Request) -> (Method, Url, HeaderMap, Option<Body>) {
     (req.method, req.url, req.headers, req.body)
 }
 
@@ -282,12 +296,10 @@ pub fn pieces(req: Request) -> (Method, Url, Headers, Option<Body>) {
 mod tests {
     use super::Client;
     use std::collections::BTreeMap;
-    use tokio_core::reactor::Core;
 
     #[test]
     fn add_query_append() {
-        let mut core = Core::new().unwrap();
-        let client = Client::new(&core.handle());
+        let client = Client::new();
         let some_url = "https://google.com/";
         let mut r = client.get(some_url);
 
@@ -300,8 +312,7 @@ mod tests {
 
     #[test]
     fn add_query_append_same() {
-        let mut core = Core::new().unwrap();
-        let client = Client::new(&core.handle());
+        let client = Client::new();
         let some_url = "https://google.com/";
         let mut r = client.get(some_url);
 
@@ -319,8 +330,7 @@ mod tests {
             qux: i32,
         }
 
-        let mut core = Core::new().unwrap();
-        let client = Client::new(&core.handle());
+        let client = Client::new();
         let some_url = "https://google.com/";
         let mut r = client.get(some_url);
 
@@ -338,8 +348,7 @@ mod tests {
         params.insert("foo", "bar");
         params.insert("qux", "three");
 
-        let mut core = Core::new().unwrap();
-        let client = Client::new(&core.handle());
+        let client = Client::new();
         let some_url = "https://google.com/";
         let mut r = client.get(some_url);
 

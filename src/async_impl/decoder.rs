@@ -33,12 +33,12 @@ use tokio_io::AsyncRead;
 use tokio_io::io as async_io;
 use futures::{Async, Future, Poll, Stream};
 use futures::stream::Concat2;
-use hyper::StatusCode;
+use hyper::{HeaderMap, StatusCode};
+use hyper::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING, HeaderValue};
 use serde::de::DeserializeOwned;
 use serde_json;
 use url::Url;
 
-use header::{Headers, ContentEncoding, ContentLength, Encoding, TransferEncoding};
 use super::{body, Body, Chunk};
 use error;
 
@@ -109,6 +109,13 @@ impl Decoder {
     fn gzip(mut body: Body) -> Decoder {
         Decoder {
             inner: Inner::Pending(Pending::Gzip(ReadableChunks::new(body)))
+        }
+    }
+
+    pub(crate) fn content_length(&self) -> Option<u64> {
+        match self.inner {
+            Inner::PlainText(ref body) => body.content_length(),
+            _ => None,
         }
     }
 }
@@ -407,31 +414,33 @@ impl<S> ReadableChunks<S>
 /// how to decode the content body of the request.
 ///
 /// Uses the correct variant by inspecting the Content-Encoding header.
-pub fn detect(headers: &mut Headers, body: Body, check_gzip: bool) -> Decoder {
+pub fn detect(headers: &mut HeaderMap, body: Body, check_gzip: bool) -> Decoder {
     if !check_gzip {
         return Decoder::plain_text(body);
     }
     let content_encoding_gzip: bool;
     let mut is_gzip = {
         content_encoding_gzip = headers
-            .get::<ContentEncoding>()
-            .map_or(false, |encs| encs.contains(&Encoding::Gzip));
+            .get_all(CONTENT_ENCODING)
+            .iter()
+            .fold(false, |acc, enc| acc || enc == HeaderValue::from_static("gzip"));
         content_encoding_gzip ||
         headers
-            .get::<TransferEncoding>()
-            .map_or(false, |encs| encs.contains(&Encoding::Gzip))
+            .get_all(TRANSFER_ENCODING)
+            .iter()
+            .fold(false, |acc, enc| acc || enc == HeaderValue::from_static("gzip"))
     };
     if is_gzip {
-        if let Some(content_length) = headers.get::<ContentLength>() {
-            if content_length.0 == 0 {
+        if let Some(content_length) = headers.get(CONTENT_LENGTH) {
+            if content_length == "0" {
                 warn!("GZipped response with content-length of 0");
                 is_gzip = false;
             }
         }
     }
     if content_encoding_gzip {
-        headers.remove::<ContentEncoding>();
-        headers.remove::<ContentLength>();
+        headers.remove(CONTENT_ENCODING);
+        headers.remove(CONTENT_LENGTH);
     }
     if is_gzip {
         Decoder::gzip(body)

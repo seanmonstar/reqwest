@@ -31,10 +31,10 @@ fn test_gzip_response() {
     let server = server! {
         request: b"\
             GET /gzip HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         chunk_size: chunk_size,
@@ -54,10 +54,10 @@ fn test_gzip_empty_body() {
     let server = server! {
         request: b"\
             HEAD /gzip HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -85,10 +85,10 @@ fn test_gzip_invalid_body() {
     let server = server! {
         request: b"\
             GET /gzip HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -113,10 +113,10 @@ fn test_accept_header_is_not_changed_if_set() {
     let server = server! {
         request: b"\
             GET /accept HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: application/json\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: application/json\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -130,11 +130,11 @@ fn test_accept_header_is_not_changed_if_set() {
 
     let res = client
         .get(&format!("http://{}/accept", server.addr()))
-        .header(reqwest::header::Accept::json())
+        .header(reqwest::header::ACCEPT, reqwest::header::HeaderValue::from_static("application/json"))
         .send()
         .unwrap();
 
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
 #[test]
@@ -142,10 +142,10 @@ fn test_accept_encoding_header_is_not_changed_if_set() {
     let server = server! {
         request: b"\
             GET /accept-encoding HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: identity\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: identity\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -158,11 +158,9 @@ fn test_accept_encoding_header_is_not_changed_if_set() {
     let client = reqwest::Client::new();
 
     let res = client.get(&format!("http://{}/accept-encoding", server.addr()))
-        .header(reqwest::header::AcceptEncoding(
-            vec![reqwest::header::qitem(reqwest::header::Encoding::Identity)]
-        ))
+        .header(reqwest::header::ACCEPT_ENCODING, reqwest::header::HeaderValue::from_static("identity"))
         .send()
         .unwrap();
 
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
 }

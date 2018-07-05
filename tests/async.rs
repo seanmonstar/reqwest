@@ -1,16 +1,15 @@
 #![cfg(feature="unstable")]
 
 extern crate futures;
-extern crate tokio_core;
-extern crate reqwest;
 extern crate libflate;
+extern crate reqwest;
+extern crate tokio;
 
 #[macro_use]
 mod support;
 
 use reqwest::unstable::async::Client;
 use futures::{Future, Stream};
-use tokio_core::reactor::Core;
 use std::io::Write;
 use std::time::Duration;
 
@@ -46,10 +45,10 @@ fn test_gzip(response_size: usize, chunk_size: usize) {
     let server = server! {
         request: b"\
             GET /gzip HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         chunk_size: chunk_size,
@@ -57,9 +56,9 @@ fn test_gzip(response_size: usize, chunk_size: usize) {
         response: response
     };
 
-    let mut core = Core::new().unwrap();
+    let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
 
-    let client = Client::new(&core.handle());
+    let client = Client::new();
 
     let res_future = client.get(&format!("http://{}/gzip", server.addr()))
         .send()
@@ -75,5 +74,5 @@ fn test_gzip(response_size: usize, chunk_size: usize) {
             Ok(())
         });
 
-    core.run(res_future).unwrap();
+    rt.block_on(res_future).unwrap();
 }

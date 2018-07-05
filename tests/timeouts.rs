@@ -11,11 +11,11 @@ fn test_write_timeout() {
     let server = server! {
         request: b"\
             POST /write-timeout HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            Content-Length: 5\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            content-length: 5\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             Hello\
             ",
@@ -34,7 +34,7 @@ fn test_write_timeout() {
         .build()
         .unwrap()
         .post(&url)
-        .header(reqwest::header::ContentLength(5))
+        .header(reqwest::header::CONTENT_LENGTH, reqwest::header::HeaderValue::from_static("5"))
         .body(reqwest::Body::new(&b"Hello"[..]))
         .send()
         .unwrap_err();
@@ -49,10 +49,10 @@ fn test_response_timeout() {
     let server = server! {
         request: b"\
             GET /response-timeout HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -80,10 +80,10 @@ fn test_read_timeout() {
     let server = server! {
         request: b"\
             GET /read-timeout HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -105,9 +105,8 @@ fn test_read_timeout() {
         .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::ContentLength(5)));
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"5");
 
     let mut buf = [0; 1024];
     let err = res.read(&mut buf).unwrap_err();
