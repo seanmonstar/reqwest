@@ -23,7 +23,7 @@ fn fetch() -> impl Future<Item=(), Error=()> {
         .map_err(|err| println!("request error: {}", err))
         .map(|body| {
             let mut body = Cursor::new(body);
-            io::copy(&mut body, &mut io::stdout())
+            let _ = io::copy(&mut body, &mut io::stdout())
                 .map_err(|err| {
                     println!("stdout error: {}", err);
                 });
