@@ -1,43 +1,35 @@
-#![allow(warnings)] // remove when error_chain is fixed
+#![deny(warnings)]
 
 extern crate futures;
 extern crate reqwest;
-extern crate tokio_core;
-#[macro_use]
-extern crate error_chain;
+extern crate tokio;
 
 use std::mem;
 use std::io::{self, Cursor};
 use futures::{Future, Stream};
 use reqwest::unstable::async::{Client, Decoder};
 
-error_chain! {
-    foreign_links {
-        ReqError(reqwest::Error);
-        IoError(io::Error);
-    }
-}
 
-fn run() -> Result<()> {
-    let mut core = tokio_core::reactor::Core::new()?;
-    let client = Client::new();
-
-    let work = client.get("https://hyper.rs")
+fn fetch() -> impl Future<Item=(), Error=()> {
+    Client::new()
+        .get("https://hyper.rs")
         .send()
-        .map_err(|e| Error::from(e))
         .and_then(|mut res| {
             println!("{}", res.status());
 
             let body = mem::replace(res.body_mut(), Decoder::empty());
-            body.concat2().map_err(Into::into)
+            body.concat2()
         })
-        .and_then(|body| {
+        .map_err(|err| println!("request error: {}", err))
+        .map(|body| {
             let mut body = Cursor::new(body);
-            io::copy(&mut body, &mut io::stdout()).map_err(Into::into)
-        });
-
-    core.run(work)?;
-    Ok(())
+            io::copy(&mut body, &mut io::stdout())
+                .map_err(|err| {
+                    println!("stdout error: {}", err);
+                });
+        })
 }
 
-quick_main!(run);
+fn main() {
+    tokio::run(fetch());
+}
