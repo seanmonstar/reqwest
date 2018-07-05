@@ -8,10 +8,10 @@ fn test_http_proxy() {
     let server = server! {
         request: b"\
             GET http://hyper.rs/prox HTTP/1.1\r\n\
-            Host: hyper.rs\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: hyper.rs\r\n\
             \r\n\
             ",
         response: b"\
@@ -34,7 +34,6 @@ fn test_http_proxy() {
         .unwrap();
 
     assert_eq!(res.url().as_str(), url);
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::Server::new("proxied")));
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"proxied");
 }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use futures::{Async, AsyncSink, Future, Sink, Stream};
+use futures::{Async, Future, Stream};
 use futures::executor::{self, Notify};
 
 // pub(crate)
@@ -39,14 +39,6 @@ pub fn stream<S>(stream: S, timeout: Option<Duration>) -> WaitStream<S>
 where S: Stream {
     WaitStream {
         stream: executor::spawn(stream),
-        timeout: timeout,
-    }
-}
-
-pub fn sink<S>(sink: S, timeout: Option<Duration>) -> WaitSink<S>
-where S: Sink {
-    WaitSink {
-        sink: executor::spawn(sink),
         timeout: timeout,
     }
 }
@@ -108,49 +100,6 @@ where S: Stream {
                     },
                     Err(e) => return Some(Err(Waited::Err(e))),
                 }
-            }
-        }
-    }
-}
-
-pub struct WaitSink<S> {
-    sink: executor::Spawn<S>,
-    timeout: Option<Duration>,
-}
-
-impl<S> WaitSink<S>
-where S: Sink {
-    pub fn send(&mut self, mut item: S::SinkItem) -> Result<(), Waited<S::SinkError>> {
-        if let Some(dur) = self.timeout {
-
-            let start = Instant::now();
-            let deadline = start + dur;
-            let notify = Arc::new(ThreadNotify {
-                thread: thread::current(),
-            });
-
-            loop {
-                let now = Instant::now();
-                if now >= deadline {
-                    return Err(Waited::TimedOut);
-                }
-                item = match self.sink.start_send_notify(item, &notify, 0)? {
-                    AsyncSink::Ready => return Ok(()),
-                    AsyncSink::NotReady(val) => val,
-                };
-                thread::park_timeout(deadline - now);
-            }
-        } else {
-            let notify = Arc::new(ThreadNotify {
-                thread: thread::current(),
-            });
-
-            loop {
-                item = match self.sink.start_send_notify(item, &notify, 0)? {
-                    AsyncSink::Ready => return Ok(()),
-                    AsyncSink::NotReady(val) => val,
-                };
-                thread::park();
             }
         }
     }

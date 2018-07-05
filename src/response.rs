@@ -6,17 +6,19 @@ use std::borrow::Cow;
 
 use encoding_rs::{Encoding, UTF_8};
 use futures::{Async, Poll, Stream};
+use mime::Mime;
 use serde::de::DeserializeOwned;
 use serde_json;
 
 use client::KeepCoreThreadAlive;
-use header::Headers;
+use hyper::header::HeaderMap;
 use {async_impl, StatusCode, Url, wait};
 
 /// A Response to a submitted `Request`.
 pub struct Response {
     inner: async_impl::Response,
     body: async_impl::ReadableChunks<WaitBody>,
+    content_length: Option<u64>,
     _thread_handle: KeepCoreThreadAlive,
 }
 
@@ -70,8 +72,8 @@ impl Response {
     ///             .body("possibly too large")
     ///             .send()?;
     /// match resp.status() {
-    ///     StatusCode::Ok => println!("success!"),
-    ///     StatusCode::PayloadTooLarge => {
+    ///     StatusCode::OK => println!("success!"),
+    ///     StatusCode::PAYLOAD_TOO_LARGE => {
     ///         println!("Request payload is too large!");
     ///     }
     ///     s => println!("Received response status: {:?}", s),
@@ -93,14 +95,15 @@ impl Response {
     /// ```rust
     /// # use std::io::{Read, Write};
     /// # use reqwest::Client;
-    /// # use reqwest::header::ContentLength;
+    /// # use reqwest::header::CONTENT_LENGTH;
     /// #
     /// # fn run() -> Result<(), Box<::std::error::Error>> {
     /// let client = Client::new();
     /// let mut resp = client.head("http://httpbin.org/bytes/3000").send()?;
     /// if resp.status().is_success() {
-    ///     let len = resp.headers().get::<ContentLength>()
-    ///                 .map(|ct_len| **ct_len)
+    ///     let len = resp.headers().get(CONTENT_LENGTH)
+    ///                 .and_then(|ct_len| ct_len.to_str().ok())
+    ///                 .and_then(|ct_len| ct_len.parse().ok())
     ///                 .unwrap_or(0);
     ///     // limit 1mb response
     ///     if len <= 1_000_000 {
@@ -115,7 +118,7 @@ impl Response {
     /// # }
     /// ```
     #[inline]
-    pub fn headers(&self) -> &Headers {
+    pub fn headers(&self) -> &HeaderMap {
         self.inner.headers()
     }
 
@@ -189,14 +192,21 @@ impl Response {
     /// This consumes the body. Trying to read more, or use of `response.json()`
     /// will return empty values.
     pub fn text(&mut self) -> ::Result<String> {
-        let len = self.headers().get::<::header::ContentLength>()
-            .map(|ct_len| **ct_len)
-            .unwrap_or(0);
+        let len = self.content_length.unwrap_or(0);
         let mut content = Vec::with_capacity(len as usize);
         self.read_to_end(&mut content).map_err(::error::from)?;
-        let encoding_name = self.headers().get::<::header::ContentType>()
-            .and_then(|content_type| {
-                content_type.get_param("charset")
+        let content_type = self.headers().get(::header::CONTENT_TYPE)
+            .and_then(|value| {
+                value.to_str().ok()
+            })
+            .and_then(|value| {
+                value.parse::<Mime>().ok()
+            });
+        let encoding_name = content_type
+            .as_ref()
+            .and_then(|mime| {
+                mime
+                    .get_param("charset")
                     .map(|charset| charset.as_str())
             })
             .unwrap_or("utf-8");
@@ -252,7 +262,7 @@ impl Response {
     /// let res = reqwest::get("http://httpbin.org/status/400")?
     ///     .error_for_status();
     /// if let Err(err) = res {
-    ///     assert_eq!(err.status(), Some(reqwest::StatusCode::BadRequest));
+    ///     assert_eq!(err.status(), Some(reqwest::StatusCode::BAD_REQUEST));
     /// }
     /// # Ok(())
     /// # }
@@ -260,12 +270,13 @@ impl Response {
     /// ```
     #[inline]
     pub fn error_for_status(self) -> ::Result<Self> {
-        let Response { body, inner, _thread_handle } = self;
+        let Response { body, content_length, inner, _thread_handle } = self;
         inner.error_for_status().map(move |inner| {
             Response {
-                inner: inner,
-                body: body,
-                _thread_handle: _thread_handle,
+                inner,
+                body,
+                content_length,
+                _thread_handle,
             }
         })
     }
@@ -306,6 +317,7 @@ impl Stream for WaitBody {
 
 pub fn new(mut res: async_impl::Response, timeout: Option<Duration>, thread: KeepCoreThreadAlive) -> Response {
     let body = mem::replace(res.body_mut(), async_impl::Decoder::empty());
+    let len = body.content_length();
     let body = async_impl::ReadableChunks::new(WaitBody {
         inner: wait::stream(body, timeout)
     });
@@ -313,6 +325,7 @@ pub fn new(mut res: async_impl::Response, timeout: Option<Duration>, thread: Kee
     Response {
         inner: res,
         body: body,
+        content_length: len,
         _thread_handle: thread,
     }
 }

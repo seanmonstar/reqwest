@@ -174,8 +174,8 @@ impl ClientBuilder {
     /// ```rust
     /// use reqwest::header;
     /// # fn build_client() -> Result<(), Box<std::error::Error>> {
-    /// let mut headers = header::Headers::new();
-    /// headers.set(header::Authorization("secret".to_string()));
+    /// let mut headers = header::HeaderMap::new();
+    /// headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("secret"));
     ///
     /// // get a client builder
     /// let client = reqwest::Client::builder()
@@ -191,8 +191,8 @@ impl ClientBuilder {
     /// ```rust
     /// use reqwest::header;
     /// # fn build_client() -> Result<(), Box<std::error::Error>> {
-    /// let mut headers = header::Headers::new();
-    /// headers.set(header::Authorization("secret".to_string()));
+    /// let mut headers = header::HeaderMap::new();
+    /// headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("secret"));
     ///
     /// // get a client builder
     /// let client = reqwest::Client::builder()
@@ -200,13 +200,13 @@ impl ClientBuilder {
     ///     .build()?;
     /// let res = client
     ///     .get("https://www.rust-lang.org")
-    ///     .header(header::Authorization("token".to_string()))
+    ///     .header(header::AUTHORIZATION, "token")
     ///     .send()?;
     /// # Ok(())
     /// # }
     /// ```
     #[inline]
-    pub fn default_headers(&mut self, headers: header::Headers) -> &mut ClientBuilder {
+    pub fn default_headers(&mut self, headers: header::HeaderMap) -> &mut ClientBuilder {
         self.inner.default_headers(headers);
         self
     }
@@ -287,7 +287,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Get, url)
+        self.request(Method::GET, url)
     }
 
     /// Convenience method to make a `POST` request to a URL.
@@ -296,7 +296,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Post, url)
+        self.request(Method::POST, url)
     }
 
     /// Convenience method to make a `PUT` request to a URL.
@@ -305,7 +305,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn put<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Put, url)
+        self.request(Method::PUT, url)
     }
 
     /// Convenience method to make a `PATCH` request to a URL.
@@ -314,7 +314,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn patch<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Patch, url)
+        self.request(Method::PATCH, url)
     }
 
     /// Convenience method to make a `DELETE` request to a URL.
@@ -323,7 +323,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn delete<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Delete, url)
+        self.request(Method::DELETE, url)
     }
 
     /// Convenience method to make a `HEAD` request to a URL.
@@ -332,7 +332,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Head, url)
+        self.request(Method::HEAD, url)
     }
 
     /// Start building a `Request` with the `Method` and `Url`.
@@ -412,22 +412,21 @@ impl ClientHandle {
         let mut builder = async_impl::client::take_builder(&mut builder.inner);
         let (tx, rx) = mpsc::unbounded();
         let (spawn_tx, spawn_rx) = oneshot::channel::<::Result<()>>();
-        let handle = try_!(thread::Builder::new().name("reqwest-internal-sync-core".into()).spawn(move || {
-            use tokio_core::reactor::Core;
+        let handle = try_!(thread::Builder::new().name("reqwest-internal-sync-runtime".into()).spawn(move || {
+            use tokio::runtime::current_thread::Runtime;
 
             let built = (|| {
-                let core = try_!(Core::new());
-                let handle = core.handle();
-                let client = builder.build(&handle)?;
-                Ok((core, handle, client))
+                let rt = try_!(Runtime::new());
+                let client = builder.build()?;
+                Ok((rt, client))
             })();
 
-            let (mut core, handle, client) = match built {
-                Ok((a, b, c)) => {
+            let (mut rt, client) = match built {
+                Ok((rt, c)) => {
                     if let Err(_) = spawn_tx.send(Ok(())) {
                         return;
                     }
-                    (a, b, c)
+                    (rt, c)
                 },
                 Err(e) => {
                     let _ = spawn_tx.send(Err(e));
@@ -435,19 +434,22 @@ impl ClientHandle {
                 }
             };
 
-            let work = rx.for_each(|(req, tx)| {
+            let work = rx.for_each(move |(req, tx)| {
                 let tx: oneshot::Sender<::Result<async_impl::Response>> = tx;
                 let task = client.execute(req)
                     .then(move |x| tx.send(x).map_err(|_| ()));
-                handle.spawn(task);
+                ::tokio::spawn(task);
                 Ok(())
             });
 
+
             // work is Future<(), ()>, and our closure will never return Err
-            let _ = core.run(work);
+            rt.spawn(work)
+                .run()
+                .expect("runtime unexpected error");
         }));
 
-        wait::timeout(spawn_rx, timeout.0).expect("core thread cancelled")?;
+        wait::timeout(spawn_rx, timeout.0).expect("runtime thread cancelled")?;
 
         let inner_handle = Arc::new(InnerClientHandle {
             tx: Some(tx),

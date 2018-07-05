@@ -10,10 +10,10 @@ fn test_response_text() {
     let server = server! {
         request: b"\
             GET /text HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -28,11 +28,9 @@ fn test_response_text() {
     let url = format!("http://{}/text", server.addr());
     let mut res = reqwest::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::Server::new("test".to_string())));
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::ContentLength(5)));
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"5");
 
     let body = res.text().unwrap();
     assert_eq!(b"Hello", body.as_bytes());
@@ -43,10 +41,10 @@ fn test_response_non_utf_8_text() {
     let server = server! {
         request: b"\
             GET /text HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -62,11 +60,9 @@ fn test_response_non_utf_8_text() {
     let url = format!("http://{}/text", server.addr());
     let mut res = reqwest::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::Server::new("test".to_string())));
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::ContentLength(4)));
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"4");
 
     let body = res.text().unwrap();
     assert_eq!("你好", &body);
@@ -78,10 +74,10 @@ fn test_response_copy_to() {
     let server = server! {
         request: b"\
             GET /1 HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -96,11 +92,9 @@ fn test_response_copy_to() {
     let url = format!("http://{}/1", server.addr());
     let mut res = reqwest::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::Server::new("test".to_string())));
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::ContentLength(5)));
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"5");
 
     let mut buf: Vec<u8> = vec![];
     res.copy_to(&mut buf).unwrap();
@@ -112,10 +106,10 @@ fn test_get() {
     let server = server! {
         request: b"\
             GET /1 HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -130,11 +124,9 @@ fn test_get() {
     let mut res = reqwest::get(&url).unwrap();
 
     assert_eq!(res.url().as_str(), &url);
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::Server::new("test".to_string())));
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::ContentLength(0)));
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
 
     let mut buf = [0; 1024];
     let n = res.read(&mut buf).unwrap();
@@ -146,11 +138,11 @@ fn test_post() {
     let server = server! {
         request: b"\
             POST /2 HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Content-Length: 5\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            content-length: 5\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             Hello\
             ",
@@ -170,11 +162,9 @@ fn test_post() {
         .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::Server::new("post")));
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::ContentLength(0)));
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"post");
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
 
     let mut buf = [0; 1024];
     let n = res.read(&mut buf).unwrap();
@@ -188,10 +178,10 @@ fn test_error_for_status_4xx() {
     let server = server! {
         request: b"\
             GET /1 HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -207,7 +197,7 @@ fn test_error_for_status_4xx() {
 
     let err = res.error_for_status().err().unwrap();
     assert!(err.is_client_error());
-    assert_eq!(err.status(), Some(reqwest::StatusCode::BadRequest));
+    assert_eq!(err.status(), Some(reqwest::StatusCode::BAD_REQUEST));
 }
 
 /// Calling `Response::error_for_status`` on a response with status in 5xx
@@ -217,10 +207,10 @@ fn test_error_for_status_5xx() {
     let server = server! {
         request: b"\
             GET /1 HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -236,17 +226,14 @@ fn test_error_for_status_5xx() {
 
     let err = res.error_for_status().err().unwrap();
     assert!(err.is_server_error());
-    assert_eq!(err.status(), Some(reqwest::StatusCode::InternalServerError));
+    assert_eq!(err.status(), Some(reqwest::StatusCode::INTERNAL_SERVER_ERROR));
 }
 
 #[test]
 fn test_default_headers() {
     use reqwest::header;
-    let mut headers = header::Headers::with_capacity(1);
-    let mut cookies = header::Cookie::new();
-    cookies.set("a", "b");
-    cookies.set("c", "d");
-    headers.set(cookies);
+    let mut headers = header::HeaderMap::with_capacity(1);
+    headers.insert(header::COOKIE, header::HeaderValue::from_static("a=b;c=d"));
     let client = reqwest::Client::builder()
         .default_headers(headers)
         .build().unwrap();
@@ -254,11 +241,11 @@ fn test_default_headers() {
     let server = server! {
         request: b"\
             GET /1 HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Cookie: a=b; c=d\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            cookie: a=b;c=d\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -273,20 +260,18 @@ fn test_default_headers() {
     let res = client.get(&url).send().unwrap();
 
     assert_eq!(res.url().as_str(), &url);
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::Server::new("test")));
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::ContentLength(0)));
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
 
     let server = server! {
         request: b"\
             GET /2 HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Cookie: a=b; c=d\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            cookie: a=b;c=d\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -301,18 +286,16 @@ fn test_default_headers() {
     let res = client.get(&url).send().unwrap();
 
     assert_eq!(res.url().as_str(), &url);
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::Server::new("test")));
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::ContentLength(0)));
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
 }
 
 #[test]
 fn test_override_default_headers() {
     use reqwest::header;
-    let mut headers = header::Headers::with_capacity(1);
-    headers.set(header::Authorization("iamatoken".to_string()));
+    let mut headers = header::HeaderMap::with_capacity(1);
+    headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("iamatoken"));
     let client = reqwest::Client::builder()
         .default_headers(headers)
         .build().unwrap();
@@ -320,11 +303,11 @@ fn test_override_default_headers() {
     let server = server! {
         request: b"\
             GET /3 HTTP/1.1\r\n\
-            Host: $HOST\r\n\
-            User-Agent: $USERAGENT\r\n\
-            Accept: */*\r\n\
-            Authorization: secret\r\n\
-            Accept-Encoding: gzip\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            authorization: secret\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
             \r\n\
             ",
         response: b"\
@@ -336,13 +319,11 @@ fn test_override_default_headers() {
     };
 
     let url = format!("http://{}/3", server.addr());
-    let res = client.get(&url).header(header::Authorization("secret".to_string())).send().unwrap();
+    let res = client.get(&url).header(header::AUTHORIZATION, header::HeaderValue::from_static("secret")).send().unwrap();
 
     assert_eq!(res.url().as_str(), &url);
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::Server::new("test")));
-    assert_eq!(res.headers().get(),
-               Some(&reqwest::header::ContentLength(0)));
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
 
 }

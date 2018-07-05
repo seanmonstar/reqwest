@@ -124,15 +124,18 @@
 //! [serde]: http://serde.rs
 //! [cookiejar_issue]: https://github.com/seanmonstar/reqwest/issues/14
 
+extern crate base64;
 extern crate bytes;
 extern crate encoding_rs;
 #[macro_use]
 extern crate futures;
+extern crate http;
 extern crate hyper;
 extern crate hyper_tls;
 #[macro_use]
 extern crate log;
 extern crate libflate;
+extern crate mime;
 extern crate mime_guess;
 extern crate native_tls;
 extern crate serde;
@@ -141,14 +144,13 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 extern crate serde_urlencoded;
-extern crate tokio_core;
+extern crate tokio;
 extern crate tokio_io;
 extern crate tokio_tls;
 extern crate url;
 extern crate uuid;
 
 pub use hyper::header;
-pub use hyper::mime;
 pub use hyper::Method;
 pub use hyper::StatusCode;
 pub use url::Url;

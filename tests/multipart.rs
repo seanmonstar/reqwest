@@ -47,5 +47,5 @@ fn test_multipart() {
         .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
-    assert_eq!(res.status(), reqwest::StatusCode::Ok);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
 }

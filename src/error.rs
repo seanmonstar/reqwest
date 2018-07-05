@@ -112,6 +112,7 @@ impl Error {
     pub fn get_ref(&self) -> Option<&(StdError + Send + Sync + 'static)> {
         match self.kind {
             Kind::Http(ref e) => Some(e),
+            Kind::Hyper(ref e) => Some(e),
             Kind::Url(ref e) => Some(e),
             Kind::Tls(ref e) => Some(e),
             Kind::Io(ref e) => Some(e),
@@ -129,6 +130,7 @@ impl Error {
     pub fn is_http(&self) -> bool {
         match self.kind {
             Kind::Http(_) => true,
+            Kind::Hyper(_) => true,
             _ => false,
         }
     }
@@ -190,6 +192,7 @@ impl fmt::Display for Error {
         }
         match self.kind {
             Kind::Http(ref e) => fmt::Display::fmt(e, f),
+            Kind::Hyper(ref e) => fmt::Display::fmt(e, f),
             Kind::Url(ref e) => fmt::Display::fmt(e, f),
             Kind::Tls(ref e) => fmt::Display::fmt(e, f),
             Kind::Io(ref e) => fmt::Display::fmt(e, f),
@@ -213,6 +216,7 @@ impl StdError for Error {
     fn description(&self) -> &str {
         match self.kind {
             Kind::Http(ref e) => e.description(),
+            Kind::Hyper(ref e) => e.description(),
             Kind::Url(ref e) => e.description(),
             Kind::Tls(ref e) => e.description(),
             Kind::Io(ref e) => e.description(),
@@ -228,6 +232,7 @@ impl StdError for Error {
     fn cause(&self) -> Option<&StdError> {
         match self.kind {
             Kind::Http(ref e) => e.cause(),
+            Kind::Hyper(ref e) => e.cause(),
             Kind::Url(ref e) => e.cause(),
             Kind::Tls(ref e) => e.cause(),
             Kind::Io(ref e) => e.cause(),
@@ -245,7 +250,8 @@ impl StdError for Error {
 
 #[derive(Debug)]
 pub enum Kind {
-    Http(::hyper::Error),
+    Http(::http::Error),
+    Hyper(::hyper::Error),
     Url(::url::ParseError),
     Tls(::native_tls::Error),
     Io(io::Error),
@@ -258,13 +264,18 @@ pub enum Kind {
 }
 
 
+impl From<::http::Error> for Kind {
+    #[inline]
+    fn from(err: ::http::Error) -> Kind {
+        Kind::Http(err)
+    }
+}
+
 impl From<::hyper::Error> for Kind {
     #[inline]
     fn from(err: ::hyper::Error) -> Kind {
         match err {
-            ::hyper::Error::Io(err) => Kind::Io(err),
-            //::hyper::Error::Uri(err) => Kind::Url(err),
-            other => Kind::Http(other),
+            other => Kind::Hyper(other),
         }
     }
 }
@@ -431,20 +442,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_error_get_ref_downcasts() {
-        let err: Error = from(::hyper::Error::Status);
-        let cause = err.get_ref()
-            .unwrap()
-            .downcast_ref::<::hyper::Error>()
-            .unwrap();
-
-        match cause {
-            &::hyper::Error::Status => (),
-            _ => panic!("unexpected downcast: {:?}", cause),
-        }
-    }
-
-    #[test]
     fn test_cause_chain() {
         #[derive(Debug)]
         struct Chain<T>(Option<T>);
@@ -475,9 +472,6 @@ mod tests {
                 }
             }
         }
-
-        let err = from(::hyper::Error::Status);
-        assert!(err.cause().is_none());
 
         let root = Chain(None::<Error>);
         let io = ::std::io::Error::new(::std::io::ErrorKind::Other, root);
