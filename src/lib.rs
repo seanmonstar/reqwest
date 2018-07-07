@@ -152,7 +152,7 @@ extern crate uuid;
 
 pub use hyper::header;
 pub use hyper::Method;
-pub use hyper::StatusCode;
+pub use hyper::{StatusCode, Version};
 pub use url::Url;
 pub use url::ParseError as UrlError;
 
