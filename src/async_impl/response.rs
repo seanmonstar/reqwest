@@ -8,7 +8,7 @@ use tokio_io::AsyncRead;
 use tokio_io::io as async_io;
 use futures::{Async, Future, Poll, Stream};
 use futures::stream::Concat2;
-use hyper::StatusCode;
+use hyper::{StatusCode, Version};
 use serde::de::DeserializeOwned;
 use serde_json;
 use url::Url;
@@ -24,6 +24,7 @@ pub struct Response {
     headers: HeaderMap,
     url: Url,
     body: Decoder,
+    version: Version,
 }
 
 impl Response {
@@ -69,6 +70,12 @@ impl Response {
     #[inline]
     pub fn body_mut(&mut self) -> &mut Decoder {
         &mut self.body
+    }
+
+    /// Get the `Version` of this `Response`.
+    #[inline]
+    pub fn version(&self) -> &Version {
+        &self.version
     }
 
 
@@ -154,6 +161,7 @@ impl<T> fmt::Debug for Json<T> {
 
 pub fn new(mut res: ::hyper::Response<::hyper::Body>, url: Url, gzip: bool) -> Response {
     let status = res.status();
+    let version = res.version();
     let mut headers = mem::replace(res.headers_mut(), HeaderMap::new());
     let decoder = decoder::detect(&mut headers, body::wrap(res.into_body()), gzip);
     debug!("Response: '{}' for {}", status, url);
@@ -162,5 +170,6 @@ pub fn new(mut res: ::hyper::Response<::hyper::Body>, url: Url, gzip: bool) -> R
         headers: headers,
         url: url,
         body: decoder,
+        version: version,
     }
 }

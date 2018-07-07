@@ -12,7 +12,7 @@ use serde_json;
 
 use client::KeepCoreThreadAlive;
 use hyper::header::HeaderMap;
-use {async_impl, StatusCode, Url, wait};
+use {async_impl, StatusCode, Url, Version, wait};
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -120,6 +120,12 @@ impl Response {
     #[inline]
     pub fn headers(&self) -> &HeaderMap {
         self.inner.headers()
+    }
+
+    /// Get the `Version` of this `Response`.
+    #[inline]
+    pub fn version(&self) -> &Version {
+        self.inner.version()
     }
 
     /// Try and deserialize the response body as JSON using `serde`.
