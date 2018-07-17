@@ -15,7 +15,7 @@ fn test_multipart() {
         --{0}\r\n\
         Content-Disposition: form-data; name=\"foo\"\r\n\r\n\
         bar\r\n\
-        --{0}--\
+        --{0}--\r\n\
     ", form.boundary());
 
     let server = server! {
@@ -25,7 +25,7 @@ fn test_multipart() {
             User-Agent: $USERAGENT\r\n\
             Accept: */*\r\n\
             Content-Type: multipart/form-data; boundary={}\r\n\
-            Content-Length: 123\r\n\
+            Content-Length: 125\r\n\
             Accept-Encoding: gzip\r\n\
             \r\n\
             {}\
