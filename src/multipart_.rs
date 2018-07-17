@@ -108,7 +108,7 @@ impl Form {
         }
         // If there is a at least one field there is a special boundary for the very last field.
         if self.fields.len() != 0 {
-            length += 2 + self.boundary.len() as u64 + 2
+            length += 2 + self.boundary.len() as u64 + 4
         }
         Some(length)
     }
@@ -271,7 +271,7 @@ impl Reader {
                 Some(Box::new(reader))
             } else {
                 Some(Box::new(reader.chain(Cursor::new(
-                    format!("--{}--", self.form.boundary),
+                    format!("--{}--\r\n", self.form.boundary),
                 ))))
             }
         } else {
@@ -377,7 +377,7 @@ mod tests {
                         \r\n\
                         --boundary\r\n\
                         Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
-                        value3\r\n--boundary--";
+                        value3\r\n--boundary--\r\n";
         form.reader().read_to_end(&mut output).unwrap();
         // These prints are for debug purposes in case the test fails
         println!(
@@ -413,7 +413,7 @@ mod tests {
                         value2\r\n\
                         --boundary\r\n\
                         Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
-                        value3\r\n--boundary--";
+                        value3\r\n--boundary--\r\n";
         form.reader().read_to_end(&mut output).unwrap();
         // These prints are for debug purposes in case the test fails
         println!(
