@@ -162,12 +162,14 @@ impl RequestBuilder {
     /// ```
     pub fn basic_auth<U, P>(&mut self, username: U, password: Option<P>) -> &mut RequestBuilder
     where
-        U: Into<String>,
-        P: Into<String>,
+        U: fmt::Display,
+        P: fmt::Display,
     {
-        let username = username.into();
-        let password = password.map(|p| p.into()).unwrap_or(String::new());
-        let header_value = format!("basic {}:{}", username, encode(&password));
+        let auth = match password {
+            Some(password) => format!("{}:{}", username, password),
+            None => format!("{}:", username)
+        };
+        let header_value = format!("basic {}", encode(&auth));
         self.header(::header::AUTHORIZATION, HeaderValue::from_str(header_value.as_str()).expect(""))
     }
 
