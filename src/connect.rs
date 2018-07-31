@@ -33,10 +33,6 @@ impl Connector {
             tls: tls,
         }
     }
-
-    pub fn danger_disable_hostname_verification(&mut self) {
-        self.https.danger_disable_hostname_verification(true);
-    }
 }
 
 impl Connect for Connector {

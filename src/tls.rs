@@ -66,7 +66,7 @@ impl fmt::Debug for Certificate {
 
 
 /// Represent a private key and X509 cert as a client certificate.
-pub struct Identity(native_tls::Pkcs12);
+pub struct Identity(native_tls::Identity);
 
 impl Identity {
     /// Parses a DER-formatted PKCS #12 archive, using the specified password to decrypt the key.
@@ -101,7 +101,7 @@ impl Identity {
     ///
     /// If the provided buffer is not valid DER, an error will be returned.
     pub fn from_pkcs12_der(der: &[u8], password: &str) -> ::Result<Identity> {
-        let inner = try_!(native_tls::Pkcs12::from_der(der, password));
+        let inner = try_!(native_tls::Identity::from_pkcs12(der, password));
         Ok(Identity(inner))
     }
 }
@@ -119,6 +119,6 @@ pub fn cert(cert: Certificate) -> native_tls::Certificate {
     cert.0
 }
 
-pub fn pkcs12(identity: Identity) -> native_tls::Pkcs12 {
+pub fn pkcs12(identity: Identity) -> native_tls::Identity {
     identity.0
 }
