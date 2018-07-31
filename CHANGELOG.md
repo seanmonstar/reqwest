@@ -1,3 +1,11 @@
+## v0.8.7
+
+### Fixes
+
+- Send an extra CRLF at the end of multipart requests, since some servers expect it.
+- Removed internal dependency on `tokio-proto`, which removed unsafe `small-vec`
+  dependency.
+
 ## v0.8.6
 
 ### Features
