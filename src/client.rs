@@ -167,6 +167,29 @@ impl ClientBuilder {
         self
     }
 
+     /// Disable certs verification.
+    ///
+    /// # Warning
+    ///
+    /// You should think very carefully before you use this method. If
+    /// hostname verification is not used, any valid certificate for any
+    /// site will be trusted for use from any other. This introduces a
+    /// significant vulnerability to man-in-the-middle attacks.
+    #[inline]
+    pub fn danger_disable_certs_verification(&mut self) -> &mut ClientBuilder {
+        self.inner.danger_disable_certs_verification();
+        self
+    }
+
+    /// Enable certs verification.
+    ///
+    /// Default is enabled.
+    #[inline]
+    pub fn enable_certs_verification(&mut self) -> &mut ClientBuilder {
+        self.inner.enable_certs_verification();
+        self
+    }
+
     /// Sets the default headers for every request.
     ///
     /// # Example

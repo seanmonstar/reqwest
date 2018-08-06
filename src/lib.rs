@@ -145,8 +145,9 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate serde_urlencoded;
 extern crate tokio;
+#[macro_use]
 extern crate tokio_io;
-extern crate tokio_tls;
+extern crate tokio_core;
 extern crate url;
 extern crate uuid;
 
@@ -173,6 +174,7 @@ mod error;
 
 mod async_impl;
 mod connect;
+mod connect_async;
 mod body;
 mod client;
 mod into_url;
