@@ -177,7 +177,6 @@ impl ClientBuilder {
     /// significant vulnerability to man-in-the-middle attacks.
     #[inline]
     pub fn danger_disable_certs_verification(&mut self) -> &mut ClientBuilder {
-
         if let Some(config) = config_mut(&mut self.config, &self.err) {
             config.certs_verification = false;
         }

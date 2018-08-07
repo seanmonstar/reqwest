@@ -2,9 +2,7 @@ use std::io::{self, Read, Write};
 
 use futures::{Poll, Future, Async};
 use native_tls;
-use native_tls::{HandshakeError, Error, TlsConnector, TlsAcceptor};
-#[allow(deprecated)]
-use tokio_core::io::Io;
+use native_tls::{HandshakeError, Error, TlsConnector};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// A wrapper around an underlying raw stream which implements the TLS or SSL
@@ -22,12 +20,6 @@ pub struct TlsStream<S> {
 /// Future returned from `TlsConnectorExt::connect_async` which will resolve
 /// once the connection handshake has finished.
 pub struct ConnectAsync<S> {
-    inner: MidHandshake<S>,
-}
-
-/// Future returned from `TlsAcceptorExt::accept_async` which will resolve
-/// once the accept handshake has finished.
-pub struct AcceptAsync<S> {
     inner: MidHandshake<S>,
 }
 
@@ -60,29 +52,6 @@ pub trait TlsConnectorExt: sealed::Sealed {
         where S: Read + Write; // TODO: change to AsyncRead + AsyncWrite
 }
 
-/// Extension trait for the `TlsAcceptor` type in the `native_tls` crate.
-pub trait TlsAcceptorExt: sealed::Sealed {
-    /// Accepts a new client connection with the provided stream.
-    ///
-    /// This function will internally call `TlsAcceptor::accept` to connect
-    /// the stream and returns a future representing the resolution of the
-    /// connection operation. The returned future will resolve to either
-    /// `TlsStream<S>` or `Error` depending if it's successful or not.
-    ///
-    /// This is typically used after a new socket has been accepted from a
-    /// `TcpListener`. That socket is then passed to this function to perform
-    /// the server half of accepting a client connection.
-    ///
-    /// # Compatibility notes
-    ///
-    /// Note that this method currently requires `S: Read + Write` but it's
-    /// highly recommended to ensure that the object implements the `AsyncRead`
-    /// and `AsyncWrite` traits as well, otherwise this function will not work
-    /// properly.
-    fn accept_async<S>(&self, stream: S) -> AcceptAsync<S>
-        where S: Read + Write; // TODO: change to AsyncRead + AsyncWrite
-}
-
 mod sealed {
     pub trait Sealed {}
 }
@@ -103,9 +72,6 @@ impl<S: Read + Write> Write for TlsStream<S> {
     }
 }
 
-#[allow(deprecated)]
-impl<S: Io> Io for TlsStream<S> {
-}
 
 impl<S: AsyncRead + AsyncWrite> AsyncRead for TlsStream<S> {
 }
@@ -131,32 +97,8 @@ impl TlsConnectorExt for TlsConnector {
 
 impl sealed::Sealed for TlsConnector {}
 
-impl TlsAcceptorExt for TlsAcceptor {
-    fn accept_async<S>(&self, stream: S) -> AcceptAsync<S>
-        where S: Read + Write,
-    {
-        AcceptAsync {
-            inner: MidHandshake {
-                inner: Some(self.accept(stream)),
-            },
-        }
-    }
-}
-
-impl sealed::Sealed for TlsAcceptor {}
-
 // TODO: change this to AsyncRead/AsyncWrite on next major version
 impl<S: Read + Write> Future for ConnectAsync<S> {
-    type Item = TlsStream<S>;
-    type Error = Error;
-
-    fn poll(&mut self) -> Poll<TlsStream<S>, Error> {
-        self.inner.poll()
-    }
-}
-
-// TODO: change this to AsyncRead/AsyncWrite on next major version
-impl<S: Read + Write> Future for AcceptAsync<S> {
     type Item = TlsStream<S>;
     type Error = Error;
 
