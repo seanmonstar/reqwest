@@ -147,7 +147,6 @@ extern crate serde_urlencoded;
 extern crate tokio;
 #[macro_use]
 extern crate tokio_io;
-extern crate tokio_core;
 extern crate url;
 extern crate uuid;
 
