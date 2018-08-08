@@ -6,7 +6,7 @@ use hyper::client::connect::{Connect, Connected, Destination};
 use hyper_tls::{HttpsConnector, MaybeHttpsStream};
 use native_tls::TlsConnector;
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_tls::{TlsConnectorExt, TlsStream};
+use connect_async::{TlsConnectorExt, TlsStream};
 
 use std::io::{self, Cursor, Read, Write};
 use std::sync::Arc;
@@ -32,10 +32,6 @@ impl Connector {
             proxies: proxies,
             tls: tls,
         }
-    }
-
-    pub fn danger_disable_hostname_verification(&mut self) {
-        self.https.danger_disable_hostname_verification(true);
     }
 }
 
