@@ -144,7 +144,9 @@ impl ClientBuilder {
     }
 
 
-    /// Disable hostname verification.
+    /// Controls the use of hostname verification.
+    ///
+    /// Defaults to `false`.
     ///
     /// # Warning
     ///
@@ -153,40 +155,26 @@ impl ClientBuilder {
     /// site will be trusted for use from any other. This introduces a
     /// significant vulnerability to man-in-the-middle attacks.
     #[inline]
-    pub fn danger_disable_hostname_verification(&mut self) -> &mut ClientBuilder {
-        self.inner.danger_disable_hostname_verification();
+    pub fn danger_accept_invalid_hostnames(&mut self, accept_invalid_hostname: bool) -> &mut ClientBuilder {
+        self.inner.danger_accept_invalid_hostnames(accept_invalid_hostname);
         self
     }
 
-    /// Enable hostname verification.
+
+    /// Controls the use of certificate validation.
     ///
-    /// Default is enabled.
-    #[inline]
-    pub fn enable_hostname_verification(&mut self) -> &mut ClientBuilder {
-        self.inner.enable_hostname_verification();
-        self
-    }
-
-     /// Disable certs verification.
+    /// Defaults to `false`.
     ///
     /// # Warning
     ///
-    /// You should think very carefully before you use this method. If
-    /// hostname verification is not used, any valid certificate for any
-    /// site will be trusted for use from any other. This introduces a
-    /// significant vulnerability to man-in-the-middle attacks.
+    /// You should think very carefully before using this method. If
+    /// invalid certificates are trusted, *any* certificate for *any* site
+    /// will be trusted for use. This includes expired certificates. This
+    /// introduces significant vulnerabilities, and should only be used
+    /// as a last resort.
     #[inline]
-    pub fn danger_disable_certs_verification(&mut self) -> &mut ClientBuilder {
-        self.inner.danger_disable_certs_verification();
-        self
-    }
-
-    /// Enable certs verification.
-    ///
-    /// Default is enabled.
-    #[inline]
-    pub fn enable_certs_verification(&mut self) -> &mut ClientBuilder {
-        self.inner.enable_certs_verification();
+    pub fn danger_accept_invalid_certs(&mut self, accept_invalid_certs: bool) -> &mut ClientBuilder {
+        self.inner.danger_accept_invalid_certs(accept_invalid_certs);
         self
     }
 
