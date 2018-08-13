@@ -141,7 +141,9 @@ impl ClientBuilder {
         self
     }
 
-    /// Disable hostname verification.
+    /// Controls the use of hostname verification.
+    ///
+    /// Defaults to `false`.
     ///
     /// # Warning
     ///
@@ -150,47 +152,33 @@ impl ClientBuilder {
     /// site will be trusted for use from any other. This introduces a
     /// significant vulnerability to man-in-the-middle attacks.
     #[inline]
-    pub fn danger_disable_hostname_verification(&mut self) -> &mut ClientBuilder {
-
+    pub fn danger_accept_invalid_hostnames(&mut self, accept_invalid_hostname: bool) -> &mut ClientBuilder {
         if let Some(config) = config_mut(&mut self.config, &self.err) {
-            config.hostname_verification = false;
+            config.hostname_verification = !accept_invalid_hostname;
         }
         self
     }
 
-    /// Enable hostname verification.
-    #[inline]
-    pub fn enable_hostname_verification(&mut self) -> &mut ClientBuilder {
-        if let Some(config) = config_mut(&mut self.config, &self.err) {
-            config.hostname_verification = true;
-        }
-        self
-    }
 
-    /// Disable certs verification.
+    /// Controls the use of certificate validation.
+    ///
+    /// Defaults to `false`.
     ///
     /// # Warning
     ///
-    /// You should think very carefully before you use this method. If
-    /// hostname verification is not used, any valid certificate for any
-    /// site will be trusted for use from any other. This introduces a
-    /// significant vulnerability to man-in-the-middle attacks.
+    /// You should think very carefully before using this method. If
+    /// invalid certificates are trusted, *any* certificate for *any* site
+    /// will be trusted for use. This includes expired certificates. This
+    /// introduces significant vulnerabilities, and should only be used
+    /// as a last resort.
     #[inline]
-    pub fn danger_disable_certs_verification(&mut self) -> &mut ClientBuilder {
+    pub fn danger_accept_invalid_certs(&mut self, accept_invalid_certs: bool) -> &mut ClientBuilder {
         if let Some(config) = config_mut(&mut self.config, &self.err) {
-            config.certs_verification = false;
+            config.certs_verification = !accept_invalid_certs;
         }
         self
     }
 
-    /// Enable certs verification.
-    #[inline]
-    pub fn enable_certs_verification(&mut self) -> &mut ClientBuilder {
-        if let Some(config) = config_mut(&mut self.config, &self.err) {
-            config.certs_verification = true;
-        }
-        self
-    }
 
     /// Sets the default headers for every request.
     #[inline]
