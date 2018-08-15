@@ -16,13 +16,7 @@ matrix:
 
         # minimum version
         - rust: 1.21.0
-
-        - rust: stable
-          env: FEATURES="--features unstable"
-        - rust: beta
-          env: FEATURES="--features unstable"
-        - rust: nightly
-          env: FEATURES="--features unstable"
+          script: cargo build
 
 sudo: false
 dist: trusty
