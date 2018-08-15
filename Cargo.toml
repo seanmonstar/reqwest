@@ -12,18 +12,18 @@ categories = ["web-programming::http-client"]
 publish = false # pre
 
 [dependencies]
-base64 = "~0.6.0"
+base64 = "0.9"
 bytes = "0.4"
-encoding_rs = "0.7"
-futures = "0.1.21"
+encoding_rs = "0.8"
+futures = "0.1.23"
 http = "0.1.5"
-hyper = "0.12.2"
+hyper = "0.12.7"
 hyper-old-types = { version = "0.11", optional = true, features = ["compat"] }
 hyper-tls = "0.3"
 libflate = "0.1.11"
 log = "0.4"
 mime = "0.3.7"
-mime_guess = "2.0.0-alpha.4"
+mime_guess = "2.0.0-alpha.6"
 native-tls = "0.2"
 serde = "1.0"
 serde_json = "1.0"

@@ -1,20 +1,11 @@
-#![allow(warnings)] // remove when error_chain is fixed
+#![deny(warnings)]
 
 //! `cargo run --example simple`
 
 extern crate reqwest;
 extern crate env_logger;
-#[macro_use]
-extern crate error_chain;
 
-error_chain! {
-    foreign_links {
-        ReqError(reqwest::Error);
-        IoError(std::io::Error);
-    }
-}
-
-fn run() -> Result<()> {
+fn main() -> Result<(), Box<std::error::Error>> {
     env_logger::init();
 
     println!("GET https://www.rust-lang.org");
@@ -25,10 +16,8 @@ fn run() -> Result<()> {
     println!("Headers:\n{:?}", res.headers());
 
     // copy the response body directly to stdout
-    let _ = std::io::copy(&mut res, &mut std::io::stdout())?;
+    std::io::copy(&mut res, &mut std::io::stdout())?;
 
     println!("\n\nDone.");
     Ok(())
 }
-
-quick_main!(run);
