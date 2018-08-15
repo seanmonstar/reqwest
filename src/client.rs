@@ -6,7 +6,7 @@ use std::thread;
 use futures::{Future, Stream};
 use futures::sync::{mpsc, oneshot};
 
-use request::{self, Request, RequestBuilder};
+use request::{Request, RequestBuilder};
 use response::{self, Response};
 use {async_impl, header, Certificate, Identity, Method, IntoUrl, Proxy, RedirectPolicy, wait};
 
@@ -359,7 +359,7 @@ impl Client {
             Ok(url) => Ok(Request::new(method, url)),
             Err(err) => Err(::error::from(err)),
         };
-        request::builder(self.clone(), req)
+        RequestBuilder::new(self.clone(), req)
     }
 
     /// Executes a `Request`.
@@ -476,7 +476,7 @@ impl ClientHandle {
 
     fn execute_request(&self, req: Request) -> ::Result<Response> {
         let (tx, rx) = oneshot::channel();
-        let (req, body) = request::async(req);
+        let (req, body) = req.into_async();
         let url = req.url().clone();
         self.inner.tx
             .as_ref()

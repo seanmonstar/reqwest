@@ -301,10 +301,10 @@ mod tests {
     fn add_query_append() {
         let client = Client::new();
         let some_url = "https://google.com/";
-        let mut r = client.get(some_url);
+        let r = client.get(some_url);
 
-        r.query(&[("foo", "bar")]);
-        r.query(&[("qux", 3)]);
+        let r = r.query(&[("foo", "bar")]);
+        let r = r.query(&[("qux", 3)]);
 
         let req = r.build().expect("request is valid");
         assert_eq!(req.url().query(), Some("foo=bar&qux=3"));
@@ -314,9 +314,9 @@ mod tests {
     fn add_query_append_same() {
         let client = Client::new();
         let some_url = "https://google.com/";
-        let mut r = client.get(some_url);
+        let r = client.get(some_url);
 
-        r.query(&[("foo", "a"), ("foo", "b")]);
+        let r = r.query(&[("foo", "a"), ("foo", "b")]);
 
         let req = r.build().expect("request is valid");
         assert_eq!(req.url().query(), Some("foo=a&foo=b"));
@@ -332,11 +332,11 @@ mod tests {
 
         let client = Client::new();
         let some_url = "https://google.com/";
-        let mut r = client.get(some_url);
+        let r = client.get(some_url);
 
         let params = Params { foo: "bar".into(), qux: 3 };
 
-        r.query(&params);
+        let r = r.query(&params);
 
         let req = r.build().expect("request is valid");
         assert_eq!(req.url().query(), Some("foo=bar&qux=3"));
@@ -350,9 +350,9 @@ mod tests {
 
         let client = Client::new();
         let some_url = "https://google.com/";
-        let mut r = client.get(some_url);
+        let r = client.get(some_url);
 
-        r.query(&params);
+        let r = r.query(&params);
 
         let req = r.build().expect("request is valid");
         assert_eq!(req.url().query(), Some("foo=bar&qux=three"));

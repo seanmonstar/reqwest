@@ -80,9 +80,31 @@ impl Request {
     pub fn body_mut(&mut self) -> &mut Option<Body> {
         &mut self.body
     }
+
+    pub(crate) fn into_async(self) -> (async_impl::Request, Option<body::Sender>) {
+        use header::CONTENT_LENGTH;
+
+        let mut req_async = self.inner;
+        let body = self.body.and_then(|body| {
+            let (tx, body, len) = body::async(body);
+            if let Some(len) = len {
+                req_async.headers_mut().insert(CONTENT_LENGTH, HeaderValue::from_str(len.to_string().as_str()).expect(""));
+            }
+            *req_async.body_mut() = Some(body);
+            tx
+        });
+        (req_async, body)
+    }
 }
 
 impl RequestBuilder {
+    pub(crate) fn new(client: Client, request: ::Result<Request>) -> RequestBuilder {
+        RequestBuilder {
+            client,
+            request,
+        }
+    }
+
     /// Add a `Header` to this Request.
     ///
     /// ```rust
@@ -431,29 +453,6 @@ fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>, req: &Request
     f.field("method", req.method())
         .field("url", req.url())
         .field("headers", req.headers())
-}
-
-// pub(crate)
-
-#[inline]
-pub fn builder(client: Client, request: ::Result<Request>) -> RequestBuilder {
-    RequestBuilder { client, request }
-}
-
-#[inline]
-pub fn async(req: Request) -> (async_impl::Request, Option<body::Sender>) {
-    use header::CONTENT_LENGTH;
-
-    let mut req_async = req.inner;
-    let body = req.body.and_then(|body| {
-        let (tx, body, len) = body::async(body);
-        if let Some(len) = len {
-            req_async.headers_mut().insert(CONTENT_LENGTH, HeaderValue::from_str(len.to_string().as_str()).expect(""));
-        }
-        *req_async.body_mut() = Some(body);
-        tx
-    });
-    (req_async, body)
 }
 
 #[cfg(test)]
