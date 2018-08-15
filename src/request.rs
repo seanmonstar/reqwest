@@ -174,7 +174,7 @@ impl RequestBuilder {
             None => format!("{}:", username)
         };
         let header_value = format!("basic {}", encode(&auth));
-        self.header(::header::AUTHORIZATION, HeaderValue::from_str(header_value.as_str()).expect(""))
+        self.header(::header::AUTHORIZATION, &*header_value)
     }
 
     /// Set the request body.
@@ -306,7 +306,10 @@ impl RequestBuilder {
         if let Ok(ref mut req) = self.request {
             match serde_urlencoded::to_string(form) {
                 Ok(body) => {
-                    req.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str(::mime::APPLICATION_WWW_FORM_URLENCODED.as_ref()).expect(""));
+                    req.headers_mut().insert(
+                        CONTENT_TYPE,
+                        HeaderValue::from_static("application/x-www-form-urlencoded")
+                    );
                     *req.body_mut() = Some(body.into());
                 },
                 Err(err) => error = Some(::error::from(err)),
@@ -348,7 +351,10 @@ impl RequestBuilder {
         if let Ok(ref mut req) = self.request {
             match serde_json::to_vec(json) {
                 Ok(body) => {
-                    req.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str(::mime::APPLICATION_JSON.as_ref()).expect(""));
+                    req.headers_mut().insert(
+                        CONTENT_TYPE,
+                        HeaderValue::from_static("application/json")
+                    );
                     *req.body_mut() = Some(body.into());
                 },
                 Err(err) => error = Some(::error::from(err)),
@@ -379,23 +385,21 @@ impl RequestBuilder {
     /// ```
     ///
     /// See [`multipart`](multipart/) for more examples.
-    pub fn multipart(mut self, mut multipart: ::multipart::Form) -> RequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            req.headers_mut().insert(
-                ::header::CONTENT_TYPE,
-                HeaderValue::from_str(
-                    format!(
-                        "multipart/form-data; boundary={}",
-                        ::multipart_::boundary(&multipart)
-                    ).as_str()
-                ).expect("")
-            );
+    pub fn multipart(self, mut multipart: ::multipart::Form) -> RequestBuilder {
+        let mut builder = self.header(
+            CONTENT_TYPE,
+            format!(
+                "multipart/form-data; boundary={}",
+                ::multipart_::boundary(&multipart)
+            ).as_str()
+        );
+        if let Ok(ref mut req) = builder.request {
             *req.body_mut() = Some(match ::multipart_::compute_length(&mut multipart) {
                 Some(length) => Body::sized(::multipart_::reader(multipart), length),
                 None => Body::new(::multipart_::reader(multipart)),
             })
         }
-        self
+        builder
     }
 
     /// Build a `Request`, which can be inspected, modified and executed with

@@ -186,7 +186,10 @@ impl RequestBuilder {
         if let Ok(ref mut req) = self.request {
             match serde_urlencoded::to_string(form) {
                 Ok(body) => {
-                    req.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str(mime::APPLICATION_WWW_FORM_URLENCODED.as_ref()).expect(""));
+                    req.headers_mut().insert(
+                        CONTENT_TYPE,
+                        HeaderValue::from_static("application/x-www-form-urlencoded")
+                    );
                     *req.body_mut() = Some(body.into());
                 },
                 Err(err) => error = Some(::error::from(err)),
@@ -209,7 +212,10 @@ impl RequestBuilder {
         if let Ok(ref mut req) = self.request {
             match serde_json::to_vec(json) {
                 Ok(body) => {
-                    req.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_str(mime::APPLICATION_JSON.as_ref()).expect(""));
+                    req.headers_mut().insert(
+                        CONTENT_TYPE,
+                        HeaderValue::from_static("application/json")
+                    );
                     *req.body_mut() = Some(body.into());
                 },
                 Err(err) => error = Some(::error::from(err)),
