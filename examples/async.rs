@@ -7,7 +7,7 @@ extern crate tokio;
 use std::mem;
 use std::io::{self, Cursor};
 use futures::{Future, Stream};
-use reqwest::unstable::async::{Client, Decoder};
+use reqwest::async::{Client, Decoder};
 
 
 fn fetch() -> impl Future<Item=(), Error=()> {

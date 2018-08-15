@@ -1,5 +1,3 @@
-#![cfg_attr(not(features = "unstable"), allow(unused))]
-
 pub use self::body::{Body, Chunk};
 pub use self::decoder::{Decoder, ReadableChunks};
 pub use self::client::{Client, ClientBuilder};

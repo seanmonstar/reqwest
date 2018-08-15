@@ -187,30 +187,21 @@ mod wait;
 
 pub mod multipart;
 
-/// A set of unstable functionality.
+/// An 'async' implementation of the reqwest `Client`.
 ///
-/// This module is only available when the `unstable` [feature][] is enabled.
-/// There is no backwards compatibility guarantee for any of the types within.
-///
-/// [feature]: http://doc.crates.io/specifying-dependencies.html#choosing-features
-#[cfg(feature = "unstable")]
-pub mod unstable {
-    /// An 'async' implementation of the reqwest `Client`.
-    ///
-    /// Relies on the `futures` crate, which is unstable, hence this module
-    /// is **unstable**.
-    pub mod async {
-        pub use ::async_impl::{
-            Body,
-            Chunk,
-            Decoder,
-            Client,
-            ClientBuilder,
-            Request,
-            RequestBuilder,
-            Response,
-        };
-    }
+/// Relies on the `futures` crate, which is unstable, hence this module
+/// is **unstable**.
+pub mod async {
+    pub use ::async_impl::{
+        Body,
+        Chunk,
+        Decoder,
+        Client,
+        ClientBuilder,
+        Request,
+        RequestBuilder,
+        Response,
+    };
 }
 
 /// Shortcut method to quickly make a `GET` request.

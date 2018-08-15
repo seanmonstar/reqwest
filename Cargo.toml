@@ -38,21 +38,4 @@ error-chain = "0.10"
 serde_derive = "1.0"
 
 [features]
-unstable = []
 
-
-[[example]]
-name = "simple"
-path = "examples/simple.rs"
-
-[[example]]
-name = "form"
-path = "examples/form.rs"
-
-[[example]]
-name = "async"
-path = "examples/async.rs"
-required-features = ["unstable"]
-
-[package.metadata.docs.rs]
-features = ["unstable"]

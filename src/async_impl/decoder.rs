@@ -25,19 +25,12 @@ use std::fmt;
 use std::mem;
 use std::cmp;
 use std::io::{self, Read};
-use std::marker::PhantomData;
 
 use bytes::{BufMut, BytesMut};
 use libflate::non_blocking::gzip;
-use tokio_io::AsyncRead;
-use tokio_io::io as async_io;
 use futures::{Async, Future, Poll, Stream};
-use futures::stream::Concat2;
-use hyper::{HeaderMap, StatusCode};
+use hyper::{HeaderMap};
 use hyper::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING, HeaderValue};
-use serde::de::DeserializeOwned;
-use serde_json;
-use url::Url;
 
 use super::{body, Body, Chunk};
 use error;
@@ -106,7 +99,7 @@ impl Decoder {
     /// 
     /// This decoder will buffer and decompress chunks that are gzipped.
     #[inline]
-    fn gzip(mut body: Body) -> Decoder {
+    fn gzip(body: Body) -> Decoder {
         Decoder {
             inner: Inner::Pending(Pending::Gzip(ReadableChunks::new(body)))
         }

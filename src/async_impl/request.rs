@@ -1,12 +1,11 @@
 use std::fmt;
 
 use base64::{encode};
-use mime::{self};
 use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
 
-use super::body::{self, Body};
+use super::body::{Body};
 use super::client::{Client, Pending, pending_err};
 use header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
 use http::HttpTryFrom;
@@ -124,7 +123,7 @@ impl RequestBuilder {
     }
 
     /// Enable HTTP basic authentication.
-    pub fn basic_auth<U, P>(mut self, username: U, password: Option<P>) -> RequestBuilder
+    pub fn basic_auth<U, P>(self, username: U, password: Option<P>) -> RequestBuilder
     where
         U: fmt::Display,
         P: fmt::Display,

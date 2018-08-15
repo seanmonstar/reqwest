@@ -1,5 +1,3 @@
-#![cfg(feature="unstable")]
-
 extern crate futures;
 extern crate libflate;
 extern crate reqwest;
@@ -8,7 +6,7 @@ extern crate tokio;
 #[macro_use]
 mod support;
 
-use reqwest::unstable::async::Client;
+use reqwest::async::Client;
 use futures::{Future, Stream};
 use std::io::Write;
 use std::time::Duration;

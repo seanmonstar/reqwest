@@ -1,21 +1,15 @@
 use std::fmt;
 use std::mem;
-use std::io::{self, Read};
 use std::marker::PhantomData;
 
-use libflate::non_blocking::gzip;
-use tokio_io::AsyncRead;
-use tokio_io::io as async_io;
 use futures::{Async, Future, Poll, Stream};
 use futures::stream::Concat2;
-use hyper::{StatusCode, Version};
+use hyper::{HeaderMap, StatusCode, Version};
 use serde::de::DeserializeOwned;
 use serde_json;
 use url::Url;
 
-use hyper::header::{HeaderMap, CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
-use super::{decoder, body, Body, Chunk, Decoder};
-use error;
+use super::{decoder, body, Decoder};
 
 
 /// A Response to a submitted `Request`.
@@ -95,9 +89,7 @@ impl Response {
     /// # Example
     ///
     /// ```
-    /// # #[cfg(feature="unstable")]
-    /// # use reqwest::unstable::async::Response;
-    /// # #[cfg(feature="unstable")]
+    /// # use reqwest::async::Response;
     /// fn on_response(res: Response) {
     ///     match res.error_for_status() {
     ///         Ok(_res) => (),

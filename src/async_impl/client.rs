@@ -17,7 +17,7 @@ use super::response::{self, Response};
 use connect::Connector;
 use into_url::to_uri;
 use redirect::{self, RedirectPolicy, check_redirect, remove_sensitive_headers};
-use {Certificate, Identity, IntoUrl, Method, proxy, Proxy, StatusCode, Url};
+use {Certificate, Identity, IntoUrl, Method, Proxy, StatusCode, Url};
 
 static DEFAULT_USER_AGENT: &'static str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -103,8 +103,8 @@ impl ClientBuilder {
 
         let proxies = Arc::new(config.proxies);
 
-        let mut connector = Connector::new(config.dns_threads, tls, proxies.clone());
-       
+        let connector = Connector::new(config.dns_threads, tls, proxies.clone());
+
         let hyper_client = ::hyper::Client::builder()
             .build(connector);
 
@@ -113,7 +113,6 @@ impl ClientBuilder {
                 gzip: config.gzip,
                 hyper: hyper_client,
                 headers: config.headers,
-                proxies: proxies,
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
             }),
@@ -449,7 +448,6 @@ struct ClientRef {
     gzip: bool,
     headers: HeaderMap,
     hyper: HyperClient,
-    proxies: Arc<Vec<Proxy>>,
     redirect_policy: RedirectPolicy,
     referer: bool,
 }

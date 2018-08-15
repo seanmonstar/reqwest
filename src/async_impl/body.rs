@@ -142,15 +142,6 @@ pub fn wrap(body: ::hyper::Body) -> Body {
 }
 
 #[inline]
-pub fn take(body: &mut Body) -> Body {
-    use std::mem;
-    let inner = mem::replace(&mut body.inner, Inner::Hyper(::hyper::Body::empty()));
-    Body {
-        inner: inner,
-    }
-}
-
-#[inline]
 pub fn empty() -> Body {
     Body {
         inner: Inner::Hyper(::hyper::Body::empty()),
