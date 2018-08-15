@@ -18,6 +18,7 @@ encoding_rs = "0.7"
 futures = "0.1.21"
 http = "0.1.5"
 hyper = "0.12.2"
+hyper-old-types = { version = "0.11", optional = true, features = ["compat"] }
 hyper-tls = "0.3"
 libflate = "0.1.11"
 log = "0.4"
@@ -38,4 +39,5 @@ error-chain = "0.10"
 serde_derive = "1.0"
 
 [features]
-
+default = []
+hyper-011 = ["hyper-old-types"]

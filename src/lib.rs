@@ -131,6 +131,8 @@ extern crate encoding_rs;
 extern crate futures;
 extern crate http;
 extern crate hyper;
+#[cfg(feature = "hyper-011")]
+pub extern crate hyper_old_types as hyper_011;
 extern crate hyper_tls;
 #[macro_use]
 extern crate log;

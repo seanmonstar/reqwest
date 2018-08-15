@@ -14,6 +14,13 @@ matrix:
         - rust: nightly
           env: FEATURES=""
 
+        - rust: stable
+          env: FEATURES="--features hyper-011"
+        - rust: beta
+          env: FEATURES="--features hyper-011"
+        - rust: nightly
+          env: FEATURES="--features hyper-011"
+
         # minimum version
         - rust: 1.21.0
           script: cargo build

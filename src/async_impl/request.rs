@@ -122,6 +122,31 @@ impl RequestBuilder {
         self
     }
 
+    /// Set a header with a type implementing hyper v0.11's `Header` trait.
+    ///
+    /// This method is provided to ease migration, and requires the `hyper-011`
+    /// Cargo feature enabled on `reqwest`.
+    #[cfg(feature = "hyper-011")]
+    pub fn header_011<H>(self, header: H) -> RequestBuilder
+    where
+        H: ::hyper_011::header::Header,
+    {
+        let mut headers = ::hyper_011::Headers::new();
+        headers.set(header);
+        let map = ::header::HeaderMap::from(headers);
+        self.headers(map)
+    }
+
+    /// Set multiple headers using hyper v0.11's `Headers` map.
+    ///
+    /// This method is provided to ease migration, and requires the `hyper-011`
+    /// Cargo feature enabled on `reqwest`.
+    #[cfg(feature = "hyper-011")]
+    pub fn headers_011(self, headers: ::hyper_011::Headers) -> RequestBuilder {
+        let map = ::header::HeaderMap::from(headers);
+        self.headers(map)
+    }
+
     /// Enable HTTP basic authentication.
     pub fn basic_auth<U, P>(self, username: U, password: Option<P>) -> RequestBuilder
     where
