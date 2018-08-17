@@ -1,3 +1,7 @@
+## v0.8.8
+
+- Fix docs.rs/reqwest build.
+
 ## v0.8.7
 
 ### Fixes

@@ -1,7 +1,7 @@
 #![cfg_attr(test, deny(warnings))]
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.8.7")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.8.8")]
 
 //! # reqwest
 //!
