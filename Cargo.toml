@@ -35,7 +35,6 @@ uuid = { version = "0.6", features = ["v4"] }
 
 [dev-dependencies]
 env_logger = "0.5"
-error-chain = "0.10"
 serde_derive = "1.0"
 
 [features]
