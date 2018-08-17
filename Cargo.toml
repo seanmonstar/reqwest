@@ -11,13 +11,13 @@ categories = ["web-programming::http-client"]
 
 [dependencies]
 bytes = "0.4"
-encoding_rs = "0.7"
+encoding_rs = "0.8"
 futures = "0.1.15"
 hyper = { default-features = false, version = "0.11.22" }
 hyper-tls = "0.1.2"
 libflate = "0.1.11"
 log = "0.4"
-mime_guess = "2.0.0-alpha.2"
+mime_guess = "2.0.0-alpha.6"
 native-tls = "0.1.5"
 serde = "1.0"
 serde_json = "1.0"
