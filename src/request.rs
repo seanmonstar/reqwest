@@ -224,6 +224,25 @@ impl RequestBuilder {
         self.header(::header::AUTHORIZATION, &*header_value)
     }
 
+    /// Enable HTTP bearer authentication.
+    ///
+    /// ```rust
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let client = reqwest::Client::new();
+    /// let resp = client.delete("http://httpbin.org/delete")
+    ///     .bearer_auth("token")
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn bearer_auth<T>(self, token: T) -> RequestBuilder
+    where
+        T: fmt::Display,
+    {
+        let header_value = format!("bearer {}", token);
+        self.header(::header::AUTHORIZATION, &*header_value)
+    }
+
     /// Set the request body.
     ///
     /// # Examples
