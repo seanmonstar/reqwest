@@ -70,12 +70,7 @@ impl ClientBuilder {
     /// # Errors
     ///
     /// This method fails if native TLS backend cannot be initialized.
-    ///
-    /// # Panics
-    ///
-    /// This method consumes the internal state of the builder.
-    /// Trying to use this builder again after calling `build` will panic.
-    pub fn build(&mut self) -> ::Result<Client> {
+    pub fn build(self) -> ::Result<Client> {
         ClientHandle::new(self).map(|handle| Client {
             inner: handle,
         })
@@ -110,9 +105,8 @@ impl ClientBuilder {
     /// # Errors
     ///
     /// This method fails if adding root certificate was unsuccessful.
-    pub fn add_root_certificate(&mut self, cert: Certificate) -> &mut ClientBuilder {
-        self.inner.add_root_certificate(cert);
-        self
+    pub fn add_root_certificate(self, cert: Certificate) -> ClientBuilder {
+        self.with_inner(move |inner| inner.add_root_certificate(cert))
     }
 
     /// Sets the identity to be used for client certificate authentication.
@@ -138,9 +132,8 @@ impl ClientBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn identity(&mut self, identity: Identity) -> &mut ClientBuilder {
-        self.inner.identity(identity);
-        self
+    pub fn identity(self, identity: Identity) -> ClientBuilder {
+        self.with_inner(move |inner| inner.identity(identity))
     }
 
 
@@ -155,9 +148,8 @@ impl ClientBuilder {
     /// site will be trusted for use from any other. This introduces a
     /// significant vulnerability to man-in-the-middle attacks.
     #[inline]
-    pub fn danger_accept_invalid_hostnames(&mut self, accept_invalid_hostname: bool) -> &mut ClientBuilder {
-        self.inner.danger_accept_invalid_hostnames(accept_invalid_hostname);
-        self
+    pub fn danger_accept_invalid_hostnames(self, accept_invalid_hostname: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.danger_accept_invalid_hostnames(accept_invalid_hostname))
     }
 
 
@@ -173,9 +165,8 @@ impl ClientBuilder {
     /// introduces significant vulnerabilities, and should only be used
     /// as a last resort.
     #[inline]
-    pub fn danger_accept_invalid_certs(&mut self, accept_invalid_certs: bool) -> &mut ClientBuilder {
-        self.inner.danger_accept_invalid_certs(accept_invalid_certs);
-        self
+    pub fn danger_accept_invalid_certs(self, accept_invalid_certs: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.danger_accept_invalid_certs(accept_invalid_certs))
     }
 
     /// Sets the default headers for every request.
@@ -217,43 +208,38 @@ impl ClientBuilder {
     /// # }
     /// ```
     #[inline]
-    pub fn default_headers(&mut self, headers: header::HeaderMap) -> &mut ClientBuilder {
-        self.inner.default_headers(headers);
-        self
+    pub fn default_headers(self, headers: header::HeaderMap) -> ClientBuilder {
+        self.with_inner(move |inner| inner.default_headers(headers))
     }
 
     /// Enable auto gzip decompression by checking the ContentEncoding response header.
     ///
     /// Default is enabled.
     #[inline]
-    pub fn gzip(&mut self, enable: bool) -> &mut ClientBuilder {
-        self.inner.gzip(enable);
-        self
+    pub fn gzip(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.gzip(enable))
     }
 
     /// Add a `Proxy` to the list of proxies the `Client` will use.
     #[inline]
-    pub fn proxy(&mut self, proxy: Proxy) -> &mut ClientBuilder {
-        self.inner.proxy(proxy);
-        self
+    pub fn proxy(self, proxy: Proxy) -> ClientBuilder {
+        self.with_inner(move |inner| inner.proxy(proxy))
     }
 
     /// Set a `RedirectPolicy` for this client.
     ///
     /// Default will follow redirects up to a maximum of 10.
     #[inline]
-    pub fn redirect(&mut self, policy: RedirectPolicy) -> &mut ClientBuilder {
-        self.inner.redirect(policy);
-        self
+    pub fn redirect(self, policy: RedirectPolicy) -> ClientBuilder {
+        self.with_inner(move |inner| inner.redirect(policy))
     }
 
     /// Enable or disable automatic setting of the `Referer` header.
     ///
     /// Default is `true`.
     #[inline]
-    pub fn referer(&mut self, enable: bool) -> &mut ClientBuilder {
-        self.inner.referer(enable);
-        self
+    pub fn referer(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.referer(enable))
     }
 
     /// Set a timeout for connect, read and write operations of a `Client`.
@@ -262,10 +248,18 @@ impl ClientBuilder {
     ///
     /// Pass `None` to disable timeout.
     #[inline]
-    pub fn timeout<T>(&mut self, timeout: T) -> &mut ClientBuilder
+    pub fn timeout<T>(mut self, timeout: T) -> ClientBuilder
     where T: Into<Option<Duration>>,
     {
         self.timeout = Timeout(timeout.into());
+        self
+    }
+
+    fn with_inner<F>(mut self, func: F) -> ClientBuilder
+    where
+        F: FnOnce(async_impl::ClientBuilder) -> async_impl::ClientBuilder,
+    {
+        self.inner = func(self.inner);
         self
     }
 }
@@ -417,10 +411,9 @@ impl Drop for InnerClientHandle {
 }
 
 impl ClientHandle {
-    fn new(builder: &mut ClientBuilder) -> ::Result<ClientHandle> {
-
+    fn new(builder: ClientBuilder) -> ::Result<ClientHandle> {
         let timeout = builder.timeout;
-        let mut builder = async_impl::client::take_builder(&mut builder.inner);
+        let builder = builder.inner;
         let (tx, rx) = mpsc::unbounded();
         let (spawn_tx, spawn_rx) = oneshot::channel::<::Result<()>>();
         let handle = try_!(thread::Builder::new().name("reqwest-internal-sync-runtime".into()).spawn(move || {

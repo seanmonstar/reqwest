@@ -37,8 +37,7 @@ pub struct Client {
 
 /// A `ClientBuilder` can be used to create a `Client` with  custom configuration:
 pub struct ClientBuilder {
-    config: Option<Config>,
-    err: Option<::Error>,
+    config: Config,
 }
 
 struct Config {
@@ -62,7 +61,7 @@ impl ClientBuilder {
         headers.insert(ACCEPT, HeaderValue::from_str(mime::STAR_STAR.as_ref()).expect("unable to parse mime"));
 
         ClientBuilder {
-            config: Some(Config {
+            config: Config {
                 gzip: true,
                 headers: headers,
                 hostname_verification: true,
@@ -73,8 +72,7 @@ impl ClientBuilder {
                 timeout: None,
                 tls: TlsConnector::builder(),
                 dns_threads: 4,
-            }),
-            err: None,
+            },
         }
     }
 
@@ -83,18 +81,8 @@ impl ClientBuilder {
     /// # Errors
     ///
     /// This method fails if native TLS backend cannot be initialized.
-    ///
-    /// # Panics
-    ///
-    /// This method consumes the internal state of the builder.
-    /// Trying to use this builder again after calling `build` will panic.
-    pub fn build(&mut self) -> ::Result<Client> {
-        if let Some(err) = self.err.take() {
-            return Err(err);
-        }
-        let mut config = self.config
-            .take()
-            .expect("ClientBuilder cannot be reused after building a Client");
+    pub fn build(self) -> ::Result<Client> {
+        let mut config = self.config;
 
         config.tls.danger_accept_invalid_hostnames(!config.hostname_verification);
         config.tls.danger_accept_invalid_certs(!config.certs_verification);
@@ -123,20 +111,16 @@ impl ClientBuilder {
     ///
     /// This can be used to connect to a server that has a self-signed
     /// certificate for example.
-    pub fn add_root_certificate(&mut self, cert: Certificate) -> &mut ClientBuilder {
-        if let Some(config) = config_mut(&mut self.config, &self.err) {
-            let cert = ::tls::cert(cert);
-            config.tls.add_root_certificate(cert);
-        }
+    pub fn add_root_certificate(mut self, cert: Certificate) -> ClientBuilder {
+        let cert = ::tls::cert(cert);
+        self.config.tls.add_root_certificate(cert);
         self
     }
 
     /// Sets the identity to be used for client certificate authentication.
-    pub fn identity(&mut self, identity: Identity) -> &mut ClientBuilder {
-        if let Some(config) = config_mut(&mut self.config, &self.err) {
-            let pkcs12 = ::tls::pkcs12(identity);
-            config.tls.identity(pkcs12);
-        }
+    pub fn identity(mut self, identity: Identity) -> ClientBuilder {
+        let pkcs12 = ::tls::pkcs12(identity);
+        self.config.tls.identity(pkcs12);
         self
     }
 
@@ -151,10 +135,8 @@ impl ClientBuilder {
     /// site will be trusted for use from any other. This introduces a
     /// significant vulnerability to man-in-the-middle attacks.
     #[inline]
-    pub fn danger_accept_invalid_hostnames(&mut self, accept_invalid_hostname: bool) -> &mut ClientBuilder {
-        if let Some(config) = config_mut(&mut self.config, &self.err) {
-            config.hostname_verification = !accept_invalid_hostname;
-        }
+    pub fn danger_accept_invalid_hostnames(mut self, accept_invalid_hostname: bool) -> ClientBuilder {
+        self.config.hostname_verification = !accept_invalid_hostname;
         self
     }
 
@@ -171,21 +153,17 @@ impl ClientBuilder {
     /// introduces significant vulnerabilities, and should only be used
     /// as a last resort.
     #[inline]
-    pub fn danger_accept_invalid_certs(&mut self, accept_invalid_certs: bool) -> &mut ClientBuilder {
-        if let Some(config) = config_mut(&mut self.config, &self.err) {
-            config.certs_verification = !accept_invalid_certs;
-        }
+    pub fn danger_accept_invalid_certs(mut self, accept_invalid_certs: bool) -> ClientBuilder {
+        self.config.certs_verification = !accept_invalid_certs;
         self
     }
 
 
     /// Sets the default headers for every request.
     #[inline]
-    pub fn default_headers(&mut self, headers: HeaderMap) -> &mut ClientBuilder {
-        if let Some(config) = config_mut(&mut self.config, &self.err) {
-            for (key, value) in headers.iter() {
-                config.headers.insert(key, value.clone());
-            }
+    pub fn default_headers(mut self, headers: HeaderMap) -> ClientBuilder {
+        for (key, value) in headers.iter() {
+            self.config.headers.insert(key, value.clone());
         }
         self
     }
@@ -194,19 +172,15 @@ impl ClientBuilder {
     ///
     /// Default is enabled.
     #[inline]
-    pub fn gzip(&mut self, enable: bool) -> &mut ClientBuilder {
-        if let Some(config) = config_mut(&mut self.config, &self.err) {
-            config.gzip = enable;
-        }
+    pub fn gzip(mut self, enable: bool) -> ClientBuilder {
+        self.config.gzip = enable;
         self
     }
 
     /// Add a `Proxy` to the list of proxies the `Client` will use.
     #[inline]
-    pub fn proxy(&mut self, proxy: Proxy) -> &mut ClientBuilder {
-        if let Some(config) = config_mut(&mut self.config, &self.err) {
-            config.proxies.push(proxy);
-        }
+    pub fn proxy(mut self, proxy: Proxy) -> ClientBuilder {
+        self.config.proxies.push(proxy);
         self
     }
 
@@ -214,10 +188,8 @@ impl ClientBuilder {
     ///
     /// Default will follow redirects up to a maximum of 10.
     #[inline]
-    pub fn redirect(&mut self, policy: RedirectPolicy) -> &mut ClientBuilder {
-        if let Some(config) = config_mut(&mut self.config, &self.err) {
-            config.redirect_policy = policy;
-        }
+    pub fn redirect(mut self, policy: RedirectPolicy) -> ClientBuilder {
+        self.config.redirect_policy = policy;
         self
     }
 
@@ -225,37 +197,23 @@ impl ClientBuilder {
     ///
     /// Default is `true`.
     #[inline]
-    pub fn referer(&mut self, enable: bool) -> &mut ClientBuilder {
-        if let Some(config) = config_mut(&mut self.config, &self.err) {
-            config.referer = enable;
-        }
+    pub fn referer(mut self, enable: bool) -> ClientBuilder {
+        self.config.referer = enable;
         self
     }
 
     /// Set a timeout for both the read and write operations of a client.
     #[inline]
-    pub fn timeout(&mut self, timeout: Duration) -> &mut ClientBuilder {
-        if let Some(config) = config_mut(&mut self.config, &self.err) {
-            config.timeout = Some(timeout);
-        }
+    pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
+        self.config.timeout = Some(timeout);
         self
     }
 
     /// Set number of DNS threads.
     #[inline]
-    pub fn dns_threads(&mut self, threads: usize) -> &mut ClientBuilder {
-        if let Some(config) = config_mut(&mut self.config, &self.err) {
-            config.dns_threads = threads;
-        }
+    pub fn dns_threads(mut self, threads: usize) -> ClientBuilder {
+        self.config.dns_threads = threads;
         self
-    }
-}
-
-fn config_mut<'a>(config: &'a mut Option<Config>, err: &Option<::Error>) -> Option<&'a mut Config> {
-    if err.is_some() {
-        None
-    } else {
-        config.as_mut()
     }
 }
 
@@ -607,11 +565,6 @@ fn make_referer(next: &Url, previous: &Url) -> Option<HeaderValue> {
 }
 
 // pub(crate)
-
-pub fn take_builder(builder: &mut ClientBuilder) -> ClientBuilder {
-    use std::mem;
-    mem::replace(builder, ClientBuilder { config: None, err: None })
-}
 
 pub fn pending_err(err: ::Error) -> Pending {
     Pending {
