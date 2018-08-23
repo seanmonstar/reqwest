@@ -128,6 +128,21 @@ impl RedirectPolicy {
             Policy::None => attempt.stop(),
         }
     }
+
+    pub(crate) fn check(
+        &self,
+        status: StatusCode,
+        next: &Url,
+        previous: &[Url],
+    ) -> Action {
+        self
+            .redirect(RedirectAttempt {
+                status: status,
+                next: next,
+                previous: previous,
+            })
+            .inner
+    }
 }
 
 impl Default for RedirectPolicy {
@@ -205,30 +220,15 @@ impl fmt::Debug for Policy {
 // pub(crate)
 
 #[derive(Debug, PartialEq)]
-pub enum Action {
+pub(crate) enum Action {
     Follow,
     Stop,
     LoopDetected,
     TooManyRedirects,
 }
 
-#[inline]
-pub fn check_redirect(
-    policy: &RedirectPolicy,
-    status: StatusCode,
-    next: &Url,
-    previous: &[Url],
-) -> Action {
-    policy
-        .redirect(RedirectAttempt {
-            status: status,
-            next: next,
-            previous: previous,
-        })
-        .inner
-}
 
-pub fn remove_sensitive_headers(headers: &mut HeaderMap, next: &Url, previous: &[Url]) {
+pub(crate) fn remove_sensitive_headers(headers: &mut HeaderMap, next: &Url, previous: &[Url]) {
     if let Some(previous) = previous.last() {
         let cross_host = next.host_str() != previous.host_str() ||
                          next.port_or_known_default() != previous.port_or_known_default();
@@ -268,14 +268,14 @@ fn test_redirect_policy_limit() {
         .collect::<Vec<_>>();
 
     assert_eq!(
-        check_redirect(&policy, StatusCode::FOUND, &next, &previous),
+        policy.check(StatusCode::FOUND, &next, &previous),
         Action::Follow
     );
 
     previous.push(Url::parse("http://a.b.d/e/33").unwrap());
 
     assert_eq!(
-        check_redirect(&policy, StatusCode::FOUND, &next, &previous),
+        policy.check(StatusCode::FOUND, &next, &previous),
         Action::TooManyRedirects
     );
 }
@@ -292,13 +292,13 @@ fn test_redirect_policy_custom() {
 
     let next = Url::parse("http://bar/baz").unwrap();
     assert_eq!(
-        check_redirect(&policy, StatusCode::FOUND, &next, &[]),
+        policy.check(StatusCode::FOUND, &next, &[]),
         Action::Follow
     );
 
     let next = Url::parse("http://foo/baz").unwrap();
     assert_eq!(
-        check_redirect(&policy, StatusCode::FOUND, &next, &[]),
+        policy.check(StatusCode::FOUND, &next, &[]),
         Action::Stop
     );
 }

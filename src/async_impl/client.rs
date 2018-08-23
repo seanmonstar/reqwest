@@ -16,7 +16,7 @@ use super::request::{self, Request, RequestBuilder};
 use super::response::{self, Response};
 use connect::Connector;
 use into_url::to_uri;
-use redirect::{self, RedirectPolicy, check_redirect, remove_sensitive_headers};
+use redirect::{self, RedirectPolicy, remove_sensitive_headers};
 use {Certificate, Identity, IntoUrl, Method, Proxy, StatusCode, Url};
 
 static DEFAULT_USER_AGENT: &'static str =
@@ -475,8 +475,7 @@ impl Future for PendingRequest {
                         }
                     }
                     self.urls.push(self.url.clone());
-                    let action = check_redirect(
-                        &self.client.redirect_policy,
+                    let action = self.client.redirect_policy.check(
                         res.status(),
                         &loc,
                         &self.urls,
