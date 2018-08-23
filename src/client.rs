@@ -147,7 +147,6 @@ impl ClientBuilder {
     /// hostname verification is not used, any valid certificate for any
     /// site will be trusted for use from any other. This introduces a
     /// significant vulnerability to man-in-the-middle attacks.
-    #[inline]
     pub fn danger_accept_invalid_hostnames(self, accept_invalid_hostname: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.danger_accept_invalid_hostnames(accept_invalid_hostname))
     }
@@ -164,7 +163,6 @@ impl ClientBuilder {
     /// will be trusted for use. This includes expired certificates. This
     /// introduces significant vulnerabilities, and should only be used
     /// as a last resort.
-    #[inline]
     pub fn danger_accept_invalid_certs(self, accept_invalid_certs: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.danger_accept_invalid_certs(accept_invalid_certs))
     }
@@ -207,7 +205,6 @@ impl ClientBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    #[inline]
     pub fn default_headers(self, headers: header::HeaderMap) -> ClientBuilder {
         self.with_inner(move |inner| inner.default_headers(headers))
     }
@@ -215,13 +212,11 @@ impl ClientBuilder {
     /// Enable auto gzip decompression by checking the ContentEncoding response header.
     ///
     /// Default is enabled.
-    #[inline]
     pub fn gzip(self, enable: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.gzip(enable))
     }
 
     /// Add a `Proxy` to the list of proxies the `Client` will use.
-    #[inline]
     pub fn proxy(self, proxy: Proxy) -> ClientBuilder {
         self.with_inner(move |inner| inner.proxy(proxy))
     }
@@ -229,7 +224,6 @@ impl ClientBuilder {
     /// Set a `RedirectPolicy` for this client.
     ///
     /// Default will follow redirects up to a maximum of 10.
-    #[inline]
     pub fn redirect(self, policy: RedirectPolicy) -> ClientBuilder {
         self.with_inner(move |inner| inner.redirect(policy))
     }
@@ -237,7 +231,6 @@ impl ClientBuilder {
     /// Enable or disable automatic setting of the `Referer` header.
     ///
     /// Default is `true`.
-    #[inline]
     pub fn referer(self, enable: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.referer(enable))
     }
@@ -247,7 +240,6 @@ impl ClientBuilder {
     /// Default is 30 seconds.
     ///
     /// Pass `None` to disable timeout.
-    #[inline]
     pub fn timeout<T>(mut self, timeout: T) -> ClientBuilder
     where T: Into<Option<Duration>>,
     {
@@ -273,7 +265,6 @@ impl Client {
     /// This method panics if native TLS backend cannot be created or
     /// initialized. Use `Client::builder()` if you wish to handle the failure
     /// as an `Error` instead of panicking.
-    #[inline]
     pub fn new() -> Client {
         ClientBuilder::new()
             .build()
@@ -281,7 +272,6 @@ impl Client {
     }
 
     /// Creates a `ClientBuilder` to configure a `Client`.
-    #[inline]
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }
@@ -503,7 +493,6 @@ impl ClientHandle {
 struct Timeout(Option<Duration>);
 
 impl Default for Timeout {
-    #[inline]
     fn default() -> Timeout {
         // default mentioned in ClientBuilder::timeout() doc comment
         Timeout(Some(Duration::from_secs(30)))

@@ -134,7 +134,6 @@ impl ClientBuilder {
     /// hostname verification is not used, any valid certificate for any
     /// site will be trusted for use from any other. This introduces a
     /// significant vulnerability to man-in-the-middle attacks.
-    #[inline]
     pub fn danger_accept_invalid_hostnames(mut self, accept_invalid_hostname: bool) -> ClientBuilder {
         self.config.hostname_verification = !accept_invalid_hostname;
         self
@@ -152,7 +151,6 @@ impl ClientBuilder {
     /// will be trusted for use. This includes expired certificates. This
     /// introduces significant vulnerabilities, and should only be used
     /// as a last resort.
-    #[inline]
     pub fn danger_accept_invalid_certs(mut self, accept_invalid_certs: bool) -> ClientBuilder {
         self.config.certs_verification = !accept_invalid_certs;
         self
@@ -160,7 +158,6 @@ impl ClientBuilder {
 
 
     /// Sets the default headers for every request.
-    #[inline]
     pub fn default_headers(mut self, headers: HeaderMap) -> ClientBuilder {
         for (key, value) in headers.iter() {
             self.config.headers.insert(key, value.clone());
@@ -171,14 +168,12 @@ impl ClientBuilder {
     /// Enable auto gzip decompression by checking the ContentEncoding response header.
     ///
     /// Default is enabled.
-    #[inline]
     pub fn gzip(mut self, enable: bool) -> ClientBuilder {
         self.config.gzip = enable;
         self
     }
 
     /// Add a `Proxy` to the list of proxies the `Client` will use.
-    #[inline]
     pub fn proxy(mut self, proxy: Proxy) -> ClientBuilder {
         self.config.proxies.push(proxy);
         self
@@ -187,7 +182,6 @@ impl ClientBuilder {
     /// Set a `RedirectPolicy` for this client.
     ///
     /// Default will follow redirects up to a maximum of 10.
-    #[inline]
     pub fn redirect(mut self, policy: RedirectPolicy) -> ClientBuilder {
         self.config.redirect_policy = policy;
         self
@@ -196,21 +190,18 @@ impl ClientBuilder {
     /// Enable or disable automatic setting of the `Referer` header.
     ///
     /// Default is `true`.
-    #[inline]
     pub fn referer(mut self, enable: bool) -> ClientBuilder {
         self.config.referer = enable;
         self
     }
 
     /// Set a timeout for both the read and write operations of a client.
-    #[inline]
     pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
         self.config.timeout = Some(timeout);
         self
     }
 
     /// Set number of DNS threads.
-    #[inline]
     pub fn dns_threads(mut self, threads: usize) -> ClientBuilder {
         self.config.dns_threads = threads;
         self
@@ -227,7 +218,6 @@ impl Client {
     /// This method panics if native TLS backend cannot be created or
     /// initialized. Use `Client::builder()` if you wish to handle the failure
     /// as an `Error` instead of panicking.
-    #[inline]
     pub fn new() -> Client {
         ClientBuilder::new()
             .build()
@@ -235,7 +225,6 @@ impl Client {
     }
 
     /// Creates a `ClientBuilder` to configure a `Client`.
-    #[inline]
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }
