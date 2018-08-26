@@ -8,6 +8,7 @@ use std::path::Path;
 use mime_guess::{self, Mime};
 use url::percent_encoding;
 use uuid::Uuid;
+use http::HeaderMap;
 
 use {Body};
 
@@ -131,6 +132,7 @@ pub struct Part {
     value: Body,
     mime: Option<Mime>,
     file_name: Option<Cow<'static, str>>,
+    headers: HeaderMap<String>,
 }
 
 impl Part {
@@ -185,6 +187,7 @@ impl Part {
             value: value,
             mime: None,
             file_name: None,
+            headers: HeaderMap::default()
         }
     }
 
@@ -199,6 +202,16 @@ impl Part {
         self.file_name = Some(filename.into());
         self
     }
+
+    /// Returns a reference to the map with additional header fields
+    pub fn headers(&self) -> &HeaderMap<String> {
+        &self.headers
+    }
+
+    /// Returns a reference to the map with additional header fields
+    pub fn headers_mut(&mut self) -> &mut HeaderMap<String> {
+        &mut self.headers
+    }
 }
 
 impl fmt::Debug for Part {
@@ -207,6 +220,7 @@ impl fmt::Debug for Part {
             .field("value", &self.value)
             .field("mime", &self.mime)
             .field("file_name", &self.file_name)
+            .field("headers", &self.headers)
             .finish()
     }
 }
@@ -289,7 +303,7 @@ impl Read for Reader {
 
 fn header(name: &str, field: &Part) -> String {
     format!(
-        "Content-Disposition: form-data; {}{}{}",
+        "Content-Disposition: form-data; {}{}{}{}",
         format_parameter("name", name),
         match field.file_name {
             Some(ref file_name) => format!("; {}", format_parameter("filename", file_name)),
@@ -298,7 +312,11 @@ fn header(name: &str, field: &Part) -> String {
         match field.mime {
             Some(ref mime) => format!("\r\nContent-Type: {}", mime),
             None => "".to_string(),
-        }
+        },
+        field.headers.iter().fold(
+            "".to_string(),
+            |header, (k,v)| header + "\r\n" + k.as_str() + ": " + v
+        )
     )
 }
 
@@ -407,6 +425,30 @@ mod tests {
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
         assert_eq!(::std::str::from_utf8(&output).unwrap(), expected);
         assert_eq!(length.unwrap(), expected.len() as u64);
+    }
+
+    #[test]
+    fn read_to_end_with_header() {
+        let mut output = Vec::new();
+        let mut part = Part::text("value2").mime(::mime::IMAGE_BMP);
+        part.headers_mut().insert("Hdr3", "/a/b/c".to_string());
+        let mut form = Form::new().part("key2", part);
+        form.boundary = "boundary".to_string();
+        let expected = "--boundary\r\n\
+                        Content-Disposition: form-data; name=\"key2\"\r\n\
+                        Content-Type: image/bmp\r\n\
+                        hdr3: /a/b/c\r\n\
+                        \r\n\
+                        value2\r\n\
+                        --boundary--\r\n";
+        form.reader().read_to_end(&mut output).unwrap();
+        // These prints are for debug purposes in case the test fails
+        println!(
+            "START REAL\n{}\nEND REAL",
+            ::std::str::from_utf8(&output).unwrap()
+        );
+        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
+        assert_eq!(::std::str::from_utf8(&output).unwrap(), expected);
     }
 
     #[test]
