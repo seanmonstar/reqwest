@@ -456,13 +456,13 @@ impl RequestBuilder {
             CONTENT_TYPE,
             format!(
                 "multipart/form-data; boundary={}",
-                ::multipart_::boundary(&multipart)
+                multipart.boundary()
             ).as_str()
         );
         if let Ok(ref mut req) = builder.request {
-            *req.body_mut() = Some(match ::multipart_::compute_length(&mut multipart) {
-                Some(length) => Body::sized(::multipart_::reader(multipart), length),
-                None => Body::new(::multipart_::reader(multipart)),
+            *req.body_mut() = Some(match multipart.compute_length() {
+                Some(length) => Body::sized(multipart.reader(), length),
+                None => Body::new(multipart.reader()),
             })
         }
         builder

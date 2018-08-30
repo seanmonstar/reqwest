@@ -179,7 +179,6 @@ mod connect_async;
 mod body;
 mod client;
 mod into_url;
-mod multipart_;
 mod proxy;
 mod redirect;
 mod request;
