@@ -16,7 +16,7 @@ use {Body};
 pub struct Form {
     boundary: String,
     fields: Vec<(Cow<'static, str>, Part)>,
-    headers: Vec<String>,
+    headers: Vec<Vec<u8>>,
 }
 
 impl Form {
@@ -132,7 +132,7 @@ pub struct Part {
     value: Body,
     mime: Option<Mime>,
     file_name: Option<Cow<'static, str>>,
-    headers: HeaderMap<String>,
+    headers: HeaderMap,
 }
 
 impl Part {
@@ -204,12 +204,12 @@ impl Part {
     }
 
     /// Returns a reference to the map with additional header fields
-    pub fn headers(&self) -> &HeaderMap<String> {
+    pub fn headers(&self) -> &HeaderMap {
         &self.headers
     }
 
     /// Returns a reference to the map with additional header fields
-    pub fn headers_mut(&mut self) -> &mut HeaderMap<String> {
+    pub fn headers_mut(&mut self) -> &mut HeaderMap {
         &mut self.headers
     }
 }
@@ -252,16 +252,20 @@ impl Reader {
         self.active_reader = if self.form.fields.len() != 0 {
             // We need to move out of the vector here because we are consuming the field's reader
             let (name, field) = self.form.fields.remove(0);
-            let reader = Cursor::new(format!(
-                "--{}\r\n{}\r\n\r\n",
-                self.form.boundary,
+            let boundary = Cursor::new(format!("--{}\r\n", self.form.boundary));
+            let header = Cursor::new({
                 // Try to use cached headers created by compute_length
-                if self.form.headers.len() > 0 {
+                let mut h = if self.form.headers.len() > 0 {
                     self.form.headers.remove(0)
                 } else {
                     header(&name, &field)
-                }
-            )).chain(::body::reader(field.value))
+                };
+                h.extend_from_slice(b"\r\n\r\n");
+                h
+            });
+            let reader = boundary
+                .chain(header)
+                .chain(::body::reader(field.value))
                 .chain(Cursor::new("\r\n"));
             // According to https://tools.ietf.org/html/rfc2046#section-5.1.1
             // the very last field has a special boundary
@@ -301,9 +305,9 @@ impl Read for Reader {
 }
 
 
-fn header(name: &str, field: &Part) -> String {
-    format!(
-        "Content-Disposition: form-data; {}{}{}{}",
+fn header(name: &str, field: &Part) -> Vec<u8> {
+    let s = format!(
+        "Content-Disposition: form-data; {}{}{}",
         format_parameter("name", name),
         match field.file_name {
             Some(ref file_name) => format!("; {}", format_parameter("filename", file_name)),
@@ -313,11 +317,15 @@ fn header(name: &str, field: &Part) -> String {
             Some(ref mime) => format!("\r\nContent-Type: {}", mime),
             None => "".to_string(),
         },
-        field.headers.iter().fold(
-            "".to_string(),
-            |header, (k,v)| header + "\r\n" + k.as_str() + ": " + v
-        )
-    )
+    );
+
+    field.headers.iter().fold(s.into_bytes(), |mut header, (k,v)| {
+        header.extend_from_slice(b"\r\n");
+        header.extend_from_slice(k.as_str().as_bytes());
+        header.extend_from_slice(b": ");
+        header.extend_from_slice(v.as_bytes());
+        header
+    })
 }
 
 fn format_parameter(name: &str, value: &str) -> String {
@@ -431,7 +439,7 @@ mod tests {
     fn read_to_end_with_header() {
         let mut output = Vec::new();
         let mut part = Part::text("value2").mime(::mime::IMAGE_BMP);
-        part.headers_mut().insert("Hdr3", "/a/b/c".to_string());
+        part.headers_mut().insert("Hdr3", "/a/b/c".parse().unwrap());
         let mut form = Form::new().part("key2", part);
         form.boundary = "boundary".to_string();
         let expected = "--boundary\r\n\
