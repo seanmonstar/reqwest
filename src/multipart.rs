@@ -463,7 +463,7 @@ mod tests {
     fn header_percent_encoding() {
         let name = "start%'\"\r\nßend";
         let field = Part::text("");
-        let expected = "Content-Disposition: form-data; name*=utf-8''start%25\'%22%0D%0A%C3%9Fend";
+        let expected = b"Content-Disposition: form-data; name*=utf-8''start%25\'%22%0D%0A%C3%9Fend";
 
         assert_eq!(header(name, &field), expected);
     }
