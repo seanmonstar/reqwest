@@ -3,12 +3,13 @@ use std::sync::Arc;
 use std::net::{SocketAddr, ToSocketAddrs};
 
 use hyper::client::connect::Destination;
+use url::percent_encoding::percent_decode;
 use {IntoUrl, Url};
 
 
 // The kinds of authentication supported to a proxy
 #[derive(Clone, Debug)]
-enum ProxyAuth {
+pub(crate) enum ProxyAuth {
     Basic {
         username: String,
         password: String,
@@ -17,7 +18,7 @@ enum ProxyAuth {
 
 // The various proxy schemes we understand
 #[derive(Clone, Debug)]
-enum ProxySchemeKind {
+pub(crate) enum ProxySchemeKind {
     Http,
     Https,
     Socks5,
@@ -29,10 +30,10 @@ enum ProxySchemeKind {
 /// For example, HTTP vs SOCKS5
 #[derive(Clone, Debug)]
 pub struct ProxyScheme {
-    kind: ProxySchemeKind,
-    uri: Option<::hyper::Uri>,
-    socket_addrs: Option<Vec<SocketAddr>>,
-    auth: Option<ProxyAuth>,
+    pub(crate) kind: ProxySchemeKind,
+    pub(crate) uri: Option<::hyper::Uri>,
+    pub(crate) socket_addrs: Option<Vec<SocketAddr>>,
+    pub(crate) auth: Option<ProxyAuth>,
 }
 
 impl ProxyScheme {
@@ -105,7 +106,9 @@ impl ProxyScheme {
         };
 
         if let Some(pwd) = url.password() {
-            scheme = scheme.with_basic_auth(url.username(), pwd);
+            let decoded_username = percent_decode(url.username().as_bytes()).decode_utf8_lossy();
+            let decoded_password = percent_decode(pwd.as_bytes()).decode_utf8_lossy();
+            scheme = scheme.with_basic_auth(decoded_username, decoded_password);
         }
 
         Ok(scheme)
@@ -116,6 +119,7 @@ impl ProxyScheme {
 /// parsing from a URL-like type, whilst also supporting proxy schemes
 /// built directly using the factory methods.
 pub trait IntoProxyScheme {
+    /// Perform the conversion
     fn into_proxy_scheme(self) -> ::Result<ProxyScheme>;
 }
 
@@ -367,7 +371,7 @@ mod tests {
         let http = "http://hyper.rs";
         let other = "https://hyper.rs";
 
-        assert_eq!(p.intercept(&url(http)).unwrap(), target);
+        assert_eq!(p.intercept(&url(http)).unwrap().unwrap().uri.unwrap(), target);
         assert!(p.intercept(&url(other)).is_none());
     }
 
@@ -380,7 +384,7 @@ mod tests {
         let other = "https://hyper.rs";
 
         assert!(p.intercept(&url(http)).is_none());
-        assert_eq!(p.intercept(&url(other)).unwrap(), target);
+        assert_eq!(p.intercept(&url(other)).unwrap().unwrap().uri.unwrap(), target);
     }
 
     #[test]
@@ -392,9 +396,9 @@ mod tests {
         let https = "https://hyper.rs";
         let other = "x-youve-never-heard-of-me-mr-proxy://hyper.rs";
 
-        assert_eq!(p.intercept(&url(http)).unwrap(), target);
-        assert_eq!(p.intercept(&url(https)).unwrap(), target);
-        assert_eq!(p.intercept(&url(other)).unwrap(), target);
+        assert_eq!(p.intercept(&url(http)).unwrap().unwrap().uri.unwrap(), target);
+        assert_eq!(p.intercept(&url(https)).unwrap().unwrap().uri.unwrap(), target);
+        assert_eq!(p.intercept(&url(other)).unwrap().unwrap().uri.unwrap(), target);
     }
 
 
@@ -408,7 +412,7 @@ mod tests {
             } else if url.scheme() == "http" {
                 target2.parse().ok()
             } else {
-                None
+                None::<Url>
             }
         });
 
@@ -416,8 +420,8 @@ mod tests {
         let https = "https://hyper.rs";
         let other = "x-youve-never-heard-of-me-mr-proxy://seanmonstar.com";
 
-        assert_eq!(p.intercept(&url(http)).unwrap(), target2);
-        assert_eq!(p.intercept(&url(https)).unwrap(), target1);
+        assert_eq!(p.intercept(&url(http)).unwrap().unwrap().uri.unwrap(), target2);
+        assert_eq!(p.intercept(&url(https)).unwrap().unwrap().uri.unwrap(), target1);
         assert!(p.intercept(&url(other)).is_none());
     }
 

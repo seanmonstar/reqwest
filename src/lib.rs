@@ -152,6 +152,8 @@ extern crate tokio;
 extern crate tokio_io;
 extern crate url;
 extern crate uuid;
+#[cfg(feature = "socks")]
+extern crate socks;
 
 pub use hyper::header;
 pub use hyper::Method;
@@ -163,7 +165,7 @@ pub use self::client::{Client, ClientBuilder};
 pub use self::error::{Error, Result};
 pub use self::body::Body;
 pub use self::into_url::IntoUrl;
-pub use self::proxy::Proxy;
+pub use self::proxy::{Proxy, ProxyScheme, IntoProxyScheme};
 pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
@@ -181,6 +183,7 @@ mod body;
 mod client;
 mod into_url;
 mod proxy;
+mod proxy_connect;
 mod redirect;
 mod request;
 mod response;
