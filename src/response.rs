@@ -122,9 +122,9 @@ impl Response {
         self.inner.headers()
     }
 
-    /// Get the `Version` of this `Response`.
+    /// Get the HTTP `Version` of this `Response`.
     #[inline]
-    pub fn version(&self) -> &Version {
+    pub fn version(&self) -> Version {
         self.inner.version()
     }
 

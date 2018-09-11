@@ -66,10 +66,10 @@ impl Response {
         &mut self.body
     }
 
-    /// Get the `Version` of this `Response`.
+    /// Get the HTTP `Version` of this `Response`.
     #[inline]
-    pub fn version(&self) -> &Version {
-        &self.version
+    pub fn version(&self) -> Version {
+        self.version
     }
 
 
