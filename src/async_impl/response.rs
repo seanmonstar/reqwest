@@ -22,6 +22,21 @@ pub struct Response {
 }
 
 impl Response {
+    pub(super) fn new(mut res: ::hyper::Response<::hyper::Body>, url: Url, gzip: bool) -> Response {
+        let status = res.status();
+        let version = res.version();
+        let mut headers = mem::replace(res.headers_mut(), HeaderMap::new());
+        let decoder = decoder::detect(&mut headers, body::wrap(res.into_body()), gzip);
+        debug!("Response: '{}' for {}", status, url);
+        Response {
+            status: status,
+            headers: headers,
+            url: url,
+            body: decoder,
+            version: version,
+        }
+    }
+
     /// Get the final `Url` of this `Response`.
     #[inline]
     pub fn url(&self) -> &Url {
@@ -146,22 +161,5 @@ impl<T> fmt::Debug for Json<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Json")
             .finish()
-    }
-}
-
-// pub(crate)
-
-pub fn new(mut res: ::hyper::Response<::hyper::Body>, url: Url, gzip: bool) -> Response {
-    let status = res.status();
-    let version = res.version();
-    let mut headers = mem::replace(res.headers_mut(), HeaderMap::new());
-    let decoder = decoder::detect(&mut headers, body::wrap(res.into_body()), gzip);
-    debug!("Response: '{}' for {}", status, url);
-    Response {
-        status: status,
-        headers: headers,
-        url: url,
-        body: decoder,
-        version: version,
     }
 }

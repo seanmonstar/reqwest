@@ -13,7 +13,7 @@ use native_tls::{TlsConnector, TlsConnectorBuilder};
 
 use super::body;
 use super::request::{self, Request, RequestBuilder};
-use super::response::{self, Response};
+use super::response::Response;
 use connect::Connector;
 use into_url::to_uri;
 use redirect::{self, RedirectPolicy, remove_sensitive_headers};
@@ -29,7 +29,6 @@ static DEFAULT_USER_AGENT: &'static str =
 ///
 /// The `Client` holds a connection pool internally, so it is advised that
 /// you create one and **reuse** it.
-
 #[derive(Clone)]
 pub struct Client {
     inner: Arc<ClientRef>,
@@ -516,7 +515,7 @@ impl Future for PendingRequest {
                     debug!("Location header had invalid URI: {:?}", e);
                 }
             }
-            let res = response::new(res, self.url.clone(), self.client.gzip);
+            let res = Response::new(res, self.url.clone(), self.client.gzip);
             return Ok(Async::Ready(res));
         }
     }
