@@ -197,13 +197,12 @@ impl Part {
         Ok(self)
     }
 
-    /* Re-enable when mime 0.4 is available, with split MediaType/MediaRange.
-    /// Sets the mime, builder style.
-    pub fn mime(mut self, mime: Mime) -> Part {
+    // Re-enable when mime 0.4 is available, with split MediaType/MediaRange.
+    #[cfg(test)]
+    fn mime(mut self, mime: Mime) -> Part {
         self.mime = Some(mime);
         self
     }
-    */
 
     /// Sets the filename, builder style.
     pub fn file_name<T: Into<Cow<'static, str>>>(mut self, filename: T) -> Part {
