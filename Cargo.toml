@@ -31,7 +31,7 @@ serde_urlencoded = "0.5"
 tokio = "0.1.7"
 tokio-io = "0.1"
 url = "1.2"
-uuid = { version = "0.6", features = ["v4"] }
+uuid = { version = "0.7", features = ["v4"] }
 
 [dev-dependencies]
 env_logger = "0.5"
