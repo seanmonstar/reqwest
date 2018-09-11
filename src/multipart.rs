@@ -191,11 +191,19 @@ impl Part {
         }
     }
 
+    /// Tries to set the mime of this part.
+    pub fn mime_str(mut self, mime: &str) -> ::Result<Part> {
+        self.mime = Some(try_!(mime.parse()));
+        Ok(self)
+    }
+
+    /* Re-enable when mime 0.4 is available, with split MediaType/MediaRange.
     /// Sets the mime, builder style.
     pub fn mime(mut self, mime: Mime) -> Part {
         self.mime = Some(mime);
         self
     }
+    */
 
     /// Sets the filename, builder style.
     pub fn file_name<T: Into<Cow<'static, str>>>(mut self, filename: T) -> Part {

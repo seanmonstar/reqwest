@@ -113,6 +113,7 @@ impl Error {
         match self.kind {
             Kind::Http(ref e) => Some(e),
             Kind::Hyper(ref e) => Some(e),
+            Kind::Mime(ref e) => Some(e),
             Kind::Url(ref e) => Some(e),
             Kind::Tls(ref e) => Some(e),
             Kind::Io(ref e) => Some(e),
@@ -193,6 +194,7 @@ impl fmt::Display for Error {
         match self.kind {
             Kind::Http(ref e) => fmt::Display::fmt(e, f),
             Kind::Hyper(ref e) => fmt::Display::fmt(e, f),
+            Kind::Mime(ref e) => fmt::Display::fmt(e, f),
             Kind::Url(ref e) => fmt::Display::fmt(e, f),
             Kind::Tls(ref e) => fmt::Display::fmt(e, f),
             Kind::Io(ref e) => fmt::Display::fmt(e, f),
@@ -217,6 +219,7 @@ impl StdError for Error {
         match self.kind {
             Kind::Http(ref e) => e.description(),
             Kind::Hyper(ref e) => e.description(),
+            Kind::Mime(ref e) => e.description(),
             Kind::Url(ref e) => e.description(),
             Kind::Tls(ref e) => e.description(),
             Kind::Io(ref e) => e.description(),
@@ -233,6 +236,7 @@ impl StdError for Error {
         match self.kind {
             Kind::Http(ref e) => e.cause(),
             Kind::Hyper(ref e) => e.cause(),
+            Kind::Mime(ref e) => e.cause(),
             Kind::Url(ref e) => e.cause(),
             Kind::Tls(ref e) => e.cause(),
             Kind::Io(ref e) => e.cause(),
@@ -252,6 +256,7 @@ impl StdError for Error {
 pub enum Kind {
     Http(::http::Error),
     Hyper(::hyper::Error),
+    Mime(::mime::FromStrError),
     Url(::url::ParseError),
     Tls(::native_tls::Error),
     Io(io::Error),
@@ -274,9 +279,14 @@ impl From<::http::Error> for Kind {
 impl From<::hyper::Error> for Kind {
     #[inline]
     fn from(err: ::hyper::Error) -> Kind {
-        match err {
-            other => Kind::Hyper(other),
-        }
+        Kind::Hyper(err)
+    }
+}
+
+impl From<::mime::FromStrError> for Kind {
+    #[inline]
+    fn from(err: ::mime::FromStrError) -> Kind {
+        Kind::Mime(err)
     }
 }
 
