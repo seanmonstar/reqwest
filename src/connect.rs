@@ -40,37 +40,37 @@ impl Connect for Connector {
 
     fn connect(&self, dst: Destination) -> Self::Future {
         for prox in self.proxies.iter() {
-            if let Some(puri) = prox.intercept(&dst) {
-                trace!("proxy({:?}) intercepts {:?}", puri, dst);
-                let mut ndst = dst.clone();
-                let new_scheme = puri
-                    .scheme_part()
-                    .map(Scheme::as_str)
-                    .unwrap_or("http");
-                ndst.set_scheme(new_scheme)
-                    .expect("proxy target scheme should be valid");
+            // if let Some(puri) = prox.intercept(&dst) {
+            //     trace!("proxy({:?}) intercepts {:?}", puri, dst);
+            //     let mut ndst = dst.clone();
+            //     let new_scheme = puri
+            //         .scheme_part()
+            //         .map(Scheme::as_str)
+            //         .unwrap_or("http");
+            //     ndst.set_scheme(new_scheme)
+            //         .expect("proxy target scheme should be valid");
 
-                ndst.set_host(puri.host().expect("proxy target should have host"))
-                    .expect("proxy target host should be valid");
+            //     ndst.set_host(puri.host().expect("proxy target should have host"))
+            //         .expect("proxy target host should be valid");
 
-                ndst.set_port(puri.port());
+            //     ndst.set_port(puri.port());
 
-                if dst.scheme() == "https" {
-                    let host = dst.host().to_owned();
-                    let port = dst.port().unwrap_or(443);
-                    let tls = self.tls.clone();
-                    return Box::new(self.https.connect(ndst).and_then(move |(conn, connected)| {
-                        trace!("tunneling HTTPS over proxy");
-                        tunnel(conn, host.clone(), port)
-                            .and_then(move |tunneled| {
-                                tls.connect_async(&host, tunneled)
-                                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-                            })
-                            .map(|io| (Conn::Proxied(io), connected.proxy(true)))
-                    }));
-                }
-                return Box::new(self.https.connect(ndst).map(|(io, connected)| (Conn::Normal(io), connected.proxy(true))));
-            }
+            //     if dst.scheme() == "https" {
+            //         let host = dst.host().to_owned();
+            //         let port = dst.port().unwrap_or(443);
+            //         let tls = self.tls.clone();
+            //         return Box::new(self.https.connect(ndst).and_then(move |(conn, connected)| {
+            //             trace!("tunneling HTTPS over proxy");
+            //             tunnel(conn, host.clone(), port)
+            //                 .and_then(move |tunneled| {
+            //                     tls.connect_async(&host, tunneled)
+            //                         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+            //                 })
+            //                 .map(|io| (Conn::Proxied(io), connected.proxy(true)))
+            //         }));
+            //     }
+            //     return Box::new(self.https.connect(ndst).map(|(io, connected)| (Conn::Normal(io), connected.proxy(true))));
+            // }
         }
         Box::new(self.https.connect(dst).map(|(io, connected)| (Conn::Normal(io), connected)))
     }

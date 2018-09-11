@@ -1,8 +1,137 @@
 use std::fmt;
 use std::sync::Arc;
+use std::net::{SocketAddr, ToSocketAddrs};
 
 use hyper::client::connect::Destination;
-use {into_url, IntoUrl, Url};
+use {IntoUrl, Url};
+
+
+// The kinds of authentication supported to a proxy
+#[derive(Clone, Debug)]
+enum ProxyAuth {
+    Basic {
+        username: String,
+        password: String,
+    }
+}
+
+// The various proxy schemes we understand
+#[derive(Clone, Debug)]
+enum ProxySchemeKind {
+    Http,
+    Https,
+    Socks5,
+    Socks5h,
+}
+
+/// A particular scheme used for proxying requests.
+/// 
+/// For example, HTTP vs SOCKS5
+#[derive(Clone, Debug)]
+pub struct ProxyScheme {
+    kind: ProxySchemeKind,
+    uri: Option<::hyper::Uri>,
+    socket_addrs: Option<Vec<SocketAddr>>,
+    auth: Option<ProxyAuth>,
+}
+
+impl ProxyScheme {
+    /// Proxy traffic via the specified URL over HTTP
+    pub fn http<T: IntoUrl>(url: T) -> ::Result<Self> {
+        Ok(ProxyScheme {
+            kind: ProxySchemeKind::Http,
+            uri: Some(::into_url::to_uri(&try_!(url.into_url()))),
+            socket_addrs: None,
+            auth: None,
+        })
+    }
+
+    /// Proxy traffic via the specified URL over HTTPS
+    pub fn https<T: IntoUrl>(url: T) -> ::Result<Self> {
+        Ok(ProxyScheme {
+            kind: ProxySchemeKind::Https,
+            uri: Some(::into_url::to_uri(&try_!(url.into_url()))),
+            socket_addrs: None,
+            auth: None,
+        })
+    }
+
+    /// Proxy traffic via the specified socket address over SOCKS5
+    pub fn socks5<T: ToSocketAddrs>(socket_addr: T) -> ::Result<Self> {
+        Ok(ProxyScheme {
+            kind: ProxySchemeKind::Socks5,
+            uri: None,
+            socket_addrs: Some(try_!(socket_addr.to_socket_addrs()).collect()),
+            auth: None,
+        })
+    }
+
+    /// Proxy traffic via the specified socket address over SOCKS5H
+    /// This differs from SOCKS5 in that DNS resolution is also performed via the proxy.
+    pub fn socks5h<T: ToSocketAddrs>(socket_addr: T) -> ::Result<Self> {
+        Ok(ProxyScheme {
+            kind: ProxySchemeKind::Socks5h,
+            uri: None,
+            socket_addrs: Some(try_!(socket_addr.to_socket_addrs()).collect()),
+            auth: None,
+        })
+    }
+
+    /// Use a username and password when connecting to the proxy server
+    pub fn with_basic_auth<T: Into<String>, U: Into<String>>(mut self, username: T, password: U) -> Self {
+        self.auth = Some(ProxyAuth::Basic {
+            username: username.into(),
+            password: password.into(),
+        });
+        self
+    }
+
+    /// Convert a URL into a proxy scheme
+    /// 
+    /// Supported schemes: HTTP, HTTPS, SOCKS5, SOCKS5H
+    pub fn parse(url: Url) -> ::Result<Self> {
+        // Resolve URL to a host and port
+        let host_and_port = try_!(url.with_default_port(|url| match url.scheme() {
+            "socks5" | "socks5h" => Ok(1080),
+            _ => Err(())
+        }));
+
+        let mut scheme = match url.scheme() {
+            "http" => Self::http(url.clone())?,
+            "https" => Self::https(url.clone())?,
+            "socks5" => Self::socks5(host_and_port)?,
+            "socks5h" => Self::socks5h(host_and_port)?,
+            _ => return Err(::error::unknown_proxy_scheme())
+        };
+
+        if let Some(pwd) = url.password() {
+            scheme = scheme.with_basic_auth(url.username(), pwd);
+        }
+
+        Ok(scheme)
+    }
+}
+
+/// Trait used for converting into a proxy scheme. This trait supports
+/// parsing from a URL-like type, whilst also supporting proxy schemes
+/// built directly using the factory methods.
+pub trait IntoProxyScheme {
+    fn into_proxy_scheme(self) -> ::Result<ProxyScheme>;
+}
+
+impl<T: IntoUrl> IntoProxyScheme for T {
+    fn into_proxy_scheme(self) -> ::Result<ProxyScheme> {
+        self.into_url()
+            .map_err(::error::from)
+            .and_then(ProxyScheme::parse)
+    }
+}
+
+impl IntoProxyScheme for ProxyScheme {
+    fn into_proxy_scheme(self) -> ::Result<ProxyScheme> {
+        Ok(self)
+    }
+}
 
 /// Configuration of a proxy that a `Client` should pass requests to.
 ///
@@ -48,9 +177,10 @@ impl Proxy {
     /// # }
     /// # fn main() {}
     /// ```
-    pub fn http<U: IntoUrl>(url: U) -> ::Result<Proxy> {
-        let uri = ::into_url::to_uri(&url.into_url()?);
-        Ok(Proxy::new(Intercept::Http(uri)))
+    pub fn http<U: IntoProxyScheme>(proxy_scheme: U) -> ::Result<Proxy> {
+        Ok(Proxy::new(Intercept::Http(
+            proxy_scheme.into_proxy_scheme()?
+        )))
     }
 
     /// Proxy all HTTPS traffic to the passed URL.
@@ -67,9 +197,10 @@ impl Proxy {
     /// # }
     /// # fn main() {}
     /// ```
-    pub fn https<U: IntoUrl>(url: U) -> ::Result<Proxy> {
-        let uri = ::into_url::to_uri(&url.into_url()?);
-        Ok(Proxy::new(Intercept::Https(uri)))
+    pub fn https<U: IntoProxyScheme>(proxy_scheme: U) -> ::Result<Proxy> {
+        Ok(Proxy::new(Intercept::Https(
+            proxy_scheme.into_proxy_scheme()?
+        )))
     }
 
     /// Proxy **all** traffic to the passed URL.
@@ -86,9 +217,10 @@ impl Proxy {
     /// # }
     /// # fn main() {}
     /// ```
-    pub fn all<U: IntoUrl>(url: U) -> ::Result<Proxy> {
-        let uri = ::into_url::to_uri(&url.into_url()?);
-        Ok(Proxy::new(Intercept::All(uri)))
+    pub fn all<U: IntoProxyScheme>(proxy_scheme: U) -> ::Result<Proxy> {
+        Ok(Proxy::new(Intercept::All(
+            proxy_scheme.into_proxy_scheme()?
+        )))
     }
 
     /// Provide a custom function to determine what traffix to proxy to where.
@@ -111,9 +243,11 @@ impl Proxy {
     /// # Ok(())
     /// # }
     /// # fn main() {}
-    pub fn custom<F>(fun: F) -> Proxy
-    where F: Fn(&Url) -> Option<Url> + Send + Sync + 'static {
-        Proxy::new(Intercept::Custom(Custom(Arc::new(fun))))
+    pub fn custom<F, U: IntoProxyScheme>(fun: F) -> Proxy
+    where F: Fn(&Url) -> Option<U> + Send + Sync + 'static {
+        Proxy::new(Intercept::Custom(Custom(Arc::new(move |url| {
+            fun(url).map(IntoProxyScheme::into_proxy_scheme)
+        }))))
     }
 
     /*
@@ -128,19 +262,19 @@ impl Proxy {
         }
     }
 
-    pub(crate) fn intercept<D: Dst>(&self, uri: &D) -> Option<::hyper::Uri> {
+    pub(crate) fn intercept<D: Dst>(&self, uri: &D) -> Option<::Result<ProxyScheme>> {
         match self.intercept {
-            Intercept::All(ref u) => Some(u.clone()),
+            Intercept::All(ref u) => Some(Ok(u.clone())),
             Intercept::Http(ref u) => {
                 if uri.scheme() == "http" {
-                    Some(u.clone())
+                    Some(Ok(u.clone()))
                 } else {
                     None
                 }
             },
             Intercept::Https(ref u) => {
                 if uri.scheme() == "https" {
-                    Some(u.clone())
+                    Some(Ok(u.clone()))
                 } else {
                     None
                 }
@@ -157,7 +291,6 @@ impl Proxy {
                         .parse()
                         .expect("should be valid Url")
                 )
-                    .map(|u| into_url::to_uri(&u) )
             },
         }
     }
@@ -165,14 +298,14 @@ impl Proxy {
 
 #[derive(Clone, Debug)]
 enum Intercept {
-    All(::hyper::Uri),
-    Http(::hyper::Uri),
-    Https(::hyper::Uri),
+    All(ProxyScheme),
+    Http(ProxyScheme),
+    Https(ProxyScheme),
     Custom(Custom),
 }
 
 #[derive(Clone)]
-struct Custom(Arc<Fn(&Url) -> Option<Url> + Send + Sync + 'static>);
+struct Custom(Arc<Fn(&Url) -> Option<::Result<ProxyScheme>> + Send + Sync + 'static>);
 
 impl fmt::Debug for Custom {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
