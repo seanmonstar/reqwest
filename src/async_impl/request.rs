@@ -84,9 +84,20 @@ impl Request {
     pub fn body_mut(&mut self) -> &mut Option<Body> {
         &mut self.body
     }
+
+    pub(super) fn pieces(self) -> (Method, Url, HeaderMap, Option<Body>) {
+        (self.method, self.url, self.headers, self.body)
+    }
 }
 
 impl RequestBuilder {
+    pub(super) fn new(client: Client, request: ::Result<Request>) -> RequestBuilder {
+        RequestBuilder {
+            client,
+            request,
+        }
+    }
+
     /// Add a `Header` to this Request.
     pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
     where
@@ -301,20 +312,6 @@ fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>, req: &Request
         .field("headers", &req.headers)
 }
 
-// pub(crate)
-
-#[inline]
-pub fn builder(client: Client, request: ::Result<Request>) -> RequestBuilder {
-    RequestBuilder {
-        client,
-        request,
-    }
-}
-
-#[inline]
-pub fn pieces(req: Request) -> (Method, Url, HeaderMap, Option<Body>) {
-    (req.method, req.url, req.headers, req.body)
-}
 
 #[cfg(test)]
 mod tests {

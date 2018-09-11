@@ -12,7 +12,7 @@ use native_tls::{TlsConnector, TlsConnectorBuilder};
 
 
 use super::body;
-use super::request::{self, Request, RequestBuilder};
+use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use connect::Connector;
 use into_url::to_uri;
@@ -295,7 +295,7 @@ impl Client {
             Ok(url) => Ok(Request::new(method, url)),
             Err(err) => Err(::error::from(err)),
         };
-        request::builder(self.clone(), req)
+        RequestBuilder::new(self.clone(), req)
     }
 
     /// Executes a `Request`.
@@ -321,7 +321,7 @@ impl Client {
             url,
             user_headers,
             body
-        ) = request::pieces(req);
+        ) = req.pieces();
 
         let mut headers = self.inner.headers.clone(); // default headers
         for (key, value) in user_headers.iter() {
