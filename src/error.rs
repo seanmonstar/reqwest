@@ -253,7 +253,7 @@ impl StdError for Error {
 // pub(crate)
 
 #[derive(Debug)]
-pub enum Kind {
+pub(crate) enum Kind {
     Http(::http::Error),
     Hyper(::hyper::Error),
     Mime(::mime::FromStrError),
@@ -344,10 +344,8 @@ fn io_timeout() -> io::Error {
     io::Error::new(io::ErrorKind::TimedOut, "timed out")
 }
 
-// pub(crate)
-
 #[allow(missing_debug_implementations)]
-pub struct InternalFrom<T>(pub T, pub Option<Url>);
+pub(crate) struct InternalFrom<T>(pub T, pub Option<Url>);
 
 #[doc(hidden)] // https://github.com/rust-lang/rust/issues/42323
 impl From<InternalFrom<Error>> for Error {
@@ -371,16 +369,14 @@ where
     }
 }
 
-#[inline]
-pub fn from<T>(err: T) -> Error
+pub(crate) fn from<T>(err: T) -> Error
 where
     T: Into<Kind>,
 {
     InternalFrom(err, None).into()
 }
 
-#[inline]
-pub fn into_io(e: Error) -> io::Error {
+pub(crate) fn into_io(e: Error) -> io::Error {
     match e.kind {
         Kind::Io(io) => io,
         _ => io::Error::new(io::ErrorKind::Other, e),
@@ -407,40 +403,35 @@ macro_rules! try_ {
     )
 }
 
-#[inline]
-pub fn loop_detected(url: Url) -> Error {
+pub(crate) fn loop_detected(url: Url) -> Error {
     Error {
         kind: Kind::RedirectLoop,
         url: Some(url),
     }
 }
 
-#[inline]
-pub fn too_many_redirects(url: Url) -> Error {
+pub(crate) fn too_many_redirects(url: Url) -> Error {
     Error {
         kind: Kind::TooManyRedirects,
         url: Some(url),
     }
 }
 
-#[inline]
-pub fn timedout(url: Option<Url>) -> Error {
+pub(crate) fn timedout(url: Option<Url>) -> Error {
     Error {
         kind: Kind::Io(io_timeout()),
         url: url,
     }
 }
 
-#[inline]
-pub fn client_error(url: Url, status: StatusCode) -> Error {
+pub(crate) fn client_error(url: Url, status: StatusCode) -> Error {
     Error {
         kind: Kind::ClientError(status),
         url: Some(url),
     }
 }
 
-#[inline]
-pub fn server_error(url: Url, status: StatusCode) -> Error {
+pub(crate) fn server_error(url: Url, status: StatusCode) -> Error {
     Error {
         kind: Kind::ServerError(status),
         url: Some(url),
