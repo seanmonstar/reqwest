@@ -6,7 +6,7 @@ use serde_json;
 use serde_urlencoded;
 
 use super::body::{Body};
-use super::client::{Client, Pending, pending_err};
+use super::client::{Client, Pending};
 use header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
 use http::HttpTryFrom;
 use {Method, Url};
@@ -277,7 +277,7 @@ impl RequestBuilder {
     pub fn send(self) -> Pending {
         match self.request {
             Ok(req) => self.client.execute(req),
-            Err(err) => pending_err(err),
+            Err(err) => Pending::new_err(err),
         }
     }
 }

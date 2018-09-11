@@ -407,7 +407,7 @@ enum PendingInner {
     Error(Option<::Error>),
 }
 
-pub struct PendingRequest {
+struct PendingRequest {
     method: Method,
     url: Url,
     headers: HeaderMap,
@@ -420,6 +420,13 @@ pub struct PendingRequest {
     in_flight: ResponseFuture,
 }
 
+impl Pending {
+    pub(super) fn new_err(err: ::Error) -> Pending {
+        Pending {
+            inner: PendingInner::Error(Some(err)),
+        }
+    }
+}
 
 impl Future for Pending {
     type Item = Response;
@@ -551,10 +558,3 @@ fn make_referer(next: &Url, previous: &Url) -> Option<HeaderValue> {
     referer.as_str().parse().ok()
 }
 
-// pub(crate)
-
-pub fn pending_err(err: ::Error) -> Pending {
-    Pending {
-        inner: PendingInner::Error(Some(err)),
-    }
-}
