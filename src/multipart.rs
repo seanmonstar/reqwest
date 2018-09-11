@@ -23,7 +23,7 @@ impl Form {
     /// Creates a new Form without any content.
     pub fn new() -> Form {
         Form {
-            boundary: format!("{}", Uuid::new_v4().simple()),
+            boundary: format!("{}", Uuid::new_v4().to_simple()),
             fields: Vec::new(),
             headers: Vec::new(),
         }
