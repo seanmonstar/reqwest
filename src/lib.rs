@@ -1,6 +1,7 @@
 #![deny(warnings)]
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
+#![cfg_attr(docs_rs_workaround, feature(extern_prelude))]
 #![doc(html_root_url = "https://docs.rs/reqwest/0.8.6")]
 
 //! # reqwest
