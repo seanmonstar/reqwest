@@ -40,3 +40,6 @@ serde_derive = "1.0"
 [features]
 default = []
 hyper-011 = ["hyper-old-types"]
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docs_rs_workaround"]
