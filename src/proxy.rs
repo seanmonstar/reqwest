@@ -41,7 +41,7 @@ impl ProxyScheme {
     pub fn http<T: IntoUrl>(url: T) -> ::Result<Self> {
         Ok(ProxyScheme {
             kind: ProxySchemeKind::Http,
-            uri: Some(::into_url::to_uri(&try_!(url.into_url()))),
+            uri: Some(::into_url::to_uri(&url.into_url()?)),
             socket_addrs: None,
             auth: None,
         })
@@ -51,7 +51,7 @@ impl ProxyScheme {
     pub fn https<T: IntoUrl>(url: T) -> ::Result<Self> {
         Ok(ProxyScheme {
             kind: ProxySchemeKind::Https,
-            uri: Some(::into_url::to_uri(&try_!(url.into_url()))),
+            uri: Some(::into_url::to_uri(&url.into_url()?)),
             socket_addrs: None,
             auth: None,
         })
@@ -125,9 +125,7 @@ pub trait IntoProxyScheme {
 
 impl<T: IntoUrl> IntoProxyScheme for T {
     fn into_proxy_scheme(self) -> ::Result<ProxyScheme> {
-        self.into_url()
-            .map_err(::error::from)
-            .and_then(ProxyScheme::parse)
+        ProxyScheme::parse(self.into_url()?)
     }
 }
 

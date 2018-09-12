@@ -23,7 +23,7 @@ mod socks {
     use connect::{Connecting, Conn};
     use proxy::{ProxyScheme, ProxyAuth};
 
-    pub fn connect(proxy: ProxyScheme, dst: Destination, tls: &TlsConnector, dns: bool) -> Connecting {
+    pub(crate) fn connect(proxy: ProxyScheme, dst: Destination, tls: &TlsConnector, dns: bool) -> Connecting {
         let https = dst.scheme() == "https";
         let original_host = dst.host().to_owned();
         let mut host = original_host.clone();
@@ -87,7 +87,7 @@ mod socks {
     use connect::Connecting;
     use proxy::ProxyScheme;
 
-    pub fn connect(_proxy: ProxyScheme, _dst: Destination, _tls: &TlsConnector, _dns: bool) -> Connecting {
+    pub(crate) fn connect(_proxy: ProxyScheme, _dst: Destination, _tls: &TlsConnector, _dns: bool) -> Connecting {
         Box::new(future::err(
             io::Error::new(io::ErrorKind::Other, "Attempted to use SOCKS proxy when socks feature not enabled in reqwest")
         ))
@@ -110,7 +110,7 @@ mod http {
     use connect::{Connecting, Conn};
     use proxy::ProxyScheme;
 
-    pub fn connect(proxy: ProxyScheme, dst: Destination, tls: &TlsConnector, https: &HttpsConnector<HttpConnector>) -> Connecting {
+    pub(crate) fn connect(proxy: ProxyScheme, dst: Destination, tls: &TlsConnector, https: &HttpsConnector<HttpConnector>) -> Connecting {
         let puri = proxy.uri.unwrap();
         let mut ndst = dst.clone();
         let new_scheme = puri
@@ -123,7 +123,7 @@ mod http {
         ndst.set_host(puri.host().expect("proxy target should have host"))
             .expect("proxy target host should be valid");
 
-        ndst.set_port(puri.port());
+        ndst.set_port(puri.port_part().map(|p| p.as_u16()));
 
         if dst.scheme() == "https" {
             let host = dst.host().to_owned();
@@ -296,7 +296,7 @@ mod http {
     }
 }
 
-pub fn connect(proxy: ProxyScheme, dst: Destination, tls: &TlsConnector, https: &HttpsConnector<HttpConnector>) -> Connecting {
+pub(crate) fn connect(proxy: ProxyScheme, dst: Destination, tls: &TlsConnector, https: &HttpsConnector<HttpConnector>) -> Connecting {
     match proxy.kind {
         ProxySchemeKind::Http | ProxySchemeKind::Https => http::connect(proxy, dst, tls, https),
         ProxySchemeKind::Socks5 => socks::connect(proxy, dst, tls, false),

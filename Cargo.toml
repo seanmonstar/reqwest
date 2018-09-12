@@ -30,7 +30,7 @@ tokio = "0.1.7"
 tokio-io = "0.1"
 url = "1.2"
 uuid = { version = "0.7", features = ["v4"] }
-socks = { git = "https://github.com/sfackler/rust-socks.git", optional = true }
+socks = { version = "0.3.2", optional = true }
 
 [dev-dependencies]
 env_logger = "0.5"

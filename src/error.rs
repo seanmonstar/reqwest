@@ -458,12 +458,8 @@ pub(crate) fn url_bad_scheme(url: Url) -> Error {
     Error::new(Kind::UrlBadScheme, Some(url))
 }
 
-#[inline]
-pub fn unknown_proxy_scheme() -> Error {
-    Error {
-        kind: Kind::UnknownProxyScheme,
-        url: None,
-    }
+pub(crate) fn unknown_proxy_scheme() -> Error {
+    Error::new(Kind::UnknownProxyScheme, None)
 }
 
 #[cfg(test)]

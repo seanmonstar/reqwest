@@ -9,7 +9,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 use std::io::{self, Read, Write};
 use std::sync::Arc;
 
-use {proxy, Proxy, proxy_connect};
+use {Proxy, proxy_connect};
 
 pub(crate) struct Connector {
     https: HttpsConnector<HttpConnector>,
