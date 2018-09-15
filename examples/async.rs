@@ -20,7 +20,7 @@ error_chain! {
 
 fn run() -> Result<()> {
     let mut core = tokio_core::reactor::Core::new()?;
-    let client = Client::new(&core.handle());
+    let client = Client::new();
 
     let work = client.get("https://hyper.rs")
         .send()

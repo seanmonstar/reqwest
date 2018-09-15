@@ -1,7 +1,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use hyper::Uri;
+use hyper::client::connect::Destination;
 use {into_url, IntoUrl, Url};
 
 /// Configuration of a proxy that a `Client` should pass requests to.
@@ -128,36 +128,36 @@ impl Proxy {
         }
     }
 
-    fn proxies(&self, url: &Url) -> bool {
-        match self.intercept {
-            Intercept::All(..) => true,
-            Intercept::Http(..) => url.scheme() == "http",
-            Intercept::Https(..) => url.scheme() == "https",
-            Intercept::Custom(ref fun) => (fun.0)(url).is_some(),
-        }
-    }
-
-
-    fn intercept(&self, uri: &Uri) -> Option<Uri> {
+    fn intercept<D: Dst>(&self, uri: &D) -> Option<::hyper::Uri> {
         match self.intercept {
             Intercept::All(ref u) => Some(u.clone()),
             Intercept::Http(ref u) => {
-                if uri.scheme() == Some("http") {
+                if uri.scheme() == "http" {
                     Some(u.clone())
                 } else {
                     None
                 }
             },
             Intercept::Https(ref u) => {
-                if uri.scheme() == Some("https") {
+                if uri.scheme() == "https" {
                     Some(u.clone())
                 } else {
                     None
                 }
             },
             Intercept::Custom(ref fun) => {
-                (fun.0)(&into_url::to_url(uri))
-                    .map(|u| into_url::to_uri(&u))
+                (fun.0)(
+                    &format!(
+                        "{}://{}{}{}",
+                        uri.scheme(),
+                        uri.host(),
+                        uri.port().map(|_| ":").unwrap_or(""),
+                        uri.port().map(|p| p.to_string()).unwrap_or(String::new())
+                    )
+                        .parse()
+                        .expect("should be valid Url")
+                )
+                    .map(|u| into_url::to_uri(&u) )
             },
         }
     }
@@ -165,9 +165,9 @@ impl Proxy {
 
 #[derive(Clone, Debug)]
 enum Intercept {
-    All(Uri),
-    Http(Uri),
-    Https(Uri),
+    All(::hyper::Uri),
+    Http(::hyper::Uri),
+    Https(::hyper::Uri),
     Custom(Custom),
 }
 
@@ -182,20 +182,50 @@ impl fmt::Debug for Custom {
 
 // pub(crate)
 
-pub fn intercept(proxy: &Proxy, uri: &Uri) -> Option<Uri> {
-    proxy.intercept(uri)
+/// A helper trait to allow testing `Proxy::intercept` without having to
+/// construct `hyper::client::connect::Destination`s.
+trait Dst {
+    fn scheme(&self) -> &str;
+    fn host(&self) -> &str;
+    fn port(&self) -> Option<u16>;
 }
 
-pub fn is_proxied(proxies: &[Proxy], uri: &Url) -> bool {
-    proxies.iter().any(|p| p.proxies(uri))
+#[doc(hidden)]
+impl Dst for Destination {
+    fn scheme(&self) -> &str {
+        Destination::scheme(self)
+    }
+
+    fn host(&self) -> &str {
+        Destination::host(self)
+    }
+
+    fn port(&self) -> Option<u16> {
+        Destination::port(self)
+    }
+}
+
+pub fn intercept(proxy: &Proxy, uri: &Destination) -> Option<::http::Uri> {
+    proxy.intercept(uri)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn uri(s: &str) -> Uri {
-        s.parse().unwrap()
+    impl Dst for Url {
+        fn scheme(&self) -> &str {
+            Url::scheme(self)
+        }
+
+        fn host(&self) -> &str {
+            Url::host_str(self)
+                .expect("<Url as Dst>::host should have a str")
+        }
+
+        fn port(&self) -> Option<u16> {
+            Url::port(self)
+        }
     }
 
     fn url(s: &str) -> Url {
@@ -210,10 +240,8 @@ mod tests {
         let http = "http://hyper.rs";
         let other = "https://hyper.rs";
 
-        assert!(p.proxies(&url(http)));
-        assert_eq!(p.intercept(&uri(http)).unwrap(), target);
-        assert!(!p.proxies(&url(other)));
-        assert!(p.intercept(&uri(other)).is_none());
+        assert_eq!(p.intercept(&url(http)).unwrap(), target);
+        assert!(p.intercept(&url(other)).is_none());
     }
 
     #[test]
@@ -224,10 +252,8 @@ mod tests {
         let http = "http://hyper.rs";
         let other = "https://hyper.rs";
 
-        assert!(!p.proxies(&url(http)));
-        assert!(p.intercept(&uri(http)).is_none());
-        assert!(p.proxies(&url(other)));
-        assert_eq!(p.intercept(&uri(other)).unwrap(), target);
+        assert!(p.intercept(&url(http)).is_none());
+        assert_eq!(p.intercept(&url(other)).unwrap(), target);
     }
 
     #[test]
@@ -239,13 +265,9 @@ mod tests {
         let https = "https://hyper.rs";
         let other = "x-youve-never-heard-of-me-mr-proxy://hyper.rs";
 
-        assert!(p.proxies(&url(http)));
-        assert!(p.proxies(&url(https)));
-        assert!(p.proxies(&url(other)));
-
-        assert_eq!(p.intercept(&uri(http)).unwrap(), target);
-        assert_eq!(p.intercept(&uri(https)).unwrap(), target);
-        assert_eq!(p.intercept(&uri(other)).unwrap(), target);
+        assert_eq!(p.intercept(&url(http)).unwrap(), target);
+        assert_eq!(p.intercept(&url(https)).unwrap(), target);
+        assert_eq!(p.intercept(&url(other)).unwrap(), target);
     }
 
 
@@ -267,29 +289,9 @@ mod tests {
         let https = "https://hyper.rs";
         let other = "x-youve-never-heard-of-me-mr-proxy://seanmonstar.com";
 
-        assert!(p.proxies(&url(http)));
-        assert!(p.proxies(&url(https)));
-        assert!(!p.proxies(&url(other)));
-
-        assert_eq!(p.intercept(&uri(http)).unwrap(), target2);
-        assert_eq!(p.intercept(&uri(https)).unwrap(), target1);
-        assert!(p.intercept(&uri(other)).is_none());
-    }
-
-    #[test]
-    fn test_is_proxied() {
-        let proxies = vec![
-            Proxy::http("http://example.domain").unwrap(),
-            Proxy::https("http://other.domain").unwrap(),
-        ];
-
-        let http = "http://hyper.rs".parse().unwrap();
-        let https = "https://hyper.rs".parse().unwrap();
-        let other = "x-other://hyper.rs".parse().unwrap();
-
-        assert!(is_proxied(&proxies, &http));
-        assert!(is_proxied(&proxies, &https));
-        assert!(!is_proxied(&proxies, &other));
+        assert_eq!(p.intercept(&url(http)).unwrap(), target2);
+        assert_eq!(p.intercept(&url(https)).unwrap(), target1);
+        assert!(p.intercept(&url(other)).is_none());
     }
 
 }

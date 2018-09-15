@@ -1,6 +1,6 @@
 use std::fmt;
 
-use hyper::header::Headers;
+use header::HeaderMap;
 use hyper::StatusCode;
 
 use Url;
@@ -228,15 +228,15 @@ pub fn check_redirect(
         .inner
 }
 
-pub fn remove_sensitive_headers(headers: &mut Headers, next: &Url, previous: &[Url]) {
+pub fn remove_sensitive_headers(headers: &mut HeaderMap, next: &Url, previous: &[Url]) {
     if let Some(previous) = previous.last() {
         let cross_host = next.host_str() != previous.host_str() ||
                          next.port_or_known_default() != previous.port_or_known_default();
         if cross_host {
-            headers.remove_raw("authorization");
-            headers.remove_raw("cookie");
-            headers.remove_raw("cookie2");
-            headers.remove_raw("www-authenticate");
+            headers.remove("authorization");
+            headers.remove("cookie");
+            headers.remove("cookie2");
+            headers.remove("www-authenticate");
         }
     }
 }
@@ -268,14 +268,14 @@ fn test_redirect_policy_limit() {
         .collect::<Vec<_>>();
 
     assert_eq!(
-        check_redirect(&policy, StatusCode::Found, &next, &previous),
+        check_redirect(&policy, StatusCode::FOUND, &next, &previous),
         Action::Follow
     );
 
     previous.push(Url::parse("http://a.b.d/e/33").unwrap());
 
     assert_eq!(
-        check_redirect(&policy, StatusCode::Found, &next, &previous),
+        check_redirect(&policy, StatusCode::FOUND, &next, &previous),
         Action::TooManyRedirects
     );
 }
@@ -292,27 +292,25 @@ fn test_redirect_policy_custom() {
 
     let next = Url::parse("http://bar/baz").unwrap();
     assert_eq!(
-        check_redirect(&policy, StatusCode::Found, &next, &[]),
+        check_redirect(&policy, StatusCode::FOUND, &next, &[]),
         Action::Follow
     );
 
     let next = Url::parse("http://foo/baz").unwrap();
     assert_eq!(
-        check_redirect(&policy, StatusCode::Found, &next, &[]),
+        check_redirect(&policy, StatusCode::FOUND, &next, &[]),
         Action::Stop
     );
 }
 
 #[test]
 fn test_remove_sensitive_headers() {
-    use hyper::header::{Accept, Authorization, Cookie};
+    use hyper::header::{ACCEPT, AUTHORIZATION, COOKIE, HeaderValue};
 
-    let mut headers = Headers::new();
-    headers.set(Accept::star());
-    headers.set(Authorization("let me in".to_owned()));
-    let mut cookie = Cookie::new();
-    cookie.set("foo", "bar");
-    headers.set(cookie);
+    let mut headers = HeaderMap::new();
+    headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
+    headers.insert(AUTHORIZATION, HeaderValue::from_static("let me in"));
+    headers.insert(COOKIE, HeaderValue::from_static("foo=bar"));
 
     let next = Url::parse("http://initial-domain.com/path").unwrap();
     let mut prev = vec![Url::parse("http://initial-domain.com/new_path").unwrap()];
@@ -322,8 +320,8 @@ fn test_remove_sensitive_headers() {
     assert_eq!(headers, filtered_headers);
 
     prev.push(Url::parse("http://new-domain.com/path").unwrap());
-    filtered_headers.remove::<Authorization<String>>();
-    filtered_headers.remove::<Cookie>();
+    filtered_headers.remove(AUTHORIZATION);
+    filtered_headers.remove(COOKIE);
 
     remove_sensitive_headers(&mut headers, &next, &prev);
     assert_eq!(headers, filtered_headers);

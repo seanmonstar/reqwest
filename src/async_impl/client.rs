@@ -4,11 +4,11 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use futures::{Async, Future, Poll};
-use hyper::client::FutureResponse;
-use hyper::header::{Headers, Location, Referer, UserAgent, Accept, Encoding,
-                    AcceptEncoding, Range, qitem};
+use hyper::client::ResponseFuture;
+use header::{HeaderMap, HeaderValue, LOCATION, USER_AGENT, REFERER, ACCEPT,
+             ACCEPT_ENCODING, RANGE};
+use mime::{self};
 use native_tls::{TlsConnector, TlsConnectorBuilder};
-use tokio_core::reactor::Handle;
 
 
 use super::body;
@@ -63,8 +63,9 @@ pub struct ClientBuilder {
 
 struct Config {
     gzip: bool,
-    headers: Headers,
+    headers: HeaderMap,
     hostname_verification: bool,
+    certs_verification: bool,
     proxies: Vec<Proxy>,
     redirect_policy: RedirectPolicy,
     referer: bool,
@@ -76,31 +77,24 @@ struct Config {
 impl ClientBuilder {
     /// Constructs a new `ClientBuilder`
     pub fn new() -> ClientBuilder {
-        match TlsConnector::builder() {
-            Ok(tls_connector_builder) => {
-                let mut headers = Headers::with_capacity(2);
-                headers.set(UserAgent::new(DEFAULT_USER_AGENT));
-                headers.set(Accept::star());
+        let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(2);
+        headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
+        headers.insert(ACCEPT, HeaderValue::from_str(mime::STAR_STAR.as_ref()).expect("unable to parse mime"));
 
-                ClientBuilder {
-                    config: Some(Config {
-                        gzip: true,
-                        headers: headers,
-                        hostname_verification: true,
-                        proxies: Vec::new(),
-                        redirect_policy: RedirectPolicy::default(),
-                        referer: true,
-                        timeout: None,
-                        tls: tls_connector_builder,
-                        dns_threads: 4,
-                    }),
-                    err: None,
-                }
-            },
-            Err(e) => ClientBuilder {
-                config: None,
-                err: Some(::error::from(e)),
-            }
+        ClientBuilder {
+            config: Some(Config {
+                gzip: true,
+                headers: headers,
+                hostname_verification: true,
+                certs_verification: true,
+                proxies: Vec::new(),
+                redirect_policy: RedirectPolicy::default(),
+                referer: true,
+                timeout: None,
+                tls: TlsConnector::builder(),
+                dns_threads: 4,
+            }),
+            err: None,
         }
     }
 
@@ -114,26 +108,25 @@ impl ClientBuilder {
     ///
     /// This method consumes the internal state of the builder.
     /// Trying to use this builder again after calling `build` will panic.
-    pub fn build(&mut self, handle: &Handle) -> ::Result<Client> {
+    pub fn build(&mut self) -> ::Result<Client> {
         if let Some(err) = self.err.take() {
             return Err(err);
         }
-        let config = self.config
+        let mut config = self.config
             .take()
             .expect("ClientBuilder cannot be reused after building a Client");
+
+        config.tls.danger_accept_invalid_hostnames(!config.hostname_verification);
+        config.tls.danger_accept_invalid_certs(!config.certs_verification);
 
         let tls = try_!(config.tls.build());
 
         let proxies = Arc::new(config.proxies);
 
-        let mut connector = Connector::new(config.dns_threads, tls, proxies.clone(), handle);
-        if !config.hostname_verification {
-            connector.danger_disable_hostname_verification();
-        }
-
-        let hyper_client = ::hyper::Client::configure()
-            .connector(connector)
-            .build(handle);
+        let mut connector = Connector::new(config.dns_threads, tls, proxies.clone());
+       
+        let hyper_client = ::hyper::Client::builder()
+            .build(connector);
 
         Ok(Client {
             inner: Arc::new(ClientRef {
@@ -154,9 +147,7 @@ impl ClientBuilder {
     pub fn add_root_certificate(&mut self, cert: Certificate) -> &mut ClientBuilder {
         if let Some(config) = config_mut(&mut self.config, &self.err) {
             let cert = ::tls::cert(cert);
-            if let Err(e) = config.tls.add_root_certificate(cert) {
-                self.err = Some(::error::from(e));
-            }
+            config.tls.add_root_certificate(cert);
         }
         self
     }
@@ -165,9 +156,7 @@ impl ClientBuilder {
     pub fn identity(&mut self, identity: Identity) -> &mut ClientBuilder {
         if let Some(config) = config_mut(&mut self.config, &self.err) {
             let pkcs12 = ::tls::pkcs12(identity);
-            if let Err(e) = config.tls.identity(pkcs12) {
-                self.err = Some(::error::from(e));
-            }
+            config.tls.identity(pkcs12);
         }
         self
     }
@@ -198,11 +187,38 @@ impl ClientBuilder {
         self
     }
 
+    /// Disable certs verification.
+    ///
+    /// # Warning
+    ///
+    /// You should think very carefully before you use this method. If
+    /// hostname verification is not used, any valid certificate for any
+    /// site will be trusted for use from any other. This introduces a
+    /// significant vulnerability to man-in-the-middle attacks.
+    #[inline]
+    pub fn danger_disable_certs_verification(&mut self) -> &mut ClientBuilder {
+        if let Some(config) = config_mut(&mut self.config, &self.err) {
+            config.certs_verification = false;
+        }
+        self
+    }
+
+    /// Enable certs verification.
+    #[inline]
+    pub fn enable_certs_verification(&mut self) -> &mut ClientBuilder {
+        if let Some(config) = config_mut(&mut self.config, &self.err) {
+            config.certs_verification = true;
+        }
+        self
+    }
+
     /// Sets the default headers for every request.
     #[inline]
-    pub fn default_headers(&mut self, headers: Headers) -> &mut ClientBuilder {
+    pub fn default_headers(&mut self, headers: HeaderMap) -> &mut ClientBuilder {
         if let Some(config) = config_mut(&mut self.config, &self.err) {
-            config.headers.extend(headers.iter());
+            for (key, value) in headers.iter() {
+                config.headers.insert(key, value.clone());
+            }
         }
         self
     }
@@ -287,9 +303,9 @@ impl Client {
     /// initialized. Use `Client::builder()` if you wish to handle the failure
     /// as an `Error` instead of panicking.
     #[inline]
-    pub fn new(handle: &Handle) -> Client {
+    pub fn new() -> Client {
         ClientBuilder::new()
-            .build(handle)
+            .build()
             .expect("TLS failed to initialize")
     }
 
@@ -305,7 +321,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Get, url)
+        self.request(Method::GET, url)
     }
 
     /// Convenience method to make a `POST` request to a URL.
@@ -314,7 +330,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Post, url)
+        self.request(Method::POST, url)
     }
 
     /// Convenience method to make a `PUT` request to a URL.
@@ -323,7 +339,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn put<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Put, url)
+        self.request(Method::PUT, url)
     }
 
     /// Convenience method to make a `PATCH` request to a URL.
@@ -332,7 +348,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn patch<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Patch, url)
+        self.request(Method::PATCH, url)
     }
 
     /// Convenience method to make a `DELETE` request to a URL.
@@ -341,7 +357,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn delete<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Delete, url)
+        self.request(Method::DELETE, url)
     }
 
     /// Convenience method to make a `HEAD` request to a URL.
@@ -350,7 +366,7 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        self.request(Method::Head, url)
+        self.request(Method::HEAD, url)
     }
 
     /// Start building a `Request` with the `Method` and `Url`.
@@ -395,28 +411,35 @@ impl Client {
         ) = request::pieces(req);
 
         let mut headers = self.inner.headers.clone(); // default headers
-        headers.extend(user_headers.iter());
+        for (key, value) in user_headers.iter() {
+            headers.insert(key, value.clone());
+        }
 
         if self.inner.gzip &&
-            !headers.has::<AcceptEncoding>() &&
-            !headers.has::<Range>() {
-            headers.set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
+            !headers.contains_key(ACCEPT_ENCODING) &&
+            !headers.contains_key(RANGE) {
+            headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip"));
         }
 
         let uri = to_uri(&url);
-        let mut req = ::hyper::Request::new(method.clone(), uri.clone());
-        *req.headers_mut() = headers.clone();
-        let body = body.map(|body| {
-            let (reusable, body) = body::into_hyper(body);
-            req.set_body(body);
-            reusable
-        });
 
-        if proxy::is_proxied(&self.inner.proxies, &url) {
-            if uri.scheme() == Some("http") {
-                req.set_proxy(true);
+        let (reusable, body) = match body {
+            Some(body) => {
+                let (reusable, body) = body::into_hyper(body);
+                (Some(reusable), body)
+            },
+            None => {
+                (None, ::hyper::Body::empty())
             }
-        }
+        };
+
+        let mut req = ::hyper::Request::builder()
+            .method(method.clone())
+            .uri(uri.clone())
+            .body(body)
+            .expect("valid request parts");
+
+        *req.headers_mut() = headers.clone();
 
         let in_flight = self.inner.hyper.request(req);
 
@@ -425,7 +448,7 @@ impl Client {
                 method: method,
                 url: url,
                 headers: headers,
-                body: body,
+                body: reusable,
 
                 urls: Vec::new(),
 
@@ -456,7 +479,7 @@ impl fmt::Debug for ClientBuilder {
 
 struct ClientRef {
     gzip: bool,
-    headers: Headers,
+    headers: HeaderMap,
     hyper: HyperClient,
     proxies: Arc<Vec<Proxy>>,
     redirect_policy: RedirectPolicy,
@@ -475,14 +498,14 @@ enum PendingInner {
 pub struct PendingRequest {
     method: Method,
     url: Url,
-    headers: Headers,
+    headers: HeaderMap,
     body: Option<Option<Bytes>>,
 
     urls: Vec<Url>,
 
     client: Arc<ClientRef>,
 
-    in_flight: FutureResponse,
+    in_flight: ResponseFuture,
 }
 
 
@@ -509,20 +532,20 @@ impl Future for PendingRequest {
                 Async::NotReady => return Ok(Async::NotReady),
             };
             let should_redirect = match res.status() {
-                StatusCode::MovedPermanently |
-                StatusCode::Found |
-                StatusCode::SeeOther => {
+                StatusCode::MOVED_PERMANENTLY |
+                StatusCode::FOUND |
+                StatusCode::SEE_OTHER => {
                     self.body = None;
                     match self.method {
-                        Method::Get | Method::Head => {},
+                        Method::GET | Method::HEAD => {},
                         _ => {
-                            self.method = Method::Get;
+                            self.method = Method::GET;
                         }
                     }
                     true
                 },
-                StatusCode::TemporaryRedirect |
-                StatusCode::PermanentRedirect => match self.body {
+                StatusCode::TEMPORARY_REDIRECT |
+                StatusCode::PERMANENT_REDIRECT => match self.body {
                     Some(Some(_)) | None => true,
                     Some(None) => false,
                 },
@@ -530,12 +553,12 @@ impl Future for PendingRequest {
             };
             if should_redirect {
                 let loc = res.headers()
-                    .get::<Location>()
-                    .map(|loc| self.url.join(loc));
+                    .get(LOCATION)
+                    .map(|loc| self.url.join(loc.to_str().expect("")));
                 if let Some(Ok(loc)) = loc {
                     if self.client.referer {
                         if let Some(referer) = make_referer(&loc, &self.url) {
-                            self.headers.set(referer);
+                            self.headers.insert(REFERER, referer);
                         }
                     }
                     self.urls.push(self.url.clone());
@@ -553,19 +576,17 @@ impl Future for PendingRequest {
                             remove_sensitive_headers(&mut self.headers, &self.url, &self.urls);
                             debug!("redirecting to {:?} '{}'", self.method, self.url);
                             let uri = to_uri(&self.url);
-                            let mut req = ::hyper::Request::new(
-                                self.method.clone(),
-                                uri.clone()
-                            );
+                            let body = match self.body {
+                                Some(Some(ref body)) => ::hyper::Body::from(body.clone()),
+                                _ => ::hyper::Body::empty(),
+                            };
+                            let mut req = ::hyper::Request::builder()
+                                .method(self.method.clone())
+                                .uri(uri.clone())
+                                .body(body)
+                                .expect("valid request parts");
+
                             *req.headers_mut() = self.headers.clone();
-                            if let Some(Some(ref body)) = self.body {
-                                req.set_body(body.clone());
-                            }
-                            if proxy::is_proxied(&self.client.proxies, &self.url) {
-                                if uri.scheme() == Some("http") {
-                                    req.set_proxy(true);
-                                }
-                            }
                             self.in_flight = self.client.hyper.request(req);
                             continue;
                         },
@@ -607,7 +628,7 @@ impl fmt::Debug for Pending {
     }
 }
 
-fn make_referer(next: &Url, previous: &Url) -> Option<Referer> {
+fn make_referer(next: &Url, previous: &Url) -> Option<HeaderValue> {
     if next.scheme() == "http" && previous.scheme() == "https" {
         return None;
     }
@@ -616,7 +637,7 @@ fn make_referer(next: &Url, previous: &Url) -> Option<Referer> {
     let _ = referer.set_username("");
     let _ = referer.set_password(None);
     referer.set_fragment(None);
-    Some(Referer::new(referer.into_string()))
+    referer.as_str().parse().ok()
 }
 
 // pub(crate)
