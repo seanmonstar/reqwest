@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.9.0-pre" # remember to update html_root_url
+version = "0.9.0" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 repository = "https://github.com/seanmonstar/reqwest"
@@ -8,8 +8,6 @@ documentation = "https://docs.rs/reqwest"
 authors = ["Sean McArthur <sean@seanmonstar.com>"]
 license = "MIT/Apache-2.0"
 categories = ["web-programming::http-client"]
-
-publish = false # pre
 
 [dependencies]
 base64 = "0.9"

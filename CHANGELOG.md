@@ -1,3 +1,112 @@
+# v0.9.0
+
+### Features
+
+- Upgrade to `tokio` 0.1.
+- Upgrade to `hyper` 0.12.
+- Upgrade to `native-tls` 0.2.
+- Add `ClientBuilder::danger_accept_invalid_certs(bool)` to disable
+  certificate verification.
+- Add `RequestBuilder::bearer_auth(token)` to ease sending bearer tokens.
+- Add `headers()` and `headers_mut()` to `multipart::Part` to allow sending
+  extra headers for a specific part.
+- Moved `request::unstable::async` to `reqwest::async`.
+
+### Fixes
+
+- Fix panicking when passing a `Url` with a `file://` scheme. Instead, an
+  `Error` is returned.
+
+### Breaking Changes
+
+- Changed `ClientBuilder::danger_disable_hostname_verification()`
+  to `ClientBuilder::danger_accept_invalid_hostnames(bool)`.
+- Changed `ClientBuilder` to be a by-value builder instead of by-ref.
+
+  For single chains of method calls, this shouldn't affect you. For code that
+  conditionally uses the builder, this kind of change is needed:
+
+  ```rust
+  // Old
+  let mut builder = ClientBuilder::new();
+  if some_val {
+      builder.gzip(false);
+  }
+  let client = builder.build()?;
+
+  // New
+  let mut builder = ClientBuilder::new();
+  if some_val {
+      builder = builder.gzip(false);
+  }
+  let client = builder.build()?;
+  ```
+- Changed `RequestBuilder` to be a by-value builder of by-ref.
+
+  See the previous note about `ClientBuilder` for affected code and
+  how to change it.
+- Removed the `unstable` cargo-feature, and moved `reqwest::unstable::async`
+  to `reqwest::async`.
+- Changed `multipart::Part::mime()` to `mime_str()`.
+
+  ```rust
+  // Old
+  let part = multipart::Part::file(path)?
+      .mime(mime::TEXT_PLAIN);
+
+  // New
+  let part = multipart::Part::file(path)?
+      .mime_str("text/plain")?;
+  ```
+- The upgrade to `hyper` 0.12 means a temporary removal of the typed headers.
+
+  The `RequestBuilder` has simple methods to set headers using strings, which
+  can work in most places.
+
+  ```rust
+  // Old
+  client
+      .get("https://hyper.rs")
+      .header(UserAgent::new("hallo"))
+      .send()?;
+
+  // New
+  client
+      .get("https://hyper.rs")
+      .header("user-agent", "hallo")
+      .send()?;
+  ```
+
+  To ease the transition, there is a `hyper-011` cargo-feature that can be
+  enabled.
+
+  ```toml
+  [dependencies]
+  reqwest = { version = "0.9", features = ["hyper-011"] }
+  ```
+
+  And then usage:
+
+  ```rust
+  client
+      .get("https://hyper.rs")
+      .header_011(reqwest::hyper_011::header::UserAgent::new("hallo"))
+      .send()?;
+  ```
+
+
+## v0.8.8
+
+- Fix docs.rs/reqwest build.
+
+## v0.8.7
+
+### Fixes
+
+- Send an extra CRLF at the end of multipart requests, since some servers expect it.
+- Removed internal dependency on `tokio-proto`, which removed unsafe `small-vec`
+  dependency.
+
 ## v0.8.6
 
 ### Features
