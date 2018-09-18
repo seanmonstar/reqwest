@@ -1,4 +1,4 @@
-use url::{Url, ParseError};
+use url::Url;
 
 /// A trait to try to convert some type into a `Url`.
 ///
@@ -12,27 +12,47 @@ impl<T: PolyfillTryInto> IntoUrl for T {}
 // pub(crate)
 
 pub trait PolyfillTryInto {
-    fn into_url(self) -> Result<Url, ParseError>;
+    // Besides parsing as a valid `Url`, the `Url` must be a valid
+    // `http::Uri`, in that it makes sense to use in a network request.
+    fn into_url(self) -> ::Result<Url>;
 }
 
 impl PolyfillTryInto for Url {
-    fn into_url(self) -> Result<Url, ParseError> {
-        Ok(self)
+    fn into_url(self) -> ::Result<Url> {
+        if self.has_host() {
+            Ok(self)
+        } else {
+            Err(::error::url_bad_scheme(self))
+        }
     }
 }
 
 impl<'a> PolyfillTryInto for &'a str {
-    fn into_url(self) -> Result<Url, ParseError> {
-        Url::parse(self)
+    fn into_url(self) -> ::Result<Url> {
+        try_!(Url::parse(self))
+            .into_url()
     }
 }
 
 impl<'a> PolyfillTryInto for &'a String {
-    fn into_url(self) -> Result<Url, ParseError> {
-        Url::parse(self)
+    fn into_url(self) -> ::Result<Url> {
+        (&**self).into_url()
     }
 }
 
-pub fn to_uri(url: &Url) -> ::hyper::Uri {
+pub(crate) fn to_uri(url: &Url) -> ::hyper::Uri {
     url.as_str().parse().expect("a parsed Url should always be a valid Uri")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn into_url_file_scheme() {
+        let err = "file:///etc/hosts"
+            .into_url()
+            .unwrap_err();
+        assert_eq!(err.to_string(), "file:///etc/hosts: URL scheme is not allowed");
+    }
 }

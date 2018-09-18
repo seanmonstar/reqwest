@@ -119,6 +119,7 @@ impl Error {
             Kind::Io(ref e) => Some(e),
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
+            Kind::UrlBadScheme |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
             Kind::ClientError(_) |
@@ -196,6 +197,7 @@ impl fmt::Display for Error {
             Kind::Hyper(ref e) => fmt::Display::fmt(e, f),
             Kind::Mime(ref e) => fmt::Display::fmt(e, f),
             Kind::Url(ref e) => fmt::Display::fmt(e, f),
+            Kind::UrlBadScheme => f.write_str("URL scheme is not allowed"),
             Kind::Tls(ref e) => fmt::Display::fmt(e, f),
             Kind::Io(ref e) => fmt::Display::fmt(e, f),
             Kind::UrlEncoded(ref e) => fmt::Display::fmt(e, f),
@@ -221,6 +223,7 @@ impl StdError for Error {
             Kind::Hyper(ref e) => e.description(),
             Kind::Mime(ref e) => e.description(),
             Kind::Url(ref e) => e.description(),
+            Kind::UrlBadScheme => "URL scheme is not allowed",
             Kind::Tls(ref e) => e.description(),
             Kind::Io(ref e) => e.description(),
             Kind::UrlEncoded(ref e) => e.description(),
@@ -242,6 +245,7 @@ impl StdError for Error {
             Kind::Io(ref e) => e.cause(),
             Kind::UrlEncoded(ref e) => e.cause(),
             Kind::Json(ref e) => e.cause(),
+            Kind::UrlBadScheme |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
             Kind::ClientError(_) |
@@ -258,6 +262,7 @@ pub(crate) enum Kind {
     Hyper(::hyper::Error),
     Mime(::mime::FromStrError),
     Url(::url::ParseError),
+    UrlBadScheme,
     Tls(::native_tls::Error),
     Io(io::Error),
     UrlEncoded(::serde_urlencoded::ser::Error),
@@ -434,6 +439,13 @@ pub(crate) fn client_error(url: Url, status: StatusCode) -> Error {
 pub(crate) fn server_error(url: Url, status: StatusCode) -> Error {
     Error {
         kind: Kind::ServerError(status),
+        url: Some(url),
+    }
+}
+
+pub(crate) fn url_bad_scheme(url: Url) -> Error {
+    Error {
+        kind: Kind::UrlBadScheme,
         url: Some(url),
     }
 }

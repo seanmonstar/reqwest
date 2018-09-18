@@ -291,10 +291,9 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
-        let req = match url.into_url() {
-            Ok(url) => Ok(Request::new(method, url)),
-            Err(err) => Err(::error::from(err)),
-        };
+        let req = url
+            .into_url()
+            .map(move |url| Request::new(method, url));
         RequestBuilder::new(self.clone(), req)
     }
 
