@@ -86,9 +86,9 @@ impl Request {
 
         let mut req_async = self.inner;
         let body = self.body.and_then(|body| {
-            let (tx, body, len) = body::async(body);
+            let (tx, body, len) = body.into_async();
             if let Some(len) = len {
-                req_async.headers_mut().insert(CONTENT_LENGTH, HeaderValue::from_str(len.to_string().as_str()).expect(""));
+                req_async.headers_mut().insert(CONTENT_LENGTH, len.into());
             }
             *req_async.body_mut() = Some(body);
             tx

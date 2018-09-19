@@ -93,7 +93,7 @@ impl Form {
     pub(crate) fn compute_length(&mut self) -> Option<u64> {
         let mut length = 0u64;
         for &(ref name, ref field) in self.fields.iter() {
-            match ::body::len(&field.value) {
+            match field.value.len() {
                 Some(value_length) => {
                     // We are constructing the header just to get its length. To not have to
                     // construct it again when the request is sent we cache these headers.
@@ -272,7 +272,7 @@ impl Reader {
             });
             let reader = boundary
                 .chain(header)
-                .chain(::body::reader(field.value))
+                .chain(field.value.into_reader())
                 .chain(Cursor::new("\r\n"));
             // According to https://tools.ietf.org/html/rfc2046#section-5.1.1
             // the very last field has a special boundary

@@ -82,6 +82,12 @@ impl Error {
         self.url.as_ref()
     }
 
+    pub(crate) fn with_url(mut self, url: Url) -> Error {
+        debug_assert_eq!(self.url, None, "with_url overriding existing url");
+        self.url = Some(url);
+        self
+    }
+
     /// Returns a reference to the internal error, if available.
     ///
     /// The `'static` bounds allows using `downcast_ref` to check the

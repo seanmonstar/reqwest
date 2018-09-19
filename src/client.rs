@@ -4,6 +4,7 @@ use std::time::Duration;
 use std::thread;
 
 use futures::{Future, Stream};
+use futures::future::{self, Either};
 use futures::sync::{mpsc, oneshot};
 
 use request::{Request, RequestBuilder};
@@ -466,20 +467,29 @@ impl ClientHandle {
             .unbounded_send((req, tx))
             .expect("core thread panicked");
 
-        if let Some(body) = body {
-            try_!(body.send(), &url);
-        }
+        let write = if let Some(body) = body {
+            Either::A(body.send())
+            //try_!(body.send(self.timeout.0), &url);
+        } else {
+            Either::B(future::ok(()))
+        };
 
-        let res = match wait::timeout(rx, self.timeout.0) {
+        let rx = rx.map_err(|_canceled| {
+            // The only possible reason there would be a Canceled error
+            // is if the thread running the event loop panicked. We could return
+            // an Err here, like a BrokenPipe, but the Client is not
+            // recoverable. Additionally, the panic in the other thread
+            // is not normal, and should likely be propagated.
+            panic!("event loop thread panicked");
+        });
+
+        let fut = write.join(rx).map(|((), res)| res);
+
+        let res = match wait::timeout(fut, self.timeout.0) {
             Ok(res) => res,
             Err(wait::Waited::TimedOut) => return Err(::error::timedout(Some(url))),
-            Err(wait::Waited::Err(_canceled)) => {
-                // The only possible reason there would be a Cancelled error
-                // is if the thread running the Core panicked. We could return
-                // an Err here, like a BrokenPipe, but the Client is not
-                // recoverable. Additionally, the panic in the other thread
-                // is not normal, and should likely be propagated.
-                panic!("core thread panicked");
+            Err(wait::Waited::Err(err)) => {
+                return Err(err.with_url(url));
             }
         };
         res.map(|res| {

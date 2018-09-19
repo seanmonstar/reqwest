@@ -32,7 +32,8 @@ static DEFAULT_USER_AGENT: &'static str =
 pub fn spawn(txns: Vec<Txn>) -> Server {
     let listener = net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
-    thread::spawn(
+    let tname = format!("test({})-support-server", thread::current().name().unwrap_or("<unknown>"));
+    thread::Builder::new().name(tname).spawn(
         move || for txn in txns {
             let mut expected = txn.request;
             let reply = txn.response;
@@ -46,20 +47,41 @@ pub fn spawn(txns: Vec<Txn>) -> Server {
                 thread::park_timeout(dur);
             }
 
-            let mut buf = [0; 4096];
-            assert!(buf.len() >= expected.len());
+            let mut buf = vec![0; expected.len() + 256];
 
             let mut n = 0;
             while n < expected.len() {
                 match socket.read(&mut buf[n..]) {
-                    Ok(0) | Err(_) => break,
+                    Ok(0) => break,
                     Ok(nread) => n += nread,
+                    Err(err) => {
+                        println!("server read error: {}", err);
+                        break;
+                    }
                 }
             }
 
             match (::std::str::from_utf8(&expected), ::std::str::from_utf8(&buf[..n])) {
-                (Ok(expected), Ok(received)) => assert_eq!(expected, received),
-                _ => assert_eq!(expected, &buf[..n]),
+                (Ok(expected), Ok(received)) => {
+                    assert_eq!(
+                        expected.len(),
+                        received.len(),
+                        "expected len = {}, received len = {}",
+                        expected.len(),
+                        received.len(),
+                    );
+                    assert_eq!(expected, received)
+                },
+                _ => {
+                    assert_eq!(
+                        expected.len(),
+                        n,
+                        "expected len = {}, received len = {}",
+                        expected.len(),
+                        n,
+                    );
+                    assert_eq!(expected, &buf[..n])
+                },
             }
 
             if let Some(dur) = txn.response_timeout {
@@ -86,7 +108,7 @@ pub fn spawn(txns: Vec<Txn>) -> Server {
                 socket.write_all(&reply).unwrap();
             }
         }
-    );
+    ).expect("server thread spawn");
 
     Server {
         addr: addr,

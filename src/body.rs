@@ -3,6 +3,7 @@ use std::fmt;
 use std::io::{self, Cursor, Read};
 
 use bytes::Bytes;
+use futures::Future;
 use hyper::{self};
 
 use {async_impl};
@@ -75,6 +76,37 @@ impl Body {
     pub fn sized<R: Read + Send + 'static>(reader: R, len: u64) -> Body {
         Body {
             kind: Kind::Reader(Box::from(reader), Some(len)),
+        }
+    }
+
+    pub(crate) fn len(&self) -> Option<u64> {
+        match self.kind {
+            Kind::Reader(_, len) => len,
+            Kind::Bytes(ref bytes) => Some(bytes.len() as u64),
+        }
+    }
+
+    pub(crate) fn into_reader(self) -> Reader {
+        match self.kind {
+            Kind::Reader(r, _) => Reader::Reader(r),
+            Kind::Bytes(b) => Reader::Bytes(Cursor::new(b)),
+        }
+    }
+
+    pub(crate) fn into_async(self) -> (Option<Sender>, async_impl::Body, Option<u64>) {
+        match self.kind {
+            Kind::Reader(read, len) => {
+                let (tx, rx) = hyper::Body::channel();
+                let tx = Sender {
+                    body: (read, len),
+                    tx: tx,
+                };
+                (Some(tx), async_impl::body::wrap(rx), len)
+            },
+            Kind::Bytes(chunk) => {
+                let len = chunk.len() as u64;
+                (None, async_impl::body::reusable(chunk), Some(len))
+            }
         }
     }
 }
@@ -150,27 +182,9 @@ impl<'a> fmt::Debug for DebugLength<'a> {
     }
 }
 
-
-// pub(crate)
-
-pub fn len(body: &Body) -> Option<u64> {
-    match body.kind {
-        Kind::Reader(_, len) => len,
-        Kind::Bytes(ref bytes) => Some(bytes.len() as u64),
-    }
-}
-
-pub enum Reader {
+pub(crate) enum Reader {
     Reader(Box<Read + Send>),
     Bytes(Cursor<Bytes>),
-}
-
-#[inline]
-pub fn reader(body: Body) -> Reader {
-    match body.kind {
-        Kind::Reader(r, _) => Reader::Reader(r),
-        Kind::Bytes(b) => Reader::Bytes(Cursor::new(b)),
-    }
 }
 
 impl Read for Reader {
@@ -182,25 +196,37 @@ impl Read for Reader {
     }
 }
 
-pub struct Sender {
+pub(crate) struct Sender {
     body: (Box<Read + Send>, Option<u64>),
     tx: hyper::body::Sender,
 }
 
 impl Sender {
-    pub fn send(self) -> ::Result<()> {
+    // A `Future` that may do blocking read calls.
+    // As a `Future`, this integrates easily with `wait::timeout`.
+    pub(crate) fn send(self) -> impl Future<Item=(), Error=::Error> {
         use std::cmp;
         use bytes::{BufMut, BytesMut};
+        use futures::future;
 
         let cap = cmp::min(self.body.1.unwrap_or(8192), 8192);
         let mut buf = BytesMut::with_capacity(cap as usize);
         let mut body = self.body.0;
-        let mut tx = self.tx;
-        loop {
+        // Put in an option so that it can be consumed on error to call abort()
+        let mut tx = Some(self.tx);
+
+        future::poll_fn(move || loop {
+            try_ready!(tx
+                .as_mut()
+                .expect("tx only taken on error")
+                .poll_ready()
+                .map_err(::error::from));
+
             match body.read(unsafe { buf.bytes_mut() }) {
-                Ok(0) => return Ok(()),
+                Ok(0) => return Ok(().into()),
                 Ok(n) => {
                     unsafe { buf.advance_mut(n); }
+                    let tx = tx.as_mut().expect("tx only taken on error");
                     if let Err(_) = tx.send_data(buf.take().freeze().into()) {
                         return Err(::error::timedout(None));
                     }
@@ -210,35 +236,20 @@ impl Sender {
                 }
                 Err(e) => {
                     let ret = io::Error::new(e.kind(), e.to_string());
-                    tx.abort();
+                    tx
+                        .take()
+                        .expect("tx only taken on error")
+                        .abort();
                     return Err(::error::from(ret));
                 }
             }
-        }
-    }
-}
-
-#[inline]
-pub fn async(body: Body) -> (Option<Sender>, async_impl::Body, Option<u64>) {
-    match body.kind {
-        Kind::Reader(read, len) => {
-            let (tx, rx) = hyper::Body::channel();
-            let tx = Sender {
-                body: (read, len),
-                tx: tx,
-            };
-            (Some(tx), async_impl::body::wrap(rx), len)
-        },
-        Kind::Bytes(chunk) => {
-            let len = chunk.len() as u64;
-            (None, async_impl::body::reusable(chunk), Some(len))
-        }
+        })
     }
 }
 
 // useful for tests, but not publicly exposed
 #[cfg(test)]
-pub fn read_to_string(mut body: Body) -> io::Result<String> {
+pub(crate) fn read_to_string(mut body: Body) -> io::Result<String> {
     let mut s = String::new();
     match body.kind {
             Kind::Reader(ref mut reader, _) => reader.read_to_string(&mut s),
