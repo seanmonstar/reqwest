@@ -336,29 +336,3 @@ pub fn new(mut res: async_impl::Response, timeout: Option<Duration>, thread: Kee
     }
 }
 
-#[test]
-fn mem_size_of() {
-    assert_eq!(::std::mem::size_of::<Response>(), 0);
-}
-
-#[test]
-fn mem_size_of_readable_async_res() {
-    assert_eq!(::std::mem::size_of::<async_impl::Response>(), 0);
-}
-
-#[test]
-fn mem_size_of_wait_body() {
-    assert_eq!(::std::mem::size_of::<WaitBody>(), 0);
-}
-
-#[test]
-fn mem_size_of_url() {
-    assert_eq!(::std::mem::size_of::<::Url>(), 0);
-}
-
-#[test]
-fn mem_size_of_readable_chunks_wait_body() {
-    assert_eq!(::std::mem::size_of::<async_impl::ReadableChunks<WaitBody>>(), 0);
-}
-
-

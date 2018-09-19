@@ -430,7 +430,3 @@ pub fn detect(headers: &mut HeaderMap, body: Body, check_gzip: bool) -> Decoder 
     }
 }
 
-#[test]
-fn mem_size_of() {
-    assert_eq!(::std::mem::size_of::<Decoder>(), 64);
-}
