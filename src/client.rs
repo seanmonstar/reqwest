@@ -438,8 +438,7 @@ impl ClientHandle {
 
 
             // work is Future<(), ()>, and our closure will never return Err
-            rt.spawn(work)
-                .run()
+            rt.block_on(work)
                 .expect("runtime unexpected error");
         }));
 

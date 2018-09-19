@@ -5,7 +5,7 @@ extern crate reqwest;
 mod support;
 
 #[test]
-fn test_multipart() {
+fn text_part() {
     let _ = env_logger::try_init();
 
     let form = reqwest::multipart::Form::new()

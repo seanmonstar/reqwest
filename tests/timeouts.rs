@@ -1,3 +1,4 @@
+extern crate env_logger;
 extern crate reqwest;
 
 #[macro_use]
@@ -8,34 +9,40 @@ use std::time::Duration;
 
 #[test]
 fn test_write_timeout() {
+    let _ = env_logger::try_init();
+    let body = String::from_utf8(vec![b'x'; 20_000]).unwrap();
+    let len = 8192;
+
     let server = server! {
-        request: b"\
+        request: format!("\
             POST /write-timeout HTTP/1.1\r\n\
             user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
-            content-length: 5\r\n\
+            content-length: {}\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
             \r\n\
-            Hello\
-            ",
+            {}\
+            ", body.len(), body),
         response: b"\
             HTTP/1.1 200 OK\r\n\
             Content-Length: 5\r\n\
             \r\n\
             Hello\
             ",
-        read_timeout: Duration::from_secs(1)
+        read_timeout: Duration::from_secs(2)
+
+        //response_timeout: Duration::from_secs(1)
     };
 
+    let cursor = ::std::io::Cursor::new(body.into_bytes());
     let url = format!("http://{}/write-timeout", server.addr());
     let err = reqwest::Client::builder()
         .timeout(Duration::from_millis(500))
         .build()
         .unwrap()
         .post(&url)
-        .header(reqwest::header::CONTENT_LENGTH, reqwest::header::HeaderValue::from_static("5"))
-        .body(reqwest::Body::new(&b"Hello"[..]))
+        .body(reqwest::Body::sized(cursor, len as u64))
         .send()
         .unwrap_err();
 
@@ -46,6 +53,7 @@ fn test_write_timeout() {
 
 #[test]
 fn test_response_timeout() {
+    let _ = env_logger::try_init();
     let server = server! {
         request: b"\
             GET /response-timeout HTTP/1.1\r\n\
@@ -77,6 +85,7 @@ fn test_response_timeout() {
 
 #[test]
 fn test_read_timeout() {
+    let _ = env_logger::try_init();
     let server = server! {
         request: b"\
             GET /read-timeout HTTP/1.1\r\n\

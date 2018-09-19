@@ -209,29 +209,40 @@ impl Sender {
         use bytes::{BufMut, BytesMut};
         use futures::future;
 
+        let con_len = self.body.1;
         let cap = cmp::min(self.body.1.unwrap_or(8192), 8192);
+        let mut written = 0;
         let mut buf = BytesMut::with_capacity(cap as usize);
         let mut body = self.body.0;
         // Put in an option so that it can be consumed on error to call abort()
         let mut tx = Some(self.tx);
 
         future::poll_fn(move || loop {
+            if Some(written) == con_len {
+                // Written up to content-length, so stop.
+                return Ok(().into());
+            }
+
             try_ready!(tx
                 .as_mut()
                 .expect("tx only taken on error")
                 .poll_ready()
                 .map_err(::error::from));
 
+            if buf.remaining_mut() == 0 {
+                buf.reserve(8192);
+            }
+
             match body.read(unsafe { buf.bytes_mut() }) {
-                Ok(0) => return Ok(().into()),
+                Ok(0) => {
+                    return Ok(().into())
+                },
                 Ok(n) => {
                     unsafe { buf.advance_mut(n); }
+                    written += n as u64;
                     let tx = tx.as_mut().expect("tx only taken on error");
                     if let Err(_) = tx.send_data(buf.take().freeze().into()) {
                         return Err(::error::timedout(None));
-                    }
-                    if buf.remaining_mut() == 0 {
-                        buf.reserve(8192);
                     }
                 }
                 Err(e) => {
