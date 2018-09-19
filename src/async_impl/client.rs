@@ -6,7 +6,7 @@ use bytes::Bytes;
 use futures::{Async, Future, Poll};
 use hyper::client::ResponseFuture;
 use header::{HeaderMap, HeaderValue, LOCATION, USER_AGENT, REFERER, ACCEPT,
-             ACCEPT_ENCODING, RANGE};
+             ACCEPT_ENCODING, RANGE, TRANSFER_ENCODING, CONTENT_TYPE, CONTENT_LENGTH, CONTENT_ENCODING};
 use mime::{self};
 use native_tls::{TlsConnector, TlsConnectorBuilder};
 
@@ -454,6 +454,10 @@ impl Future for PendingRequest {
                 StatusCode::FOUND |
                 StatusCode::SEE_OTHER => {
                     self.body = None;
+                    for header in &[TRANSFER_ENCODING, CONTENT_ENCODING, CONTENT_TYPE, CONTENT_LENGTH] {
+                        self.headers.remove(header);
+                    }
+
                     match self.method {
                         Method::GET | Method::HEAD => {},
                         _ => {
