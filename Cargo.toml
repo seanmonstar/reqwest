@@ -39,5 +39,13 @@ serde_derive = "1.0"
 default = []
 hyper-011 = ["hyper-old-types"]
 
+[[example]]
+name = "arbitrary_json"
+path = "examples/arbitrary_json.rs"
+
+[[example]]
+name = "statically_typed_json"
+path = "examples/statically_typed_json.rs"
+
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docs_rs_workaround"]
