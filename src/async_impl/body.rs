@@ -1,7 +1,7 @@
 use std::fmt;
 
 use futures::{Stream, Poll, Async};
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use hyper::body::Payload;
 
 /// An asynchronous `Stream`.
@@ -86,6 +86,20 @@ impl From<&'static str> for Body {
 #[derive(Default)]
 pub struct Chunk {
     inner: ::hyper::Chunk,
+}
+
+impl Buf for Chunk {
+    fn bytes(&self) -> &[u8] {
+        self.inner.bytes()
+    }
+
+    fn remaining(&self) -> usize {
+        self.inner.remaining()
+    }
+
+    fn advance(&mut self, n: usize) {
+        self.inner.advance(n);
+    }
 }
 
 impl AsRef<[u8]> for Chunk {

@@ -16,7 +16,9 @@ use super::{decoder, body, Decoder};
 pub struct Response {
     status: StatusCode,
     headers: HeaderMap,
-    url: Url,
+    // Boxed to save space (11 words to 1 word), and it's not accessed
+    // frequently internally.
+    url: Box<Url>,
     body: Decoder,
     version: Version,
 }
@@ -29,11 +31,11 @@ impl Response {
         let decoder = decoder::detect(&mut headers, body::wrap(res.into_body()), gzip);
         debug!("Response: '{}' for {}", status, url);
         Response {
-            status: status,
-            headers: headers,
-            url: url,
+            status,
+            headers,
+            url: Box::new(url),
             body: decoder,
-            version: version,
+            version,
         }
     }
 
@@ -123,9 +125,9 @@ impl Response {
     #[inline]
     pub fn error_for_status(self) -> ::Result<Self> {
         if self.status.is_client_error() {
-            Err(::error::client_error(self.url, self.status))
+            Err(::error::client_error(*self.url, self.status))
         } else if self.status.is_server_error() {
-            Err(::error::server_error(self.url, self.status))
+            Err(::error::server_error(*self.url, self.status))
         } else {
             Ok(self)
         }
@@ -163,3 +165,4 @@ impl<T> fmt::Debug for Json<T> {
             .finish()
     }
 }
+

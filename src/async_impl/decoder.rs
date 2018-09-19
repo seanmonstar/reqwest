@@ -26,7 +26,7 @@ use std::mem;
 use std::cmp;
 use std::io::{self, Read};
 
-use bytes::{BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use libflate::non_blocking::gzip;
 use futures::{Async, Future, Poll, Stream};
 use hyper::{HeaderMap};
@@ -53,17 +53,15 @@ enum Inner {
     Pending(Pending)
 }
 
-enum Pending {
-    /// An unreachable internal state.
-    Empty,
-    /// A future attempt to poll the response body for EOF so we know whether to use gzip or not.
-    Gzip(ReadableChunks<Body>)
+/// A future attempt to poll the response body for EOF so we know whether to use gzip or not.
+struct Pending {
+    body: ReadableChunks<Body>,
 }
 
 /// A gzip decoder that reads from a `libflate::gzip::Decoder` into a `BytesMut` and emits the results
 /// as a `Chunk`.
 struct Gzip {
-    inner: gzip::Decoder<Peeked<ReadableChunks<Body>>>,
+    inner: Box<gzip::Decoder<Peeked<ReadableChunks<Body>>>>,
     buf: BytesMut,
 }
 
@@ -101,7 +99,7 @@ impl Decoder {
     #[inline]
     fn gzip(body: Body) -> Decoder {
         Decoder {
-            inner: Inner::Pending(Pending::Gzip(ReadableChunks::new(body)))
+            inner: Inner::Pending(Pending { body: ReadableChunks::new(body) })
         }
     }
 
@@ -141,28 +139,19 @@ impl Future for Pending {
     type Error = error::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let body_state = match *self {
-            Pending::Gzip(ref mut body) => {
-                match body.poll_stream() {
-                    Ok(Async::Ready(state)) => state,
-                    Ok(Async::NotReady) => return Ok(Async::NotReady),
-                    Err(e) => return Err(e)
-                }
-            },
-            Pending::Empty => panic!("poll for a decoder after it's done")
+        let body_state = match self.body.poll_stream() {
+            Ok(Async::Ready(state)) => state,
+            Ok(Async::NotReady) => return Ok(Async::NotReady),
+            Err(e) => return Err(e)
         };
 
-        match mem::replace(self, Pending::Empty) {
-            Pending::Gzip(body) => {
-                // libflate does a read_exact([0; 2]), so its impossible to tell
-                // if the stream was empty, or truly had an UnexpectedEof.
-                // Therefore, we need to check for EOF first.
-                match body_state {
-                    StreamState::Eof => Ok(Async::Ready(Inner::PlainText(body::empty()))),
-                    StreamState::HasMore => Ok(Async::Ready(Inner::Gzip(Gzip::new(body))))
-                }
-            },
-            Pending::Empty => panic!("invalid internal state")
+        let body = mem::replace(&mut self.body, ReadableChunks::new(body::empty()));
+        // libflate does a read_exact([0; 2]), so its impossible to tell
+        // if the stream was empty, or truly had an UnexpectedEof.
+        // Therefore, we need to check for EOF first.
+        match body_state {
+            StreamState::Eof => Ok(Async::Ready(Inner::PlainText(body::empty()))),
+            StreamState::HasMore => Ok(Async::Ready(Inner::Gzip(Gzip::new(body))))
         }
     }
 }
@@ -171,7 +160,7 @@ impl Gzip {
     fn new(stream: ReadableChunks<Body>) -> Self {
         Gzip {
             buf: BytesMut::with_capacity(INIT_BUFFER_SIZE),
-            inner: gzip::Decoder::new(Peeked::new(stream))
+            inner: Box::new(gzip::Decoder::new(Peeked::new(stream))),
         }
     }
 }
@@ -221,7 +210,7 @@ pub struct ReadableChunks<S> {
 
 enum ReadState {
     /// A chunk is ready to be read from.
-    Ready(Chunk, usize),
+    Ready(Chunk),
     /// The next chunk isn't ready yet.
     NotReady,
     /// The stream has finished.
@@ -330,21 +319,20 @@ impl<S> fmt::Debug for ReadableChunks<S> {
     }
 }
 
-impl<S> Read for ReadableChunks<S> 
-    where S: Stream<Item = Chunk, Error = error::Error>
+impl<S> Read for ReadableChunks<S>
+where
+    S: Stream<Item = Chunk, Error = error::Error>,
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         loop {
             let ret;
             match self.state {
-                ReadState::Ready(ref mut chunk, ref mut pos) => {
-                    let chunk_start = *pos;
-                    let len = cmp::min(buf.len(), chunk.len() - chunk_start);
-                    let chunk_end = chunk_start + len;
+                ReadState::Ready(ref mut chunk) => {
+                    let len = cmp::min(buf.len(), chunk.remaining());
 
-                    buf[..len].copy_from_slice(&chunk[chunk_start..chunk_end]);
-                    *pos += len;
-                    if *pos == chunk.len() {
+                    buf[..len].copy_from_slice(&chunk[..len]);
+                    chunk.advance(len);
+                    if chunk.is_empty() {
                         ret = len;
                     } else {
                         return Ok(len);
@@ -382,7 +370,7 @@ impl<S> ReadableChunks<S>
     fn poll_stream(&mut self) -> Poll<StreamState, error::Error> {
         match self.stream.poll() {
             Ok(Async::Ready(Some(chunk))) => {
-                self.state = ReadState::Ready(chunk, 0);
+                self.state = ReadState::Ready(chunk);
 
                 Ok(Async::Ready(StreamState::HasMore))
             },
@@ -440,4 +428,9 @@ pub fn detect(headers: &mut HeaderMap, body: Body, check_gzip: bool) -> Decoder 
     } else {
         Decoder::plain_text(body)
     }
+}
+
+#[test]
+fn mem_size_of() {
+    assert_eq!(::std::mem::size_of::<Decoder>(), 64);
 }
