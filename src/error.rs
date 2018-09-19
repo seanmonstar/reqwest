@@ -50,16 +50,30 @@ use {StatusCode, Url};
 ///    }
 /// }
 /// ```
-#[derive(Debug)]
 pub struct Error {
+    inner: Box<Inner>,
+}
+
+#[derive(Debug)]
+struct Inner {
     kind: Kind,
     url: Option<Url>,
 }
+
 
 /// A `Result` alias where the `Err` case is `reqwest::Error`.
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 impl Error {
+    fn new(kind: Kind, url: Option<Url>) -> Error {
+        Error {
+            inner: Box::new(Inner {
+                kind,
+                url,
+            }),
+        }
+    }
+
     /// Returns a possible URL related to this error.
     ///
     /// # Examples
@@ -79,12 +93,12 @@ impl Error {
     /// ```
     #[inline]
     pub fn url(&self) -> Option<&Url> {
-        self.url.as_ref()
+        self.inner.url.as_ref()
     }
 
     pub(crate) fn with_url(mut self, url: Url) -> Error {
-        debug_assert_eq!(self.url, None, "with_url overriding existing url");
-        self.url = Some(url);
+        debug_assert_eq!(self.inner.url, None, "with_url overriding existing url");
+        self.inner.url = Some(url);
         self
     }
 
@@ -116,7 +130,7 @@ impl Error {
     /// ```
     #[inline]
     pub fn get_ref(&self) -> Option<&(StdError + Send + Sync + 'static)> {
-        match self.kind {
+        match self.inner.kind {
             Kind::Http(ref e) => Some(e),
             Kind::Hyper(ref e) => Some(e),
             Kind::Mime(ref e) => Some(e),
@@ -136,7 +150,7 @@ impl Error {
     /// Returns true if the error is related to HTTP.
     #[inline]
     pub fn is_http(&self) -> bool {
-        match self.kind {
+        match self.inner.kind {
             Kind::Http(_) => true,
             Kind::Hyper(_) => true,
             _ => false,
@@ -146,7 +160,7 @@ impl Error {
     /// Returns true if the error is serialization related.
     #[inline]
     pub fn is_serialization(&self) -> bool {
-        match self.kind {
+        match self.inner.kind {
             Kind::Json(_) |
             Kind::UrlEncoded(_) => true,
             _ => false,
@@ -156,7 +170,7 @@ impl Error {
     /// Returns true if the error is from a `RedirectPolicy`.
     #[inline]
     pub fn is_redirect(&self) -> bool {
-        match self.kind {
+        match self.inner.kind {
             Kind::TooManyRedirects |
             Kind::RedirectLoop => true,
             _ => false,
@@ -166,7 +180,7 @@ impl Error {
     /// Returns true if the error is from a request returning a 4xx error.
     #[inline]
     pub fn is_client_error(&self) -> bool {
-        match self.kind {
+        match self.inner.kind {
             Kind::ClientError(_) => true,
             _ => false,
         }
@@ -175,7 +189,7 @@ impl Error {
     /// Returns true if the error is from a request returning a 5xx error.
     #[inline]
     pub fn is_server_error(&self) -> bool {
-        match self.kind {
+        match self.inner.kind {
             Kind::ServerError(_) => true,
             _ => false,
         }
@@ -184,7 +198,7 @@ impl Error {
     /// Returns the status code, if the error was generated from a response.
     #[inline]
     pub fn status(&self) -> Option<StatusCode> {
-        match self.kind {
+        match self.inner.kind {
             Kind::ClientError(code) |
             Kind::ServerError(code) => Some(code),
             _ => None,
@@ -192,13 +206,19 @@ impl Error {
     }
 }
 
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&self.inner, f)
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(ref url) = self.url {
+        if let Some(ref url) = self.inner.url {
             try!(fmt::Display::fmt(url, f));
             try!(f.write_str(": "));
         }
-        match self.kind {
+        match self.inner.kind {
             Kind::Http(ref e) => fmt::Display::fmt(e, f),
             Kind::Hyper(ref e) => fmt::Display::fmt(e, f),
             Kind::Mime(ref e) => fmt::Display::fmt(e, f),
@@ -224,7 +244,7 @@ impl fmt::Display for Error {
 
 impl StdError for Error {
     fn description(&self) -> &str {
-        match self.kind {
+        match self.inner.kind {
             Kind::Http(ref e) => e.description(),
             Kind::Hyper(ref e) => e.description(),
             Kind::Mime(ref e) => e.description(),
@@ -242,7 +262,7 @@ impl StdError for Error {
     }
 
     fn cause(&self) -> Option<&StdError> {
-        match self.kind {
+        match self.inner.kind {
             Kind::Http(ref e) => e.cause(),
             Kind::Hyper(ref e) => e.cause(),
             Kind::Mime(ref e) => e.cause(),
@@ -373,10 +393,7 @@ where
 {
     #[inline]
     fn from(other: InternalFrom<T>) -> Error {
-        Error {
-            kind: other.0.into(),
-            url: other.1,
-        }
+        Error::new(other.0.into(), other.1)
     }
 }
 
@@ -388,7 +405,7 @@ where
 }
 
 pub(crate) fn into_io(e: Error) -> io::Error {
-    match e.kind {
+    match e.inner.kind {
         Kind::Io(io) => io,
         _ => io::Error::new(io::ErrorKind::Other, e),
     }
@@ -415,45 +432,27 @@ macro_rules! try_ {
 }
 
 pub(crate) fn loop_detected(url: Url) -> Error {
-    Error {
-        kind: Kind::RedirectLoop,
-        url: Some(url),
-    }
+    Error::new(Kind::RedirectLoop, Some(url))
 }
 
 pub(crate) fn too_many_redirects(url: Url) -> Error {
-    Error {
-        kind: Kind::TooManyRedirects,
-        url: Some(url),
-    }
+    Error::new(Kind::TooManyRedirects, Some(url))
 }
 
 pub(crate) fn timedout(url: Option<Url>) -> Error {
-    Error {
-        kind: Kind::Io(io_timeout()),
-        url: url,
-    }
+    Error::new(Kind::Io(io_timeout()), url)
 }
 
 pub(crate) fn client_error(url: Url, status: StatusCode) -> Error {
-    Error {
-        kind: Kind::ClientError(status),
-        url: Some(url),
-    }
+    Error::new(Kind::ClientError(status), Some(url))
 }
 
 pub(crate) fn server_error(url: Url, status: StatusCode) -> Error {
-    Error {
-        kind: Kind::ServerError(status),
-        url: Some(url),
-    }
+    Error::new(Kind::ServerError(status), Some(url))
 }
 
 pub(crate) fn url_bad_scheme(url: Url) -> Error {
-    Error {
-        kind: Kind::UrlBadScheme,
-        url: Some(url),
-    }
+    Error::new(Kind::UrlBadScheme, Some(url))
 }
 
 #[cfg(test)]
@@ -494,7 +493,7 @@ mod tests {
 
         let root = Chain(None::<Error>);
         let io = ::std::io::Error::new(::std::io::ErrorKind::Other, root);
-        let err = Error { kind: Kind::Io(io), url: None };
+        let err = Error::new(Kind::Io(io), None);
         assert!(err.cause().is_none());
         assert_eq!(err.to_string(), "root");
 
@@ -502,8 +501,14 @@ mod tests {
         let root = ::std::io::Error::new(::std::io::ErrorKind::Other, Chain(None::<Error>));
         let link = Chain(Some(root));
         let io = ::std::io::Error::new(::std::io::ErrorKind::Other, link);
-        let err = Error { kind: Kind::Io(io), url: None };
+        let err = Error::new(Kind::Io(io), None);
         assert!(err.cause().is_some());
         assert_eq!(err.to_string(), "chain: root");
+    }
+
+    #[test]
+    fn mem_size_of() {
+        use std::mem::size_of;
+        assert_eq!(size_of::<Error>(), size_of::<usize>());
     }
 }
