@@ -1,3 +1,11 @@
+## v0.9.1
+
+### Fixes
+
+- Fix large request bodies failing because of improper handling of backpressure.
+- Remove body-related headers when redirect changes a `POST` into a `GET`.
+- Reduce memory size of `Response` and `Error` signicantly.
+
 # v0.9.0
 
 ### Features
