@@ -476,9 +476,17 @@ impl Future for PendingRequest {
             if should_redirect {
                 let loc = res.headers()
                     .get(LOCATION)
-                    .and_then(|val| val.to_str().ok())
-                    .map(|loc| self.url.join(loc));
-                if let Some(Ok(loc)) = loc {
+                    .and_then(|val| {
+                        let loc = (|| -> Option<Url> {
+                            self.url.join(val.to_str().ok()?).ok()
+                        })();
+
+                        if loc.is_none() {
+                            debug!("Location header had invalid URI: {:?}", val);
+                        }
+                        loc
+                    });
+                if let Some(loc) = loc {
                     if self.client.referer {
                         if let Some(referer) = make_referer(&loc, &self.url) {
                             self.headers.insert(REFERER, referer);
@@ -522,8 +530,6 @@ impl Future for PendingRequest {
                             return Err(::error::too_many_redirects(self.url.clone()));
                         }
                     }
-                } else if let Some(Err(e)) = loc {
-                    debug!("Location header had invalid URI: {:?}", e);
                 }
             }
             let res = Response::new(res, self.url.clone(), self.client.gzip);
