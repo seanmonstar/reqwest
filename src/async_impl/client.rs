@@ -476,7 +476,8 @@ impl Future for PendingRequest {
             if should_redirect {
                 let loc = res.headers()
                     .get(LOCATION)
-                    .map(|loc| self.url.join(loc.to_str().expect("")));
+                    .and_then(|val| val.to_str().ok())
+                    .map(|loc| self.url.join(loc));
                 if let Some(Ok(loc)) = loc {
                     if self.client.referer {
                         if let Some(referer) = make_referer(&loc, &self.url) {
