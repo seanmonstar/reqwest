@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, str};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -478,7 +478,10 @@ impl Future for PendingRequest {
                     .get(LOCATION)
                     .and_then(|val| {
                         let loc = (|| -> Option<Url> {
-                            self.url.join(val.to_str().ok()?).ok()
+                            // Some sites may send a utf-8 Location header,
+                            // even though we're supposed to treat those bytes
+                            // as opaque, we'll check specifically for utf8.
+                            self.url.join(str::from_utf8(val.as_bytes()).ok()?).ok()
                         })();
 
                         if loc.is_none() {
