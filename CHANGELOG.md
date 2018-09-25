@@ -1,3 +1,7 @@
+## v0.9.2
+
+- Fix panic when `Location` header has UTF-8 characters.
+
 ## v0.9.1
 
 ### Fixes
