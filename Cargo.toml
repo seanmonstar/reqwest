@@ -18,7 +18,7 @@ http = "0.1.10"
 hyper = "0.12.7"
 hyper-old-types = { version = "0.11", optional = true, features = ["compat"] }
 hyper-tls = "0.3"
-libflate = "0.1.11"
+libflate = "0.1.18"
 log = "0.4"
 mime = "0.3.7"
 mime_guess = "2.0.0-alpha.6"
