@@ -12,12 +12,12 @@ use serde_json;
 
 use client::KeepCoreThreadAlive;
 use hyper::header::HeaderMap;
-use {async_impl, StatusCode, Url, Version, wait};
+use {async, StatusCode, Url, Version, wait};
 
 /// A Response to a submitted `Request`.
 pub struct Response {
-    inner: async_impl::Response,
-    body: async_impl::ReadableChunks<WaitBody>,
+    inner: async::Response,
+    body: async::ReadableChunks<WaitBody>,
     content_length: Option<u64>,
     _thread_handle: KeepCoreThreadAlive,
 }
@@ -296,12 +296,12 @@ impl Read for Response {
 }
 
 struct WaitBody {
-    inner: wait::WaitStream<async_impl::Decoder>
+    inner: wait::WaitStream<async::Decoder>
 }
 
 impl Stream for WaitBody {
-    type Item = <async_impl::Decoder as Stream>::Item;
-    type Error = <async_impl::Decoder as Stream>::Error;
+    type Item = <async::Decoder as Stream>::Item;
+    type Error = <async::Decoder as Stream>::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.inner.next() {
@@ -321,10 +321,10 @@ impl Stream for WaitBody {
 
 // pub(crate)
 
-pub fn new(mut res: async_impl::Response, timeout: Option<Duration>, thread: KeepCoreThreadAlive) -> Response {
-    let body = mem::replace(res.body_mut(), async_impl::Decoder::empty());
+pub fn new(mut res: async::Response, timeout: Option<Duration>, thread: KeepCoreThreadAlive) -> Response {
+    let body = mem::replace(res.body_mut(), async::Decoder::empty());
     let len = body.content_length();
-    let body = async_impl::ReadableChunks::new(WaitBody {
+    let body = async::ReadableChunks::new(WaitBody {
         inner: wait::stream(body, timeout)
     });
 

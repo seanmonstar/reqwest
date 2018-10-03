@@ -9,7 +9,7 @@ use futures::sync::{mpsc, oneshot};
 
 use request::{Request, RequestBuilder};
 use response::{self, Response};
-use {async_impl, header, Certificate, Identity, Method, IntoUrl, Proxy, RedirectPolicy, wait};
+use {async, header, Certificate, Identity, Method, IntoUrl, Proxy, RedirectPolicy, wait};
 
 /// A `Client` to make Requests with.
 ///
@@ -53,7 +53,7 @@ pub struct Client {
 /// # }
 /// ```
 pub struct ClientBuilder {
-    inner: async_impl::ClientBuilder,
+    inner: async::ClientBuilder,
     timeout: Timeout,
 }
 
@@ -61,7 +61,7 @@ impl ClientBuilder {
     /// Constructs a new `ClientBuilder`
     pub fn new() -> ClientBuilder {
         ClientBuilder {
-            inner: async_impl::ClientBuilder::new(),
+            inner: async::ClientBuilder::new(),
             timeout: Timeout::default(),
         }
     }
@@ -250,7 +250,7 @@ impl ClientBuilder {
 
     fn with_inner<F>(mut self, func: F) -> ClientBuilder
     where
-        F: FnOnce(async_impl::ClientBuilder) -> async_impl::ClientBuilder,
+        F: FnOnce(async::ClientBuilder) -> async::ClientBuilder,
     {
         self.inner = func(self.inner);
         self
@@ -386,7 +386,7 @@ struct ClientHandle {
     inner: Arc<InnerClientHandle>
 }
 
-type ThreadSender = mpsc::UnboundedSender<(async_impl::Request, oneshot::Sender<::Result<async_impl::Response>>)>;
+type ThreadSender = mpsc::UnboundedSender<(async::Request, oneshot::Sender<::Result<async::Response>>)>;
 
 struct InnerClientHandle {
     tx: Option<ThreadSender>,
@@ -429,7 +429,7 @@ impl ClientHandle {
             };
 
             let work = rx.for_each(move |(req, tx)| {
-                let tx: oneshot::Sender<::Result<async_impl::Response>> = tx;
+                let tx: oneshot::Sender<::Result<async::Response>> = tx;
                 let task = client.execute(req)
                     .then(move |x| tx.send(x).map_err(|_| ()));
                 ::tokio::spawn(task);
