@@ -166,6 +166,14 @@ impl ClientBuilder {
 
     /// Enable auto gzip decompression by checking the ContentEncoding response header.
     ///
+    /// If auto gzip decompresson is turned on:
+    /// - When sending a request and if the request's headers do not already contain
+    ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `gzip`.
+    ///   The body is **not** automatically inflated.
+    /// - When receiving a response, if it's headers contain a `Content-Encoding` value that
+    ///   equals to `gzip`, both values `Content-Encoding` and `Content-Length` are removed from the 
+    ///   headers' set. The body is automatically deinflated.
+    /// 
     /// Default is enabled.
     pub fn gzip(mut self, enable: bool) -> ClientBuilder {
         self.config.gzip = enable;
