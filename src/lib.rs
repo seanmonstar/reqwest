@@ -174,7 +174,6 @@ pub use self::tls::{Certificate, Identity};
 #[macro_use]
 mod error;
 
-mod async_impl;
 mod connect;
 mod connect_async;
 mod body;
@@ -189,22 +188,8 @@ mod wait;
 
 pub mod multipart;
 
-/// An 'async' implementation of the reqwest `Client`.
-///
-/// Relies on the `futures` crate, which is unstable, hence this module
-/// is **unstable**.
-pub mod async {
-    pub use ::async_impl::{
-        Body,
-        Chunk,
-        Decoder,
-        Client,
-        ClientBuilder,
-        Request,
-        RequestBuilder,
-        Response,
-    };
-}
+/// The async implementation of the client
+pub mod async;
 
 /// Shortcut method to quickly make a `GET` request.
 ///

@@ -8,12 +8,12 @@ use serde_urlencoded;
 use body::{self, Body};
 use header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 use http::HttpTryFrom;
-use {async_impl, Client, Method, Url};
+use {async, Client, Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
     body: Option<Body>,
-    inner: async_impl::Request,
+    inner: async::Request,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -29,7 +29,7 @@ impl Request {
     pub fn new(method: Method, url: Url) -> Self {
         Request {
             body: None,
-            inner: async_impl::Request::new(method, url),
+            inner: async::Request::new(method, url),
         }
     }
 
@@ -81,7 +81,7 @@ impl Request {
         &mut self.body
     }
 
-    pub(crate) fn into_async(self) -> (async_impl::Request, Option<body::Sender>) {
+    pub(crate) fn into_async(self) -> (async::Request, Option<body::Sender>) {
         use header::CONTENT_LENGTH;
 
         let mut req_async = self.inner;
