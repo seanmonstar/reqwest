@@ -519,8 +519,8 @@ impl Default for Timeout {
 
 pub struct KeepCoreThreadAlive(Option<Arc<InnerClientHandle>>);
 
-impl Default for KeepCoreThreadAlive {
-    fn default() -> KeepCoreThreadAlive {
+impl KeepCoreThreadAlive {
+    pub(crate) fn empty() -> KeepCoreThreadAlive {
         KeepCoreThreadAlive(None)
     }
 }

@@ -340,6 +340,6 @@ pub fn new(mut res: async_impl::Response, timeout: Option<Duration>, thread: Kee
 impl<T: Into<async_impl::body::Body>> From<http::Response<T>> for Response {
     fn from(r: http::Response<T>) -> Response {
         let response = async_impl::Response::from(r);
-        new(response, None, KeepCoreThreadAlive::default())
+        new(response, None, KeepCoreThreadAlive::empty())
     }
 }
