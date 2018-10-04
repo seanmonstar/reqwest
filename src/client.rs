@@ -500,7 +500,7 @@ impl ClientHandle {
             }
         };
         res.map(|res| {
-            response::new(res, self.timeout.0, KeepCoreThreadAlive(self.inner.clone()))
+            response::new(res, self.timeout.0, KeepCoreThreadAlive(Some(self.inner.clone())))
         })
     }
 }
@@ -517,4 +517,10 @@ impl Default for Timeout {
 
 // pub(crate)
 
-pub struct KeepCoreThreadAlive(Arc<InnerClientHandle>);
+pub struct KeepCoreThreadAlive(Option<Arc<InnerClientHandle>>);
+
+impl Default for KeepCoreThreadAlive {
+    fn default() -> KeepCoreThreadAlive {
+        KeepCoreThreadAlive(None)
+    }
+}

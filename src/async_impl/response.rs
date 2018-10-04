@@ -227,7 +227,7 @@ impl ResponseBuilderExt for http::response::Builder {
 mod tests {
     use url::Url;
     use http::response::Builder;
-    use super::{Response, ResponseUrl, ResponseBuilderExt, body};
+    use super::{Response, ResponseUrl, ResponseBuilderExt};
 
     #[test]
     fn test_response_builder_ext() {

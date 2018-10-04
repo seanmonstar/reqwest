@@ -6,6 +6,7 @@ use std::borrow::Cow;
 
 use encoding_rs::{Encoding, UTF_8};
 use futures::{Async, Poll, Stream};
+use http;
 use mime::Mime;
 use serde::de::DeserializeOwned;
 use serde_json;
@@ -336,3 +337,9 @@ pub fn new(mut res: async_impl::Response, timeout: Option<Duration>, thread: Kee
     }
 }
 
+impl<T: Into<async_impl::body::Body>> From<http::Response<T>> for Response {
+    fn from(r: http::Response<T>) -> Response {
+        let response = async_impl::Response::from(r);
+        new(response, None, KeepCoreThreadAlive::default())
+    }
+}
