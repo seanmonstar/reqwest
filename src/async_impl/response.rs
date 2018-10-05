@@ -8,6 +8,7 @@ use hyper::{HeaderMap, StatusCode, Version};
 use serde::de::DeserializeOwned;
 use serde_json;
 use url::Url;
+use http;
 
 use super::{decoder, body, Decoder};
 
@@ -144,6 +145,25 @@ impl fmt::Debug for Response {
     }
 }
 
+impl<T: Into<body::Body>> From<http::Response<T>> for Response {
+    fn from(r: http::Response<T>) -> Response {
+        let (mut parts, body) = r.into_parts();
+        let body = body.into();
+        let body = decoder::detect(&mut parts.headers, body, false);
+        let url = parts.extensions
+            .remove::<ResponseUrl>()
+            .unwrap_or_else(|| ResponseUrl(Url::parse("http://no.url.provided.local").unwrap()));
+        let url = url.0;
+        Response {
+            status: parts.status,
+            headers: parts.headers,
+            url: Box::new(url),
+            body: body,
+            version: parts.version,
+        }
+    }
+}
+
 pub struct Json<T> {
     concat: Concat2<Decoder>,
     _marker: PhantomData<T>,
@@ -166,3 +186,72 @@ impl<T> fmt::Debug for Json<T> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct ResponseUrl(Url);
+
+/// Extension trait for http::response::Builder objects
+///
+/// Allows the user to add a `Url` to the http::Response
+pub trait ResponseBuilderExt {
+    /// A builder method for the `http::response::Builder` type that allows the user to add a `Url`
+    /// to the `http::Response`
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # extern crate url;
+    /// # extern crate http;
+    /// # extern crate reqwest;
+    /// # use std::error::Error;
+    /// use url::Url;
+    /// use http::response::Builder;
+    /// use reqwest::async::ResponseBuilderExt;
+    /// # fn main() -> Result<(), Box<Error>> {
+    /// let response = Builder::new()
+    ///     .status(200)
+    ///     .url(Url::parse("http://example.com")?)
+    ///     .body(())?;
+    ///
+    /// #   Ok(())
+    /// # }
+    fn url(&mut self, url: Url) -> &mut Self;
+}
+
+impl ResponseBuilderExt for http::response::Builder {
+    fn url(&mut self, url: Url) -> &mut Self {
+        self.extension(ResponseUrl(url))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use url::Url;
+    use http::response::Builder;
+    use super::{Response, ResponseUrl, ResponseBuilderExt};
+
+    #[test]
+    fn test_response_builder_ext() {
+        let url = Url::parse("http://example.com").unwrap();
+        let response = Builder::new()
+            .status(200)
+            .url(url.clone())
+            .body(())
+            .unwrap();
+
+        assert_eq!(response.extensions().get::<ResponseUrl>(), Some(&ResponseUrl(url)));
+    }
+
+    #[test]
+    fn test_from_http_response() {
+        let url = Url::parse("http://example.com").unwrap();
+        let response = Builder::new()
+            .status(200)
+            .url(url.clone())
+            .body("foo")
+            .unwrap();
+        let response = Response::from(response);
+
+        assert_eq!(response.status, 200);
+        assert_eq!(response.url, Box::new(url));
+    }
+}

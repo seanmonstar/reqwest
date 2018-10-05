@@ -203,6 +203,7 @@ pub mod async {
         Request,
         RequestBuilder,
         Response,
+        ResponseBuilderExt,
     };
 }
 
