@@ -7,6 +7,7 @@ use std::path::Path;
 
 use mime_guess::{self, Mime};
 use url::percent_encoding;
+use url::percent_encoding::EncodeSet;
 use uuid::Uuid;
 use http::HeaderMap;
 
@@ -311,6 +312,32 @@ impl Read for Reader {
     }
 }
 
+#[derive(Debug, Clone)]
+struct AttrCharEncodeSet;
+
+impl EncodeSet for AttrCharEncodeSet {
+    fn contains(&self, ch: u8) -> bool {
+        match ch as char {
+             '!'  => false,
+             '#'  => false,
+             '$'  => false,
+             '&'  => false,
+             '+'  => false,
+             '-'  => false,
+             '.' => false,
+             '^'  => false,
+             '_'  => false,
+             '`'  => false,
+             '|'  => false,
+             '~' => false,
+              _ => {
+                  let is_alpha_numeric = ch >= 0x41 && ch <= 0x5a || ch >= 0x61 && ch <= 0x7a || ch >= 0x30 && ch <= 0x39;
+                  !is_alpha_numeric
+              }
+        }
+    }
+
+}
 
 fn header(name: &str, field: &Part) -> Vec<u8> {
     let s = format!(
@@ -325,7 +352,6 @@ fn header(name: &str, field: &Part) -> Vec<u8> {
             None => "".to_string(),
         },
     );
-
     field.headers.iter().fold(s.into_bytes(), |mut header, (k,v)| {
         header.extend_from_slice(b"\r\n");
         header.extend_from_slice(k.as_str().as_bytes());
@@ -337,7 +363,7 @@ fn header(name: &str, field: &Part) -> Vec<u8> {
 
 fn format_parameter(name: &str, value: &str) -> String {
     let legal_value =
-        percent_encoding::utf8_percent_encode(value, percent_encoding::PATH_SEGMENT_ENCODE_SET)
+        percent_encoding::utf8_percent_encode(value, AttrCharEncodeSet)
             .to_string();
     if value.len() == legal_value.len() {
         // nothing has been percent encoded
@@ -470,7 +496,7 @@ mod tests {
     fn header_percent_encoding() {
         let name = "start%'\"\r\nßend";
         let field = Part::text("");
-        let expected = "Content-Disposition: form-data; name*=utf-8''start%25\'%22%0D%0A%C3%9Fend";
+        let expected = "Content-Disposition: form-data; name*=utf-8''start%25%27%22%0D%0A%C3%9Fend";
 
         assert_eq!(header(name, &field), expected.as_bytes());
     }
