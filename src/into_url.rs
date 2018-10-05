@@ -9,8 +9,6 @@ pub trait IntoUrl: PolyfillTryInto {}
 
 impl<T: PolyfillTryInto> IntoUrl for T {}
 
-// pub(crate)
-
 pub trait PolyfillTryInto {
     // Besides parsing as a valid `Url`, the `Url` must be a valid
     // `http::Uri`, in that it makes sense to use in a network request.

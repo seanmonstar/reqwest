@@ -5,10 +5,7 @@ use std::time::{Duration, Instant};
 use futures::{Async, Future, Stream};
 use futures::executor::{self, Notify};
 
-// pub(crate)
-
-
-pub fn timeout<F>(fut: F, timeout: Option<Duration>) -> Result<F::Item, Waited<F::Error>>
+pub(crate) fn timeout<F>(fut: F, timeout: Option<Duration>) -> Result<F::Item, Waited<F::Error>>
 where F: Future {
     if let Some(dur) = timeout {
         let start = Instant::now();
@@ -35,7 +32,7 @@ where F: Future {
     }
 }
 
-pub fn stream<S>(stream: S, timeout: Option<Duration>) -> WaitStream<S>
+pub(crate) fn stream<S>(stream: S, timeout: Option<Duration>) -> WaitStream<S>
 where S: Stream {
     WaitStream {
         stream: executor::spawn(stream),
@@ -44,7 +41,7 @@ where S: Stream {
 }
 
 #[derive(Debug)]
-pub enum Waited<E> {
+pub(crate) enum Waited<E> {
     TimedOut,
     Err(E),
 }
@@ -55,7 +52,7 @@ impl<E> From<E> for Waited<E> {
     }
 }
 
-pub struct WaitStream<S> {
+pub(crate) struct WaitStream<S> {
     stream: executor::Spawn<S>,
     timeout: Option<Duration>,
 }

@@ -113,12 +113,10 @@ impl fmt::Debug for Identity {
     }
 }
 
-// pub(crate)
-
-pub fn cert(cert: Certificate) -> native_tls::Certificate {
+pub(crate) fn cert(cert: Certificate) -> native_tls::Certificate {
     cert.0
 }
 
-pub fn pkcs12(identity: Identity) -> native_tls::Identity {
+pub(crate) fn pkcs12(identity: Identity) -> native_tls::Identity {
     identity.0
 }

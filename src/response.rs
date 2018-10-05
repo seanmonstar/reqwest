@@ -30,6 +30,21 @@ impl fmt::Debug for Response {
 }
 
 impl Response {
+    pub(crate) fn new(mut res: async_impl::Response, timeout: Option<Duration>, thread: KeepCoreThreadAlive) -> Response {
+        let body = mem::replace(res.body_mut(), async_impl::Decoder::empty());
+        let len = body.content_length();
+        let body = async_impl::ReadableChunks::new(WaitBody {
+            inner: wait::stream(body, timeout)
+        });
+
+        Response {
+            inner: res,
+            body: body,
+            content_length: len,
+            _thread_handle: thread,
+        }
+    }
+
     /// Get the final `Url` of this `Response`.
     ///
     /// # Example
@@ -320,26 +335,9 @@ impl Stream for WaitBody {
     }
 }
 
-// pub(crate)
-
-pub fn new(mut res: async_impl::Response, timeout: Option<Duration>, thread: KeepCoreThreadAlive) -> Response {
-    let body = mem::replace(res.body_mut(), async_impl::Decoder::empty());
-    let len = body.content_length();
-    let body = async_impl::ReadableChunks::new(WaitBody {
-        inner: wait::stream(body, timeout)
-    });
-
-    Response {
-        inner: res,
-        body: body,
-        content_length: len,
-        _thread_handle: thread,
-    }
-}
-
 impl<T: Into<async_impl::body::Body>> From<http::Response<T>> for Response {
     fn from(r: http::Response<T>) -> Response {
         let response = async_impl::Response::from(r);
-        new(response, None, KeepCoreThreadAlive::empty())
+        Response::new(response, None, KeepCoreThreadAlive::empty())
     }
 }
