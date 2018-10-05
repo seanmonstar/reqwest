@@ -145,10 +145,11 @@ impl fmt::Debug for Response {
     }
 }
 
-impl<T: Into<body::Body>> From<http::Response<T>> for Response {
+impl<T: Into<::hyper::Body>> From<http::Response<T>> for Response {
     fn from(r: http::Response<T>) -> Response {
-        let (mut parts, body) = r.into_parts();
-        let body = body.into();
+        let (mut parts, raw) = r.into_parts();
+        let hyper_body = raw.into();
+        let body = body::wrap(hyper_body);
         let body = decoder::detect(&mut parts.headers, body, false);
         let url = parts.extensions
             .remove::<ResponseUrl>()
