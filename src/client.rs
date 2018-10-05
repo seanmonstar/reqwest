@@ -8,7 +8,7 @@ use futures::future::{self, Either};
 use futures::sync::{mpsc, oneshot};
 
 use request::{Request, RequestBuilder};
-use response::{self, Response};
+use response::Response;
 use {async_impl, header, Certificate, Identity, Method, IntoUrl, Proxy, RedirectPolicy, wait};
 
 /// A `Client` to make Requests with.
@@ -500,7 +500,7 @@ impl ClientHandle {
             }
         };
         res.map(|res| {
-            response::new(res, self.timeout.0, KeepCoreThreadAlive(Some(self.inner.clone())))
+            Response::new(res, self.timeout.0, KeepCoreThreadAlive(Some(self.inner.clone())))
         })
     }
 }
@@ -515,9 +515,7 @@ impl Default for Timeout {
     }
 }
 
-// pub(crate)
-
-pub struct KeepCoreThreadAlive(Option<Arc<InnerClientHandle>>);
+pub(crate) struct KeepCoreThreadAlive(Option<Arc<InnerClientHandle>>);
 
 impl KeepCoreThreadAlive {
     pub(crate) fn empty() -> KeepCoreThreadAlive {

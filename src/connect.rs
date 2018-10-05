@@ -13,16 +13,14 @@ use std::sync::Arc;
 
 use {proxy, Proxy};
 
-// pub(crate)
-
-pub struct Connector {
+pub(crate) struct Connector {
     https: HttpsConnector<HttpConnector>,
     proxies: Arc<Vec<Proxy>>,
     tls: TlsConnector,
 }
 
 impl Connector {
-    pub fn new(threads: usize, tls: TlsConnector, proxies: Arc<Vec<Proxy>>) -> Connector {
+    pub(crate) fn new(threads: usize, tls: TlsConnector, proxies: Arc<Vec<Proxy>>) -> Connector {
         let mut http = HttpConnector::new(threads);
         http.enforce_http(false);
         let https = HttpsConnector::from((http, tls.clone()));
@@ -81,9 +79,9 @@ impl Connect for Connector {
 type HttpStream = <HttpConnector as Connect>::Transport;
 type HttpsStream = MaybeHttpsStream<HttpStream>;
 
-pub type Connecting = Box<Future<Item=(Conn, Connected), Error=io::Error> + Send>;
+pub(crate) type Connecting = Box<Future<Item=(Conn, Connected), Error=io::Error> + Send>;
 
-pub enum Conn {
+pub(crate) enum Conn {
     Normal(HttpsStream),
     Proxied(TlsStream<MaybeHttpsStream<HttpStream>>),
 }

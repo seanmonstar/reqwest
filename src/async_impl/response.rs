@@ -164,6 +164,7 @@ impl<T: Into<body::Body>> From<http::Response<T>> for Response {
     }
 }
 
+/// A JSON object.
 pub struct Json<T> {
     concat: Concat2<Decoder>,
     _marker: PhantomData<T>,

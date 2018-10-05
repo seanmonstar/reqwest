@@ -304,7 +304,7 @@ impl<R: Read> Read for Peeked<R> {
 
 impl<S> ReadableChunks<S> {
     #[inline]
-    pub fn new(stream: S) -> Self {
+    pub(crate) fn new(stream: S) -> Self {
         ReadableChunks {
             state: ReadState::NotReady,
             stream: stream,
@@ -387,15 +387,13 @@ impl<S> ReadableChunks<S>
     }
 }
 
-// pub(crate)
-
 /// Constructs a Decoder from a hyper request.
 ///
 /// A decoder is just a wrapper around the hyper request that knows
 /// how to decode the content body of the request.
 ///
 /// Uses the correct variant by inspecting the Content-Encoding header.
-pub fn detect(headers: &mut HeaderMap, body: Body, check_gzip: bool) -> Decoder {
+pub(crate) fn detect(headers: &mut HeaderMap, body: Body, check_gzip: bool) -> Decoder {
     if !check_gzip {
         return Decoder::plain_text(body);
     }

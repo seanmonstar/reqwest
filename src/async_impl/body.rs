@@ -146,38 +146,36 @@ impl fmt::Debug for Chunk {
     }
 }
 
-// pub(crate)
-
 #[inline]
-pub fn wrap(body: ::hyper::Body) -> Body {
+pub(crate) fn wrap(body: ::hyper::Body) -> Body {
     Body {
         inner: Inner::Hyper(body),
     }
 }
 
 #[inline]
-pub fn empty() -> Body {
+pub(crate) fn empty() -> Body {
     Body {
         inner: Inner::Hyper(::hyper::Body::empty()),
     }
 }
 
 #[inline]
-pub fn chunk(chunk: Bytes) -> Chunk {
+pub(crate) fn chunk(chunk: Bytes) -> Chunk {
     Chunk {
         inner: ::hyper::Chunk::from(chunk)
     }
 }
 
 #[inline]
-pub fn reusable(chunk: Bytes) -> Body {
+pub(crate) fn reusable(chunk: Bytes) -> Body {
     Body {
         inner: Inner::Reusable(chunk),
     }
 }
 
 #[inline]
-pub fn into_hyper(body: Body) -> (Option<Bytes>, ::hyper::Body) {
+pub(crate) fn into_hyper(body: Body) -> (Option<Bytes>, ::hyper::Body) {
     match body.inner {
         Inner::Reusable(chunk) => (Some(chunk.clone()), chunk.into()),
         Inner::Hyper(b) => (None, b),

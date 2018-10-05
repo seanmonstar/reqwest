@@ -180,11 +180,9 @@ impl fmt::Debug for Custom {
     }
 }
 
-// pub(crate)
-
 /// A helper trait to allow testing `Proxy::intercept` without having to
 /// construct `hyper::client::connect::Destination`s.
-trait Dst {
+pub(crate) trait Dst {
     fn scheme(&self) -> &str;
     fn host(&self) -> &str;
     fn port(&self) -> Option<u16>;
@@ -205,7 +203,7 @@ impl Dst for Destination {
     }
 }
 
-pub fn intercept(proxy: &Proxy, uri: &Destination) -> Option<::http::Uri> {
+pub(crate) fn intercept(proxy: &Proxy, uri: &Destination) -> Option<::http::Uri> {
     proxy.intercept(uri)
 }
 
