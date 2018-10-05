@@ -280,8 +280,6 @@ impl StdError for Error {
     }
 }
 
-// pub(crate)
-
 #[derive(Debug)]
 pub(crate) enum Kind {
     Http(::http::Error),

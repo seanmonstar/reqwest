@@ -10,7 +10,8 @@ use serde_json;
 use url::Url;
 use http;
 
-use super::{decoder, body, Decoder};
+use super::Decoder;
+use super::body::Body;
 
 
 /// A Response to a submitted `Request`.
@@ -29,7 +30,7 @@ impl Response {
         let status = res.status();
         let version = res.version();
         let mut headers = mem::replace(res.headers_mut(), HeaderMap::new());
-        let decoder = decoder::detect(&mut headers, body::wrap(res.into_body()), gzip);
+        let decoder = Decoder::detect(&mut headers, Body::wrap(res.into_body()), gzip);
         debug!("Response: '{}' for {}", status, url);
         Response {
             status,
@@ -145,11 +146,11 @@ impl fmt::Debug for Response {
     }
 }
 
-impl<T: Into<body::Body>> From<http::Response<T>> for Response {
+impl<T: Into<Body>> From<http::Response<T>> for Response {
     fn from(r: http::Response<T>) -> Response {
         let (mut parts, body) = r.into_parts();
         let body = body.into();
-        let body = decoder::detect(&mut parts.headers, body, false);
+        let body = Decoder::detect(&mut parts.headers, body, false);
         let url = parts.extensions
             .remove::<ResponseUrl>()
             .unwrap_or_else(|| ResponseUrl(Url::parse("http://no.url.provided.local").unwrap()));

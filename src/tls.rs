@@ -55,6 +55,11 @@ impl Certificate {
         let inner = try_!(native_tls::Certificate::from_pem(der));
         Ok(Certificate(inner))
     }
+
+    pub(crate) fn cert(self) -> native_tls::Certificate {
+        self.0
+    }
+
 }
 
 impl fmt::Debug for Certificate {
@@ -104,6 +109,10 @@ impl Identity {
         let inner = try_!(native_tls::Identity::from_pkcs12(der, password));
         Ok(Identity(inner))
     }
+
+    pub(crate) fn pkcs12(self) -> native_tls::Identity {
+        self.0
+    }
 }
 
 impl fmt::Debug for Identity {
@@ -113,10 +122,3 @@ impl fmt::Debug for Identity {
     }
 }
 
-pub(crate) fn cert(cert: Certificate) -> native_tls::Certificate {
-    cert.0
-}
-
-pub(crate) fn pkcs12(identity: Identity) -> native_tls::Identity {
-    identity.0
-}

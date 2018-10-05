@@ -28,6 +28,36 @@ impl Body {
             Inner::Hyper(ref body) => body.content_length(),
         }
     }
+
+    #[inline]
+    pub(crate) fn wrap(body: ::hyper::Body) -> Body {
+        Body {
+            inner: Inner::Hyper(body),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn empty() -> Body {
+        Body {
+            inner: Inner::Hyper(::hyper::Body::empty()),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn reusable(chunk: Bytes) -> Body {
+        Body {
+            inner: Inner::Reusable(chunk),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn into_hyper(self) -> (Option<Bytes>, ::hyper::Body) {
+        match self.inner {
+            Inner::Reusable(chunk) => (Some(chunk.clone()), chunk.into()),
+            Inner::Hyper(b) => (None, b),
+        }
+}
+
 }
 
 impl Stream for Body {
@@ -48,28 +78,28 @@ impl Stream for Body {
 impl From<Bytes> for Body {
     #[inline]
     fn from(bytes: Bytes) -> Body {
-        reusable(bytes)
+        Body::reusable(bytes)
     }
 }
 
 impl From<Vec<u8>> for Body {
     #[inline]
     fn from(vec: Vec<u8>) -> Body {
-        reusable(vec.into())
+        Body::reusable(vec.into())
     }
 }
 
 impl From<&'static [u8]> for Body {
     #[inline]
     fn from(s: &'static [u8]) -> Body {
-        reusable(Bytes::from_static(s))
+        Body::reusable(Bytes::from_static(s))
     }
 }
 
 impl From<String> for Body {
     #[inline]
     fn from(s: String) -> Body {
-        reusable(s.into())
+        Body::reusable(s.into())
     }
 }
 
@@ -88,6 +118,14 @@ pub struct Chunk {
     inner: ::hyper::Chunk,
 }
 
+impl Chunk {
+    #[inline]
+    pub(crate) fn from_chunk(chunk: Bytes) -> Chunk {
+        Chunk {
+            inner: ::hyper::Chunk::from(chunk)
+        }
+    }
+}
 impl Buf for Chunk {
     fn bytes(&self) -> &[u8] {
         self.inner.bytes()
@@ -143,41 +181,5 @@ impl fmt::Debug for Body {
 impl fmt::Debug for Chunk {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&self.inner, f)
-    }
-}
-
-#[inline]
-pub(crate) fn wrap(body: ::hyper::Body) -> Body {
-    Body {
-        inner: Inner::Hyper(body),
-    }
-}
-
-#[inline]
-pub(crate) fn empty() -> Body {
-    Body {
-        inner: Inner::Hyper(::hyper::Body::empty()),
-    }
-}
-
-#[inline]
-pub(crate) fn chunk(chunk: Bytes) -> Chunk {
-    Chunk {
-        inner: ::hyper::Chunk::from(chunk)
-    }
-}
-
-#[inline]
-pub(crate) fn reusable(chunk: Bytes) -> Body {
-    Body {
-        inner: Inner::Reusable(chunk),
-    }
-}
-
-#[inline]
-pub(crate) fn into_hyper(body: Body) -> (Option<Bytes>, ::hyper::Body) {
-    match body.inner {
-        Inner::Reusable(chunk) => (Some(chunk.clone()), chunk.into()),
-        Inner::Hyper(b) => (None, b),
     }
 }

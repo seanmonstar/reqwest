@@ -11,7 +11,7 @@ use connect_async::{TlsConnectorExt, TlsStream};
 use std::io::{self, Cursor, Read, Write};
 use std::sync::Arc;
 
-use {proxy, Proxy};
+use Proxy;
 
 pub(crate) struct Connector {
     https: HttpsConnector<HttpConnector>,
@@ -40,7 +40,7 @@ impl Connect for Connector {
 
     fn connect(&self, dst: Destination) -> Self::Future {
         for prox in self.proxies.iter() {
-            if let Some(puri) = proxy::intercept(prox, &dst) {
+            if let Some(puri) = prox.intercept(&dst) {
                 trace!("proxy({:?}) intercepts {:?}", puri, dst);
                 let mut ndst = dst.clone();
                 let new_scheme = puri
