@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, mem};
 
 use futures::{Stream, Poll, Async};
 use bytes::{Buf, Bytes};
@@ -17,7 +17,19 @@ enum Inner {
 impl Body {
     fn poll_inner(&mut self) -> &mut ::hyper::Body {
         match self.inner {
-            Inner::Hyper(ref mut body) => body,
+            Inner::Hyper(ref mut body) => return body,
+            Inner::Reusable(_) => (),
+        }
+
+        let bytes = match mem::replace(&mut self.inner, Inner::Reusable(Bytes::new())) {
+            Inner::Reusable(bytes) => bytes,
+            Inner::Hyper(_) => unreachable!(),
+        };
+
+        self.inner = Inner::Hyper(bytes.into());
+
+        match self.inner {
+            Inner::Hyper(ref mut body) => return body,
             Inner::Reusable(_) => unreachable!(),
         }
     }
@@ -56,8 +68,7 @@ impl Body {
             Inner::Reusable(chunk) => (Some(chunk.clone()), chunk.into()),
             Inner::Hyper(b) => (None, b),
         }
-}
-
+    }
 }
 
 impl Stream for Body {
