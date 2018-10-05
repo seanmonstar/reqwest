@@ -128,7 +128,7 @@ impl Proxy {
         }
     }
 
-    fn intercept<D: Dst>(&self, uri: &D) -> Option<::hyper::Uri> {
+    pub(crate) fn intercept<D: Dst>(&self, uri: &D) -> Option<::hyper::Uri> {
         match self.intercept {
             Intercept::All(ref u) => Some(u.clone()),
             Intercept::Http(ref u) => {
@@ -201,10 +201,6 @@ impl Dst for Destination {
     fn port(&self) -> Option<u16> {
         Destination::port(self)
     }
-}
-
-pub(crate) fn intercept(proxy: &Proxy, uri: &Destination) -> Option<::http::Uri> {
-    proxy.intercept(uri)
 }
 
 #[cfg(test)]

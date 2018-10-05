@@ -101,11 +101,11 @@ impl Body {
                     body: (read, len),
                     tx: tx,
                 };
-                (Some(tx), async_impl::body::wrap(rx), len)
+                (Some(tx), async_impl::Body::wrap(rx), len)
             },
             Kind::Bytes(chunk) => {
                 let len = chunk.len() as u64;
-                (None, async_impl::body::reusable(chunk), Some(len))
+                (None, async_impl::Body::reusable(chunk), Some(len))
             }
         }
     }

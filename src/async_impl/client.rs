@@ -11,7 +11,6 @@ use mime::{self};
 use native_tls::{TlsConnector, TlsConnectorBuilder};
 
 
-use super::body;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use connect::Connector;
@@ -111,15 +110,13 @@ impl ClientBuilder {
     /// This can be used to connect to a server that has a self-signed
     /// certificate for example.
     pub fn add_root_certificate(mut self, cert: Certificate) -> ClientBuilder {
-        let cert = ::tls::cert(cert);
-        self.config.tls.add_root_certificate(cert);
+        self.config.tls.add_root_certificate(cert.cert());
         self
     }
 
     /// Sets the identity to be used for client certificate authentication.
     pub fn identity(mut self, identity: Identity) -> ClientBuilder {
-        let pkcs12 = ::tls::pkcs12(identity);
-        self.config.tls.identity(pkcs12);
+        self.config.tls.identity(identity.pkcs12());
         self
     }
 
@@ -345,7 +342,7 @@ impl Client {
 
         let (reusable, body) = match body {
             Some(body) => {
-                let (reusable, body) = body::into_hyper(body);
+                let (reusable, body) = body.into_hyper();
                 (Some(reusable), body)
             },
             None => {
@@ -578,4 +575,3 @@ fn make_referer(next: &Url, previous: &Url) -> Option<HeaderValue> {
     referer.set_fragment(None);
     referer.as_str().parse().ok()
 }
-

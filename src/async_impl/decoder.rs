@@ -32,7 +32,7 @@ use futures::{Async, Future, Poll, Stream};
 use hyper::{HeaderMap};
 use hyper::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING, HeaderValue};
 
-use super::{body, Body, Chunk};
+use super::{Body, Chunk};
 use error;
 
 const INIT_BUFFER_SIZE: usize = 8192;
@@ -79,7 +79,7 @@ impl Decoder {
     #[inline]
     pub fn empty() -> Decoder {
         Decoder {
-            inner: Inner::PlainText(body::empty())
+            inner: Inner::PlainText(Body::empty())
         }
     }
 
@@ -102,6 +102,48 @@ impl Decoder {
             inner: Inner::Pending(Pending { body: ReadableChunks::new(body) })
         }
     }
+
+    /// Constructs a Decoder from a hyper request.
+    ///
+    /// A decoder is just a wrapper around the hyper request that knows
+    /// how to decode the content body of the request.
+    ///
+    /// Uses the correct variant by inspecting the Content-Encoding header.
+    pub(crate) fn detect(headers: &mut HeaderMap, body: Body, check_gzip: bool) -> Decoder {
+        if !check_gzip {
+            return Decoder::plain_text(body);
+        }
+        let content_encoding_gzip: bool;
+        let mut is_gzip = {
+            content_encoding_gzip = headers
+                .get_all(CONTENT_ENCODING)
+                .iter()
+                .fold(false, |acc, enc| acc || enc == HeaderValue::from_static("gzip"));
+            content_encoding_gzip ||
+            headers
+                .get_all(TRANSFER_ENCODING)
+                .iter()
+                .fold(false, |acc, enc| acc || enc == HeaderValue::from_static("gzip"))
+        };
+        if is_gzip {
+            if let Some(content_length) = headers.get(CONTENT_LENGTH) {
+                if content_length == "0" {
+                    warn!("GZipped response with content-length of 0");
+                    is_gzip = false;
+                }
+            }
+        }
+        if content_encoding_gzip {
+            headers.remove(CONTENT_ENCODING);
+            headers.remove(CONTENT_LENGTH);
+        }
+        if is_gzip {
+            Decoder::gzip(body)
+        } else {
+            Decoder::plain_text(body)
+        }
+    }
+
 
     pub(crate) fn content_length(&self) -> Option<u64> {
         match self.inner {
@@ -145,12 +187,12 @@ impl Future for Pending {
             Err(e) => return Err(e)
         };
 
-        let body = mem::replace(&mut self.body, ReadableChunks::new(body::empty()));
+        let body = mem::replace(&mut self.body, ReadableChunks::new(Body::empty()));
         // libflate does a read_exact([0; 2]), so its impossible to tell
         // if the stream was empty, or truly had an UnexpectedEof.
         // Therefore, we need to check for EOF first.
         match body_state {
-            StreamState::Eof => Ok(Async::Ready(Inner::PlainText(body::empty()))),
+            StreamState::Eof => Ok(Async::Ready(Inner::PlainText(Body::empty()))),
             StreamState::HasMore => Ok(Async::Ready(Inner::Gzip(Gzip::new(body))))
         }
     }
@@ -190,7 +232,7 @@ impl Stream for Gzip {
             },
             Ok(read) => {
                 unsafe { self.buf.advance_mut(read) };
-                let chunk = body::chunk(self.buf.split_to(read).freeze());
+                let chunk = Chunk::from_chunk(self.buf.split_to(read).freeze());
 
                 Ok(Async::Ready(Some(chunk)))
             },
@@ -386,45 +428,3 @@ impl<S> ReadableChunks<S>
         }
     }
 }
-
-/// Constructs a Decoder from a hyper request.
-///
-/// A decoder is just a wrapper around the hyper request that knows
-/// how to decode the content body of the request.
-///
-/// Uses the correct variant by inspecting the Content-Encoding header.
-pub(crate) fn detect(headers: &mut HeaderMap, body: Body, check_gzip: bool) -> Decoder {
-    if !check_gzip {
-        return Decoder::plain_text(body);
-    }
-    let content_encoding_gzip: bool;
-    let mut is_gzip = {
-        content_encoding_gzip = headers
-            .get_all(CONTENT_ENCODING)
-            .iter()
-            .fold(false, |acc, enc| acc || enc == HeaderValue::from_static("gzip"));
-        content_encoding_gzip ||
-        headers
-            .get_all(TRANSFER_ENCODING)
-            .iter()
-            .fold(false, |acc, enc| acc || enc == HeaderValue::from_static("gzip"))
-    };
-    if is_gzip {
-        if let Some(content_length) = headers.get(CONTENT_LENGTH) {
-            if content_length == "0" {
-                warn!("GZipped response with content-length of 0");
-                is_gzip = false;
-            }
-        }
-    }
-    if content_encoding_gzip {
-        headers.remove(CONTENT_ENCODING);
-        headers.remove(CONTENT_LENGTH);
-    }
-    if is_gzip {
-        Decoder::gzip(body)
-    } else {
-        Decoder::plain_text(body)
-    }
-}
-
