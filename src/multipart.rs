@@ -148,6 +148,17 @@ impl Part {
         Part::new(body)
     }
 
+    /// Makes a new parameter from arbitrary bytes
+    pub fn bytes<T>(value: T) -> Part
+    where T: Into<Cow<'static, [u8]>>
+    {
+        let body = match value.into() {
+            Cow::Borrowed(slice) => Body::from(slice),
+            Cow::Owned(vec) => Body::from(vec),
+        };
+        Part::new(body)
+    }
+
     /// Adds a generic reader.
     ///
     /// Does not set filename or mime.
