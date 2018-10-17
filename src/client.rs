@@ -450,7 +450,10 @@ impl ClientHandle {
                 .expect("runtime unexpected error");
         }));
 
-        wait::timeout(spawn_rx, timeout.0).expect("runtime thread cancelled")?;
+        // Wait up to 5 seconds for the background thread to be spawned.
+        // More than that and something bad is up!
+        wait::timeout(spawn_rx, Some(Duration::from_secs(5)))
+            .expect("runtime thread cancelled")?;
 
         let inner_handle = Arc::new(InnerClientHandle {
             tx: Some(tx),
