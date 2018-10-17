@@ -1,4 +1,18 @@
+## v0.9.3
+
+### Features
+
+- Adds `multipart::Part::bytes()` to create a part of raw bytes.
+- Adds constructors for `Response` to help with testing.
+
+### Fixes
+
+- Properly percent-encoding more illegal characters in multipart filenames.
+- Ensure timed out requests cancel the associated async task.
+
 ## v0.9.2
+
+### Fixes
 
 - Fix panic when `Location` header has UTF-8 characters.
 
