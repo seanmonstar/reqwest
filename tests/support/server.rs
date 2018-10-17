@@ -28,7 +28,7 @@ impl Drop for Server {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Txn {
     pub request: Vec<u8>,
     pub response: Vec<u8>,
@@ -188,13 +188,10 @@ fn replace_expected_vars(bytes: &mut Vec<u8>, host: &[u8], ua: &[u8]) {
 
 #[macro_export]
 macro_rules! server {
-    ($(request: $req:expr, response: $res:expr),*) => ({
-        server!($(request: $req, response: $res;)*)
-    });
-    ($($($f:ident: $v:expr),*);*) => ({
+    ($($($f:ident: $v:expr),+);*) => ({
         let txns = vec![
             $(__internal__txn! {
-                $($f: $v,)*
+                $($f: $v,)+
             }),*
         ];
         ::support::server::spawn(txns)
@@ -203,9 +200,9 @@ macro_rules! server {
 
 #[macro_export]
 macro_rules! __internal__txn {
-    ($($field:ident: $val:expr,)*) => (
+    ($($field:ident: $val:expr,)+) => (
         ::support::server::Txn {
-            $( $field: __internal__prop!($field: $val), )*
+            $( $field: __internal__prop!($field: $val), )+
             .. Default::default()
         }
     )

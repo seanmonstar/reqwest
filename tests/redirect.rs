@@ -25,7 +25,8 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
                 Location: /dst\r\n\
                 Connection: close\r\n\
                 \r\n\
-                ", code),
+                ", code)
+                ;
 
             request: format!("\
                 GET /dst HTTP/1.1\r\n\
@@ -76,7 +77,8 @@ fn test_redirect_307_and_308_tries_to_get_again() {
                 Location: /dst\r\n\
                 Connection: close\r\n\
                 \r\n\
-                ", code),
+                ", code)
+                ;
 
             request: format!("\
                 GET /dst HTTP/1.1\r\n\
@@ -129,7 +131,8 @@ fn test_redirect_307_and_308_tries_to_post_again() {
                 Location: /dst\r\n\
                 Connection: close\r\n\
                 \r\n\
-                ", code),
+                ", code)
+                ;
 
             request: format!("\
                 POST /dst HTTP/1.1\r\n\
@@ -328,7 +331,8 @@ fn test_referer_is_not_set_if_disabled() {
             Location: /dst\r\n\
             Connection: close\r\n\
             \r\n\
-            ",
+            "
+            ;
 
         request: b"\
             GET /dst HTTP/1.1\r\n\
