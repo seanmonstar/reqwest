@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::thread;
 
-use futures::{Future, Stream};
+use futures::{Async, Future, Stream};
 use futures::future::{self, Either};
 use futures::sync::{mpsc, oneshot};
 
@@ -437,9 +437,42 @@ impl ClientHandle {
             };
 
             let work = rx.for_each(move |(req, tx)| {
+                /*
                 let tx: oneshot::Sender<::Result<async_impl::Response>> = tx;
                 let task = client.execute(req)
-                    .then(move |x| tx.send(x).map_err(|_| ()));
+                    .then(move |r| {
+                        trace!("result received: {:?}", r);
+                        tx.send(r).map_err(|_| ())
+                    });
+                    */
+                let mut tx_opt: Option<oneshot::Sender<::Result<async_impl::Response>>> = Some(tx);
+                let mut res_fut = client.execute(req);
+
+                let task = future::poll_fn(move || {
+                    let canceled = tx_opt
+                        .as_mut()
+                        .expect("polled after complete")
+                        .poll_cancel()
+                        .expect("poll_cancel cannot error")
+                        .is_ready();
+
+                    if canceled {
+                        trace!("response receiver is canceled");
+                        Ok(Async::Ready(()))
+                    } else {
+                        let result = match res_fut.poll() {
+                            Ok(Async::NotReady) => return Ok(Async::NotReady),
+                            Ok(Async::Ready(res)) => Ok(res),
+                            Err(err) => Err(err),
+                        };
+
+                        let _ = tx_opt
+                            .take()
+                            .expect("polled after complete")
+                            .send(result);
+                        Ok(Async::Ready(()))
+                    }
+                });
                 ::tokio::spawn(task);
                 Ok(())
             });

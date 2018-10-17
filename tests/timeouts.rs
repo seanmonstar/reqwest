@@ -8,10 +8,57 @@ use std::io::Read;
 use std::time::Duration;
 
 #[test]
-fn test_write_timeout() {
+fn timeout_closes_connection() {
+    let _ = env_logger::try_init();
+
+    // Make Client drop *after* the Server, so the background doesn't
+    // close too early.
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_millis(500))
+        .build()
+        .unwrap();
+
+    let server = server! {
+        request: b"\
+            GET /closes HTTP/1.1\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Content-Length: 5\r\n\
+            \r\n\
+            Hello\
+            ",
+        read_timeout: Duration::from_secs(2),
+        read_closes: true
+    };
+
+    let url = format!("http://{}/closes", server.addr());
+    let err = client
+        .get(&url)
+        .send()
+        .unwrap_err();
+
+    assert_eq!(err.get_ref().unwrap().to_string(), "timed out");
+    assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
+}
+
+#[test]
+fn write_timeout_large_body() {
     let _ = env_logger::try_init();
     let body = String::from_utf8(vec![b'x'; 20_000]).unwrap();
     let len = 8192;
+
+    // Make Client drop *after* the Server, so the background doesn't
+    // close too early.
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_millis(500))
+        .build()
+        .unwrap();
 
     let server = server! {
         request: format!("\
@@ -30,17 +77,13 @@ fn test_write_timeout() {
             \r\n\
             Hello\
             ",
-        read_timeout: Duration::from_secs(2)
-
-        //response_timeout: Duration::from_secs(1)
+        read_timeout: Duration::from_secs(2),
+        read_closes: true
     };
 
     let cursor = ::std::io::Cursor::new(body.into_bytes());
     let url = format!("http://{}/write-timeout", server.addr());
-    let err = reqwest::Client::builder()
-        .timeout(Duration::from_millis(500))
-        .build()
-        .unwrap()
+    let err = client
         .post(&url)
         .body(reqwest::Body::sized(cursor, len as u64))
         .send()

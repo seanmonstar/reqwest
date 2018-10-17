@@ -3,15 +3,28 @@
 use std::io::{Read, Write};
 use std::net;
 use std::time::Duration;
+use std::sync::mpsc;
 use std::thread;
 
 pub struct Server {
     addr: net::SocketAddr,
+    panic_rx: mpsc::Receiver<()>,
 }
 
 impl Server {
     pub fn addr(&self) -> net::SocketAddr {
         self.addr
+    }
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        if !::std::thread::panicking() {
+            self
+                .panic_rx
+                .recv_timeout(Duration::from_secs(3))
+                .expect("test server should not panic");
+        }
     }
 }
 
@@ -21,6 +34,7 @@ pub struct Txn {
     pub response: Vec<u8>,
 
     pub read_timeout: Option<Duration>,
+    pub read_closes: bool,
     pub response_timeout: Option<Duration>,
     pub write_timeout: Option<Duration>,
     pub chunk_size: Option<usize>,
@@ -32,9 +46,10 @@ static DEFAULT_USER_AGENT: &'static str =
 pub fn spawn(txns: Vec<Txn>) -> Server {
     let listener = net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
+    let (panic_tx, panic_rx) = mpsc::channel();
     let tname = format!("test({})-support-server", thread::current().name().unwrap_or("<unknown>"));
-    thread::Builder::new().name(tname).spawn(
-        move || for txn in txns {
+    thread::Builder::new().name(tname).spawn(move || {
+        'txns: for txn in txns {
             let mut expected = txn.request;
             let reply = txn.response;
             let (mut socket, _addr) = listener.accept().unwrap();
@@ -52,11 +67,32 @@ pub fn spawn(txns: Vec<Txn>) -> Server {
             let mut n = 0;
             while n < expected.len() {
                 match socket.read(&mut buf[n..]) {
-                    Ok(0) => break,
+                    Ok(0) => {
+                        if !txn.read_closes {
+                            panic!("server unexpected socket closed");
+                        } else {
+                            continue 'txns;
+                        }
+                    },
                     Ok(nread) => n += nread,
                     Err(err) => {
                         println!("server read error: {}", err);
                         break;
+                    }
+                }
+            }
+
+            if txn.read_closes {
+                socket.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+                match socket.read(&mut [0; 256]) {
+                    Ok(0) => {
+                        continue 'txns
+                    },
+                    Ok(_) => {
+                        panic!("server read expected EOF, found more bytes");
+                    },
+                    Err(err) => {
+                        panic!("server read expected EOF, got error: {}", err);
                     }
                 }
             }
@@ -108,10 +144,12 @@ pub fn spawn(txns: Vec<Txn>) -> Server {
                 socket.write_all(&reply).unwrap();
             }
         }
-    ).expect("server thread spawn");
+        let _ = panic_tx.send(());
+    }).expect("server thread spawn");
 
     Server {
-        addr: addr,
+        addr,
+        panic_rx,
     }
 }
 
