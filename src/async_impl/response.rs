@@ -1,10 +1,12 @@
 use std::fmt;
 use std::mem;
 use std::marker::PhantomData;
+use std::net::SocketAddr;
 
 use futures::{Async, Future, Poll, Stream};
 use futures::stream::Concat2;
 use hyper::{HeaderMap, StatusCode, Version};
+use hyper::client::connect::HttpInfo;
 use serde::de::DeserializeOwned;
 use serde_json;
 use url::Url;
@@ -23,14 +25,19 @@ pub struct Response {
     url: Box<Url>,
     body: Decoder,
     version: Version,
+    extensions: http::Extensions,
 }
 
 impl Response {
-    pub(super) fn new(mut res: ::hyper::Response<::hyper::Body>, url: Url, gzip: bool) -> Response {
-        let status = res.status();
-        let version = res.version();
-        let mut headers = mem::replace(res.headers_mut(), HeaderMap::new());
-        let decoder = Decoder::detect(&mut headers, Body::wrap(res.into_body()), gzip);
+    pub(super) fn new(res: ::hyper::Response<::hyper::Body>, url: Url, gzip: bool) -> Response {
+        let (parts, body) = res.into_parts();
+        let status = parts.status;
+        let version = parts.version;
+        let extensions = parts.extensions;
+
+        let mut headers = parts.headers;
+        let decoder = Decoder::detect(&mut headers, Body::wrap(body), gzip);
+
         debug!("Response: '{}' for {}", status, url);
         Response {
             status,
@@ -38,6 +45,7 @@ impl Response {
             url: Box::new(url),
             body: decoder,
             version,
+            extensions,
         }
     }
 
@@ -45,6 +53,14 @@ impl Response {
     #[inline]
     pub fn url(&self) -> &Url {
         &self.url
+    }
+
+    /// Get the remote address used to get this `Response`.
+    pub fn remote_addr(&self) -> Option<SocketAddr> {
+        self
+            .extensions
+            .get::<HttpInfo>()
+            .map(|info| info.remote_addr())
     }
 
     /// Get the `StatusCode` of this `Response`.
@@ -161,6 +177,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
             url: Box::new(url),
             body: body,
             version: parts.version,
+            extensions: parts.extensions,
         }
     }
 }

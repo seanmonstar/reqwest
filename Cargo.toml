@@ -15,7 +15,7 @@ bytes = "0.4"
 encoding_rs = "0.8"
 futures = "0.1.23"
 http = "0.1.10"
-hyper = "0.12.7"
+hyper = "0.12.13"
 hyper-old-types = { version = "0.11", optional = true, features = ["compat"] }
 hyper-tls = "0.3"
 libflate = "0.1.18"

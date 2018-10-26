@@ -127,6 +127,7 @@ fn test_get() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
     assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
+    assert_eq!(res.remote_addr(), Some(server.addr()));
 
     let mut buf = [0; 1024];
     let n = res.read(&mut buf).unwrap();

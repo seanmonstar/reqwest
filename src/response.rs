@@ -1,6 +1,7 @@
 use std::mem;
 use std::fmt;
 use std::io::{self, Read};
+use std::net::SocketAddr;
 use std::time::Duration;
 use std::borrow::Cow;
 
@@ -59,6 +60,22 @@ impl Response {
     #[inline]
     pub fn url(&self) -> &Url {
         self.inner.url()
+    }
+
+    /// Get the remote address used to get this `Response`.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let resp = reqwest::get("http://httpbin.org/redirect/1")?;
+    /// println!("httpbin.org address: {:?}", resp.remote_addr());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn remote_addr(&self) -> Option<SocketAddr> {
+        self.inner.remote_addr()
+
     }
 
     /// Get the `StatusCode` of this `Response`.
