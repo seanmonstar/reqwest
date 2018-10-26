@@ -1,3 +1,13 @@
+## v0.9.4
+
+### Features
+
+- Adds `percent_encoding_path_segment` and `percent_encoding_attr_char` configuration to `multipart::Form`.
+
+### Fixes
+
+- Reverts `multipart::Form` default percent encoding format to `path-segment`.
+
 ## v0.9.3
 
 ### Features
