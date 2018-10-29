@@ -9,7 +9,9 @@ use futures::sync::{mpsc, oneshot};
 
 use request::{Request, RequestBuilder};
 use response::Response;
-use {async_impl, header, Certificate, Identity, Method, IntoUrl, Proxy, RedirectPolicy, wait};
+use {async_impl, header, Method, IntoUrl, Proxy, RedirectPolicy, wait};
+#[cfg(feature = "default-tls")]
+use {Certificate, Identity};
 
 /// A `Client` to make Requests with.
 ///
@@ -106,6 +108,7 @@ impl ClientBuilder {
     /// # Errors
     ///
     /// This method fails if adding root certificate was unsuccessful.
+    #[cfg(feature = "default-tls")]
     pub fn add_root_certificate(self, cert: Certificate) -> ClientBuilder {
         self.with_inner(move |inner| inner.add_root_certificate(cert))
     }
@@ -133,6 +136,7 @@ impl ClientBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    #[cfg(feature = "default-tls")]
     pub fn identity(self, identity: Identity) -> ClientBuilder {
         self.with_inner(move |inner| inner.identity(identity))
     }
@@ -148,6 +152,7 @@ impl ClientBuilder {
     /// hostname verification is not used, any valid certificate for any
     /// site will be trusted for use from any other. This introduces a
     /// significant vulnerability to man-in-the-middle attacks.
+    #[cfg(feature = "default-tls")]
     pub fn danger_accept_invalid_hostnames(self, accept_invalid_hostname: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.danger_accept_invalid_hostnames(accept_invalid_hostname))
     }
@@ -164,6 +169,7 @@ impl ClientBuilder {
     /// will be trusted for use. This includes expired certificates. This
     /// introduces significant vulnerabilities, and should only be used
     /// as a last resort.
+    #[cfg(feature = "default-tls")]
     pub fn danger_accept_invalid_certs(self, accept_invalid_certs: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.danger_accept_invalid_certs(accept_invalid_certs))
     }

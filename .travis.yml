@@ -8,17 +8,14 @@ matrix:
           rust: stable
 
         - rust: stable
-          env: FEATURES=""
         - rust: beta
-          env: FEATURES=""
         - rust: nightly
-          env: FEATURES=""
+
+        # Disable default-tls
+        - rust: stable
+          env: FEATURES="--no-default-features"
 
         - rust: stable
-          env: FEATURES="--features hyper-011"
-        - rust: beta
-          env: FEATURES="--features hyper-011"
-        - rust: nightly
           env: FEATURES="--features hyper-011"
 
         # minimum version

@@ -117,6 +117,16 @@
 //! # }
 //! ```
 //!
+//! ## Optional Features
+//!
+//! The following are a list of [Cargo features][cargo-features] that can be
+//! enabled or disabled:
+//!
+//! - **default-tls** *(enabled by default)*: Provides TLS support via the
+//!   `native-tls` library to connect over HTTPS.
+//! - **hyper-011**: Provides support for hyper's old typed headers.
+//!
+//!
 //! [hyper]: http://hyper.rs
 //! [client]: ./struct.Client.html
 //! [response]: ./struct.Response.html
@@ -124,6 +134,7 @@
 //! [builder]: ./struct.RequestBuilder.html
 //! [serde]: http://serde.rs
 //! [cookiejar_issue]: https://github.com/seanmonstar/reqwest/issues/14
+//! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
 
 extern crate base64;
 extern crate bytes;
@@ -134,12 +145,14 @@ extern crate http;
 extern crate hyper;
 #[cfg(feature = "hyper-011")]
 pub extern crate hyper_old_types as hyper_011;
+#[cfg(feature = "default-tls")]
 extern crate hyper_tls;
 #[macro_use]
 extern crate log;
 extern crate libflate;
 extern crate mime;
 extern crate mime_guess;
+#[cfg(feature = "default-tls")]
 extern crate native_tls;
 extern crate serde;
 #[cfg(test)]
@@ -148,7 +161,7 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate serde_urlencoded;
 extern crate tokio;
-#[macro_use]
+#[cfg_attr(feature = "default-tls", macro_use)]
 extern crate tokio_io;
 extern crate url;
 extern crate uuid;
@@ -167,6 +180,7 @@ pub use self::proxy::Proxy;
 pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
+#[cfg(feature = "default-tls")]
 pub use self::tls::{Certificate, Identity};
 
 
@@ -176,6 +190,7 @@ mod error;
 
 mod async_impl;
 mod connect;
+#[cfg(feature = "default-tls")]
 mod connect_async;
 mod body;
 mod client;
@@ -184,6 +199,7 @@ mod proxy;
 mod redirect;
 mod request;
 mod response;
+#[cfg(feature = "default-tls")]
 mod tls;
 mod wait;
 
