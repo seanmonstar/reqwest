@@ -8,6 +8,7 @@ use hyper::client::ResponseFuture;
 use header::{HeaderMap, HeaderValue, LOCATION, USER_AGENT, REFERER, ACCEPT,
              ACCEPT_ENCODING, RANGE, TRANSFER_ENCODING, CONTENT_TYPE, CONTENT_LENGTH, CONTENT_ENCODING};
 use mime::{self};
+#[cfg(feature = "default-tls")]
 use native_tls::{TlsConnector, TlsConnectorBuilder};
 
 
@@ -16,7 +17,9 @@ use super::response::Response;
 use connect::Connector;
 use into_url::to_uri;
 use redirect::{self, RedirectPolicy, remove_sensitive_headers};
-use {Certificate, Identity, IntoUrl, Method, Proxy, StatusCode, Url};
+use {IntoUrl, Method, Proxy, StatusCode, Url};
+#[cfg(feature = "default-tls")]
+use {Certificate, Identity};
 
 static DEFAULT_USER_AGENT: &'static str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -41,12 +44,15 @@ pub struct ClientBuilder {
 struct Config {
     gzip: bool,
     headers: HeaderMap,
+    #[cfg(feature = "default-tls")]
     hostname_verification: bool,
+    #[cfg(feature = "default-tls")]
     certs_verification: bool,
     proxies: Vec<Proxy>,
     redirect_policy: RedirectPolicy,
     referer: bool,
     timeout: Option<Duration>,
+    #[cfg(feature = "default-tls")]
     tls: TlsConnectorBuilder,
     dns_threads: usize,
 }
@@ -62,12 +68,15 @@ impl ClientBuilder {
             config: Config {
                 gzip: true,
                 headers: headers,
+                #[cfg(feature = "default-tls")]
                 hostname_verification: true,
+                #[cfg(feature = "default-tls")]
                 certs_verification: true,
                 proxies: Vec::new(),
                 redirect_policy: RedirectPolicy::default(),
                 referer: true,
                 timeout: None,
+                #[cfg(feature = "default-tls")]
                 tls: TlsConnector::builder(),
                 dns_threads: 4,
             },
@@ -80,16 +89,31 @@ impl ClientBuilder {
     ///
     /// This method fails if native TLS backend cannot be initialized.
     pub fn build(self) -> ::Result<Client> {
-        let mut config = self.config;
+        let config = self.config;
 
-        config.tls.danger_accept_invalid_hostnames(!config.hostname_verification);
-        config.tls.danger_accept_invalid_certs(!config.certs_verification);
 
-        let tls = try_!(config.tls.build());
+        let connector = {
+            #[cfg(feature = "default-tls")]
+            {
+            let mut tls = config.tls;
+            tls.danger_accept_invalid_hostnames(!config.hostname_verification);
+            tls.danger_accept_invalid_certs(!config.certs_verification);
 
-        let proxies = Arc::new(config.proxies);
+            let tls = try_!(tls.build());
 
-        let connector = Connector::new(config.dns_threads, tls, proxies.clone());
+            let proxies = Arc::new(config.proxies);
+
+            Connector::new(config.dns_threads, tls, proxies.clone())
+            }
+
+
+            #[cfg(not(feature = "default-tls"))]
+            {
+            let proxies = Arc::new(config.proxies);
+
+            Connector::new(config.dns_threads, proxies.clone())
+            }
+        };
 
         let hyper_client = ::hyper::Client::builder()
             .build(connector);
@@ -109,12 +133,14 @@ impl ClientBuilder {
     ///
     /// This can be used to connect to a server that has a self-signed
     /// certificate for example.
+    #[cfg(feature = "default-tls")]
     pub fn add_root_certificate(mut self, cert: Certificate) -> ClientBuilder {
         self.config.tls.add_root_certificate(cert.cert());
         self
     }
 
     /// Sets the identity to be used for client certificate authentication.
+    #[cfg(feature = "default-tls")]
     pub fn identity(mut self, identity: Identity) -> ClientBuilder {
         self.config.tls.identity(identity.pkcs12());
         self
@@ -130,6 +156,7 @@ impl ClientBuilder {
     /// hostname verification is not used, any valid certificate for any
     /// site will be trusted for use from any other. This introduces a
     /// significant vulnerability to man-in-the-middle attacks.
+    #[cfg(feature = "default-tls")]
     pub fn danger_accept_invalid_hostnames(mut self, accept_invalid_hostname: bool) -> ClientBuilder {
         self.config.hostname_verification = !accept_invalid_hostname;
         self
@@ -147,6 +174,7 @@ impl ClientBuilder {
     /// will be trusted for use. This includes expired certificates. This
     /// introduces significant vulnerabilities, and should only be used
     /// as a last resort.
+    #[cfg(feature = "default-tls")]
     pub fn danger_accept_invalid_certs(mut self, accept_invalid_certs: bool) -> ClientBuilder {
         self.config.certs_verification = !accept_invalid_certs;
         self
