@@ -262,6 +262,13 @@ impl ClientBuilder {
         self
     }
 
+    /// Set the number of threads to use for DNS
+    ///
+    /// Default is 4
+    pub fn dns_threads(self, threads: usize) -> ClientBuilder {
+        self.with_inner(|inner| inner.dns_threads(threads))
+    }
+
     fn with_inner<F>(mut self, func: F) -> ClientBuilder
     where
         F: FnOnce(async_impl::ClientBuilder) -> async_impl::ClientBuilder,
