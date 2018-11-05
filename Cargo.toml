@@ -10,7 +10,7 @@ license = "MIT/Apache-2.0"
 categories = ["web-programming::http-client"]
 
 [dependencies]
-base64 = "0.9"
+base64 = "0.10"
 bytes = "0.4"
 encoding_rs = "0.8"
 futures = "0.1.23"
