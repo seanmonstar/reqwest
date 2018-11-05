@@ -448,7 +448,7 @@ impl Client {
 
         let mut headers = self.inner.headers.clone(); // default headers
         for (key, value) in user_headers.iter() {
-            headers.insert(key, value.clone());
+            headers.append(key, value.clone());
         }
 
         if self.inner.gzip &&

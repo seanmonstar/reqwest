@@ -128,7 +128,9 @@ impl RequestBuilder {
     /// The headers will be merged in to any already set.
     pub fn headers(mut self, headers: ::header::HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            replace_headers(req.headers_mut(), headers);
+            for (key, value) in headers.iter() {
+                req.headers_mut().append(key, value.clone());
+            }
         }
         self
     }
@@ -570,6 +572,27 @@ mod tests {
 
     #[test]
     fn add_headers() {
+        let client = Client::new().unwrap();
+        let some_url = "https://google.com/";
+        let mut r = client.post(some_url).unwrap();
+
+        let header = Host {
+            hostname: "google.com".to_string(),
+            port: None,
+        };
+
+        let mut headers = Headers::new();
+        headers.set(header);
+
+        // Add a copy of the headers to the request builder
+        let r = r.headers(headers.clone()).build();
+
+        // then make sure they were added correctly
+        assert_eq!(r.headers, headers);
+    }
+
+    #[test]
+    fn add_headers_multi() {
         let client = Client::new().unwrap();
         let some_url = "https://google.com/";
         let mut r = client.post(some_url).unwrap();

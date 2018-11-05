@@ -188,7 +188,9 @@ impl RequestBuilder {
     /// ```
     pub fn headers(mut self, headers: ::header::HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            async_impl::request::replace_headers(req.headers_mut(), headers);
+            for (key, value) in headers.iter() {
+                req.headers_mut().append(key, value.clone());
+            }
         }
         self
     }
@@ -575,7 +577,7 @@ fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>, req: &Request
 #[cfg(test)]
 mod tests {
     use {body, Client, Method};
-    use header::{HOST, HeaderMap, HeaderValue, CONTENT_TYPE};
+    use header::{ACCEPT, HOST, HeaderMap, HeaderValue, CONTENT_TYPE};
     use std::collections::{BTreeMap, HashMap};
     use serde_json;
     use serde_urlencoded;
@@ -665,6 +667,26 @@ mod tests {
 
         let mut headers = HeaderMap::new();
         headers.insert(HOST, header);
+
+        // Add a copy of the headers to the request builder
+        let r = r.headers(headers.clone()).build().unwrap();
+
+        // then make sure they were added correctly
+        assert_eq!(r.headers(), &headers);
+    }
+
+    #[test]
+    fn add_headers_multi() {
+        let client = Client::new();
+        let some_url = "https://google.com/";
+        let r = client.post(some_url);
+
+        let header_json = HeaderValue::from_static("application/json");
+        let header_xml = HeaderValue::from_static("application/xml");
+
+        let mut headers = HeaderMap::new();
+        headers.append(ACCEPT, header_json);
+        headers.append(ACCEPT, header_xml);
 
         // Add a copy of the headers to the request builder
         let r = r.headers(headers.clone()).build().unwrap();
