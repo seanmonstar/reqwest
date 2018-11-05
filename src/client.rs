@@ -266,7 +266,7 @@ impl ClientBuilder {
     ///
     /// Default is 4
     pub fn dns_threads(self, threads: usize) -> ClientBuilder {
-        self.with_inner(move |inner| inner.dns_threads(threads))
+        self.with_inner(|inner| inner.dns_threads(threads))
     }
 
     fn with_inner<F>(mut self, func: F) -> ClientBuilder
