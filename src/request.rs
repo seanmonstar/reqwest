@@ -344,7 +344,7 @@ impl RequestBuilder {
     /// Send a form body.
     ///
     /// Sets the body to the url encoded serialization of the passed value,
-    /// and also sets the `Content-Type: application/www-form-url-encoded`
+    /// and also sets the `Content-Type: application/x-www-form-urlencoded`
     /// header.
     ///
     /// ```rust
