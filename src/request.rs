@@ -432,6 +432,29 @@ impl RequestBuilder {
         self
     }
 
+    /// Same as `json`, but emits "prettified" JSON.
+    /// Available if feature "pretty-json" is enabled.
+    #[cfg(feature = "pretty-json")]
+    pub fn pretty_json<T: Serialize + ?Sized>(mut self, json: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
+            match serde_json::to_vec_pretty(json) {
+                Ok(body) => {
+                    req.headers_mut().insert(
+                        CONTENT_TYPE,
+                        HeaderValue::from_static("application/json")
+                    );
+                    *req.body_mut() = Some(body.into());
+                },
+                Err(err) => error = Some(::error::from(err)),
+            }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
+        }
+        self
+    }
+
     /// Sends a multipart/form-data body.
     ///
     /// ```
@@ -714,6 +737,29 @@ mod tests {
 
         let body_should_be = serde_json::to_string(&json_data).unwrap();
         assert_eq!(buf, body_should_be);
+    }
+
+    #[cfg(feature = "pretty-json")]
+    #[test]
+    fn add_pretty_json() {
+        let client = Client::new();
+        let some_url = "https://google.com/";
+        let r = client.post(some_url);
+
+        let mut json_data = HashMap::new();
+        json_data.insert("foo", "bar");
+
+        let mut r = r.pretty_json(&json_data).build().unwrap();
+
+        // Make sure the content type was set
+        assert_eq!(r.headers().get(CONTENT_TYPE).unwrap(), &"application/json");
+
+        let buf = body::read_to_string(r.body_mut().take().unwrap()).unwrap();
+
+        let body_should_be = serde_json::to_string_pretty(&json_data).unwrap();
+        let body_shouldn_be = serde_json::to_string(&json_data).unwrap();
+        assert_eq!(buf, body_should_be);
+        assert_ne!(buf, body_shouldn_be);
     }
 
     #[test]

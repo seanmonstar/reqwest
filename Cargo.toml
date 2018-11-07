@@ -39,6 +39,7 @@ serde_derive = "1.0"
 default = ["default-tls"]
 hyper-011 = ["hyper-old-types"]
 default-tls = ["hyper-tls", "native-tls"]
+pretty-json = []
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docs_rs_workaround"]
