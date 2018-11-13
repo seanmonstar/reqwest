@@ -81,6 +81,26 @@ impl Request {
         &mut self.body
     }
 
+    /// Attempts to clone the `Request`.
+    ///
+    /// None is returned if a body is which can not be cloned. This can be because the body is a
+    /// stream.
+    pub fn try_clone(&self) -> Option<Request> {
+        let body = if let Some(ref body) = self.body.as_ref() {
+            if let Some(body) = body.try_clone() {
+                Some(body)
+            } else {
+                return None;
+            }
+        } else {
+            None
+        };
+        let mut req = Request::new(self.method().clone(), self.url().clone());
+        *req.headers_mut() = self.headers().clone();
+        req.body = body;
+        Some(req)
+    }
+
     pub(crate) fn into_async(self) -> (async_impl::Request, Option<body::Sender>) {
         use header::CONTENT_LENGTH;
 
@@ -484,6 +504,61 @@ impl RequestBuilder {
         self.client.execute(self.request?)
     }
 
+    /// Attempts to clone the `RequestBuilder`.
+    ///
+    /// None is returned if a body is which can not be cloned. This can be because the body is a
+    /// stream.
+    ///
+    /// # Examples
+    ///
+    /// With a static body
+    ///
+    /// ```rust
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let client = reqwest::Client::new();
+    /// let builder = client.post("http://httpbin.org/post")
+    ///     .body("from a &str!");
+    /// let clone = builder.try_clone();
+    /// assert!(clone.is_some());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// Without a body
+    ///
+    /// ```rust
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let client = reqwest::Client::new();
+    /// let builder = client.get("http://httpbin.org/get");
+    /// let clone = builder.try_clone();
+    /// assert!(clone.is_some());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// With a non-clonable body
+    ///
+    /// ```rust
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let client = reqwest::Client::new();
+    /// let builder = client.get("http://httpbin.org/get")
+    ///     .body(reqwest::Body::new(std::io::empty()));
+    /// let clone = builder.try_clone();
+    /// assert!(clone.is_none());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn try_clone(&self) -> Option<RequestBuilder> {
+        self.request.as_ref()
+            .ok()
+            .and_then(|req| req.try_clone())
+            .map(|req| {
+                RequestBuilder{
+                    client: self.client.clone(),
+                    request: Ok(req),
+                }
+            })
+    }
 }
 
 impl fmt::Debug for Request {

@@ -109,12 +109,26 @@ impl Body {
             }
         }
     }
+
+    pub(crate) fn try_clone(&self) -> Option<Body> {
+        self.kind.try_clone()
+            .map(|kind| Body { kind })
+    }
 }
 
 
 enum Kind {
     Reader(Box<Read + Send>, Option<u64>),
     Bytes(Bytes),
+}
+
+impl Kind {
+    fn try_clone(&self) -> Option<Kind> {
+        match self {
+            Kind::Reader(..) => None,
+            Kind::Bytes(v) => Some(Kind::Bytes(v.clone())),
+        }
+    }
 }
 
 impl From<Vec<u8>> for Body {
