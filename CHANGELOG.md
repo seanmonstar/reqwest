@@ -1,3 +1,10 @@
+## v0.9.5
+
+### Features
+
+- Adds `Response::remote_addr()` method to check the address of the connection used.
+- Adds `default-tls` crate feature, enabled by default, which allows users to *disable* TLS.
+
 ## v0.9.4
 
 ### Features
