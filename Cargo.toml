@@ -32,7 +32,7 @@ url = "1.2"
 uuid = { version = "0.7", features = ["v4"] }
 
 [dev-dependencies]
-env_logger = "0.5"
+env_logger = "0.6"
 serde_derive = "1.0"
 
 [features]
