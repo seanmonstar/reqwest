@@ -271,6 +271,7 @@ impl Response {
     /// the body and then write it into writer in a streaming fashion until EOF is met.
     ///
     /// On success, the total number of bytes that were copied to `writer` is returned.
+    ///
     /// [`std::io::copy`]: https://doc.rust-lang.org/std/io/fn.copy.html
     ///
     /// # Example
