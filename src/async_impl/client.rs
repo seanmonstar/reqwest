@@ -81,7 +81,11 @@ impl ClientBuilder {
                 #[cfg(feature = "default-tls")]
                 tls: TlsConnector::builder(),
                 #[cfg(feature = "rustls-tls")]
-                tls: rustls::ClientConfig::new(),
+                tls: {
+                    let mut tls = rustls::ClientConfig::new();
+                    tls.root_store.add_server_trust_anchors(&::webpki_roots::TLS_SERVER_ROOTS);
+                    tls
+                },
                 dns_threads: 4,
             },
         }
@@ -112,10 +116,8 @@ impl ClientBuilder {
 
             #[cfg(feature = "rustls-tls")]
             {
-            let mut tls = config.tls;
+            let tls = config.tls;
             let proxies = Arc::new(config.proxies);
-
-            tls.root_store.add_server_trust_anchors(&::webpki_roots::TLS_SERVER_ROOTS);
 
             Connector::new(config.dns_threads, tls, proxies.clone())
             }
@@ -174,7 +176,7 @@ impl ClientBuilder {
     #[cfg(feature = "rustls-tls")]
     pub fn identity(mut self, identity: Identity) -> ClientBuilder {
         let (sk, pk) = identity.into_inner();
-        self.config.tls.set_single_client_cert(vec!(pk), sk);
+        self.config.tls.set_single_client_cert(pk, sk);
         self
     }
 

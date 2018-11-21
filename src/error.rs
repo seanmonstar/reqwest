@@ -294,7 +294,7 @@ pub(crate) enum Kind {
     #[cfg(feature = "default-tls")]
     Tls(::native_tls::Error),
     #[cfg(feature = "rustls-tls")]
-    Tls(::tls::Error),
+    Tls(::rustls::TLSError),
     Io(io::Error),
     UrlEncoded(::serde_urlencoded::ser::Error),
     Json(::serde_json::Error),
@@ -362,8 +362,8 @@ impl From<::native_tls::Error> for Kind {
 }
 
 #[cfg(feature = "rustls-tls")]
-impl From<::tls::Error> for Kind {
-    fn from(err: ::tls::Error) -> Kind {
+impl From<::rustls::TLSError> for Kind {
+    fn from(err: ::rustls::TLSError) -> Kind {
         Kind::Tls(err)
     }
 }
