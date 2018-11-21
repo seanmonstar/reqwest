@@ -18,7 +18,7 @@ use connect::Connector;
 use into_url::to_uri;
 use redirect::{self, RedirectPolicy, remove_sensitive_headers};
 use {IntoUrl, Method, Proxy, StatusCode, Url};
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "tls")]
 use {Certificate, Identity};
 
 static DEFAULT_USER_AGENT: &'static str =
@@ -54,6 +54,8 @@ struct Config {
     timeout: Option<Duration>,
     #[cfg(feature = "default-tls")]
     tls: TlsConnectorBuilder,
+    #[cfg(feature = "rustls-tls")]
+    tls: rustls::ClientConfig,
     dns_threads: usize,
 }
 
@@ -78,6 +80,8 @@ impl ClientBuilder {
                 timeout: None,
                 #[cfg(feature = "default-tls")]
                 tls: TlsConnector::builder(),
+                #[cfg(feature = "rustls-tls")]
+                tls: rustls::ClientConfig::new(),
                 dns_threads: 4,
             },
         }
@@ -106,8 +110,17 @@ impl ClientBuilder {
             Connector::new(config.dns_threads, tls, proxies.clone())
             }
 
+            #[cfg(feature = "rustls-tls")]
+            {
+            let mut tls = config.tls;
+            let proxies = Arc::new(config.proxies);
 
-            #[cfg(not(feature = "default-tls"))]
+            tls.root_store.add_server_trust_anchors(&::webpki_roots::TLS_SERVER_ROOTS);
+
+            Connector::new(config.dns_threads, tls, proxies.clone())
+            }
+
+            #[cfg(not(any(feature = "default-tls", feature = "rustls-tls")))]
             {
             let proxies = Arc::new(config.proxies);
 
@@ -139,10 +152,29 @@ impl ClientBuilder {
         self
     }
 
+    /// Add a custom root certificate.
+    ///
+    /// This can be used to connect to a server that has a self-signed
+    /// certificate for example.
+    #[cfg(feature = "rustls-tls")]
+    pub fn add_root_certificate(mut self, cert: Certificate) -> ClientBuilder {
+        // ignore the Result because we have checked it.
+        let _ = self.config.tls.root_store.add(&cert.cert());
+        self
+    }
+
     /// Sets the identity to be used for client certificate authentication.
     #[cfg(feature = "default-tls")]
     pub fn identity(mut self, identity: Identity) -> ClientBuilder {
         self.config.tls.identity(identity.pkcs12());
+        self
+    }
+
+    /// Sets the identity to be used for client certificate authentication.
+    #[cfg(feature = "rustls-tls")]
+    pub fn identity(mut self, identity: Identity) -> ClientBuilder {
+        let (sk, pk) = identity.into_inner();
+        self.config.tls.set_single_client_cert(vec!(pk), sk);
         self
     }
 

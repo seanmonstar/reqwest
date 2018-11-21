@@ -135,7 +135,7 @@ impl Error {
             Kind::Hyper(ref e) => Some(e),
             Kind::Mime(ref e) => Some(e),
             Kind::Url(ref e) => Some(e),
-            #[cfg(feature = "default-tls")]
+            #[cfg(feature = "tls")]
             Kind::Tls(ref e) => Some(e),
             Kind::Io(ref e) => Some(e),
             Kind::UrlEncoded(ref e) => Some(e),
@@ -225,7 +225,7 @@ impl fmt::Display for Error {
             Kind::Mime(ref e) => fmt::Display::fmt(e, f),
             Kind::Url(ref e) => fmt::Display::fmt(e, f),
             Kind::UrlBadScheme => f.write_str("URL scheme is not allowed"),
-            #[cfg(feature = "default-tls")]
+            #[cfg(feature = "tls")]
             Kind::Tls(ref e) => fmt::Display::fmt(e, f),
             Kind::Io(ref e) => fmt::Display::fmt(e, f),
             Kind::UrlEncoded(ref e) => fmt::Display::fmt(e, f),
@@ -252,7 +252,7 @@ impl StdError for Error {
             Kind::Mime(ref e) => e.description(),
             Kind::Url(ref e) => e.description(),
             Kind::UrlBadScheme => "URL scheme is not allowed",
-            #[cfg(feature = "default-tls")]
+            #[cfg(feature = "tls")]
             Kind::Tls(ref e) => e.description(),
             Kind::Io(ref e) => e.description(),
             Kind::UrlEncoded(ref e) => e.description(),
@@ -270,7 +270,7 @@ impl StdError for Error {
             Kind::Hyper(ref e) => e.cause(),
             Kind::Mime(ref e) => e.cause(),
             Kind::Url(ref e) => e.cause(),
-            #[cfg(feature = "default-tls")]
+            #[cfg(feature = "tls")]
             Kind::Tls(ref e) => e.cause(),
             Kind::Io(ref e) => e.cause(),
             Kind::UrlEncoded(ref e) => e.cause(),
@@ -293,6 +293,8 @@ pub(crate) enum Kind {
     UrlBadScheme,
     #[cfg(feature = "default-tls")]
     Tls(::native_tls::Error),
+    #[cfg(feature = "rustls-tls")]
+    Tls(::tls::Error),
     Io(io::Error),
     UrlEncoded(::serde_urlencoded::ser::Error),
     Json(::serde_json::Error),
@@ -355,6 +357,13 @@ impl From<::serde_json::Error> for Kind {
 #[cfg(feature = "default-tls")]
 impl From<::native_tls::Error> for Kind {
     fn from(err: ::native_tls::Error) -> Kind {
+        Kind::Tls(err)
+    }
+}
+
+#[cfg(feature = "rustls-tls")]
+impl From<::tls::Error> for Kind {
+    fn from(err: ::tls::Error) -> Kind {
         Kind::Tls(err)
     }
 }

@@ -30,15 +30,23 @@ tokio = "0.1.7"
 tokio-io = "0.1"
 url = "1.2"
 uuid = { version = "0.7", features = ["v4"] }
+hyper-rustls = { version = "*", optional = true }
+tokio-rustls = { version = "*", optional = true }
+webpki-roots = { version = "*", optional = true }
+rustls = { version = "*", optional = true }
+untrusted = { version = "*", optional = true }
 
 [dev-dependencies]
 env_logger = "0.6"
 serde_derive = "1.0"
 
 [features]
-default = ["default-tls"]
+default = ["rustls-tls"]
+# default = ["default-tls"]
+tls = []
 hyper-011 = ["hyper-old-types"]
-default-tls = ["hyper-tls", "native-tls"]
+default-tls = ["hyper-tls", "native-tls", "tls"]
+rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "untrusted", "tls"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docs_rs_workaround"]

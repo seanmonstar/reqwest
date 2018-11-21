@@ -10,7 +10,7 @@ use futures::sync::{mpsc, oneshot};
 use request::{Request, RequestBuilder};
 use response::Response;
 use {async_impl, header, Method, IntoUrl, Proxy, RedirectPolicy, wait};
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "tls")]
 use {Certificate, Identity};
 
 /// A `Client` to make Requests with.
@@ -108,7 +108,7 @@ impl ClientBuilder {
     /// # Errors
     ///
     /// This method fails if adding root certificate was unsuccessful.
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "tls")]
     pub fn add_root_certificate(self, cert: Certificate) -> ClientBuilder {
         self.with_inner(move |inner| inner.add_root_certificate(cert))
     }
@@ -136,7 +136,7 @@ impl ClientBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "tls")]
     pub fn identity(self, identity: Identity) -> ClientBuilder {
         self.with_inner(move |inner| inner.identity(identity))
     }

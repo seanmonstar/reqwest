@@ -166,6 +166,17 @@ extern crate tokio_io;
 extern crate url;
 extern crate uuid;
 
+#[cfg(feature = "rustls-tls")]
+extern crate hyper_rustls;
+#[cfg(feature = "rustls-tls")]
+extern crate tokio_rustls;
+#[cfg(feature = "rustls-tls")]
+extern crate webpki_roots;
+#[cfg(feature = "rustls-tls")]
+extern crate rustls;
+#[cfg(feature = "rustls-tls")]
+extern crate untrusted;
+
 pub use hyper::header;
 pub use hyper::Method;
 pub use hyper::{StatusCode, Version};
@@ -180,7 +191,7 @@ pub use self::proxy::Proxy;
 pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "tls")]
 pub use self::tls::{Certificate, Identity};
 
 
@@ -202,6 +213,9 @@ mod response;
 #[cfg(feature = "default-tls")]
 mod tls;
 mod wait;
+#[cfg(feature = "rustls-tls")]
+#[path = "rustls.rs"]
+mod tls;
 
 pub mod multipart;
 
