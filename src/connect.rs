@@ -3,69 +3,70 @@ use futures::{Future, Poll};
 use http::uri::Scheme;
 use hyper::client::{HttpConnector};
 use hyper::client::connect::{Connect, Connected, Destination};
-#[cfg(feature = "default-tls")]
-use hyper_tls::{HttpsConnector, MaybeHttpsStream};
-#[cfg(feature = "default-tls")]
-use native_tls::TlsConnector;
 use tokio_io::{AsyncRead, AsyncWrite};
 #[cfg(feature = "default-tls")]
-use connect_async::{TlsConnectorExt, TlsStream};
-#[cfg(feature = "rustls-tls")]
-use hyper_rustls::{HttpsConnector, MaybeHttpsStream};
-#[cfg(feature = "rustls-tls")]
-use tokio_rustls::{TlsConnector as RustlsConnector, TlsStream};
-#[cfg(feature = "rustls-tls")]
-use tokio_rustls::webpki::DNSNameRef;
+use native_tls::TlsConnector;
+
+#[cfg(feature = "tls")]
+use ::tls::TlsBackend;
 
 use std::io::{self, Read, Write};
 use std::sync::Arc;
 
 use Proxy;
 
+
 pub(crate) struct Connector {
-    #[cfg(feature = "tls")]
-    http: HttpsConnector<HttpConnector>,
-    #[cfg(not(feature = "tls"))]
-    http: HttpConnector,
     proxies: Arc<Vec<Proxy>>,
+    inner: Inner
+}
+
+enum Inner {
+    #[cfg(not(feature = "tls"))]
+    Http(HttpConnector),
     #[cfg(feature = "default-tls")]
-    tls: TlsConnector,
+    DefaultTls(hyper_tls::HttpsConnector<HttpConnector>, TlsConnector),
     #[cfg(feature = "rustls-tls")]
-    tls: Arc<rustls::ClientConfig>
+    Rustls(hyper_rustls::HttpsConnector<HttpConnector>, Arc<rustls::ClientConfig>)
 }
 
 impl Connector {
     #[cfg(not(feature = "tls"))]
     pub(crate) fn new(threads: usize, proxies: Arc<Vec<Proxy>>) -> Connector {
         let http = HttpConnector::new(threads);
-        Connector {
-            http,
+        Ok(Connector {
             proxies,
-        }
-    }
-    #[cfg(feature = "default-tls")]
-    pub(crate) fn new(threads: usize, tls: TlsConnector, proxies: Arc<Vec<Proxy>>) -> Connector {
-        let mut http = HttpConnector::new(threads);
-        http.enforce_http(false);
-        let http = HttpsConnector::from((http, tls.clone()));
-
-        Connector {
-            http,
-            proxies,
-            tls,
-        }
+            inner: Inner::Http(http)
+        })
     }
 
-    #[cfg(feature = "rustls-tls")]
-    pub(crate) fn new(threads: usize, tls: rustls::ClientConfig, proxies: Arc<Vec<Proxy>>) -> Connector {
-        let mut http = HttpConnector::new(threads);
-        http.enforce_http(false);
-        let http = HttpsConnector::from((http, tls.clone()));
+    #[cfg(feature = "tls")]
+    pub(crate) fn new(threads: usize, tls: TlsBackend, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
+        match tls {
+            #[cfg(feature = "default-tls")]
+            TlsBackend::Default(tls) => {
+                let tls = try_!(tls.build());
 
-        Connector {
-            http,
-            proxies,
-            tls: Arc::new(tls),
+                let mut http = HttpConnector::new(threads);
+                http.enforce_http(false);
+                let http = hyper_tls::HttpsConnector::from((http, tls.clone()));
+
+                Ok(Connector {
+                    proxies,
+                    inner: Inner::DefaultTls(http, tls)
+                })
+            },
+            #[cfg(feature = "rustls-tls")]
+            TlsBackend::Rustls(tls) => {
+                let mut http = HttpConnector::new(threads);
+                http.enforce_http(false);
+                let http = hyper_rustls::HttpsConnector::from((http, tls.clone()));
+
+                Ok(Connector {
+                    proxies,
+                    inner: Inner::Rustls(http, Arc::new(tls))
+                })
+            }
         }
     }
 }
@@ -76,6 +77,23 @@ impl Connect for Connector {
     type Future = Connecting;
 
     fn connect(&self, dst: Destination) -> Self::Future {
+        macro_rules! connect {
+            ( $http:expr, $dst:expr, $proxy:expr ) => {
+                Box::new($http.connect($dst)
+                    .map(|(io, connected)| (Box::new(io) as Conn, connected.proxy($proxy))))
+            };
+            ( $dst:expr, $proxy:expr ) => {
+                match &self.inner {
+                    #[cfg(not(feature = "tls"))]
+                    Inner::Http(http) => connect!(http, $dst, $proxy),
+                    #[cfg(feature = "default-tls")]
+                    Inner::DefaultTls(http, _) => connect!(http, $dst, $proxy),
+                    #[cfg(feature = "rustls-tls")]
+                    Inner::Rustls(http, _) => connect!(http, $dst, $proxy)
+                }
+            };
+        }
+
         for prox in self.proxies.iter() {
             if let Some(puri) = prox.intercept(&dst) {
                 trace!("proxy({:?}) intercepts {:?}", puri, dst);
@@ -92,137 +110,65 @@ impl Connect for Connector {
 
                 ndst.set_port(puri.port());
 
-                #[cfg(feature = "default-tls")]
-                {
-                if dst.scheme() == "https" {
-                    let host = dst.host().to_owned();
-                    let port = dst.port().unwrap_or(443);
-                    let tls = self.tls.clone();
-                    return Box::new(self.http.connect(ndst).and_then(move |(conn, connected)| {
-                        trace!("tunneling HTTPS over proxy");
-                        tunnel(conn, host.clone(), port)
-                            .and_then(move |tunneled| {
-                                tls.connect_async(&host, tunneled)
-                                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-                            })
-                            .map(|io| (Conn::Proxied(io), connected.proxy(true)))
-                    }));
-                }
+                match &self.inner {
+                    #[cfg(feature = "default-tls")]
+                    Inner::DefaultTls(http, tls) => if dst.scheme() == "https" {
+                        #[cfg(feature = "default-tls")]
+                        use connect_async::TlsConnectorExt;
+
+                        let host = dst.host().to_owned();
+                        let port = dst.port().unwrap_or(443);
+                        let tls = tls.clone();
+                        return Box::new(http.connect(ndst).and_then(move |(conn, connected)| {
+                            trace!("tunneling HTTPS over proxy");
+                            tunnel(conn, host.clone(), port)
+                                .and_then(move |tunneled| {
+                                    tls.connect_async(&host, tunneled)
+                                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+                                })
+                                .map(|io| (Box::new(io) as Conn, connected.proxy(true)))
+                        }));
+                    },
+                    #[cfg(feature = "rustls-tls")]
+                    Inner::Rustls(http, tls) => if dst.scheme() == "https" {
+                        #[cfg(feature = "rustls-tls")]
+                        use tokio_rustls::TlsConnector as RustlsConnector;
+                        #[cfg(feature = "rustls-tls")]
+                        use tokio_rustls::webpki::DNSNameRef;
+
+                        let host = dst.host().to_owned();
+                        let port = dst.port().unwrap_or(443);
+                        let tls = tls.clone();
+                        return Box::new(http.connect(ndst).and_then(move |(conn, connected)| {
+                            trace!("tunneling HTTPS over proxy");
+                            let maybe_dnsname = DNSNameRef::try_from_ascii_str(&host)
+                                .map(|dnsname| dnsname.to_owned())
+                                .map_err(|_| io::Error::new(io::ErrorKind::Other, "Invalid DNS Name"));
+                            tunnel(conn, host, port)
+                                .and_then(move |tunneled| Ok((maybe_dnsname?, tunneled)))
+                                .and_then(move |(dnsname, tunneled)| {
+                                    RustlsConnector::from(tls).connect(dnsname.as_ref(), tunneled)
+                                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+                                })
+                                .map(|io| (Box::new(io) as Conn, connected.proxy(true)))
+                        }));
+                    },
+                    _ => ()
                 }
 
-                #[cfg(feature = "rustls-tls")]
-                {
-                if dst.scheme() == "https" {
-                    let host = dst.host().to_owned();
-                    let port = dst.port().unwrap_or(443);
-                    let tls = self.tls.clone();
-                    return Box::new(self.http.connect(ndst).and_then(move |(conn, connected)| {
-                        trace!("tunneling HTTPS over proxy");
-                        let maybe_dnsname = DNSNameRef::try_from_ascii_str(&host)
-                            .map(|dnsname| dnsname.to_owned())
-                            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Invalid DNS Name"));
-                        tunnel(conn, host, port)
-                            .and_then(move |tunneled| Ok((maybe_dnsname?, tunneled)))
-                            .and_then(move |(dnsname, tunneled)| {
-                                RustlsConnector::from(tls).connect(dnsname.as_ref(), tunneled)
-                                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-                            })
-                            .map(|io| (Conn::Proxied(io), connected.proxy(true)))
-                    }));
-                }
-                }
-
-                return Box::new(self.http.connect(ndst).map(|(io, connected)| (Conn::Normal(io), connected.proxy(true))));
+                return connect!(ndst, true);
             }
         }
-        Box::new(self.http.connect(dst).map(|(io, connected)| (Conn::Normal(io), connected)))
+
+        connect!(dst, false)
     }
 }
 
-type HttpStream = <HttpConnector as Connect>::Transport;
-#[cfg(feature = "tls")]
-type HttpsStream = MaybeHttpsStream<HttpStream>;
-
+pub(crate) trait AsyncConn: AsyncRead + AsyncWrite {}
+impl<T: AsyncRead + AsyncWrite> AsyncConn for T {}
+pub(crate) type Conn = Box<dyn AsyncConn + Send + Sync + 'static>;
 
 pub(crate) type Connecting = Box<Future<Item=(Conn, Connected), Error=io::Error> + Send>;
-
-pub(crate) enum Conn {
-    #[cfg(feature = "tls")]
-    Normal(HttpsStream),
-    #[cfg(not(feature = "tls"))]
-    Normal(HttpStream),
-    #[cfg(feature = "default-tls")]
-    Proxied(TlsStream<MaybeHttpsStream<HttpStream>>),
-    #[cfg(feature = "rustls-tls")]
-    Proxied(TlsStream<MaybeHttpsStream<HttpStream>, rustls::ClientSession>),
-}
-
-impl Read for Conn {
-    #[inline]
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match *self {
-            Conn::Normal(ref mut s) => s.read(buf),
-            #[cfg(feature = "tls")]
-            Conn::Proxied(ref mut s) => s.read(buf),
-        }
-    }
-}
-
-impl Write for Conn {
-    #[inline]
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match *self {
-            Conn::Normal(ref mut s) => s.write(buf),
-            #[cfg(feature = "tls")]
-            Conn::Proxied(ref mut s) => s.write(buf),
-        }
-    }
-
-    #[inline]
-    fn flush(&mut self) -> io::Result<()> {
-        match *self {
-            Conn::Normal(ref mut s) => s.flush(),
-            #[cfg(feature = "tls")]
-            Conn::Proxied(ref mut s) => s.flush(),
-        }
-    }
-}
-
-impl AsyncRead for Conn {
-    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
-        match *self {
-            Conn::Normal(ref s) => s.prepare_uninitialized_buffer(buf),
-            #[cfg(feature = "tls")]
-            Conn::Proxied(ref s) => s.prepare_uninitialized_buffer(buf),
-        }
-    }
-
-    fn read_buf<B: BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
-        match *self {
-            Conn::Normal(ref mut s) => s.read_buf(buf),
-            #[cfg(feature = "tls")]
-            Conn::Proxied(ref mut s) => s.read_buf(buf),
-        }
-    }
-}
-
-impl AsyncWrite for Conn {
-    fn shutdown(&mut self) -> Poll<(), io::Error> {
-        match *self {
-            Conn::Normal(ref mut s) => s.shutdown(),
-            #[cfg(feature = "tls")]
-            Conn::Proxied(ref mut s) => s.shutdown(),
-        }
-    }
-
-    fn write_buf<B: Buf>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
-        match *self {
-            Conn::Normal(ref mut s) => s.write_buf(buf),
-            #[cfg(feature = "tls")]
-            Conn::Proxied(ref mut s) => s.write_buf(buf),
-        }
-    }
-}
 
 #[cfg(feature = "tls")]
 fn tunnel<T>(conn: T, host: String, port: u16) -> Tunnel<T> {
