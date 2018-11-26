@@ -14,7 +14,7 @@ base64 = "0.9"
 bytes = "0.4"
 encoding_rs = "0.8"
 futures = "0.1.23"
-http = "0.1.10"
+http = "0.1.14"
 hyper = "0.12.13"
 hyper-old-types = { version = "0.11", optional = true, features = ["compat"] }
 hyper-tls = { version = "0.3", optional = true }

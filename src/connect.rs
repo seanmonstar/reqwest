@@ -69,7 +69,7 @@ impl Connect for Connector {
                 ndst.set_host(puri.host().expect("proxy target should have host"))
                     .expect("proxy target host should be valid");
 
-                ndst.set_port(puri.port());
+                ndst.set_port(puri.port_part().map(|p| p.as_u16()));
 
                 #[cfg(feature = "default-tls")]
                 {
