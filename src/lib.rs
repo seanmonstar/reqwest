@@ -210,9 +210,12 @@ mod proxy;
 mod redirect;
 mod request;
 mod response;
-#[cfg(feature = "tls")]
+#[cfg(feature = "default-tls")]
 mod tls;
 mod wait;
+#[cfg(feature = "rustls-tls")]
+#[path = "rustls.rs"]
+mod tls;
 
 pub mod multipart;
 

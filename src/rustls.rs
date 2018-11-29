@@ -8,7 +8,7 @@ use rustls::TLSError;
 
 
 /// Represent an X509 certificate.
-pub struct Certificate(::rustls::Certificate);
+pub struct Certificate(rustls::Certificate);
 
 impl Certificate {
     /// Create a `Certificate` from a binary DER encoded certificate
@@ -60,7 +60,7 @@ impl Certificate {
         pemfile::certs(&mut pem)
             .map_err(|_| ::error::from(TLSError::General(String::from("No valid certificate was found"))))?
             .into_iter()
-            .find_map(|::rustls::Certificate(der)| Certificate::from_der_vec(der).ok())
+            .find_map(|rustls::Certificate(der)| Certificate::from_der_vec(der).ok())
             .ok_or_else(|| ::error::from(TLSError::General(String::from("No valid certificate was found"))))
     }
 
@@ -71,13 +71,13 @@ impl Certificate {
         };
 
         if ret {
-            Ok(Certificate(::rustls::Certificate(der)))
+            Ok(Certificate(rustls::Certificate(der)))
         } else {
             Err(::error::from(TLSError::WebPKIError(webpki::Error::BadDER)))
         }
     }
 
-    pub(crate) fn cert(self) -> ::rustls::Certificate {
+    pub(crate) fn cert(self) -> rustls::Certificate {
         self.0
     }
 }
@@ -91,7 +91,7 @@ impl fmt::Debug for Certificate {
 
 
 /// Represent a private key and X509 cert as a client certificate.
-pub struct Identity(::rustls::PrivateKey, Vec<::rustls::Certificate>);
+pub struct Identity(rustls::PrivateKey, Vec<rustls::Certificate>);
 
 impl Identity {
     /// Parses PEM encoded private key and certificate.
@@ -136,7 +136,7 @@ impl Identity {
         }
     }
 
-    pub(crate) fn into_inner(self) -> (::rustls::PrivateKey, Vec<::rustls::Certificate>) {
+    pub(crate) fn into_inner(self) -> (rustls::PrivateKey, Vec<rustls::Certificate>) {
         (self.0, self.1)
     }
 }

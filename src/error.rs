@@ -135,10 +135,8 @@ impl Error {
             Kind::Hyper(ref e) => Some(e),
             Kind::Mime(ref e) => Some(e),
             Kind::Url(ref e) => Some(e),
-            #[cfg(feature = "default-tls")]
-            Kind::NativeTls(ref e) => Some(e),
-            #[cfg(feature = "rustls-tls")]
-            Kind::Rustls(ref e) => Some(e),
+            #[cfg(feature = "tls")]
+            Kind::Tls(ref e) => Some(e),
             Kind::Io(ref e) => Some(e),
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
@@ -227,10 +225,8 @@ impl fmt::Display for Error {
             Kind::Mime(ref e) => fmt::Display::fmt(e, f),
             Kind::Url(ref e) => fmt::Display::fmt(e, f),
             Kind::UrlBadScheme => f.write_str("URL scheme is not allowed"),
-            #[cfg(feature = "default-tls")]
-            Kind::NativeTls(ref e) => fmt::Display::fmt(e, f),
-            #[cfg(feature = "rustls-tls")]
-            Kind::Rustls(ref e) => fmt::Display::fmt(e, f),
+            #[cfg(feature = "tls")]
+            Kind::Tls(ref e) => fmt::Display::fmt(e, f),
             Kind::Io(ref e) => fmt::Display::fmt(e, f),
             Kind::UrlEncoded(ref e) => fmt::Display::fmt(e, f),
             Kind::Json(ref e) => fmt::Display::fmt(e, f),
@@ -256,10 +252,8 @@ impl StdError for Error {
             Kind::Mime(ref e) => e.description(),
             Kind::Url(ref e) => e.description(),
             Kind::UrlBadScheme => "URL scheme is not allowed",
-            #[cfg(feature = "default-tls")]
-            Kind::NativeTls(ref e) => e.description(),
-            #[cfg(feature = "rustls-tls")]
-            Kind::Rustls(ref e) => e.description(),
+            #[cfg(feature = "tls")]
+            Kind::Tls(ref e) => e.description(),
             Kind::Io(ref e) => e.description(),
             Kind::UrlEncoded(ref e) => e.description(),
             Kind::Json(ref e) => e.description(),
@@ -276,10 +270,8 @@ impl StdError for Error {
             Kind::Hyper(ref e) => e.cause(),
             Kind::Mime(ref e) => e.cause(),
             Kind::Url(ref e) => e.cause(),
-            #[cfg(feature = "default-tls")]
-            Kind::NativeTls(ref e) => e.cause(),
-            #[cfg(feature = "rustls-tls")]
-            Kind::Rustls(ref e) => e.cause(),
+            #[cfg(feature = "tls")]
+            Kind::Tls(ref e) => e.cause(),
             Kind::Io(ref e) => e.cause(),
             Kind::UrlEncoded(ref e) => e.cause(),
             Kind::Json(ref e) => e.cause(),
@@ -300,9 +292,9 @@ pub(crate) enum Kind {
     Url(::url::ParseError),
     UrlBadScheme,
     #[cfg(feature = "default-tls")]
-    NativeTls(::native_tls::Error),
+    Tls(::native_tls::Error),
     #[cfg(feature = "rustls-tls")]
-    Rustls(::rustls::TLSError),
+    Tls(::rustls::TLSError),
     Io(io::Error),
     UrlEncoded(::serde_urlencoded::ser::Error),
     Json(::serde_json::Error),
@@ -365,14 +357,14 @@ impl From<::serde_json::Error> for Kind {
 #[cfg(feature = "default-tls")]
 impl From<::native_tls::Error> for Kind {
     fn from(err: ::native_tls::Error) -> Kind {
-        Kind::NativeTls(err)
+        Kind::Tls(err)
     }
 }
 
 #[cfg(feature = "rustls-tls")]
 impl From<::rustls::TLSError> for Kind {
     fn from(err: ::rustls::TLSError) -> Kind {
-        Kind::Rustls(err)
+        Kind::Tls(err)
     }
 }
 
