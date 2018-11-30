@@ -33,7 +33,7 @@ uuid = { version = "0.7", features = ["v4"] }
 hyper-rustls = { version = "*", optional = true }
 tokio-rustls = { version = "*", optional = true }
 webpki-roots = { version = "*", optional = true }
-rustls = { version = "*", optional = true }
+rustls = { version = "*", features = ["dangerous_configuration"], optional = true }
 untrusted = { version = "*", optional = true }
 
 [dev-dependencies]

@@ -2,9 +2,10 @@ use std::fmt;
 use std::io::Cursor;
 use untrusted::Input;
 use tokio_rustls::webpki;
+use tokio_rustls::webpki::DNSNameRef;
 use tokio_rustls::webpki::trust_anchor_util::cert_der_as_trust_anchor;
 use rustls::internal::pemfile;
-use rustls::TLSError;
+use rustls::{TLSError, ServerCertVerifier, RootCertStore, ServerCertVerified};
 
 
 /// Represent an X509 certificate.
@@ -145,5 +146,19 @@ impl fmt::Debug for Identity {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Identity")
             .finish()
+    }
+}
+
+pub(crate) struct NoVerifier;
+
+impl ServerCertVerifier for NoVerifier {
+    fn verify_server_cert(
+        &self,
+        _roots: &RootCertStore,
+        _presented_certs: &[rustls::Certificate],
+        _dns_name: DNSNameRef,
+        _ocsp_response: &[u8]
+    ) -> Result<ServerCertVerified, TLSError> {
+        Ok(ServerCertVerified::assertion())
     }
 }

@@ -165,7 +165,6 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.danger_accept_invalid_hostnames(accept_invalid_hostname))
     }
 
-
     /// Controls the use of certificate validation.
     ///
     /// Defaults to `false`.
@@ -177,7 +176,7 @@ impl ClientBuilder {
     /// will be trusted for use. This includes expired certificates. This
     /// introduces significant vulnerabilities, and should only be used
     /// as a last resort.
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "tls")]
     pub fn danger_accept_invalid_certs(self, accept_invalid_certs: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.danger_accept_invalid_certs(accept_invalid_certs))
     }

@@ -46,7 +46,7 @@ struct Config {
     headers: HeaderMap,
     #[cfg(feature = "default-tls")]
     hostname_verification: bool,
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "tls")]
     certs_verification: bool,
     proxies: Vec<Proxy>,
     redirect_policy: RedirectPolicy,
@@ -62,6 +62,22 @@ struct Config {
 impl ClientBuilder {
     /// Constructs a new `ClientBuilder`
     pub fn new() -> ClientBuilder {
+        #[cfg(feature = "default-tls")]
+        {
+            ClientBuilder::new_with_tls(TlsConnector::builder())
+        }
+
+        #[cfg(feature = "rustls-tls")]
+        {
+            let mut tls = rustls::ClientConfig::new();
+            tls.root_store.add_server_trust_anchors(&::webpki_roots::TLS_SERVER_ROOTS);
+            ClientBuilder::new_with_tls(tls)
+        }
+    }
+
+    /// Constructs a new `ClientBuilder` use `TlsConnectorBuilder`
+    #[cfg(feature = "default-tls")]
+    pub fn new_with_tls(tls: TlsConnectorBuilder) -> ClientBuilder {
         let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(2);
         headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
         headers.insert(ACCEPT, HeaderValue::from_str(mime::STAR_STAR.as_ref()).expect("unable to parse mime"));
@@ -70,23 +86,36 @@ impl ClientBuilder {
             config: Config {
                 gzip: true,
                 headers: headers,
-                #[cfg(feature = "default-tls")]
                 hostname_verification: true,
-                #[cfg(feature = "default-tls")]
                 certs_verification: true,
                 proxies: Vec::new(),
                 redirect_policy: RedirectPolicy::default(),
                 referer: true,
                 timeout: None,
-                #[cfg(feature = "default-tls")]
-                tls: TlsConnector::builder(),
-                #[cfg(feature = "rustls-tls")]
-                tls: {
-                    let mut tls = rustls::ClientConfig::new();
-                    tls.root_store.add_server_trust_anchors(&::webpki_roots::TLS_SERVER_ROOTS);
-                    tls
-                },
                 dns_threads: 4,
+                tls
+            },
+        }
+    }
+
+    /// Constructs a new `ClientBuilder` use `ClientConfig`
+    #[cfg(feature = "rustls-tls")]
+    pub fn new_with_tls(tls: rustls::ClientConfig) -> ClientBuilder {
+        let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(2);
+        headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
+        headers.insert(ACCEPT, HeaderValue::from_str(mime::STAR_STAR.as_ref()).expect("unable to parse mime"));
+
+        ClientBuilder {
+            config: Config {
+                gzip: true,
+                headers: headers,
+                certs_verification: true,
+                proxies: Vec::new(),
+                redirect_policy: RedirectPolicy::default(),
+                referer: true,
+                timeout: None,
+                dns_threads: 4,
+                tls
             },
         }
     }
@@ -98,7 +127,6 @@ impl ClientBuilder {
     /// This method fails if native TLS backend cannot be initialized.
     pub fn build(self) -> ::Result<Client> {
         let config = self.config;
-
 
         let connector = {
             #[cfg(feature = "default-tls")]
@@ -116,13 +144,19 @@ impl ClientBuilder {
 
             #[cfg(feature = "rustls-tls")]
             {
-            let tls = config.tls;
+            use ::tls::NoVerifier;
+
+            let mut tls = config.tls;
             let proxies = Arc::new(config.proxies);
+
+            if !config.certs_verification {
+                tls.dangerous().set_certificate_verifier(Arc::new(NoVerifier));
+            }
 
             Connector::new(config.dns_threads, tls, proxies.clone())
             }
 
-            #[cfg(not(any(feature = "default-tls", feature = "rustls-tls")))]
+            #[cfg(not(feature = "tls"))]
             {
             let proxies = Arc::new(config.proxies);
 
@@ -160,7 +194,7 @@ impl ClientBuilder {
     /// certificate for example.
     #[cfg(feature = "rustls-tls")]
     pub fn add_root_certificate(mut self, cert: Certificate) -> ClientBuilder {
-        // ignore the Result because we have checked it.
+        // Ignore the Result because we have checked it.
         let _ = self.config.tls.root_store.add(&cert.cert());
         self
     }
@@ -196,7 +230,6 @@ impl ClientBuilder {
         self
     }
 
-
     /// Controls the use of certificate validation.
     ///
     /// Defaults to `false`.
@@ -208,7 +241,7 @@ impl ClientBuilder {
     /// will be trusted for use. This includes expired certificates. This
     /// introduces significant vulnerabilities, and should only be used
     /// as a last resort.
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "tls")]
     pub fn danger_accept_invalid_certs(mut self, accept_invalid_certs: bool) -> ClientBuilder {
         self.config.certs_verification = !accept_invalid_certs;
         self
@@ -230,9 +263,9 @@ impl ClientBuilder {
     ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `gzip`.
     ///   The body is **not** automatically inflated.
     /// - When receiving a response, if it's headers contain a `Content-Encoding` value that
-    ///   equals to `gzip`, both values `Content-Encoding` and `Content-Length` are removed from the 
+    ///   equals to `gzip`, both values `Content-Encoding` and `Content-Length` are removed from the
     ///   headers' set. The body is automatically deinflated.
-    /// 
+    ///
     /// Default is enabled.
     pub fn gzip(mut self, enable: bool) -> ClientBuilder {
         self.config.gzip = enable;
