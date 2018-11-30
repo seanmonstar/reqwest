@@ -30,11 +30,11 @@ tokio = "0.1.7"
 tokio-io = "0.1"
 url = "1.2"
 uuid = { version = "0.7", features = ["v4"] }
-hyper-rustls = { version = "*", optional = true }
-tokio-rustls = { version = "*", optional = true }
-webpki-roots = { version = "*", optional = true }
-rustls = { version = "*", features = ["dangerous_configuration"], optional = true }
-untrusted = { version = "*", optional = true }
+hyper-rustls = { version = "0.15", optional = true }
+tokio-rustls = { version = "0.8", optional = true }
+webpki-roots = { version = "0.15", optional = true }
+rustls = { version = "0.14", features = ["dangerous_configuration"], optional = true }
+untrusted = { version = "0.6", optional = true }
 
 [dev-dependencies]
 env_logger = "0.6"
