@@ -15,6 +15,14 @@ matrix:
         - rust: stable
           env: FEATURES="--no-default-features"
 
+        # rustls-tls
+        - rust: stable
+          env: FEATURES="--no-default-features --features rustls-tls"
+
+        # default-tls and rustls-tls
+        - rust: stable
+          env: FEATURES="--features rustls-tls"
+
         - rust: stable
           env: FEATURES="--features hyper-011"
 
