@@ -10,11 +10,11 @@ license = "MIT/Apache-2.0"
 categories = ["web-programming::http-client"]
 
 [dependencies]
-base64 = "0.9"
+base64 = "0.10"
 bytes = "0.4"
 encoding_rs = "0.8"
 futures = "0.1.23"
-http = "0.1.10"
+http = "0.1.14"
 hyper = "0.12.13"
 hyper-old-types = { version = "0.11", optional = true, features = ["compat"] }
 hyper-tls = { version = "0.3", optional = true }
@@ -46,6 +46,7 @@ tls = []
 hyper-011 = ["hyper-old-types"]
 default-tls = ["hyper-tls", "native-tls", "tls"]
 rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "untrusted", "tls"]
+native-tls-vendored = ["native-tls/vendored"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docs_rs_workaround"]
