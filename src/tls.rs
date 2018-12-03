@@ -50,7 +50,7 @@ impl Certificate {
     ///
     /// # Errors
     ///
-    /// If the provided buffer is not valid DER, an error will be returned.
+    /// It never returns error.
     pub fn from_der(der: &[u8]) -> ::Result<Certificate> {
         Ok(Certificate {
             inner: inner::Certificate::Der(der.to_owned())
@@ -77,7 +77,7 @@ impl Certificate {
     ///
     /// # Errors
     ///
-    /// If the provided buffer is not valid PEM, an error will be returned.
+    /// It never returns error.
     pub fn from_pem(der: &[u8]) -> ::Result<Certificate> {
         Ok(Certificate {
             inner: inner::Certificate::Pem(der.to_owned())
@@ -116,7 +116,7 @@ impl Identity {
     ///
     /// # Errors
     ///
-    /// If the provided buffer is not valid DER, an error will be returned.
+    /// It never returns error.
     #[cfg(feature = "default-tls")]
     pub fn from_pkcs12_der(der: &[u8], password: &str) -> ::Result<Identity> {
         Ok(Identity {
@@ -146,7 +146,7 @@ impl Identity {
     ///
     /// # Errors
     ///
-    /// If the provided buffer is not valid PEM, an error will be returned.
+    /// It never returns error.
     #[cfg(feature = "rustls-tls")]
     pub fn from_pem(pem: &[u8]) -> ::Result<Identity> {
         Ok(Identity {

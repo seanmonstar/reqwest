@@ -97,7 +97,7 @@ impl ClientBuilder {
     ///
     /// # Errors
     ///
-    /// This method fails if native TLS backend cannot be initialized.
+    /// This method fails if TLS backend cannot be initialized.
     pub fn build(self) -> ::Result<Client> {
         let config = self.config;
         let proxies = Arc::new(config.proxies);
@@ -213,16 +213,16 @@ impl ClientBuilder {
         })
     }
 
-    /// TODO
+    /// Use native TLS backend.
     #[cfg(feature = "default-tls")]
-    pub fn ues_default_tls(mut self, tls: Option<TlsConnectorBuilder>) -> ClientBuilder {
+    pub fn use_default_tls(mut self, tls: Option<TlsConnectorBuilder>) -> ClientBuilder {
         self.config.tls = TLSBackend::Default(tls);
         self
     }
 
-    /// TODO
+    /// Use rustls TLS backend.
     #[cfg(feature = "rustls-tls")]
-    pub fn ues_rustls_tls(mut self, tls: Option<rustls::ClientConfig>) -> ClientBuilder {
+    pub fn use_rustls_tls(mut self, tls: Option<rustls::ClientConfig>) -> ClientBuilder {
         self.config.tls = TLSBackend::Rustls(tls);
         self
     }
@@ -344,7 +344,7 @@ impl Client {
     ///
     /// # Panics
     ///
-    /// This method panics if native TLS backend cannot be created or
+    /// This method panics if TLS backend cannot be created or
     /// initialized. Use `Client::builder()` if you wish to handle the failure
     /// as an `Error` instead of panicking.
     pub fn new() -> Client {
