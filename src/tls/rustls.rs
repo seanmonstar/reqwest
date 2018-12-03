@@ -148,17 +148,3 @@ impl fmt::Debug for Identity {
             .finish()
     }
 }
-
-pub(crate) struct NoVerifier;
-
-impl ServerCertVerifier for NoVerifier {
-    fn verify_server_cert(
-        &self,
-        _roots: &RootCertStore,
-        _presented_certs: &[rustls::Certificate],
-        _dns_name: DNSNameRef,
-        _ocsp_response: &[u8]
-    ) -> Result<ServerCertVerified, TLSError> {
-        Ok(ServerCertVerified::assertion())
-    }
-}

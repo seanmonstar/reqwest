@@ -1,16 +1,17 @@
-use bytes::{Buf, BufMut};
-use futures::{Future, Poll};
+use futures::Future;
 use http::uri::Scheme;
 use hyper::client::{HttpConnector};
 use hyper::client::connect::{Connect, Connected, Destination};
 use tokio_io::{AsyncRead, AsyncWrite};
+
 #[cfg(feature = "default-tls")]
-use native_tls::TlsConnector;
-
+use native_tls::{TlsConnector, TlsConnectorBuilder};
 #[cfg(feature = "tls")]
-use ::tls::TlsBackend;
+use futures::Poll;
+#[cfg(feature = "tls")]
+use bytes::BufMut;
 
-use std::io::{self, Read, Write};
+use std::io;
 use std::sync::Arc;
 
 use Proxy;
@@ -27,47 +28,43 @@ enum Inner {
     #[cfg(feature = "default-tls")]
     DefaultTls(hyper_tls::HttpsConnector<HttpConnector>, TlsConnector),
     #[cfg(feature = "rustls-tls")]
-    Rustls(hyper_rustls::HttpsConnector<HttpConnector>, Arc<rustls::ClientConfig>)
+    RustlsTls(hyper_rustls::HttpsConnector<HttpConnector>, Arc<rustls::ClientConfig>)
 }
 
 impl Connector {
     #[cfg(not(feature = "tls"))]
     pub(crate) fn new(threads: usize, proxies: Arc<Vec<Proxy>>) -> Connector {
         let http = HttpConnector::new(threads);
-        Ok(Connector {
+        Connector {
             proxies,
             inner: Inner::Http(http)
+        }
+    }
+
+    #[cfg(feature = "default-tls")]
+    pub(crate) fn new_default_tls(threads: usize, tls: TlsConnectorBuilder, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
+        let tls = try_!(tls.build());
+
+        let mut http = HttpConnector::new(threads);
+        http.enforce_http(false);
+        let http = hyper_tls::HttpsConnector::from((http, tls.clone()));
+
+        Ok(Connector {
+            proxies,
+            inner: Inner::DefaultTls(http, tls)
         })
     }
 
-    #[cfg(feature = "tls")]
-    pub(crate) fn new(threads: usize, tls: TlsBackend, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
-        match tls {
-            #[cfg(feature = "default-tls")]
-            TlsBackend::Default(tls) => {
-                let tls = try_!(tls.build());
+    #[cfg(feature = "rustls-tls")]
+    pub(crate) fn new_rustls_tls(threads: usize, tls: rustls::ClientConfig, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
+        let mut http = HttpConnector::new(threads);
+        http.enforce_http(false);
+        let http = hyper_rustls::HttpsConnector::from((http, tls.clone()));
 
-                let mut http = HttpConnector::new(threads);
-                http.enforce_http(false);
-                let http = hyper_tls::HttpsConnector::from((http, tls.clone()));
-
-                Ok(Connector {
-                    proxies,
-                    inner: Inner::DefaultTls(http, tls)
-                })
-            },
-            #[cfg(feature = "rustls-tls")]
-            TlsBackend::Rustls(tls) => {
-                let mut http = HttpConnector::new(threads);
-                http.enforce_http(false);
-                let http = hyper_rustls::HttpsConnector::from((http, tls.clone()));
-
-                Ok(Connector {
-                    proxies,
-                    inner: Inner::Rustls(http, Arc::new(tls))
-                })
-            }
-        }
+        Ok(Connector {
+            proxies,
+            inner: Inner::RustlsTls(http, Arc::new(tls))
+        })
     }
 }
 
@@ -89,7 +86,7 @@ impl Connect for Connector {
                     #[cfg(feature = "default-tls")]
                     Inner::DefaultTls(http, _) => connect!(http, $dst, $proxy),
                     #[cfg(feature = "rustls-tls")]
-                    Inner::Rustls(http, _) => connect!(http, $dst, $proxy)
+                    Inner::RustlsTls(http, _) => connect!(http, $dst, $proxy)
                 }
             };
         }
@@ -130,7 +127,7 @@ impl Connect for Connector {
                         }));
                     },
                     #[cfg(feature = "rustls-tls")]
-                    Inner::Rustls(http, tls) => if dst.scheme() == "https" {
+                    Inner::RustlsTls(http, tls) => if dst.scheme() == "https" {
                         #[cfg(feature = "rustls-tls")]
                         use tokio_rustls::TlsConnector as RustlsConnector;
                         #[cfg(feature = "rustls-tls")]
@@ -153,7 +150,8 @@ impl Connect for Connector {
                                 .map(|io| (Box::new(io) as Conn, connected.proxy(true)))
                         }));
                     },
-                    _ => ()
+                    #[cfg(not(feature = "tls"))]
+                    Inner::Http(_) => ()
                 }
 
                 return connect!(ndst, true);
