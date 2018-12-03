@@ -26,9 +26,9 @@ enum Inner {
     #[cfg(not(feature = "tls"))]
     Http(HttpConnector),
     #[cfg(feature = "default-tls")]
-    DefaultTls(hyper_tls::HttpsConnector<HttpConnector>, TlsConnector),
+    DefaultTls(::hyper_tls::HttpsConnector<HttpConnector>, TlsConnector),
     #[cfg(feature = "rustls-tls")]
-    RustlsTls(hyper_rustls::HttpsConnector<HttpConnector>, Arc<rustls::ClientConfig>)
+    RustlsTls(::hyper_rustls::HttpsConnector<HttpConnector>, Arc<rustls::ClientConfig>)
 }
 
 impl Connector {
@@ -47,7 +47,7 @@ impl Connector {
 
         let mut http = HttpConnector::new(threads);
         http.enforce_http(false);
-        let http = hyper_tls::HttpsConnector::from((http, tls.clone()));
+        let http = ::hyper_tls::HttpsConnector::from((http, tls.clone()));
 
         Ok(Connector {
             proxies,
@@ -59,7 +59,7 @@ impl Connector {
     pub(crate) fn new_rustls_tls(threads: usize, tls: rustls::ClientConfig, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
         let mut http = HttpConnector::new(threads);
         http.enforce_http(false);
-        let http = hyper_rustls::HttpsConnector::from((http, tls.clone()));
+        let http = ::hyper_rustls::HttpsConnector::from((http, tls.clone()));
 
         Ok(Connector {
             proxies,

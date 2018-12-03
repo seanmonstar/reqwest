@@ -114,9 +114,9 @@ impl ClientBuilder {
                     for cert in config.root_certs {
                         let cert = match cert.inner {
                             inner::Certificate::Der(buf) =>
-                                try_!(native_tls::Certificate::from_der(&buf)),
+                                try_!(::native_tls::Certificate::from_der(&buf)),
                             inner::Certificate::Pem(buf) =>
-                                try_!(native_tls::Certificate::from_pem(&buf))
+                                try_!(::native_tls::Certificate::from_pem(&buf))
                         };
                         tls.add_root_certificate(cert);
                     }
@@ -124,7 +124,7 @@ impl ClientBuilder {
                     if let Some(id) = config.identity {
                         let id = match id.inner {
                             inner::Identity::Pkcs12(buf, passwd) =>
-                                try_!(native_tls::Identity::from_pkcs12(&buf, &passwd)),
+                                try_!(::native_tls::Identity::from_pkcs12(&buf, &passwd)),
                             #[cfg(feature = "rustls-tls")]
                             _ => return Err(::error::from(::error::Kind::Incompatible))
                         };
@@ -141,7 +141,7 @@ impl ClientBuilder {
                     use ::tls::NoVerifier;
 
                     let mut tls = tls.unwrap_or_else(|| {
-                        let mut tls = rustls::ClientConfig::new();
+                        let mut tls = ::rustls::ClientConfig::new();
                         tls.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
                         tls
                     });
@@ -152,7 +152,7 @@ impl ClientBuilder {
 
                     for cert in config.root_certs {
                         match cert.inner {
-                            inner::Certificate::Der(buf) => try_!(tls.root_store.add(&rustls::Certificate(buf))
+                            inner::Certificate::Der(buf) => try_!(tls.root_store.add(&::rustls::Certificate(buf))
                                 .map_err(TLSError::WebPKIError)),
                             inner::Certificate::Pem(buf) => {
                                 let mut pem = Cursor::new(buf);
