@@ -34,7 +34,6 @@ hyper-rustls = { version = "0.15", optional = true }
 tokio-rustls = { version = "0.8", optional = true }
 webpki-roots = { version = "0.15", optional = true }
 rustls = { version = "0.14", features = ["dangerous_configuration"], optional = true }
-untrusted = { version = "0.6", optional = true }
 
 [dev-dependencies]
 env_logger = "0.6"
@@ -45,7 +44,7 @@ default = ["default-tls"]
 tls = []
 hyper-011 = ["hyper-old-types"]
 default-tls = ["hyper-tls", "native-tls", "tls"]
-rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "untrusted", "tls"]
+rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 native-tls-vendored = ["native-tls/vendored"]
 
 [package.metadata.docs.rs]

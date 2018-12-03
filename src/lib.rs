@@ -174,8 +174,6 @@ extern crate tokio_rustls;
 extern crate webpki_roots;
 #[cfg(feature = "rustls-tls")]
 extern crate rustls;
-#[cfg(feature = "rustls-tls")]
-extern crate untrusted;
 
 pub use hyper::header;
 pub use hyper::Method;
