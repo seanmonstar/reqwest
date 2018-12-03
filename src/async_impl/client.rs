@@ -19,7 +19,7 @@ use into_url::to_uri;
 use redirect::{self, RedirectPolicy, remove_sensitive_headers};
 use {IntoUrl, Method, Proxy, StatusCode, Url};
 #[cfg(feature = "tls")]
-use {Certificate, Identity};
+use {Certificate, Identity, tls::TlsBackend};
 
 static DEFAULT_USER_AGENT: &'static str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -52,32 +52,18 @@ struct Config {
     redirect_policy: RedirectPolicy,
     referer: bool,
     timeout: Option<Duration>,
-    #[cfg(feature = "default-tls")]
-    tls: TlsConnectorBuilder,
-    #[cfg(feature = "rustls-tls")]
-    tls: rustls::ClientConfig,
+    #[cfg(feature = "tls")]
+    root_certs: Vec<Certificate>,
+    #[cfg(feature = "tls")]
+    identity: Option<Identity>,
+    #[cfg(feature = "tls")]
+    tls: Option<TlsBackend>,
     dns_threads: usize,
 }
 
 impl ClientBuilder {
     /// Constructs a new `ClientBuilder`
     pub fn new() -> ClientBuilder {
-        #[cfg(feature = "default-tls")]
-        {
-            ClientBuilder::new_with_tls(TlsConnector::builder())
-        }
-
-        #[cfg(feature = "rustls-tls")]
-        {
-            let mut tls = rustls::ClientConfig::new();
-            tls.root_store.add_server_trust_anchors(&::webpki_roots::TLS_SERVER_ROOTS);
-            ClientBuilder::new_with_tls(tls)
-        }
-    }
-
-    /// Constructs a new `ClientBuilder` use `TlsConnectorBuilder`
-    #[cfg(feature = "default-tls")]
-    pub fn new_with_tls(tls: TlsConnectorBuilder) -> ClientBuilder {
         let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(2);
         headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
         headers.insert(ACCEPT, HeaderValue::from_str(mime::STAR_STAR.as_ref()).expect("unable to parse mime"));
@@ -92,32 +78,31 @@ impl ClientBuilder {
                 redirect_policy: RedirectPolicy::default(),
                 referer: true,
                 timeout: None,
+                #[cfg(feature = "tls")]
+                root_certs: Vec::new(),
+                #[cfg(feature = "tls")]
+                identity: None,
+                #[cfg(feature = "tls")]
+                tls: None,
                 dns_threads: 4,
-                tls
             },
         }
     }
 
+    /// Constructs a new `ClientBuilder` use `TlsConnectorBuilder`
+    #[cfg(feature = "default-tls")]
+    pub fn use_default_tls(tls: TlsConnectorBuilder) -> ClientBuilder {
+        let mut builder = ClientBuilder::new();
+        builder.config.tls = Some(TlsBackend::Default(tls));
+        builder
+    }
+
     /// Constructs a new `ClientBuilder` use `ClientConfig`
     #[cfg(feature = "rustls-tls")]
-    pub fn new_with_tls(tls: rustls::ClientConfig) -> ClientBuilder {
-        let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(2);
-        headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
-        headers.insert(ACCEPT, HeaderValue::from_str(mime::STAR_STAR.as_ref()).expect("unable to parse mime"));
-
-        ClientBuilder {
-            config: Config {
-                gzip: true,
-                headers: headers,
-                certs_verification: true,
-                proxies: Vec::new(),
-                redirect_policy: RedirectPolicy::default(),
-                referer: true,
-                timeout: None,
-                dns_threads: 4,
-                tls
-            },
-        }
+    pub fn use_rustls_tls(tls: rustls::ClientConfig) -> ClientBuilder {
+        let mut builder = ClientBuilder::new();
+        builder.config.tls = Some(TlsBackend::Rustls(tls));
+        builder
     }
 
     /// Returns a `Client` that uses this `ClientBuilder` configuration.
@@ -129,31 +114,47 @@ impl ClientBuilder {
         let config = self.config;
 
         let connector = {
-            #[cfg(feature = "default-tls")]
+            #[cfg(feature = "tls")]
             {
-            let mut tls = config.tls;
-            tls.danger_accept_invalid_hostnames(!config.hostname_verification);
-            tls.danger_accept_invalid_certs(!config.certs_verification);
+            let tls = config.tls.unwrap_or_default();
+            let tls = match tls {
+                #[cfg(feature = "default-tls")]
+                TlsBackend::Default(mut tls) => {
+                    tls.danger_accept_invalid_hostnames(!config.hostname_verification);
+                    tls.danger_accept_invalid_certs(!config.certs_verification);
 
-            let tls = try_!(tls.build());
+                    // TODO
+                    // add root_certs
+                    // add identity
+
+                    TlsBackend::Default(tls)
+                },
+                #[cfg(feature = "rustls-tls")]
+                TlsBackend::Rustls(mut tls) => {
+                    // TODO
+                    // danger accept
+                    // add root_certs
+                    // add identity
+
+                    if !config.certs_verification {
+                        tls.dangerous().set_certificate_verifier(Arc::new(NoVerifier));
+                    }
+
+                    for cert in &config.root_certs {
+                        tls.root_store.add(cert)?;
+                    }
+
+                    if let Some(id) = config.identity {
+                        // TODO
+                    }
+
+                    TlsBackend::Rustls(tls)
+                }
+            };
 
             let proxies = Arc::new(config.proxies);
 
-            Connector::new(config.dns_threads, tls, proxies.clone())
-            }
-
-            #[cfg(feature = "rustls-tls")]
-            {
-            use ::tls::NoVerifier;
-
-            let mut tls = config.tls;
-            let proxies = Arc::new(config.proxies);
-
-            if !config.certs_verification {
-                tls.dangerous().set_certificate_verifier(Arc::new(NoVerifier));
-            }
-
-            Connector::new(config.dns_threads, tls, proxies.clone())
+            Connector::new(config.dns_threads, tls, proxies.clone())?
             }
 
             #[cfg(not(feature = "tls"))]
@@ -178,39 +179,34 @@ impl ClientBuilder {
         })
     }
 
+    /// TODO
+    #[cfg(feature = "default-tls")]
+    pub fn ues_default_tls(mut self, tls: TlsConnectorBuilder) -> ClientBuilder {
+        self.config.tls = Some(TlsBackend::Default(tls));
+        self
+    }
+
+    /// TODO
+    #[cfg(feature = "rustls-tls")]
+    pub fn ues_rustls_tls(mut self, tls: rustls::ClientConfig) -> ClientBuilder {
+        self.config.tls = Some(TlsBackend::Rustls(tls));
+        self
+    }
+
     /// Add a custom root certificate.
     ///
     /// This can be used to connect to a server that has a self-signed
     /// certificate for example.
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "tls")]
     pub fn add_root_certificate(mut self, cert: Certificate) -> ClientBuilder {
-        self.config.tls.add_root_certificate(cert.cert());
-        self
-    }
-
-    /// Add a custom root certificate.
-    ///
-    /// This can be used to connect to a server that has a self-signed
-    /// certificate for example.
-    #[cfg(feature = "rustls-tls")]
-    pub fn add_root_certificate(mut self, cert: Certificate) -> ClientBuilder {
-        // Ignore the Result because we have checked it.
-        let _ = self.config.tls.root_store.add(&cert.cert());
+        self.config.root_certs.push(cert);
         self
     }
 
     /// Sets the identity to be used for client certificate authentication.
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "tls")]
     pub fn identity(mut self, identity: Identity) -> ClientBuilder {
-        self.config.tls.identity(identity.pkcs12());
-        self
-    }
-
-    /// Sets the identity to be used for client certificate authentication.
-    #[cfg(feature = "rustls-tls")]
-    pub fn identity(mut self, identity: Identity) -> ClientBuilder {
-        let (sk, pk) = identity.into_inner();
-        self.config.tls.set_single_client_cert(pk, sk);
+        self.config.identity = Some(identity);
         self
     }
 
