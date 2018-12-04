@@ -1,9 +1,13 @@
-use bytes::BufMut;
-use futures::{Future, Poll};
+use futures::Future;
 use http::uri::Scheme;
 use hyper::client::{HttpConnector};
 use hyper::client::connect::{Connect, Connected, Destination};
 use hyper::client::connect::dns::Resolve;
+
+#[cfg(feature = "default-tls")]
+use bytes::BufMut;
+#[cfg(feature = "default-tls")]
+use futures::Poll;
 #[cfg(feature = "default-tls")]
 use hyper_tls::HttpsConnector;
 #[cfg(feature = "default-tls")]
@@ -11,6 +15,7 @@ use native_tls::TlsConnector;
 use tokio_io::{AsyncRead, AsyncWrite};
 #[cfg(feature = "default-tls")]
 use connect_async::TlsConnectorExt;
+
 
 use std::io;
 use std::sync::Arc;
