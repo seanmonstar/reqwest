@@ -6,6 +6,7 @@ use std::thread;
 use futures::{Async, Future, Stream};
 use futures::future::{self, Either};
 use futures::sync::{mpsc, oneshot};
+use hyper::client::connect::dns::{Resolve, GaiResolver};
 
 use request::{Request, RequestBuilder};
 use response::Response;
@@ -54,12 +55,12 @@ pub struct Client {
 /// # Ok(())
 /// # }
 /// ```
-pub struct ClientBuilder {
-    inner: async_impl::ClientBuilder,
+pub struct ClientBuilder<R = GaiResolver> {
+    inner: async_impl::ClientBuilder<R>,
     timeout: Timeout,
 }
 
-impl ClientBuilder {
+impl ClientBuilder<GaiResolver> {
     /// Constructs a new `ClientBuilder`
     pub fn new() -> ClientBuilder {
         ClientBuilder {
@@ -68,6 +69,19 @@ impl ClientBuilder {
         }
     }
 
+    /// Set the number of threads to use for DNS
+    ///
+    /// Default is 4
+    pub fn dns_threads(self, threads: usize) -> ClientBuilder {
+        self.with_inner(|inner| inner.dns_threads(threads))
+    }
+}
+
+impl<R> ClientBuilder<R>
+where
+    R: Resolve + Clone + Send + Sync + 'static,
+    <R as Resolve>::Future: Send + Sync
+{
     /// Returns a `Client` that uses this `ClientBuilder` configuration.
     ///
     /// # Errors
@@ -109,7 +123,7 @@ impl ClientBuilder {
     ///
     /// This method fails if adding root certificate was unsuccessful.
     #[cfg(feature = "default-tls")]
-    pub fn add_root_certificate(self, cert: Certificate) -> ClientBuilder {
+    pub fn add_root_certificate(self, cert: Certificate) -> ClientBuilder<R> {
         self.with_inner(move |inner| inner.add_root_certificate(cert))
     }
 
@@ -137,7 +151,7 @@ impl ClientBuilder {
     /// # }
     /// ```
     #[cfg(feature = "default-tls")]
-    pub fn identity(self, identity: Identity) -> ClientBuilder {
+    pub fn identity(self, identity: Identity) -> ClientBuilder<R> {
         self.with_inner(move |inner| inner.identity(identity))
     }
 
@@ -153,7 +167,7 @@ impl ClientBuilder {
     /// site will be trusted for use from any other. This introduces a
     /// significant vulnerability to man-in-the-middle attacks.
     #[cfg(feature = "default-tls")]
-    pub fn danger_accept_invalid_hostnames(self, accept_invalid_hostname: bool) -> ClientBuilder {
+    pub fn danger_accept_invalid_hostnames(self, accept_invalid_hostname: bool) -> ClientBuilder<R> {
         self.with_inner(|inner| inner.danger_accept_invalid_hostnames(accept_invalid_hostname))
     }
 
@@ -170,7 +184,7 @@ impl ClientBuilder {
     /// introduces significant vulnerabilities, and should only be used
     /// as a last resort.
     #[cfg(feature = "default-tls")]
-    pub fn danger_accept_invalid_certs(self, accept_invalid_certs: bool) -> ClientBuilder {
+    pub fn danger_accept_invalid_certs(self, accept_invalid_certs: bool) -> ClientBuilder<R> {
         self.with_inner(|inner| inner.danger_accept_invalid_certs(accept_invalid_certs))
     }
 
@@ -212,7 +226,7 @@ impl ClientBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn default_headers(self, headers: header::HeaderMap) -> ClientBuilder {
+    pub fn default_headers(self, headers: header::HeaderMap) -> ClientBuilder<R> {
         self.with_inner(move |inner| inner.default_headers(headers))
     }
 
@@ -227,26 +241,26 @@ impl ClientBuilder {
     ///   headers' set. The body is automatically deinflated.
     /// 
     /// Default is enabled.
-    pub fn gzip(self, enable: bool) -> ClientBuilder {
+    pub fn gzip(self, enable: bool) -> ClientBuilder<R> {
         self.with_inner(|inner| inner.gzip(enable))
     }
 
     /// Add a `Proxy` to the list of proxies the `Client` will use.
-    pub fn proxy(self, proxy: Proxy) -> ClientBuilder {
+    pub fn proxy(self, proxy: Proxy) -> ClientBuilder<R> {
         self.with_inner(move |inner| inner.proxy(proxy))
     }
 
     /// Set a `RedirectPolicy` for this client.
     ///
     /// Default will follow redirects up to a maximum of 10.
-    pub fn redirect(self, policy: RedirectPolicy) -> ClientBuilder {
+    pub fn redirect(self, policy: RedirectPolicy) -> ClientBuilder<R> {
         self.with_inner(move |inner| inner.redirect(policy))
     }
 
     /// Enable or disable automatic setting of the `Referer` header.
     ///
     /// Default is `true`.
-    pub fn referer(self, enable: bool) -> ClientBuilder {
+    pub fn referer(self, enable: bool) -> ClientBuilder<R> {
         self.with_inner(|inner| inner.referer(enable))
     }
 
@@ -255,23 +269,26 @@ impl ClientBuilder {
     /// Default is 30 seconds.
     ///
     /// Pass `None` to disable timeout.
-    pub fn timeout<T>(mut self, timeout: T) -> ClientBuilder
+    pub fn timeout<T>(mut self, timeout: T) -> ClientBuilder<R>
     where T: Into<Option<Duration>>,
     {
         self.timeout = Timeout(timeout.into());
         self
     }
 
-    /// Set the number of threads to use for DNS
+    /// Set a custom DNS resolver.
     ///
-    /// Default is 4
-    pub fn dns_threads(self, threads: usize) -> ClientBuilder {
-        self.with_inner(|inner| inner.dns_threads(threads))
+    /// Default is `GaiResolver` of 4 threads.
+    pub fn resolver<R2: Resolve>(self, resolver: R2) -> ClientBuilder<R2> {
+        ClientBuilder {
+            inner: self.inner.resolver(resolver),
+            timeout: self.timeout
+        }
     }
 
-    fn with_inner<F>(mut self, func: F) -> ClientBuilder
+    fn with_inner<F>(mut self, func: F) -> ClientBuilder<R>
     where
-        F: FnOnce(async_impl::ClientBuilder) -> async_impl::ClientBuilder,
+        F: FnOnce(async_impl::ClientBuilder<R>) -> async_impl::ClientBuilder<R>,
     {
         self.inner = func(self.inner);
         self
@@ -422,7 +439,12 @@ impl Drop for InnerClientHandle {
 }
 
 impl ClientHandle {
-    fn new(builder: ClientBuilder) -> ::Result<ClientHandle> {
+    fn new<R>(builder: ClientBuilder<R>)
+        -> ::Result<ClientHandle>
+    where
+        R: Resolve + Clone + Send + Sync + 'static,
+        <R as Resolve>::Future: Send + Sync
+    {
         let timeout = builder.timeout;
         let builder = builder.inner;
         let (tx, rx) = mpsc::unbounded();

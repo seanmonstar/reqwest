@@ -5,16 +5,16 @@ use std::time::Duration;
 use bytes::Bytes;
 use futures::{Async, Future, Poll};
 use hyper::client::ResponseFuture;
+use hyper::client::connect::dns::{GaiResolver, Resolve};
 use header::{HeaderMap, HeaderValue, LOCATION, USER_AGENT, REFERER, ACCEPT,
              ACCEPT_ENCODING, RANGE, TRANSFER_ENCODING, CONTENT_TYPE, CONTENT_LENGTH, CONTENT_ENCODING};
 use mime::{self};
 #[cfg(feature = "default-tls")]
 use native_tls::{TlsConnector, TlsConnectorBuilder};
 
-
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
-use connect::Connector;
+use connect::{Connector, BoxConnector};
 use into_url::to_uri;
 use redirect::{self, RedirectPolicy, remove_sensitive_headers};
 use {IntoUrl, Method, Proxy, StatusCode, Url};
@@ -37,11 +37,11 @@ pub struct Client {
 }
 
 /// A `ClientBuilder` can be used to create a `Client` with  custom configuration:
-pub struct ClientBuilder {
-    config: Config,
+pub struct ClientBuilder<R = GaiResolver> {
+    config: Config<R>,
 }
 
-struct Config {
+struct Config<R> {
     gzip: bool,
     headers: HeaderMap,
     #[cfg(feature = "default-tls")]
@@ -54,12 +54,12 @@ struct Config {
     timeout: Option<Duration>,
     #[cfg(feature = "default-tls")]
     tls: TlsConnectorBuilder,
-    dns_threads: usize,
+    dns_resolver: Option<R>
 }
 
-impl ClientBuilder {
+impl ClientBuilder<GaiResolver> {
     /// Constructs a new `ClientBuilder`
-    pub fn new() -> ClientBuilder {
+    pub fn new() -> ClientBuilder<GaiResolver> {
         let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(2);
         headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
         headers.insert(ACCEPT, HeaderValue::from_str(mime::STAR_STAR.as_ref()).expect("unable to parse mime"));
@@ -78,11 +78,23 @@ impl ClientBuilder {
                 timeout: None,
                 #[cfg(feature = "default-tls")]
                 tls: TlsConnector::builder(),
-                dns_threads: 4,
+                dns_resolver: None
             },
         }
     }
 
+    /// Set number of DNS threads.
+    pub fn dns_threads(mut self, threads: usize) -> ClientBuilder<GaiResolver> {
+        self.config.dns_resolver = Some(GaiResolver::new(threads));
+        self
+    }
+}
+
+impl<R> ClientBuilder<R>
+where
+    R: Resolve + Clone + Send + Sync + 'static,
+    <R as Resolve>::Future: Send + Sync
+{
     /// Returns a `Client` that uses this `ClientBuilder` configuration.
     ///
     /// # Errors
@@ -90,7 +102,16 @@ impl ClientBuilder {
     /// This method fails if native TLS backend cannot be initialized.
     pub fn build(self) -> ::Result<Client> {
         let config = self.config;
-
+        let resolver = match config.dns_resolver {
+            Some(resolver) => resolver,
+            None => {
+                let resolver = GaiResolver::new(4);
+                let builder = ClientBuilder { config };
+                return builder
+                    .resolver(resolver)
+                    .build();
+            }
+        };
 
         let connector = {
             #[cfg(feature = "default-tls")]
@@ -103,7 +124,7 @@ impl ClientBuilder {
 
             let proxies = Arc::new(config.proxies);
 
-            Connector::new(config.dns_threads, tls, proxies.clone())
+            Connector::new(resolver, tls, proxies.clone())
             }
 
 
@@ -111,10 +132,11 @@ impl ClientBuilder {
             {
             let proxies = Arc::new(config.proxies);
 
-            Connector::new(config.dns_threads, proxies.clone())
+            Connector::new(resolver, proxies.clone())
             }
         };
 
+        let connector = BoxConnector(Box::new(connector));
         let hyper_client = ::hyper::Client::builder()
             .build(connector);
 
@@ -134,14 +156,14 @@ impl ClientBuilder {
     /// This can be used to connect to a server that has a self-signed
     /// certificate for example.
     #[cfg(feature = "default-tls")]
-    pub fn add_root_certificate(mut self, cert: Certificate) -> ClientBuilder {
+    pub fn add_root_certificate(mut self, cert: Certificate) -> ClientBuilder<R> {
         self.config.tls.add_root_certificate(cert.cert());
         self
     }
 
     /// Sets the identity to be used for client certificate authentication.
     #[cfg(feature = "default-tls")]
-    pub fn identity(mut self, identity: Identity) -> ClientBuilder {
+    pub fn identity(mut self, identity: Identity) -> ClientBuilder<R> {
         self.config.tls.identity(identity.pkcs12());
         self
     }
@@ -157,7 +179,7 @@ impl ClientBuilder {
     /// site will be trusted for use from any other. This introduces a
     /// significant vulnerability to man-in-the-middle attacks.
     #[cfg(feature = "default-tls")]
-    pub fn danger_accept_invalid_hostnames(mut self, accept_invalid_hostname: bool) -> ClientBuilder {
+    pub fn danger_accept_invalid_hostnames(mut self, accept_invalid_hostname: bool) -> ClientBuilder<R> {
         self.config.hostname_verification = !accept_invalid_hostname;
         self
     }
@@ -175,14 +197,14 @@ impl ClientBuilder {
     /// introduces significant vulnerabilities, and should only be used
     /// as a last resort.
     #[cfg(feature = "default-tls")]
-    pub fn danger_accept_invalid_certs(mut self, accept_invalid_certs: bool) -> ClientBuilder {
+    pub fn danger_accept_invalid_certs(mut self, accept_invalid_certs: bool) -> ClientBuilder<R> {
         self.config.certs_verification = !accept_invalid_certs;
         self
     }
 
 
     /// Sets the default headers for every request.
-    pub fn default_headers(mut self, headers: HeaderMap) -> ClientBuilder {
+    pub fn default_headers(mut self, headers: HeaderMap) -> ClientBuilder<R> {
         for (key, value) in headers.iter() {
             self.config.headers.insert(key, value.clone());
         }
@@ -200,13 +222,13 @@ impl ClientBuilder {
     ///   headers' set. The body is automatically deinflated.
     /// 
     /// Default is enabled.
-    pub fn gzip(mut self, enable: bool) -> ClientBuilder {
+    pub fn gzip(mut self, enable: bool) -> ClientBuilder<R> {
         self.config.gzip = enable;
         self
     }
 
     /// Add a `Proxy` to the list of proxies the `Client` will use.
-    pub fn proxy(mut self, proxy: Proxy) -> ClientBuilder {
+    pub fn proxy(mut self, proxy: Proxy) -> ClientBuilder<R> {
         self.config.proxies.push(proxy);
         self
     }
@@ -214,7 +236,7 @@ impl ClientBuilder {
     /// Set a `RedirectPolicy` for this client.
     ///
     /// Default will follow redirects up to a maximum of 10.
-    pub fn redirect(mut self, policy: RedirectPolicy) -> ClientBuilder {
+    pub fn redirect(mut self, policy: RedirectPolicy) -> ClientBuilder<R> {
         self.config.redirect_policy = policy;
         self
     }
@@ -222,25 +244,42 @@ impl ClientBuilder {
     /// Enable or disable automatic setting of the `Referer` header.
     ///
     /// Default is `true`.
-    pub fn referer(mut self, enable: bool) -> ClientBuilder {
+    pub fn referer(mut self, enable: bool) -> ClientBuilder<R> {
         self.config.referer = enable;
         self
     }
 
     /// Set a timeout for both the read and write operations of a client.
-    pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
+    pub fn timeout(mut self, timeout: Duration) -> ClientBuilder<R> {
         self.config.timeout = Some(timeout);
         self
     }
 
-    /// Set number of DNS threads.
-    pub fn dns_threads(mut self, threads: usize) -> ClientBuilder {
-        self.config.dns_threads = threads;
-        self
+    /// Set a custom DNS resolver.
+    ///
+    /// Default is `GaiResolver` of 4 threads.
+    pub fn resolver<R2: Resolve>(self, resolver: R2) -> ClientBuilder<R2> {
+        ClientBuilder {
+            config: Config {
+                gzip: self.config.gzip,
+                headers: self.config.headers,
+                #[cfg(feature = "default-tls")]
+                hostname_verification: self.config.hostname_verification,
+                #[cfg(feature = "default-tls")]
+                certs_verification: self.config.certs_verification,
+                proxies: self.config.proxies,
+                redirect_policy: self.config.redirect_policy,
+                referer: self.config.referer,
+                timeout: self.config.timeout,
+                #[cfg(feature = "default-tls")]
+                tls: self.config.tls,
+                dns_resolver: Some(resolver)
+            }
+        }
     }
 }
 
-type HyperClient = ::hyper::Client<Connector>;
+type HyperClient = ::hyper::Client<BoxConnector>;
 
 impl Client {
     /// Constructs a new `Client`.
