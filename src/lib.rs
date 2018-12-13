@@ -253,7 +253,8 @@ pub mod async {
 /// - redirect loop was detected
 /// - redirect limit was exhausted
 pub fn get<T: IntoUrl>(url: T) -> ::Result<Response> {
-    Client::new()
+    Client::builder()
+        .build()?
         .get(url)
         .send()
 }
