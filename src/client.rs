@@ -7,9 +7,6 @@ use futures::{Async, Future, Stream};
 use futures::future::{self, Either};
 use futures::sync::{mpsc, oneshot};
 
-#[cfg(feature = "default-tls")]
-use native_tls::TlsConnectorBuilder;
-
 use request::{Request, RequestBuilder};
 use response::Response;
 use {async_impl, header, Method, IntoUrl, Proxy, RedirectPolicy, wait};
@@ -84,14 +81,14 @@ impl ClientBuilder {
 
     /// Use native TLS backend.
     #[cfg(feature = "default-tls")]
-    pub fn use_default_tls(self, tls: Option<TlsConnectorBuilder>) -> ClientBuilder {
-        self.with_inner(move |inner| inner.use_default_tls(tls))
+    pub fn use_default_tls(self) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_default_tls())
     }
 
     /// Use rustls TLS backend.
     #[cfg(feature = "rustls-tls")]
-    pub fn use_rustls_tls(self, tls: Option<rustls::ClientConfig>) -> ClientBuilder {
-        self.with_inner(move |inner| inner.use_rustls_tls(tls))
+    pub fn use_rustls_tls(self) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_rustls_tls())
     }
 
     /// Add a custom root certificate.

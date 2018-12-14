@@ -9,7 +9,7 @@ use header::{HeaderMap, HeaderValue, LOCATION, USER_AGENT, REFERER, ACCEPT,
              ACCEPT_ENCODING, RANGE, TRANSFER_ENCODING, CONTENT_TYPE, CONTENT_LENGTH, CONTENT_ENCODING};
 use mime::{self};
 #[cfg(feature = "default-tls")]
-use native_tls::{TlsConnector, TlsConnectorBuilder};
+use native_tls::TlsConnector;
 
 
 use super::request::{Request, RequestBuilder};
@@ -106,8 +106,8 @@ impl ClientBuilder {
             #[cfg(feature = "tls")]
             match config.tls {
                 #[cfg(feature = "default-tls")]
-                TLSBackend::Default(tls) => {
-                    let mut tls = tls.unwrap_or_else(TlsConnector::builder);
+                TLSBackend::Default => {
+                    let mut tls = TlsConnector::builder();
                     tls.danger_accept_invalid_hostnames(!config.hostname_verification);
                     tls.danger_accept_invalid_certs(!config.certs_verification);
 
@@ -134,17 +134,14 @@ impl ClientBuilder {
                     Connector::new_default_tls(config.dns_threads, tls, proxies.clone())?
                 },
                 #[cfg(feature = "rustls-tls")]
-                TLSBackend::Rustls(tls) => {
+                TLSBackend::Rustls => {
                     use std::io::Cursor;
                     use rustls::TLSError;
                     use rustls::internal::pemfile;
                     use ::tls::NoVerifier;
 
-                    let mut tls = tls.unwrap_or_else(|| {
-                        let mut tls = ::rustls::ClientConfig::new();
-                        tls.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-                        tls
-                    });
+                    let mut tls = ::rustls::ClientConfig::new();
+                    tls.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
 
                     if !config.certs_verification {
                         tls.dangerous().set_certificate_verifier(Arc::new(NoVerifier));
@@ -215,15 +212,15 @@ impl ClientBuilder {
 
     /// Use native TLS backend.
     #[cfg(feature = "default-tls")]
-    pub fn use_default_tls(mut self, tls: Option<TlsConnectorBuilder>) -> ClientBuilder {
-        self.config.tls = TLSBackend::Default(tls);
+    pub fn use_default_tls(mut self) -> ClientBuilder {
+        self.config.tls = TLSBackend::Default;
         self
     }
 
     /// Use rustls TLS backend.
     #[cfg(feature = "rustls-tls")]
-    pub fn use_rustls_tls(mut self, tls: Option<rustls::ClientConfig>) -> ClientBuilder {
-        self.config.tls = TLSBackend::Rustls(tls);
+    pub fn use_rustls_tls(mut self) -> ClientBuilder {
+        self.config.tls = TLSBackend::Rustls;
         self
     }
 

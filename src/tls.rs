@@ -1,6 +1,4 @@
 use std::fmt;
-#[cfg(feature = "default-tls")]
-use ::native_tls::TlsConnectorBuilder;
 #[cfg(feature = "rustls-tls")]
 use rustls::{TLSError, ServerCertVerifier, RootCertStore, ServerCertVerified};
 #[cfg(feature = "rustls-tls")]
@@ -171,18 +169,18 @@ impl fmt::Debug for Identity {
 
 pub(crate) enum TLSBackend {
     #[cfg(feature = "default-tls")]
-    Default(Option<TlsConnectorBuilder>),
+    Default,
     #[cfg(feature = "rustls-tls")]
-    Rustls(Option<::rustls::ClientConfig>)
+    Rustls
 }
 
 impl Default for TLSBackend {
     fn default() -> TLSBackend {
         #[cfg(feature = "default-tls")]
-        { TLSBackend::Default(None) }
+        { TLSBackend::Default }
 
         #[cfg(all(feature = "rustls-tls", not(feature = "default-tls")))]
-        { TLSBackend::Rustls(None) }
+        { TLSBackend::Rustls }
     }
 }
 
