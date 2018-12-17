@@ -1,6 +1,5 @@
 use futures::Future;
 use http::uri::Scheme;
-use hyper::client::{HttpConnector};
 use hyper::client::connect::{Connect, Connected, Destination};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -14,7 +13,10 @@ use bytes::BufMut;
 use std::io;
 use std::sync::Arc;
 
+use dns::TrustDnsResolver;
 use Proxy;
+
+type HttpConnector = ::hyper::client::HttpConnector<TrustDnsResolver>;
 
 
 pub(crate) struct Connector {
@@ -33,8 +35,8 @@ enum Inner {
 
 impl Connector {
     #[cfg(not(feature = "tls"))]
-    pub(crate) fn new(threads: usize, proxies: Arc<Vec<Proxy>>) -> Connector {
-        let http = HttpConnector::new(threads);
+    pub(crate) fn new(proxies: Arc<Vec<Proxy>>) -> Connector {
+        let http = http_connector();
         Connector {
             proxies,
             inner: Inner::Http(http)
@@ -42,10 +44,10 @@ impl Connector {
     }
 
     #[cfg(feature = "default-tls")]
-    pub(crate) fn new_default_tls(threads: usize, tls: TlsConnectorBuilder, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
+    pub(crate) fn new_default_tls(tls: TlsConnectorBuilder, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
         let tls = try_!(tls.build());
 
-        let mut http = HttpConnector::new(threads);
+        let mut http = http_connector();
         http.enforce_http(false);
         let http = ::hyper_tls::HttpsConnector::from((http, tls.clone()));
 
@@ -56,8 +58,8 @@ impl Connector {
     }
 
     #[cfg(feature = "rustls-tls")]
-    pub(crate) fn new_rustls_tls(threads: usize, tls: rustls::ClientConfig, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
-        let mut http = HttpConnector::new(threads);
+    pub(crate) fn new_rustls_tls(tls: rustls::ClientConfig, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
+        let mut http = http_connector();
         http.enforce_http(false);
         let http = ::hyper_rustls::HttpsConnector::from((http, tls.clone()));
 
@@ -66,6 +68,11 @@ impl Connector {
             inner: Inner::RustlsTls(http, Arc::new(tls))
         })
     }
+}
+
+fn http_connector() -> HttpConnector {
+    let http = HttpConnector::new_with_resolver(TrustDnsResolver::new());
+    http
 }
 
 impl Connect for Connector {
