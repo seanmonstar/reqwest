@@ -276,6 +276,7 @@ impl StdError for Error {
         }
     }
 
+    #[allow(deprecated)]
     fn cause(&self) -> Option<&StdError> {
         match self.inner.kind {
             Kind::Http(ref e) => e.cause(),
