@@ -1,8 +1,32 @@
 use std::fmt;
-use native_tls;
+#[cfg(feature = "rustls-tls")]
+use rustls::{TLSError, ServerCertVerifier, RootCertStore, ServerCertVerified};
+#[cfg(feature = "rustls-tls")]
+use tokio_rustls::webpki::DNSNameRef;
 
 /// Represent an X509 certificate.
-pub struct Certificate(native_tls::Certificate);
+pub struct Certificate {
+    pub(crate) inner: inner::Certificate
+}
+
+/// Represent a private key and X509 cert as a client certificate.
+pub struct Identity {
+    pub(crate) inner: inner::Identity
+}
+
+pub(crate) mod inner {
+    pub(crate) enum Certificate {
+        Der(Vec<u8>),
+        Pem(Vec<u8>)
+    }
+
+    pub(crate) enum Identity {
+        #[cfg(feature = "default-tls")]
+        Pkcs12(Vec<u8>, String),
+        #[cfg(feature = "rustls-tls")]
+        Pem(Vec<u8>),
+    }
+}
 
 impl Certificate {
     /// Create a `Certificate` from a binary DER encoded certificate
@@ -24,10 +48,11 @@ impl Certificate {
     ///
     /// # Errors
     ///
-    /// If the provided buffer is not valid DER, an error will be returned.
+    /// It never returns error.
     pub fn from_der(der: &[u8]) -> ::Result<Certificate> {
-        let inner = try_!(native_tls::Certificate::from_der(der));
-        Ok(Certificate(inner))
+        Ok(Certificate {
+            inner: inner::Certificate::Der(der.to_owned())
+        })
     }
 
 
@@ -50,28 +75,13 @@ impl Certificate {
     ///
     /// # Errors
     ///
-    /// If the provided buffer is not valid PEM, an error will be returned.
+    /// It never returns error.
     pub fn from_pem(der: &[u8]) -> ::Result<Certificate> {
-        let inner = try_!(native_tls::Certificate::from_pem(der));
-        Ok(Certificate(inner))
-    }
-
-    pub(crate) fn cert(self) -> native_tls::Certificate {
-        self.0
-    }
-
-}
-
-impl fmt::Debug for Certificate {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Certificate")
-            .finish()
+        Ok(Certificate {
+            inner: inner::Certificate::Pem(der.to_owned())
+        })
     }
 }
-
-
-/// Represent a private key and X509 cert as a client certificate.
-pub struct Identity(native_tls::Identity);
 
 impl Identity {
     /// Parses a DER-formatted PKCS #12 archive, using the specified password to decrypt the key.
@@ -104,14 +114,49 @@ impl Identity {
     ///
     /// # Errors
     ///
-    /// If the provided buffer is not valid DER, an error will be returned.
+    /// It never returns error.
+    #[cfg(feature = "default-tls")]
     pub fn from_pkcs12_der(der: &[u8], password: &str) -> ::Result<Identity> {
-        let inner = try_!(native_tls::Identity::from_pkcs12(der, password));
-        Ok(Identity(inner))
+        Ok(Identity {
+            inner: inner::Identity::Pkcs12(der.to_owned(), password.to_owned())
+        })
     }
 
-    pub(crate) fn pkcs12(self) -> native_tls::Identity {
-        self.0
+    /// Parses PEM encoded private key and certificate.
+    ///
+    /// The input should contain a PEM encoded private key
+    /// and at least one PEM encoded certificate.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::fs::File;
+    /// # use std::io::Read;
+    /// # fn pem() -> Result<(), Box<std::error::Error>> {
+    /// let mut buf = Vec::new();
+    /// File::open("my-ident.pem")?
+    ///     .read_to_end(&mut buf)?;
+    /// let id = reqwest::Identity::from_pem(&buf)?;
+    /// # drop(id);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// It never returns error.
+    #[cfg(feature = "rustls-tls")]
+    pub fn from_pem(pem: &[u8]) -> ::Result<Identity> {
+        Ok(Identity {
+            inner: inner::Identity::Pem(pem.to_owned())
+        })
+    }
+}
+
+impl fmt::Debug for Certificate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Certificate")
+            .finish()
     }
 }
 
@@ -122,3 +167,35 @@ impl fmt::Debug for Identity {
     }
 }
 
+pub(crate) enum TLSBackend {
+    #[cfg(feature = "default-tls")]
+    Default,
+    #[cfg(feature = "rustls-tls")]
+    Rustls
+}
+
+impl Default for TLSBackend {
+    fn default() -> TLSBackend {
+        #[cfg(feature = "default-tls")]
+        { TLSBackend::Default }
+
+        #[cfg(all(feature = "rustls-tls", not(feature = "default-tls")))]
+        { TLSBackend::Rustls }
+    }
+}
+
+#[cfg(feature = "rustls-tls")]
+pub(crate) struct NoVerifier;
+
+#[cfg(feature = "rustls-tls")]
+impl ServerCertVerifier for NoVerifier {
+    fn verify_server_cert(
+        &self,
+        _roots: &RootCertStore,
+        _presented_certs: &[rustls::Certificate],
+        _dns_name: DNSNameRef,
+        _ocsp_response: &[u8]
+    ) -> Result<ServerCertVerified, TLSError> {
+        Ok(ServerCertVerified::assertion())
+    }
+}

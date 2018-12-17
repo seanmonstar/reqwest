@@ -30,6 +30,10 @@ tokio = "0.1.7"
 tokio-io = "0.1"
 url = "1.2"
 uuid = { version = "0.7", features = ["v4"] }
+hyper-rustls = { version = "0.15", optional = true }
+tokio-rustls = { version = "0.8", optional = true }
+webpki-roots = { version = "0.15", optional = true }
+rustls = { version = "0.14", features = ["dangerous_configuration"], optional = true }
 
 [dev-dependencies]
 env_logger = "0.6"
@@ -37,8 +41,10 @@ serde_derive = "1.0"
 
 [features]
 default = ["default-tls"]
+tls = []
 hyper-011 = ["hyper-old-types"]
-default-tls = ["hyper-tls", "native-tls"]
+default-tls = ["hyper-tls", "native-tls", "tls"]
+rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 native-tls-vendored = ["native-tls/vendored"]
 
 [package.metadata.docs.rs]

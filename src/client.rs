@@ -10,7 +10,7 @@ use futures::sync::{mpsc, oneshot};
 use request::{Request, RequestBuilder};
 use response::Response;
 use {async_impl, header, Method, IntoUrl, Proxy, RedirectPolicy, wait};
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "tls")]
 use {Certificate, Identity};
 
 /// A `Client` to make Requests with.
@@ -79,6 +79,18 @@ impl ClientBuilder {
         })
     }
 
+    /// Use native TLS backend.
+    #[cfg(feature = "default-tls")]
+    pub fn use_default_tls(self) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_default_tls())
+    }
+
+    /// Use rustls TLS backend.
+    #[cfg(feature = "rustls-tls")]
+    pub fn use_rustls_tls(self) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_rustls_tls())
+    }
+
     /// Add a custom root certificate.
     ///
     /// This can be used to connect to a server that has a self-signed
@@ -108,7 +120,7 @@ impl ClientBuilder {
     /// # Errors
     ///
     /// This method fails if adding root certificate was unsuccessful.
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "tls")]
     pub fn add_root_certificate(self, cert: Certificate) -> ClientBuilder {
         self.with_inner(move |inner| inner.add_root_certificate(cert))
     }
@@ -123,10 +135,18 @@ impl ClientBuilder {
     /// # fn build_client() -> Result<(), Box<std::error::Error>> {
     /// // read a local PKCS12 bundle
     /// let mut buf = Vec::new();
-    /// File::open("my-ident.pfx")?.read_to_end(&mut buf)?;
     ///
+    /// #[cfg(feature = "default-tls")]
+    /// File::open("my-ident.pfx")?.read_to_end(&mut buf)?;
+    /// #[cfg(feature = "rustls-tls")]
+    /// File::open("my-ident.pem")?.read_to_end(&mut buf)?;
+    ///
+    /// #[cfg(feature = "default-tls")]
     /// // create an Identity from the PKCS#12 archive
     /// let pkcs12 = reqwest::Identity::from_pkcs12_der(&buf, "my-privkey-password")?;
+    /// #[cfg(feature = "rustls-tls")]
+    /// // create an Identity from the PEM file
+    /// let pkcs12 = reqwest::Identity::from_pem(&buf)?;
     ///
     /// // get a client builder
     /// let client = reqwest::Client::builder()
@@ -136,7 +156,7 @@ impl ClientBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "tls")]
     pub fn identity(self, identity: Identity) -> ClientBuilder {
         self.with_inner(move |inner| inner.identity(identity))
     }
@@ -157,7 +177,6 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.danger_accept_invalid_hostnames(accept_invalid_hostname))
     }
 
-
     /// Controls the use of certificate validation.
     ///
     /// Defaults to `false`.
@@ -169,7 +188,7 @@ impl ClientBuilder {
     /// will be trusted for use. This includes expired certificates. This
     /// introduces significant vulnerabilities, and should only be used
     /// as a last resort.
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "tls")]
     pub fn danger_accept_invalid_certs(self, accept_invalid_certs: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.danger_accept_invalid_certs(accept_invalid_certs))
     }
@@ -223,9 +242,9 @@ impl ClientBuilder {
     ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `gzip`.
     ///   The body is **not** automatically inflated.
     /// - When receiving a response, if it's headers contain a `Content-Encoding` value that
-    ///   equals to `gzip`, both values `Content-Encoding` and `Content-Length` are removed from the 
+    ///   equals to `gzip`, both values `Content-Encoding` and `Content-Length` are removed from the
     ///   headers' set. The body is automatically deinflated.
-    /// 
+    ///
     /// Default is enabled.
     pub fn gzip(self, enable: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.gzip(enable))
