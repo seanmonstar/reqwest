@@ -60,7 +60,6 @@ struct Config {
     identity: Option<Identity>,
     #[cfg(feature = "tls")]
     tls: TLSBackend,
-    dns_threads: usize,
 }
 
 impl ClientBuilder {
@@ -88,7 +87,6 @@ impl ClientBuilder {
                 identity: None,
                 #[cfg(feature = "tls")]
                 tls: TLSBackend::default(),
-                dns_threads: 4,
             },
         }
     }
@@ -131,7 +129,7 @@ impl ClientBuilder {
                         tls.identity(id);
                     }
 
-                    Connector::new_default_tls(config.dns_threads, tls, proxies.clone())?
+                    Connector::new_default_tls(tls, proxies.clone())?
                 },
                 #[cfg(feature = "rustls-tls")]
                 TLSBackend::Rustls => {
@@ -188,12 +186,12 @@ impl ClientBuilder {
                         tls.set_single_client_cert(certs, key);
                     }
 
-                    Connector::new_rustls_tls(config.dns_threads, tls, proxies.clone())?
+                    Connector::new_rustls_tls(tls, proxies.clone())?
                 }
             }
 
             #[cfg(not(feature = "tls"))]
-            Connector::new(config.dns_threads, proxies.clone())
+            Connector::new(proxies.clone())
         };
 
         let hyper_client = ::hyper::Client::builder()
@@ -327,9 +325,9 @@ impl ClientBuilder {
         self
     }
 
-    /// Set number of DNS threads.
-    pub fn dns_threads(mut self, threads: usize) -> ClientBuilder {
-        self.config.dns_threads = threads;
+    #[doc(hidden)]
+    #[deprecated(note = "DNS no longer uses blocking threads")]
+    pub fn dns_threads(self, _threads: usize) -> ClientBuilder {
         self
     }
 }
