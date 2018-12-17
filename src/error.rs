@@ -491,6 +491,7 @@ pub(crate) fn url_bad_scheme(url: Url) -> Error {
 mod tests {
     use super::*;
 
+    #[allow(deprecated)]
     #[test]
     fn test_cause_chain() {
         #[derive(Debug)]
