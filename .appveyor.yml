@@ -12,5 +12,5 @@ install:
   - cargo -vV
 build: false
 test_script:
-  - cargo build --verbose
   - cargo test --verbose
+skip_branch_with_pr: true
