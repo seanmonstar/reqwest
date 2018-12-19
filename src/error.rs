@@ -54,7 +54,6 @@ pub struct Error {
     inner: Box<Inner>,
 }
 
-#[derive(Debug)]
 struct Inner {
     kind: Kind,
     url: Option<Url>,
@@ -213,7 +212,10 @@ impl Error {
 
 impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&self.inner, f)
+        f.debug_struct("Error")
+            .field("kind", &self.inner.kind)
+            .field("url", &self.inner.url)
+            .finish()
     }
 }
 
