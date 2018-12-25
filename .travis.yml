@@ -27,7 +27,7 @@ matrix:
           env: FEATURES="--features hyper-011"
 
         # minimum version
-        - rust: 1.30.0
+        - rust: 1.31.0
           script: cargo build
 
 sudo: false
