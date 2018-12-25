@@ -31,9 +31,10 @@ use libflate::non_blocking::gzip;
 use futures::{Async, Future, Poll, Stream};
 use hyper::{HeaderMap};
 use hyper::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING, HeaderValue};
+use log::warn;
 
 use super::{Body, Chunk};
-use error;
+use crate::error;
 
 const INIT_BUFFER_SIZE: usize = 8192;
 

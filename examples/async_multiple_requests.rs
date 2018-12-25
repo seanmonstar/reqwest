@@ -8,7 +8,7 @@ extern crate serde;
 extern crate serde_json;
 
 use futures::Future;
-use reqwest::async::{Client, Response};
+use reqwest::asynchronous::{Client, Response};
 
 #[derive(Deserialize, Debug)]
 struct Slideshow {

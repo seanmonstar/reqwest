@@ -1,9 +1,9 @@
 use std::fmt;
 
-use header::HeaderMap;
+use crate::header::HeaderMap;
 use hyper::StatusCode;
 
-use Url;
+use crate::Url;
 
 /// A type that controls the policy on how to handle the following of redirects.
 ///

@@ -12,9 +12,9 @@ use mime::Mime;
 use serde::de::DeserializeOwned;
 use serde_json;
 
-use client::KeepCoreThreadAlive;
+use crate::client::KeepCoreThreadAlive;
 use hyper::header::HeaderMap;
-use {async_impl, StatusCode, Url, Version, wait};
+use crate::{async_impl, StatusCode, Url, Version, wait};
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -191,7 +191,7 @@ impl Response {
     /// details please see [`serde_json::from_reader`].
     /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
     #[inline]
-    pub fn json<T: DeserializeOwned>(&mut self) -> ::Result<T> {
+    pub fn json<T: DeserializeOwned>(&mut self) -> crate::Result<T> {
         // There's 2 ways we could implement this:
         //
         // 1. Just using from_reader(self), making use of our blocking read adapter
@@ -206,7 +206,7 @@ impl Response {
         // body.
         //
         // Went for easier for now, just to get it working.
-        serde_json::from_reader(self).map_err(::error::from)
+        serde_json::from_reader(self).map_err(crate::error::from)
     }
 
     /// Get the response text.
@@ -230,11 +230,11 @@ impl Response {
     ///
     /// This consumes the body. Trying to read more, or use of `response.json()`
     /// will return empty values.
-    pub fn text(&mut self) -> ::Result<String> {
+    pub fn text(&mut self) -> crate::Result<String> {
         let len = self.content_length.unwrap_or(0);
         let mut content = Vec::with_capacity(len as usize);
-        self.read_to_end(&mut content).map_err(::error::from)?;
-        let content_type = self.headers().get(::header::CONTENT_TYPE)
+        self.read_to_end(&mut content).map_err(crate::error::from)?;
+        let content_type = self.headers().get(crate::header::CONTENT_TYPE)
             .and_then(|value| {
                 value.to_str().ok()
             })
@@ -286,10 +286,10 @@ impl Response {
     /// # }
     /// ```
     #[inline]
-    pub fn copy_to<W: ?Sized>(&mut self, w: &mut W) -> ::Result<u64>
+    pub fn copy_to<W: ?Sized>(&mut self, w: &mut W) -> crate::Result<u64>
         where W: io::Write
     {
-        io::copy(self, w).map_err(::error::from)
+        io::copy(self, w).map_err(crate::error::from)
     }
 
     /// Turn a response into an error if the server returned an error.
@@ -309,7 +309,7 @@ impl Response {
     /// # fn main() {}
     /// ```
     #[inline]
-    pub fn error_for_status(self) -> ::Result<Self> {
+    pub fn error_for_status(self) -> crate::Result<Self> {
         let Response { body, content_length, inner, _thread_handle } = self;
         inner.error_for_status().map(move |inner| {
             Response {
@@ -342,7 +342,7 @@ impl Stream for WaitBody {
             Some(Ok(chunk)) => Ok(Async::Ready(Some(chunk))),
             Some(Err(e)) => {
                 let req_err = match e {
-                    wait::Waited::TimedOut => ::error::timedout(None),
+                    wait::Waited::TimedOut => crate::error::timedout(None),
                     wait::Waited::Err(e) => e,
                 };
 

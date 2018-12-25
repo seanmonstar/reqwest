@@ -49,7 +49,7 @@ impl Certificate {
     /// # Errors
     ///
     /// It never returns error.
-    pub fn from_der(der: &[u8]) -> ::Result<Certificate> {
+    pub fn from_der(der: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             inner: inner::Certificate::Der(der.to_owned())
         })
@@ -76,7 +76,7 @@ impl Certificate {
     /// # Errors
     ///
     /// It never returns error.
-    pub fn from_pem(der: &[u8]) -> ::Result<Certificate> {
+    pub fn from_pem(der: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             inner: inner::Certificate::Pem(der.to_owned())
         })
@@ -116,7 +116,7 @@ impl Identity {
     ///
     /// It never returns error.
     #[cfg(feature = "default-tls")]
-    pub fn from_pkcs12_der(der: &[u8], password: &str) -> ::Result<Identity> {
+    pub fn from_pkcs12_der(der: &[u8], password: &str) -> crate::Result<Identity> {
         Ok(Identity {
             inner: inner::Identity::Pkcs12(der.to_owned(), password.to_owned())
         })
@@ -146,7 +146,7 @@ impl Identity {
     ///
     /// It never returns error.
     #[cfg(feature = "rustls-tls")]
-    pub fn from_pem(pem: &[u8]) -> ::Result<Identity> {
+    pub fn from_pem(pem: &[u8]) -> crate::Result<Identity> {
         Ok(Identity {
             inner: inner::Identity::Pem(pem.to_owned())
         })

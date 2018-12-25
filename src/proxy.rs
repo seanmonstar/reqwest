@@ -2,7 +2,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use hyper::client::connect::Destination;
-use {into_url, IntoUrl, Url};
+use crate::{into_url, IntoUrl, Url};
 
 /// Configuration of a proxy that a `Client` should pass requests to.
 ///
@@ -48,8 +48,8 @@ impl Proxy {
     /// # }
     /// # fn main() {}
     /// ```
-    pub fn http<U: IntoUrl>(url: U) -> ::Result<Proxy> {
-        let uri = ::into_url::to_uri(&url.into_url()?);
+    pub fn http<U: IntoUrl>(url: U) -> crate::Result<Proxy> {
+        let uri = crate::into_url::to_uri(&url.into_url()?);
         Ok(Proxy::new(Intercept::Http(uri)))
     }
 
@@ -67,8 +67,8 @@ impl Proxy {
     /// # }
     /// # fn main() {}
     /// ```
-    pub fn https<U: IntoUrl>(url: U) -> ::Result<Proxy> {
-        let uri = ::into_url::to_uri(&url.into_url()?);
+    pub fn https<U: IntoUrl>(url: U) -> crate::Result<Proxy> {
+        let uri = crate::into_url::to_uri(&url.into_url()?);
         Ok(Proxy::new(Intercept::Https(uri)))
     }
 
@@ -86,8 +86,8 @@ impl Proxy {
     /// # }
     /// # fn main() {}
     /// ```
-    pub fn all<U: IntoUrl>(url: U) -> ::Result<Proxy> {
-        let uri = ::into_url::to_uri(&url.into_url()?);
+    pub fn all<U: IntoUrl>(url: U) -> crate::Result<Proxy> {
+        let uri = crate::into_url::to_uri(&url.into_url()?);
         Ok(Proxy::new(Intercept::All(uri)))
     }
 

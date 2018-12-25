@@ -7,11 +7,13 @@ use futures::{Async, Future, Stream};
 use futures::future::{self, Either};
 use futures::sync::{mpsc, oneshot};
 
-use request::{Request, RequestBuilder};
-use response::Response;
-use {async_impl, header, Method, IntoUrl, Proxy, RedirectPolicy, wait};
+use log::trace;
+
+use crate::request::{Request, RequestBuilder};
+use crate::response::Response;
+use crate::{async_impl, header, Method, IntoUrl, Proxy, RedirectPolicy, wait};
 #[cfg(feature = "tls")]
-use {Certificate, Identity};
+use crate::{Certificate, Identity};
 
 /// A `Client` to make Requests with.
 ///
@@ -73,7 +75,7 @@ impl ClientBuilder {
     /// # Errors
     ///
     /// This method fails if native TLS backend cannot be initialized.
-    pub fn build(self) -> ::Result<Client> {
+    pub fn build(self) -> crate::Result<Client> {
         ClientHandle::new(self).map(|handle| Client {
             inner: handle,
         })
@@ -391,7 +393,7 @@ impl Client {
     ///
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
-    pub fn execute(&self, request: Request) -> ::Result<Response> {
+    pub fn execute(&self, request: Request) -> crate::Result<Response> {
         self.inner.execute_request(request)
     }
 }
@@ -419,7 +421,7 @@ struct ClientHandle {
     inner: Arc<InnerClientHandle>
 }
 
-type ThreadSender = mpsc::UnboundedSender<(async_impl::Request, oneshot::Sender<::Result<async_impl::Response>>)>;
+type ThreadSender = mpsc::UnboundedSender<(async_impl::Request, oneshot::Sender<crate::Result<async_impl::Response>>)>;
 
 struct InnerClientHandle {
     tx: Option<ThreadSender>,
@@ -434,11 +436,11 @@ impl Drop for InnerClientHandle {
 }
 
 impl ClientHandle {
-    fn new(builder: ClientBuilder) -> ::Result<ClientHandle> {
+    fn new(builder: ClientBuilder) -> crate::Result<ClientHandle> {
         let timeout = builder.timeout;
         let builder = builder.inner;
         let (tx, rx) = mpsc::unbounded();
-        let (spawn_tx, spawn_rx) = oneshot::channel::<::Result<()>>();
+        let (spawn_tx, spawn_rx) = oneshot::channel::<crate::Result<()>>();
         let handle = try_!(thread::Builder::new().name("reqwest-internal-sync-runtime".into()).spawn(move || {
             use tokio::runtime::current_thread::Runtime;
 
@@ -470,7 +472,7 @@ impl ClientHandle {
                         tx.send(r).map_err(|_| ())
                     });
                     */
-                let mut tx_opt: Option<oneshot::Sender<::Result<async_impl::Response>>> = Some(tx);
+                let mut tx_opt: Option<oneshot::Sender<crate::Result<async_impl::Response>>> = Some(tx);
                 let mut res_fut = client.execute(req);
 
                 let task = future::poll_fn(move || {
@@ -525,7 +527,7 @@ impl ClientHandle {
         })
     }
 
-    fn execute_request(&self, req: Request) -> ::Result<Response> {
+    fn execute_request(&self, req: Request) -> crate::Result<Response> {
         let (tx, rx) = oneshot::channel();
         let (req, body) = req.into_async();
         let url = req.url().clone();
@@ -555,7 +557,7 @@ impl ClientHandle {
 
         let res = match wait::timeout(fut, self.timeout.0) {
             Ok(res) => res,
-            Err(wait::Waited::TimedOut) => return Err(::error::timedout(Some(url))),
+            Err(wait::Waited::TimedOut) => return Err(crate::error::timedout(Some(url))),
             Err(wait::Waited::Err(err)) => {
                 return Err(err.with_url(url));
             }

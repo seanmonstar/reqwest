@@ -10,7 +10,7 @@ use url::percent_encoding::{self, EncodeSet, PATH_SEGMENT_ENCODE_SET};
 use uuid::Uuid;
 use http::HeaderMap;
 
-use {Body};
+use crate::Body;
 
 /// A multipart/form-data request.
 pub struct Form {
@@ -222,7 +222,7 @@ impl Part {
     }
 
     /// Tries to set the mime of this part.
-    pub fn mime_str(mut self, mime: &str) -> ::Result<Part> {
+    pub fn mime_str(mut self, mime: &str) -> crate::Result<Part> {
         self.mime = Some(try_!(mime.parse()));
         Ok(self)
     }

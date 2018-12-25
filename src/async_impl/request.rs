@@ -7,9 +7,9 @@ use serde_urlencoded;
 
 use super::body::{Body};
 use super::client::{Client, Pending};
-use header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
+use crate::header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
 use http::HttpTryFrom;
-use {Method, Url};
+use crate::{Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -22,7 +22,7 @@ pub struct Request {
 /// A builder to construct the properties of a `Request`.
 pub struct RequestBuilder {
     client: Client,
-    request: ::Result<Request>,
+    request: crate::Result<Request>,
 }
 
 impl Request {
@@ -91,7 +91,7 @@ impl Request {
 }
 
 impl RequestBuilder {
-    pub(super) fn new(client: Client, request: ::Result<Request>) -> RequestBuilder {
+    pub(super) fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
         RequestBuilder {
             client,
             request,
@@ -110,10 +110,10 @@ impl RequestBuilder {
                 Ok(key) => {
                     match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
                         Ok(value) => { req.headers_mut().append(key, value); }
-                        Err(e) => error = Some(::error::from(e.into())),
+                        Err(e) => error = Some(crate::error::from(e.into())),
                     }
                 },
-                Err(e) => error = Some(::error::from(e.into())),
+                Err(e) => error = Some(crate::error::from(e.into())),
             };
         }
         if let Some(err) = error {
@@ -124,7 +124,7 @@ impl RequestBuilder {
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
-    pub fn headers(mut self, headers: ::header::HeaderMap) -> RequestBuilder {
+    pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             for (key, value) in headers.iter() {
                 req.headers_mut().insert(key, value.clone());
@@ -140,11 +140,11 @@ impl RequestBuilder {
     #[cfg(feature = "hyper-011")]
     pub fn header_011<H>(self, header: H) -> RequestBuilder
     where
-        H: ::hyper_011::header::Header,
+        H: crate::hyper_011::header::Header,
     {
-        let mut headers = ::hyper_011::Headers::new();
+        let mut headers = crate::hyper_011::Headers::new();
         headers.set(header);
-        let map = ::header::HeaderMap::from(headers);
+        let map = crate::header::HeaderMap::from(headers);
         self.headers(map)
     }
 
@@ -153,8 +153,8 @@ impl RequestBuilder {
     /// This method is provided to ease migration, and requires the `hyper-011`
     /// Cargo feature enabled on `reqwest`.
     #[cfg(feature = "hyper-011")]
-    pub fn headers_011(self, headers: ::hyper_011::Headers) -> RequestBuilder {
-        let map = ::header::HeaderMap::from(headers);
+    pub fn headers_011(self, headers: crate::hyper_011::Headers) -> RequestBuilder {
+        let map = crate::header::HeaderMap::from(headers);
         self.headers(map)
     }
 
@@ -169,7 +169,7 @@ impl RequestBuilder {
             None => format!("{}:", username)
         };
         let header_value = format!("basic {}", encode(&auth));
-        self.header(::header::AUTHORIZATION, &*header_value)
+        self.header(crate::header::AUTHORIZATION, &*header_value)
     }
 
     /// Set the request body.
@@ -206,7 +206,7 @@ impl RequestBuilder {
             let serializer = serde_urlencoded::Serializer::new(&mut pairs);
 
             if let Err(err) = query.serialize(serializer) {
-                error = Some(::error::from(err));
+                error = Some(crate::error::from(err));
             }
         }
         if let Some(err) = error {
@@ -227,7 +227,7 @@ impl RequestBuilder {
                     );
                     *req.body_mut() = Some(body.into());
                 },
-                Err(err) => error = Some(::error::from(err)),
+                Err(err) => error = Some(crate::error::from(err)),
             }
         }
         if let Some(err) = error {
@@ -253,7 +253,7 @@ impl RequestBuilder {
                     );
                     *req.body_mut() = Some(body.into());
                 },
-                Err(err) => error = Some(::error::from(err)),
+                Err(err) => error = Some(crate::error::from(err)),
             }
         }
         if let Some(err) = error {
@@ -264,7 +264,7 @@ impl RequestBuilder {
 
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
-    pub fn build(self) -> ::Result<Request> {
+    pub fn build(self) -> crate::Result<Request> {
         self.request
     }
 
@@ -317,6 +317,7 @@ fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>, req: &Request
 mod tests {
     use super::Client;
     use std::collections::BTreeMap;
+    use serde_derive::Serialize;
 
     #[test]
     fn add_query_append() {

@@ -73,7 +73,7 @@ impl Body {
 
 impl Stream for Body {
     type Item = Chunk;
-    type Error = ::Error;
+    type Error = crate::Error;
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {

@@ -3,7 +3,7 @@ use std::mem;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
 
-use futures::{Async, Future, Poll, Stream};
+use futures::{Async, Future, Poll, Stream, try_ready};
 use futures::stream::Concat2;
 use hyper::{HeaderMap, StatusCode, Version};
 use hyper::client::connect::HttpInfo;
@@ -11,6 +11,7 @@ use serde::de::DeserializeOwned;
 use serde_json;
 use url::Url;
 use http;
+use log::debug;
 
 use super::Decoder;
 use super::body::Body;
@@ -124,7 +125,7 @@ impl Response {
     /// # Example
     ///
     /// ```
-    /// # use reqwest::async::Response;
+    /// # use reqwest::asynchronous::Response;
     /// fn on_response(res: Response) {
     ///     match res.error_for_status() {
     ///         Ok(_res) => (),
@@ -141,11 +142,11 @@ impl Response {
     /// # fn main() {}
     /// ```
     #[inline]
-    pub fn error_for_status(self) -> ::Result<Self> {
+    pub fn error_for_status(self) -> crate::Result<Self> {
         if self.status.is_client_error() {
-            Err(::error::client_error(*self.url, self.status))
+            Err(crate::error::client_error(*self.url, self.status))
         } else if self.status.is_server_error() {
-            Err(::error::server_error(*self.url, self.status))
+            Err(crate::error::server_error(*self.url, self.status))
         } else {
             Ok(self)
         }
@@ -190,7 +191,7 @@ pub struct Json<T> {
 
 impl<T: DeserializeOwned> Future for Json<T> {
     type Item = T;
-    type Error = ::Error;
+    type Error = crate::Error;
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let bytes = try_ready!(self.concat.poll());
         let t = try_!(serde_json::from_slice(&bytes));
@@ -224,7 +225,7 @@ pub trait ResponseBuilderExt {
     /// # use std::error::Error;
     /// use url::Url;
     /// use http::response::Builder;
-    /// use reqwest::async::ResponseBuilderExt;
+    /// use reqwest::asynchronous::ResponseBuilderExt;
     /// # fn main() -> Result<(), Box<Error>> {
     /// let response = Builder::new()
     ///     .status(200)

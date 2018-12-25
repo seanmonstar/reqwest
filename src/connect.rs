@@ -2,19 +2,20 @@ use futures::Future;
 use http::uri::Scheme;
 use hyper::client::connect::{Connect, Connected, Destination};
 use tokio_io::{AsyncRead, AsyncWrite};
+use log::trace;
 
 #[cfg(feature = "default-tls")]
 use native_tls::{TlsConnector, TlsConnectorBuilder};
 #[cfg(feature = "tls")]
-use futures::Poll;
+use futures::{Poll, try_ready};
 #[cfg(feature = "tls")]
 use bytes::BufMut;
 
 use std::io;
 use std::sync::Arc;
 
-use dns::TrustDnsResolver;
-use Proxy;
+use crate::dns::TrustDnsResolver;
+use crate::Proxy;
 
 type HttpConnector = ::hyper::client::HttpConnector<TrustDnsResolver>;
 
@@ -44,7 +45,7 @@ impl Connector {
     }
 
     #[cfg(feature = "default-tls")]
-    pub(crate) fn new_default_tls(tls: TlsConnectorBuilder, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
+    pub(crate) fn new_default_tls(tls: TlsConnectorBuilder, proxies: Arc<Vec<Proxy>>) -> crate::Result<Connector> {
         let tls = try_!(tls.build());
 
         let mut http = http_connector();
@@ -58,7 +59,7 @@ impl Connector {
     }
 
     #[cfg(feature = "rustls-tls")]
-    pub(crate) fn new_rustls_tls(tls: rustls::ClientConfig, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
+    pub(crate) fn new_rustls_tls(tls: rustls::ClientConfig, proxies: Arc<Vec<Proxy>>) -> crate::Result<Connector> {
         let mut http = http_connector();
         http.enforce_http(false);
         let http = ::hyper_rustls::HttpsConnector::from((http, tls.clone()));
@@ -118,7 +119,7 @@ impl Connect for Connector {
                     #[cfg(feature = "default-tls")]
                     Inner::DefaultTls(http, tls) => if dst.scheme() == "https" {
                         #[cfg(feature = "default-tls")]
-                        use connect_async::TlsConnectorExt;
+                        use crate::connect_async::TlsConnectorExt;
 
                         let host = dst.host().to_owned();
                         let port = dst.port().unwrap_or(443);

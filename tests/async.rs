@@ -6,7 +6,7 @@ extern crate tokio;
 #[macro_use]
 mod support;
 
-use reqwest::async::Client;
+use reqwest::asynchronous::Client;
 use futures::{Future, Stream};
 use std::io::Write;
 use std::time::Duration;
@@ -64,7 +64,7 @@ fn test_gzip(response_size: usize, chunk_size: usize) {
             let body = res.into_body();
             body.concat2()
         })
-        .and_then(|buf| {
+        .and_then(|buf: reqwest::asynchronous::Chunk| {
             let body = ::std::str::from_utf8(&buf).unwrap();
 
             assert_eq!(body, &content);

@@ -136,45 +136,11 @@
 //! [cookiejar_issue]: https://github.com/seanmonstar/reqwest/issues/14
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
 
-extern crate base64;
-extern crate bytes;
-extern crate encoding_rs;
-#[macro_use]
-extern crate futures;
-extern crate http;
-extern crate hyper;
-#[cfg(feature = "hyper-011")]
-pub extern crate hyper_old_types as hyper_011;
-#[cfg(feature = "default-tls")]
-extern crate hyper_tls;
-#[macro_use]
-extern crate log;
-extern crate libflate;
-extern crate mime;
-extern crate mime_guess;
-#[cfg(feature = "default-tls")]
-extern crate native_tls;
-extern crate serde;
 #[cfg(test)]
-#[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
-extern crate serde_urlencoded;
-extern crate tokio;
-#[cfg_attr(feature = "default-tls", macro_use)]
-extern crate tokio_io;
-extern crate trust_dns_resolver;
-extern crate url;
-extern crate uuid;
 
-#[cfg(feature = "rustls-tls")]
-extern crate hyper_rustls;
-#[cfg(feature = "rustls-tls")]
-extern crate tokio_rustls;
-#[cfg(feature = "rustls-tls")]
-extern crate webpki_roots;
-#[cfg(feature = "rustls-tls")]
-extern crate rustls;
+#[cfg(feature = "hyper-011")]
+pub use hyper_old_types as hyper_011;
 
 pub use hyper::header;
 pub use hyper::Method;
@@ -220,8 +186,8 @@ pub mod multipart;
 ///
 /// Relies on the `futures` crate, which is unstable, hence this module
 /// is **unstable**.
-pub mod async {
-    pub use ::async_impl::{
+pub mod asynchronous {
+    pub use crate::async_impl::{
         Body,
         Chunk,
         Decoder,
@@ -263,7 +229,7 @@ pub mod async {
 /// - there was an error while sending request
 /// - redirect loop was detected
 /// - redirect limit was exhausted
-pub fn get<T: IntoUrl>(url: T) -> ::Result<Response> {
+pub fn get<T: IntoUrl>(url: T) -> Result<Response> {
     Client::builder()
         .build()?
         .get(url)

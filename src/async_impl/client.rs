@@ -5,23 +5,24 @@ use std::time::Duration;
 use bytes::Bytes;
 use futures::{Async, Future, Poll};
 use hyper::client::ResponseFuture;
-use header::{HeaderMap, HeaderValue, LOCATION, USER_AGENT, REFERER, ACCEPT,
+use crate::header::{HeaderMap, HeaderValue, LOCATION, USER_AGENT, REFERER, ACCEPT,
              ACCEPT_ENCODING, RANGE, TRANSFER_ENCODING, CONTENT_TYPE, CONTENT_LENGTH, CONTENT_ENCODING};
 use mime::{self};
+use log::debug;
 #[cfg(feature = "default-tls")]
 use native_tls::TlsConnector;
 
 
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
-use connect::Connector;
-use into_url::to_uri;
-use redirect::{self, RedirectPolicy, remove_sensitive_headers};
-use {IntoUrl, Method, Proxy, StatusCode, Url};
+use crate::connect::Connector;
+use crate::into_url::to_uri;
+use crate::redirect::{self, RedirectPolicy, remove_sensitive_headers};
+use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
 #[cfg(feature = "tls")]
-use {Certificate, Identity};
+use crate::{Certificate, Identity};
 #[cfg(feature = "tls")]
-use ::tls::{ TLSBackend, inner };
+use crate::tls::{ TLSBackend, inner };
 
 static DEFAULT_USER_AGENT: &'static str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -96,7 +97,7 @@ impl ClientBuilder {
     /// # Errors
     ///
     /// This method fails if TLS backend cannot be initialized.
-    pub fn build(self) -> ::Result<Client> {
+    pub fn build(self) -> crate::Result<Client> {
         let config = self.config;
         let proxies = Arc::new(config.proxies);
 
@@ -124,7 +125,7 @@ impl ClientBuilder {
                             inner::Identity::Pkcs12(buf, passwd) =>
                                 try_!(::native_tls::Identity::from_pkcs12(&buf, &passwd)),
                             #[cfg(feature = "rustls-tls")]
-                            _ => return Err(::error::from(::error::Kind::Incompatible))
+                            _ => return Err(crate::error::from(crate::error::Kind::Incompatible))
                         };
                         tls.identity(id);
                     }
@@ -136,7 +137,7 @@ impl ClientBuilder {
                     use std::io::Cursor;
                     use rustls::TLSError;
                     use rustls::internal::pemfile;
-                    use ::tls::NoVerifier;
+                    use crate::tls::NoVerifier;
 
                     let mut tls = ::rustls::ClientConfig::new();
                     tls.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
@@ -151,7 +152,7 @@ impl ClientBuilder {
                                 .map_err(TLSError::WebPKIError)),
                             inner::Certificate::Pem(buf) => {
                                 let mut pem = Cursor::new(buf);
-                                let mut certs = try_!(pemfile::certs(&mut pem)
+                                let certs = try_!(pemfile::certs(&mut pem)
                                     .map_err(|_| TLSError::General(String::from("No valid certificate was found"))));
                                 for c in certs {
                                     try_!(tls.root_store.add(&c)
@@ -165,7 +166,7 @@ impl ClientBuilder {
                         let (key, certs) = match id.inner {
                             inner::Identity::Pem(buf) => {
                                 let mut pem = Cursor::new(buf);
-                                let mut certs = try_!(pemfile::certs(&mut pem)
+                                let certs = try_!(pemfile::certs(&mut pem)
                                     .map_err(|_| TLSError::General(String::from("No valid certificate was found"))));
                                 pem.set_position(0);
                                 let mut sk = try_!(pemfile::pkcs8_private_keys(&mut pem)
@@ -177,11 +178,11 @@ impl ClientBuilder {
                                 if let (Some(sk), false) = (sk.pop(), certs.is_empty()) {
                                     (sk, certs)
                                 } else {
-                                    return Err(::error::from(TLSError::General(String::from("private key or certificate not found"))));
+                                    return Err(crate::error::from(TLSError::General(String::from("private key or certificate not found"))));
                                 }
                             },
                             #[cfg(feature = "default-tls")]
-                            _ => return Err(::error::from(::error::Kind::Incompatible))
+                            _ => return Err(crate::error::from(crate::error::Kind::Incompatible))
                         };
                         tls.set_single_client_cert(certs, key);
                     }
@@ -528,7 +529,7 @@ pub struct Pending {
 
 enum PendingInner {
     Request(PendingRequest),
-    Error(Option<::Error>),
+    Error(Option<crate::Error>),
 }
 
 struct PendingRequest {
@@ -545,7 +546,7 @@ struct PendingRequest {
 }
 
 impl Pending {
-    pub(super) fn new_err(err: ::Error) -> Pending {
+    pub(super) fn new_err(err: crate::Error) -> Pending {
         Pending {
             inner: PendingInner::Error(Some(err)),
         }
@@ -554,7 +555,7 @@ impl Pending {
 
 impl Future for Pending {
     type Item = Response;
-    type Error = ::Error;
+    type Error = crate::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.inner {
@@ -566,7 +567,7 @@ impl Future for Pending {
 
 impl Future for PendingRequest {
     type Item = Response;
-    type Error = ::Error;
+    type Error = crate::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
@@ -652,10 +653,10 @@ impl Future for PendingRequest {
                             debug!("redirect_policy disallowed redirection to '{}'", loc);
                         },
                         redirect::Action::LoopDetected => {
-                            return Err(::error::loop_detected(self.url.clone()));
+                            return Err(crate::error::loop_detected(self.url.clone()));
                         },
                         redirect::Action::TooManyRedirects => {
-                            return Err(::error::too_many_redirects(self.url.clone()));
+                            return Err(crate::error::too_many_redirects(self.url.clone()));
                         }
                     }
                 }

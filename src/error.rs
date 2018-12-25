@@ -2,7 +2,7 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 
-use {StatusCode, Url};
+use crate::{StatusCode, Url};
 
 /// The Errors that may occur when processing a `Request`.
 ///
@@ -222,8 +222,8 @@ impl fmt::Debug for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(ref url) = self.inner.url {
-            try!(fmt::Display::fmt(url, f));
-            try!(f.write_str(": "));
+            fmt::Display::fmt(url, f)?;
+            f.write_str(": ")?;
         }
         match self.inner.kind {
             Kind::Http(ref e) => fmt::Display::fmt(e, f),
@@ -389,12 +389,12 @@ impl From<::rustls::TLSError> for Kind {
     }
 }
 
-impl<T> From<::wait::Waited<T>> for Kind
+impl<T> From<crate::wait::Waited<T>> for Kind
 where T: Into<Kind> {
-    fn from(err: ::wait::Waited<T>) -> Kind {
+    fn from(err: crate::wait::Waited<T>) -> Kind {
         match err {
-            ::wait::Waited::TimedOut =>  io_timeout().into(),
-            ::wait::Waited::Err(e) => e.into(),
+            crate::wait::Waited::TimedOut =>  io_timeout().into(),
+            crate::wait::Waited::Err(e) => e.into(),
         }
     }
 }
@@ -451,7 +451,7 @@ macro_rules! try_ {
         match $e {
             Ok(v) => v,
             Err(err) => {
-                return Err(::error::from(err));
+                return Err(crate::error::from(err));
             }
         }
     );
@@ -459,7 +459,7 @@ macro_rules! try_ {
         match $e {
             Ok(v) => v,
             Err(err) => {
-                return Err(::Error::from(::error::InternalFrom(err, Some($url.clone()))));
+                return Err(crate::Error::from(crate::error::InternalFrom(err, Some($url.clone()))));
             }
         }
     )
