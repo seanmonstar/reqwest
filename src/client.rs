@@ -462,14 +462,6 @@ impl ClientHandle {
             };
 
             let work = rx.for_each(move |(req, tx)| {
-                /*
-                let tx: oneshot::Sender<::Result<async_impl::Response>> = tx;
-                let task = client.execute(req)
-                    .then(move |r| {
-                        trace!("result received: {:?}", r);
-                        tx.send(r).map_err(|_| ())
-                    });
-                    */
                 let mut tx_opt: Option<oneshot::Sender<::Result<async_impl::Response>>> = Some(tx);
                 let mut res_fut = client.execute(req);
 
@@ -508,10 +500,15 @@ impl ClientHandle {
                 .expect("runtime unexpected error");
         }));
 
-        // Wait up to 5 seconds for the background thread to be spawned.
+        // Wait some seconds for the background thread to be spawned.
         // More than that and something bad is up!
-        wait::timeout(spawn_rx, Some(Duration::from_secs(5)))
-            .expect("runtime thread cancelled")?;
+        match wait::timeout(spawn_rx, Some(Duration::from_secs(10))) {
+            Ok(Ok(())) => (),
+            Ok(Err(err)) => return Err(err),
+            Err(wait::Waited::Err(_/*mpsc::Canceled*/)) |
+            Err(wait::Waited::TimedOut) => return Err(::error::runtime_startup()),
+        }
+
 
         let inner_handle = Arc::new(InnerClientHandle {
             tx: Some(tx),
