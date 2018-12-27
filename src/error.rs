@@ -147,7 +147,8 @@ impl Error {
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
             Kind::ClientError(_) |
-            Kind::ServerError(_) => None,
+            Kind::ServerError(_) |
+            Kind::RuntimeStartupFailure => None,
         }
     }
 
@@ -250,6 +251,7 @@ impl fmt::Display for Error {
                 f.write_str("Server Error: ")?;
                 fmt::Display::fmt(code, f)
             }
+            Kind::RuntimeStartupFailure => f.write_str("Client runtime failed to start"),
         }
     }
 }
@@ -275,6 +277,7 @@ impl StdError for Error {
             Kind::RedirectLoop => "Infinite redirect loop",
             Kind::ClientError(_) => "Client Error",
             Kind::ServerError(_) => "Server Error",
+            Kind::RuntimeStartupFailure => "Client runtime failed to start",
         }
     }
 
@@ -298,7 +301,8 @@ impl StdError for Error {
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
             Kind::ClientError(_) |
-            Kind::ServerError(_) => None,
+            Kind::ServerError(_) |
+            Kind::RuntimeStartupFailure => None,
         }
     }
 }
@@ -323,6 +327,7 @@ pub(crate) enum Kind {
     RedirectLoop,
     ClientError(StatusCode),
     ServerError(StatusCode),
+    RuntimeStartupFailure,
 }
 
 
@@ -487,6 +492,10 @@ pub(crate) fn server_error(url: Url, status: StatusCode) -> Error {
 
 pub(crate) fn url_bad_scheme(url: Url) -> Error {
     Error::new(Kind::UrlBadScheme, Some(url))
+}
+
+pub(crate) fn runtime_startup() -> Error {
+    Error::new(Kind::RuntimeStartupFailure, None)
 }
 
 #[cfg(test)]
