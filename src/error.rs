@@ -209,6 +209,14 @@ impl Error {
             _ => None,
         }
     }
+
+    /// Returns true if this error is due to a failure starting the runtime.
+    pub fn is_runtime_startup(&self) -> bool {
+        match self.inner.kind {
+            Kind::RuntimeStartupFailure => true,
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Debug for Error {
