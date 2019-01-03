@@ -188,9 +188,7 @@ impl RequestBuilder {
     /// ```
     pub fn headers(mut self, headers: ::header::HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            for (key, value) in headers.iter() {
-                req.headers_mut().insert(key, value.clone());
-            }
+            async_impl::request::replace_headers(req.headers_mut(), headers);
         }
         self
     }
@@ -809,5 +807,34 @@ mod tests {
         let r = client.post(some_url);
         let json_data = MyStruct;
         assert!(r.json(&json_data).build().unwrap_err().is_serialization());
+    }
+
+    #[test]
+    fn test_replace_headers() {
+        use http::HeaderMap;
+
+        let mut headers = HeaderMap::new();
+        headers.insert("foo", "bar".parse().unwrap());
+        headers.append("foo", "baz".parse().unwrap());
+
+        let client = Client::new();
+        let req = client
+            .get("https://hyper.rs")
+            .header("im-a", "keeper")
+            .header("foo", "pop me")
+            .headers(headers)
+            .build()
+            .expect("request build");
+
+        assert_eq!(req.headers()["im-a"], "keeper");
+
+        let foo = req
+            .headers()
+            .get_all("foo")
+            .iter()
+            .collect::<Vec<_>>();
+        assert_eq!(foo.len(), 2);
+        assert_eq!(foo[0], "bar");
+        assert_eq!(foo[1], "baz");
     }
 }

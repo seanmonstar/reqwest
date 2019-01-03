@@ -7,5 +7,5 @@ pub use self::response::{Response, ResponseBuilderExt};
 pub mod body;
 pub mod client;
 pub mod decoder;
-mod request;
+pub(crate) mod request;
 mod response;

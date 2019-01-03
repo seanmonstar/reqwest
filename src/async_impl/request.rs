@@ -121,14 +121,13 @@ impl RequestBuilder {
         }
         self
     }
+
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
     pub fn headers(mut self, headers: ::header::HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            for (key, value) in headers.iter() {
-                req.headers_mut().insert(key, value.clone());
-            }
+            replace_headers(req.headers_mut(), headers);
         }
         self
     }
@@ -312,6 +311,33 @@ fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>, req: &Request
         .field("headers", &req.headers)
 }
 
+pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
+
+    // IntoIter of HeaderMap yields (Option<HeaderName>, HeaderValue).
+    // The first time a name is yielded, it will be Some(name), and if
+    // there are more values with the same name, the next yield will be
+    // None.
+    //
+    // TODO: a complex exercise would be to optimize this to only
+    // require 1 hash/lookup of the key, but doing something fancy
+    // with header::Entry...
+
+    let mut prev_name = None;
+    for (key, value) in src {
+        match key {
+            Some(key) => {
+                dst.insert(key.clone(), value);
+                prev_name = Some(key);
+            },
+            None => match prev_name {
+                Some(ref key) => {
+                    dst.append(key.clone(), value);
+                },
+                None => unreachable!("HeaderMap::into_iter yielded None first"),
+            },
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -377,6 +403,35 @@ mod tests {
 
         let req = r.build().expect("request is valid");
         assert_eq!(req.url().query(), Some("foo=bar&qux=three"));
+    }
+
+    #[test]
+    fn test_replace_headers() {
+        use http::HeaderMap;
+
+        let mut headers = HeaderMap::new();
+        headers.insert("foo", "bar".parse().unwrap());
+        headers.append("foo", "baz".parse().unwrap());
+
+        let client = Client::new();
+        let req = client
+            .get("https://hyper.rs")
+            .header("im-a", "keeper")
+            .header("foo", "pop me")
+            .headers(headers)
+            .build()
+            .expect("request build");
+
+        assert_eq!(req.headers()["im-a"], "keeper");
+
+        let foo = req
+            .headers()
+            .get_all("foo")
+            .iter()
+            .collect::<Vec<_>>();
+        assert_eq!(foo.len(), 2);
+        assert_eq!(foo[0], "bar");
+        assert_eq!(foo[1], "baz");
     }
 
     /*
