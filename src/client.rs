@@ -500,13 +500,11 @@ impl ClientHandle {
                 .expect("runtime unexpected error");
         }));
 
-        // Wait some seconds for the background thread to be spawned.
-        // More than that and something bad is up!
-        match wait::timeout(spawn_rx, Some(Duration::from_secs(10))) {
+        // Wait for the runtime thread to start up...
+        match spawn_rx.wait() {
             Ok(Ok(())) => (),
             Ok(Err(err)) => return Err(err),
-            Err(wait::Waited::Err(_/*mpsc::Canceled*/)) |
-            Err(wait::Waited::TimedOut) => return Err(::error::runtime_startup()),
+            Err(_canceled) => return Err(::error::runtime_startup()),
         }
 
 
