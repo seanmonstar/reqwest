@@ -44,11 +44,15 @@ serde_derive = "1.0"
 
 [features]
 default = ["default-tls"]
+
 tls = []
-hyper-011 = ["hyper-old-types"]
+
 default-tls = ["hyper-tls", "native-tls", "tls"]
+default-tls-vendored = ["default-tls", "native-tls/vendored"]
+
 rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
-native-tls-vendored = ["native-tls/vendored"]
+
+hyper-011 = ["hyper-old-types"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docs_rs_workaround"]
