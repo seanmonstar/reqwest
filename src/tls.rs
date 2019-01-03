@@ -167,20 +167,20 @@ impl fmt::Debug for Identity {
     }
 }
 
-pub(crate) enum TLSBackend {
+pub(crate) enum TlsBackend {
     #[cfg(feature = "default-tls")]
     Default,
     #[cfg(feature = "rustls-tls")]
     Rustls
 }
 
-impl Default for TLSBackend {
-    fn default() -> TLSBackend {
+impl Default for TlsBackend {
+    fn default() -> TlsBackend {
         #[cfg(feature = "default-tls")]
-        { TLSBackend::Default }
+        { TlsBackend::Default }
 
         #[cfg(all(feature = "rustls-tls", not(feature = "default-tls")))]
-        { TLSBackend::Rustls }
+        { TlsBackend::Rustls }
     }
 }
 

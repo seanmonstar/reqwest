@@ -21,7 +21,7 @@ use {IntoUrl, Method, Proxy, StatusCode, Url};
 #[cfg(feature = "tls")]
 use {Certificate, Identity};
 #[cfg(feature = "tls")]
-use ::tls::{ TLSBackend, inner };
+use ::tls::{TlsBackend, inner as tls_inner};
 
 static DEFAULT_USER_AGENT: &'static str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -59,7 +59,7 @@ struct Config {
     #[cfg(feature = "tls")]
     identity: Option<Identity>,
     #[cfg(feature = "tls")]
-    tls: TLSBackend,
+    tls: TlsBackend,
 }
 
 impl ClientBuilder {
@@ -86,7 +86,7 @@ impl ClientBuilder {
                 #[cfg(feature = "tls")]
                 identity: None,
                 #[cfg(feature = "tls")]
-                tls: TLSBackend::default(),
+                tls: TlsBackend::default(),
             },
         }
     }
@@ -104,16 +104,16 @@ impl ClientBuilder {
             #[cfg(feature = "tls")]
             match config.tls {
                 #[cfg(feature = "default-tls")]
-                TLSBackend::Default => {
+                TlsBackend::Default => {
                     let mut tls = TlsConnector::builder();
                     tls.danger_accept_invalid_hostnames(!config.hostname_verification);
                     tls.danger_accept_invalid_certs(!config.certs_verification);
 
                     for cert in config.root_certs {
                         let cert = match cert.inner {
-                            inner::Certificate::Der(buf) =>
+                            tls_inner::Certificate::Der(buf) =>
                                 try_!(::native_tls::Certificate::from_der(&buf)),
-                            inner::Certificate::Pem(buf) =>
+                            tls_inner::Certificate::Pem(buf) =>
                                 try_!(::native_tls::Certificate::from_pem(&buf))
                         };
                         tls.add_root_certificate(cert);
@@ -121,7 +121,7 @@ impl ClientBuilder {
 
                     if let Some(id) = config.identity {
                         let id = match id.inner {
-                            inner::Identity::Pkcs12(buf, passwd) =>
+                            tls_inner::Identity::Pkcs12(buf, passwd) =>
                                 try_!(::native_tls::Identity::from_pkcs12(&buf, &passwd)),
                             #[cfg(feature = "rustls-tls")]
                             _ => return Err(::error::from(::error::Kind::Incompatible))
@@ -132,7 +132,7 @@ impl ClientBuilder {
                     Connector::new_default_tls(tls, proxies.clone())?
                 },
                 #[cfg(feature = "rustls-tls")]
-                TLSBackend::Rustls => {
+                TlsBackend::Rustls => {
                     use std::io::Cursor;
                     use rustls::TLSError;
                     use rustls::internal::pemfile;
@@ -147,9 +147,9 @@ impl ClientBuilder {
 
                     for cert in config.root_certs {
                         match cert.inner {
-                            inner::Certificate::Der(buf) => try_!(tls.root_store.add(&::rustls::Certificate(buf))
+                            tls_inner::Certificate::Der(buf) => try_!(tls.root_store.add(&::rustls::Certificate(buf))
                                 .map_err(TLSError::WebPKIError)),
-                            inner::Certificate::Pem(buf) => {
+                            tls_inner::Certificate::Pem(buf) => {
                                 let mut pem = Cursor::new(buf);
                                 let mut certs = try_!(pemfile::certs(&mut pem)
                                     .map_err(|_| TLSError::General(String::from("No valid certificate was found"))));
@@ -163,7 +163,7 @@ impl ClientBuilder {
 
                     if let Some(id) = config.identity {
                         let (key, certs) = match id.inner {
-                            inner::Identity::Pem(buf) => {
+                            tls_inner::Identity::Pem(buf) => {
                                 let mut pem = Cursor::new(buf);
                                 let mut certs = try_!(pemfile::certs(&mut pem)
                                     .map_err(|_| TLSError::General(String::from("No valid certificate was found"))));
@@ -211,14 +211,14 @@ impl ClientBuilder {
     /// Use native TLS backend.
     #[cfg(feature = "default-tls")]
     pub fn use_default_tls(mut self) -> ClientBuilder {
-        self.config.tls = TLSBackend::Default;
+        self.config.tls = TlsBackend::Default;
         self
     }
 
     /// Use rustls TLS backend.
     #[cfg(feature = "rustls-tls")]
     pub fn use_rustls_tls(mut self) -> ClientBuilder {
-        self.config.tls = TLSBackend::Rustls;
+        self.config.tls = TlsBackend::Rustls;
         self
     }
 
