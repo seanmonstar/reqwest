@@ -504,7 +504,7 @@ impl ClientHandle {
         match spawn_rx.wait() {
             Ok(Ok(())) => (),
             Ok(Err(err)) => return Err(err),
-            Err(_canceled) => return Err(::error::runtime_startup()),
+            Err(_canceled) => event_loop_panicked(),
         }
 
 
@@ -537,14 +537,7 @@ impl ClientHandle {
             Either::B(future::ok(()))
         };
 
-        let rx = rx.map_err(|_canceled| {
-            // The only possible reason there would be a Canceled error
-            // is if the thread running the event loop panicked. We could return
-            // an Err here, like a BrokenPipe, but the Client is not
-            // recoverable. Additionally, the panic in the other thread
-            // is not normal, and should likely be propagated.
-            panic!("event loop thread panicked");
-        });
+        let rx = rx.map_err(|_canceled| event_loop_panicked());
 
         let fut = write.join(rx).map(|((), res)| res);
 
@@ -577,4 +570,15 @@ impl KeepCoreThreadAlive {
     pub(crate) fn empty() -> KeepCoreThreadAlive {
         KeepCoreThreadAlive(None)
     }
+}
+
+#[cold]
+#[inline(never)]
+fn event_loop_panicked() -> ! {
+    // The only possible reason there would be a Canceled error
+    // is if the thread running the event loop panicked. We could return
+    // an Err here, like a BrokenPipe, but the Client is not
+    // recoverable. Additionally, the panic in the other thread
+    // is not normal, and should likely be propagated.
+    panic!("event loop thread panicked");
 }
