@@ -123,6 +123,8 @@
 //!
 //! - **default-tls** *(enabled by default)*: Provides TLS support via the
 //!   `native-tls` library to connect over HTTPS.
+//! - **default-tls-vendored**: Enables the `vendored` feature of `native-tls`.
+//! - **rustls-tls**: Provides TLS support via the `rustls` library.
 //! - **hyper-011**: Provides support for hyper's old typed headers.
 //!
 //!
