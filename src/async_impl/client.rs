@@ -138,7 +138,7 @@ impl ClientBuilder {
                             tls_inner::Identity::Pkcs12(buf, passwd) =>
                                 try_!(::native_tls::Identity::from_pkcs12(&buf, &passwd)),
                             #[cfg(feature = "rustls-tls")]
-                            _ => return Err(::error::from(::error::Kind::Incompatible))
+                            _ => return Err(::error::from(::error::Kind::TlsIncompatible))
                         };
                         tls.identity(id);
                     }
@@ -195,7 +195,7 @@ impl ClientBuilder {
                                 }
                             },
                             #[cfg(feature = "default-tls")]
-                            _ => return Err(::error::from(::error::Kind::Incompatible))
+                            _ => return Err(::error::from(::error::Kind::TlsIncompatible))
                         };
                         tls.set_single_client_cert(certs, key);
                     }
