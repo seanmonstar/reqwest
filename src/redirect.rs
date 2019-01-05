@@ -1,6 +1,13 @@
 use std::fmt;
 
-use header::HeaderMap;
+use header::{
+    HeaderMap,
+    AUTHORIZATION,
+    COOKIE,
+    PROXY_AUTHORIZATION,
+    WWW_AUTHENTICATE,
+
+};
 use hyper::StatusCode;
 
 use Url;
@@ -233,10 +240,11 @@ pub(crate) fn remove_sensitive_headers(headers: &mut HeaderMap, next: &Url, prev
         let cross_host = next.host_str() != previous.host_str() ||
                          next.port_or_known_default() != previous.port_or_known_default();
         if cross_host {
-            headers.remove("authorization");
-            headers.remove("cookie");
+            headers.remove(AUTHORIZATION);
+            headers.remove(COOKIE);
             headers.remove("cookie2");
-            headers.remove("www-authenticate");
+            headers.remove(PROXY_AUTHORIZATION);
+            headers.remove(WWW_AUTHENTICATE);
         }
     }
 }

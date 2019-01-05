@@ -135,7 +135,7 @@ impl Error {
             Kind::Mime(ref e) => Some(e),
             Kind::Url(ref e) => Some(e),
             #[cfg(all(feature = "default-tls", feature = "rustls-tls"))]
-            Kind::Incompatible => None,
+            Kind::TlsIncompatible => None,
             #[cfg(feature = "default-tls")]
             Kind::NativeTls(ref e) => Some(e),
             #[cfg(feature = "rustls-tls")]
@@ -232,7 +232,7 @@ impl fmt::Display for Error {
             Kind::Url(ref e) => fmt::Display::fmt(e, f),
             Kind::UrlBadScheme => f.write_str("URL scheme is not allowed"),
             #[cfg(all(feature = "default-tls", feature = "rustls-tls"))]
-            Kind::Incompatible => f.write_str("Incompatible identity type"),
+            Kind::TlsIncompatible => f.write_str("Incompatible TLS identity type"),
             #[cfg(feature = "default-tls")]
             Kind::NativeTls(ref e) => fmt::Display::fmt(e, f),
             #[cfg(feature = "rustls-tls")]
@@ -263,7 +263,7 @@ impl StdError for Error {
             Kind::Url(ref e) => e.description(),
             Kind::UrlBadScheme => "URL scheme is not allowed",
             #[cfg(all(feature = "default-tls", feature = "rustls-tls"))]
-            Kind::Incompatible => "Incompatible identity type",
+            Kind::TlsIncompatible => "Incompatible TLS identity type",
             #[cfg(feature = "default-tls")]
             Kind::NativeTls(ref e) => e.description(),
             #[cfg(feature = "rustls-tls")]
@@ -286,7 +286,7 @@ impl StdError for Error {
             Kind::Mime(ref e) => e.cause(),
             Kind::Url(ref e) => e.cause(),
             #[cfg(all(feature = "default-tls", feature = "rustls-tls"))]
-            Kind::Incompatible => None,
+            Kind::TlsIncompatible => None,
             #[cfg(feature = "default-tls")]
             Kind::NativeTls(ref e) => e.cause(),
             #[cfg(feature = "rustls-tls")]
@@ -311,7 +311,7 @@ pub(crate) enum Kind {
     Url(::url::ParseError),
     UrlBadScheme,
     #[cfg(all(feature = "default-tls", feature = "rustls-tls"))]
-    Incompatible,
+    TlsIncompatible,
     #[cfg(feature = "default-tls")]
     NativeTls(::native_tls::Error),
     #[cfg(feature = "rustls-tls")]

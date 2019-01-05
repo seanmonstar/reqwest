@@ -114,6 +114,9 @@ impl Connect for Connector {
 
                 ndst.set_port(puri.port_part().map(|port| port.as_u16()));
 
+                #[cfg(feature = "tls")]
+                let auth = prox.auth().cloned();
+
                 match &self.inner {
                     #[cfg(feature = "default-tls")]
                     Inner::DefaultTls(http, tls) => if dst.scheme() == "https" {
@@ -125,7 +128,7 @@ impl Connect for Connector {
                         let tls = tls.clone();
                         return Box::new(http.connect(ndst).and_then(move |(conn, connected)| {
                             trace!("tunneling HTTPS over proxy");
-                            tunnel(conn, host.clone(), port)
+                            tunnel(conn, host.clone(), port, auth)
                                 .and_then(move |tunneled| {
                                     tls.connect_async(&host, tunneled)
                                         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
@@ -148,7 +151,7 @@ impl Connect for Connector {
                             let maybe_dnsname = DNSNameRef::try_from_ascii_str(&host)
                                 .map(|dnsname| dnsname.to_owned())
                                 .map_err(|_| io::Error::new(io::ErrorKind::Other, "Invalid DNS Name"));
-                            tunnel(conn, host, port)
+                            tunnel(conn, host, port, auth)
                                 .and_then(move |tunneled| Ok((maybe_dnsname?, tunneled)))
                                 .and_then(move |(dnsname, tunneled)| {
                                     RustlsConnector::from(tls).connect(dnsname.as_ref(), tunneled)
@@ -176,18 +179,30 @@ pub(crate) type Conn = Box<dyn AsyncConn + Send + Sync + 'static>;
 pub(crate) type Connecting = Box<Future<Item=(Conn, Connected), Error=io::Error> + Send>;
 
 #[cfg(feature = "tls")]
-fn tunnel<T>(conn: T, host: String, port: u16) -> Tunnel<T> {
-     let buf = format!("\
+fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<::proxy::Auth>) -> Tunnel<T> {
+    let mut buf = format!("\
         CONNECT {0}:{1} HTTP/1.1\r\n\
         Host: {0}:{1}\r\n\
-        \r\n\
     ", host, port).into_bytes();
 
-     Tunnel {
+    match auth {
+        Some(::proxy::Auth::Basic(value)) => {
+            debug!("tunnel to {}:{} using basic auth", host, port);
+            buf.extend_from_slice(b"Proxy-Authorization: ");
+            buf.extend_from_slice(value.as_bytes());
+            buf.extend_from_slice(b"\r\n");
+        },
+        None => (),
+    }
+
+    // headers end
+    buf.extend_from_slice(b"\r\n");
+
+    Tunnel {
         buf: io::Cursor::new(buf),
         conn: Some(conn),
         state: TunnelState::Writing,
-     }
+    }
 }
 
 #[cfg(feature = "tls")]
@@ -230,6 +245,8 @@ where T: AsyncRead + AsyncWrite {
                             return Ok(self.conn.take().unwrap().into());
                         }
                         // else read more
+                    } else if read.starts_with(b"HTTP/1.1 407") {
+                        return Err(io::Error::new(io::ErrorKind::Other, "proxy authentication required"));
                     } else {
                         return Err(io::Error::new(io::ErrorKind::Other, "unsuccessful tunnel"));
                     }
@@ -258,23 +275,29 @@ mod tests {
     use tokio::runtime::current_thread::Runtime;
     use tokio::net::TcpStream;
     use super::tunnel;
+    use proxy;
 
+    static TUNNEL_OK: &'static [u8] = b"\
+        HTTP/1.1 200 OK\r\n\
+        \r\n\
+    ";
 
     macro_rules! mock_tunnel {
         () => ({
-            mock_tunnel!(b"\
-                HTTP/1.1 200 OK\r\n\
-                \r\n\
-            ")
+            mock_tunnel!(TUNNEL_OK)
         });
         ($write:expr) => ({
+            mock_tunnel!($write, "")
+        });
+        ($write:expr, $auth:expr) => ({
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let addr = listener.local_addr().unwrap();
             let connect_expected = format!("\
                 CONNECT {0}:{1} HTTP/1.1\r\n\
                 Host: {0}:{1}\r\n\
+                {2}\
                 \r\n\
-            ", addr.ip(), addr.port()).into_bytes();
+            ", addr.ip(), addr.port(), $auth).into_bytes();
 
             thread::spawn(move || {
                 let (mut sock, _) = listener.accept().unwrap();
@@ -297,7 +320,7 @@ mod tests {
         let host = addr.ip().to_string();
         let port = addr.port();
         let work = work.and_then(|tcp| {
-            tunnel(tcp, host, port)
+            tunnel(tcp, host, port, None)
         });
 
         rt.block_on(work).unwrap();
@@ -312,14 +335,14 @@ mod tests {
         let host = addr.ip().to_string();
         let port = addr.port();
         let work = work.and_then(|tcp| {
-            tunnel(tcp, host, port)
+            tunnel(tcp, host, port, None)
         });
 
         rt.block_on(work).unwrap_err();
     }
 
     #[test]
-    fn test_tunnel_bad_response() {
+    fn test_tunnel_non_http_response() {
         let addr = mock_tunnel!(b"foo bar baz hallo");
 
         let mut rt = Runtime::new().unwrap();
@@ -327,9 +350,47 @@ mod tests {
         let host = addr.ip().to_string();
         let port = addr.port();
         let work = work.and_then(|tcp| {
-            tunnel(tcp, host, port)
+            tunnel(tcp, host, port, None)
         });
 
         rt.block_on(work).unwrap_err();
+    }
+
+    #[test]
+    fn test_tunnel_proxy_unauthorized() {
+        let addr = mock_tunnel!(b"\
+            HTTP/1.1 407 Proxy Authentication Required\r\n\
+            Proxy-Authenticate: Basic realm=\"nope\"\r\n\
+            \r\n\
+        ");
+
+        let mut rt = Runtime::new().unwrap();
+        let work = TcpStream::connect(&addr);
+        let host = addr.ip().to_string();
+        let port = addr.port();
+        let work = work.and_then(|tcp| {
+            tunnel(tcp, host, port, None)
+        });
+
+        let error = rt.block_on(work).unwrap_err();
+        assert_eq!(error.to_string(), "proxy authentication required");
+    }
+
+    #[test]
+    fn test_tunnel_basic_auth() {
+        let addr = mock_tunnel!(
+            TUNNEL_OK,
+            "Proxy-Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==\r\n"
+        );
+
+        let mut rt = Runtime::new().unwrap();
+        let work = TcpStream::connect(&addr);
+        let host = addr.ip().to_string();
+        let port = addr.port();
+        let work = work.and_then(|tcp| {
+            tunnel(tcp, host, port, Some(proxy::Auth::basic("Aladdin", "open sesame")))
+        });
+
+        rt.block_on(work).unwrap();
     }
 }
