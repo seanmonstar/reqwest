@@ -193,7 +193,7 @@ impl RequestBuilder {
     /// let client = reqwest::async::Client::new();
     /// let form = reqwest::async::multipart::Form::new()
     ///     .text("key3", "value3")
-    ///     .text("file", "/path/to/field");
+    ///     .text("key4", "value4");
     ///
     /// let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
     ///
