@@ -1,6 +1,7 @@
 use std::fmt;
 use std::sync::Arc;
 
+use http::{header::HeaderValue, Uri};
 use hyper::client::connect::Destination;
 use {into_url, IntoUrl, Url};
 
@@ -30,7 +31,13 @@ use {into_url, IntoUrl, Url};
 /// would prevent a `Proxy` later in the list from ever working, so take care.
 #[derive(Clone, Debug)]
 pub struct Proxy {
+    auth: Option<Auth>,
     intercept: Intercept,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum Auth {
+    Basic(HeaderValue),
 }
 
 impl Proxy {
@@ -124,7 +131,43 @@ impl Proxy {
 
     fn new(intercept: Intercept) -> Proxy {
         Proxy {
-            intercept: intercept,
+            auth: None,
+            intercept,
+        }
+    }
+
+    /// Set the `Proxy-Authorization` header using Basic auth.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # extern crate reqwest;
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let proxy = reqwest::Proxy::https("http://localhost:1234")?
+    ///     .basic_auth("Aladdin", "open sesame");
+    /// # Ok(())
+    /// # }
+    /// # fn main() {}
+    /// ```
+    pub fn basic_auth(mut self, username: &str, password: &str) -> Proxy {
+        self.auth = Some(Auth::basic(username, password));
+        self
+    }
+
+    pub(crate) fn auth(&self) -> Option<&Auth> {
+        self.auth.as_ref()
+    }
+
+    pub(crate) fn maybe_has_http_auth(&self) -> bool {
+        match self.auth {
+            Some(Auth::Basic(_)) => match self.intercept {
+                Intercept::All(_) |
+                Intercept::Http(_) |
+                // Custom *may* match 'http', so assume so.
+                Intercept::Custom(_) => true,
+                Intercept::Https(_) => false,
+            },
+            None => false,
         }
     }
 
@@ -158,6 +201,31 @@ impl Proxy {
                         .expect("should be valid Url")
                 )
                     .map(|u| into_url::to_uri(&u) )
+            },
+        }
+    }
+
+    pub(crate) fn is_match<D: Dst>(&self, uri: &D) -> bool {
+        match self.intercept {
+            Intercept::All(_) => true,
+            Intercept::Http(_) => {
+                uri.scheme() == "http"
+            },
+            Intercept::Https(_) => {
+                uri.scheme() == "https"
+            },
+            Intercept::Custom(ref fun) => {
+                (fun.0)(
+                    &format!(
+                        "{}://{}{}{}",
+                        uri.scheme(),
+                        uri.host(),
+                        uri.port().map(|_| ":").unwrap_or(""),
+                        uri.port().map(|p| p.to_string()).unwrap_or(String::new())
+                    )
+                        .parse()
+                        .expect("should be valid Url")
+                ).is_some()
             },
         }
     }
@@ -200,6 +268,35 @@ impl Dst for Destination {
 
     fn port(&self) -> Option<u16> {
         Destination::port(self)
+    }
+}
+
+#[doc(hidden)]
+impl Dst for Uri {
+    fn scheme(&self) -> &str {
+        self.scheme_part()
+            .expect("Uri should have a scheme")
+            .as_str()
+    }
+
+    fn host(&self) -> &str {
+        Uri::host(self)
+            .expect("<Uri as Dst>::host should have a str")
+    }
+
+    fn port(&self) -> Option<u16> {
+        self.port_part().map(|p| p.as_u16())
+    }
+}
+
+impl Auth {
+    pub(crate) fn basic(username: &str, password: &str) -> Auth {
+        let val = format!("{}:{}", username, password);
+        let mut header = format!("Basic {}", base64::encode(&val))
+            .parse::<HeaderValue>()
+            .expect("base64 is always valid HeaderValue");
+        header.set_sensitive(true);
+        Auth::Basic(header)
     }
 }
 

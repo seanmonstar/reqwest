@@ -4,10 +4,24 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use futures::{Async, Future, Poll};
+use header::{
+    HeaderMap,
+    HeaderValue,
+    ACCEPT,
+    ACCEPT_ENCODING,
+    CONTENT_LENGTH,
+    CONTENT_ENCODING,
+    CONTENT_TYPE,
+    LOCATION,
+    PROXY_AUTHORIZATION,
+    RANGE,
+    REFERER,
+    TRANSFER_ENCODING,
+    USER_AGENT,
+};
+use http::Uri;
 use hyper::client::ResponseFuture;
-use header::{HeaderMap, HeaderValue, LOCATION, USER_AGENT, REFERER, ACCEPT,
-             ACCEPT_ENCODING, RANGE, TRANSFER_ENCODING, CONTENT_TYPE, CONTENT_LENGTH, CONTENT_ENCODING};
-use mime::{self};
+use mime;
 #[cfg(feature = "default-tls")]
 use native_tls::TlsConnector;
 
@@ -124,7 +138,7 @@ impl ClientBuilder {
                             tls_inner::Identity::Pkcs12(buf, passwd) =>
                                 try_!(::native_tls::Identity::from_pkcs12(&buf, &passwd)),
                             #[cfg(feature = "rustls-tls")]
-                            _ => return Err(::error::from(::error::Kind::Incompatible))
+                            _ => return Err(::error::from(::error::Kind::TlsIncompatible))
                         };
                         tls.identity(id);
                     }
@@ -181,7 +195,7 @@ impl ClientBuilder {
                                 }
                             },
                             #[cfg(feature = "default-tls")]
-                            _ => return Err(::error::from(::error::Kind::Incompatible))
+                            _ => return Err(::error::from(::error::Kind::TlsIncompatible))
                         };
                         tls.set_single_client_cert(certs, key);
                     }
@@ -197,6 +211,10 @@ impl ClientBuilder {
         let hyper_client = ::hyper::Client::builder()
             .build(connector);
 
+        let proxies_maybe_http_auth = proxies
+            .iter()
+            .any(|p| p.maybe_has_http_auth());
+
         Ok(Client {
             inner: Arc::new(ClientRef {
                 gzip: config.gzip,
@@ -204,6 +222,8 @@ impl ClientBuilder {
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
+                proxies,
+                proxies_maybe_http_auth,
             }),
         })
     }
@@ -470,6 +490,8 @@ impl Client {
             }
         };
 
+        self.proxy_auth(&uri, &mut headers);
+
         let mut req = ::hyper::Request::builder()
             .method(method.clone())
             .uri(uri.clone())
@@ -493,6 +515,40 @@ impl Client {
 
                 in_flight: in_flight,
             }),
+        }
+    }
+
+    fn proxy_auth(&self, dst: &Uri, headers: &mut HeaderMap) {
+        if !self.inner.proxies_maybe_http_auth {
+            return;
+        }
+
+        // Only set the header here if the destination scheme is 'http',
+        // since otherwise, the header will be included in the CONNECT tunnel
+        // request instead.
+        if dst.scheme_part() != Some(&::http::uri::Scheme::HTTP) {
+            return;
+        }
+
+        if headers.contains_key(PROXY_AUTHORIZATION) {
+            return;
+        }
+
+
+        for proxy in self.inner.proxies.iter() {
+            if proxy.is_match(dst) {
+                match proxy.auth() {
+                    Some(::proxy::Auth::Basic(ref header)) => {
+                        headers.insert(
+                            PROXY_AUTHORIZATION,
+                            header.clone()
+                        );
+                    },
+                    None => (),
+                }
+
+                break;
+            }
         }
     }
 }
@@ -520,6 +576,8 @@ struct ClientRef {
     hyper: HyperClient,
     redirect_policy: RedirectPolicy,
     referer: bool,
+    proxies: Arc<Vec<Proxy>>,
+    proxies_maybe_http_auth: bool,
 }
 
 pub struct Pending {
