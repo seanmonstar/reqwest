@@ -6,6 +6,7 @@ use serde_json;
 use serde_urlencoded;
 
 use super::body::{Body};
+use super::multipart as multipart_;
 use super::client::{Client, Pending};
 use header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
 use http::HttpTryFrom;
@@ -177,6 +178,47 @@ impl RequestBuilder {
             *req.body_mut() = Some(body.into());
         }
         self
+    }
+
+    /// Sends a multipart/form-data body.
+    ///
+    /// ```
+    /// # extern crate futures;
+    /// # extern crate reqwest;
+    ///
+    /// # use reqwest::Error;
+    /// # use futures::future::Future;
+    ///
+    /// # fn run() -> Result<(), Error> {
+    /// let client = reqwest::async::Client::new();
+    /// let form = reqwest::async::multipart::Form::new()
+    ///     .text("key3", "value3")
+    ///     .text("file", "/path/to/field");
+    ///
+    /// let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
+    ///
+    /// let response = client.post("your url")
+    ///     .multipart(form)
+    ///     .send()
+    ///     .and_then(|_| {
+    ///       Ok(())
+    ///     });
+    ///
+    /// rt.block_on(response)
+    /// # }
+    /// ```
+    pub fn multipart(self, multipart: multipart_::Form) -> RequestBuilder {
+        let mut builder = self.header(
+            CONTENT_TYPE,
+            format!(
+                "multipart/form-data; boundary={}",
+                multipart.boundary()
+            ).as_str()
+        );
+        if let Ok(ref mut req) = builder.request {
+            *req.body_mut() = Some(Body::wrap(multipart.stream()))
+        }
+        builder
     }
 
     /// Modify the query string of the URL.
