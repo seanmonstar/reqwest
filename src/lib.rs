@@ -232,6 +232,7 @@ pub mod async {
         RequestBuilder,
         Response,
         ResponseBuilderExt,
+        multipart
     };
 }
 

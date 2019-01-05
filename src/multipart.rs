@@ -20,7 +20,7 @@ pub struct Form {
     percent_encoding: PercentEncoding,
 }
 
-enum PercentEncoding {
+pub(crate) enum PercentEncoding {
     PathSegment,
     AttrChar,
 }
@@ -145,6 +145,15 @@ impl fmt::Debug for Form {
     }
 }
 
+pub(crate) trait PartProp {
+    fn mime(&self) -> &Option<Mime>;
+    fn mime_mut(&mut self) -> &mut Option<Mime>;
+    fn file_name(&self) -> &Option<Cow<'static, str>>;
+    fn file_name_mut(&mut self) -> &mut Option<Cow<'static, str>>;
+    fn headers(&self) -> &HeaderMap;
+    fn headers_mut(&mut self) -> &mut HeaderMap;
+}
+
 
 /// A field in a multipart form.
 pub struct Part {
@@ -240,13 +249,31 @@ impl Part {
         self
     }
 
-    /// Returns a reference to the map with additional header fields
-    pub fn headers(&self) -> &HeaderMap {
+    
+}
+
+impl PartProp for Part {
+    fn mime(&self) -> &Option<Mime> {
+        &self.mime
+    }
+
+    fn mime_mut(&mut self) -> &mut Option<Mime> {
+        &mut self.mime
+    }
+
+    fn file_name(&self) -> &Option<Cow<'static, str>> {
+        &self.file_name
+    }
+
+    fn file_name_mut(&mut self) -> &mut Option<Cow<'static, str>> {
+        &mut self.file_name
+    }
+
+    fn headers(&self) -> &HeaderMap {
         &self.headers
     }
 
-    /// Returns a reference to the map with additional header fields
-    pub fn headers_mut(&mut self) -> &mut HeaderMap {
+    fn headers_mut(&mut self) -> &mut HeaderMap {
         &mut self.headers
     }
 }
@@ -342,7 +369,7 @@ impl Read for Reader {
 }
 
 #[derive(Debug, Clone)]
-struct AttrCharEncodeSet;
+pub(crate) struct AttrCharEncodeSet;
 
 impl EncodeSet for AttrCharEncodeSet {
     fn contains(&self, ch: u8) -> bool {
@@ -369,20 +396,20 @@ impl EncodeSet for AttrCharEncodeSet {
 }
 
 impl PercentEncoding {
-    fn encode_headers(&self, name: &str, field: &Part) -> Vec<u8> {
+    pub fn encode_headers<T: PartProp>(&self, name: &str, field: &T) -> Vec<u8> {
         let s = format!(
             "Content-Disposition: form-data; {}{}{}",
             self.format_parameter("name", name),
-            match field.file_name {
+            match *field.file_name() {
                 Some(ref file_name) => format!("; {}", self.format_parameter("filename", file_name)),
                 None => String::new(),
             },
-            match field.mime {
+            match *field.mime() {
                 Some(ref mime) => format!("\r\nContent-Type: {}", mime),
                 None => "".to_string(),
             },
         );
-        field.headers.iter().fold(s.into_bytes(), |mut header, (k,v)| {
+        field.headers().iter().fold(s.into_bytes(), |mut header, (k,v)| {
             header.extend_from_slice(b"\r\n");
             header.extend_from_slice(k.as_str().as_bytes());
             header.extend_from_slice(b": ");

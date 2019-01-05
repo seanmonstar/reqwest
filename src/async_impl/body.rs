@@ -182,6 +182,12 @@ impl IntoIterator for Chunk {
     }
 }
 
+impl From<Chunk> for hyper::Chunk {
+  fn from(val: Chunk) -> hyper::Chunk {
+    val.inner
+  }
+}
+
 impl fmt::Debug for Body {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Body")
