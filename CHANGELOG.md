@@ -1,3 +1,24 @@
+## v0.9.6
+
+### Features
+
+- Add `Proxy::basic_auth` method to support proxy authorization.
+- Add `rustls-tls` optional feature to use rustls instead of native-tls.
+- Add `try_clone` method to `Request` and `RequestBuilder`.
+- Add `reqwest::async::multipart` support, similar to the synchronous API.
+- Adds `default-tls-vendored` optional feature to vendor OpenSSL.
+
+### Fixes
+
+- Fix panic from top-level `reqwest::get` if client builder fails to build.
+- Removed timeout waiting for `reqwest::Client` runtime to startup.
+- Fix `RequestBuilder::headers` to properly append extra headers of the same name.
+
+
+### Performance
+
+- Replaced DNS threadpool using `getaddrinfo` with a non-blocking DNS resolver.
+
 ## v0.9.5
 
 ### Features
