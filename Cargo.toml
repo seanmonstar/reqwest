@@ -15,7 +15,7 @@ bytes = "0.4"
 encoding_rs = "0.8"
 futures = "0.1.23"
 http = "0.1.14"
-hyper = "0.12.13"
+hyper = "0.12.20"
 hyper-old-types = { version = "0.11", optional = true, features = ["compat"] }
 hyper-tls = { version = "0.3", optional = true }
 libflate = "0.1.18"
@@ -26,9 +26,10 @@ native-tls = { version = "0.2", optional = true }
 serde = "1.0"
 serde_json = "1.0"
 serde_urlencoded = "0.5"
-tokio = "0.1.7"
+tokio = { version = "0.1.7", default-features = false, features = ["rt-full"] }
 tokio-executor = "0.1.4" # a minimum version so trust-dns-resolver compiles
 tokio-io = "0.1"
+tokio-threadpool = "0.1.8" # a minimum version so tokio compiles
 tokio-timer = "0.2.6" # a minimum version so trust-dns-resolver compiles
 trust-dns-resolver = "0.10"
 url = "1.2"

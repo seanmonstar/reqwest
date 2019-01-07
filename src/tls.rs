@@ -4,7 +4,7 @@ use rustls::{TLSError, ServerCertVerifier, RootCertStore, ServerCertVerified};
 #[cfg(feature = "rustls-tls")]
 use tokio_rustls::webpki::DNSNameRef;
 
-/// Represent an X509 certificate.
+/// Represent a server X509 certificate.
 pub struct Certificate {
     pub(crate) inner: inner::Certificate
 }
@@ -45,10 +45,6 @@ impl Certificate {
     /// # Ok(())
     /// # }
     /// ```
-    ///
-    /// # Errors
-    ///
-    /// It never returns error.
     pub fn from_der(der: &[u8]) -> ::Result<Certificate> {
         Ok(Certificate {
             inner: inner::Certificate::Der(der.to_owned())
@@ -72,10 +68,6 @@ impl Certificate {
     /// # Ok(())
     /// # }
     /// ```
-    ///
-    /// # Errors
-    ///
-    /// It never returns error.
     pub fn from_pem(der: &[u8]) -> ::Result<Certificate> {
         Ok(Certificate {
             inner: inner::Certificate::Pem(der.to_owned())
@@ -111,10 +103,6 @@ impl Identity {
     /// # Ok(())
     /// # }
     /// ```
-    ///
-    /// # Errors
-    ///
-    /// It never returns error.
     #[cfg(feature = "default-tls")]
     pub fn from_pkcs12_der(der: &[u8], password: &str) -> ::Result<Identity> {
         Ok(Identity {
@@ -141,10 +129,6 @@ impl Identity {
     /// # Ok(())
     /// # }
     /// ```
-    ///
-    /// # Errors
-    ///
-    /// It never returns error.
     #[cfg(feature = "rustls-tls")]
     pub fn from_pem(pem: &[u8]) -> ::Result<Identity> {
         Ok(Identity {
