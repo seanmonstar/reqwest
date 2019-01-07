@@ -5,15 +5,16 @@
 
 //! # reqwest
 //!
-//! The `reqwest` crate provides a convenient, higher-level HTTP Client.
+//! The `reqwest` crate provides a convenient, higher-level HTTP
+//! [`Client`][client].
 //!
 //! It handles many of the things that most people just expect an HTTP client
 //! to do for them.
 //!
-//! - Uses system-native TLS
-//! - Plain bodies, JSON, urlencoded, multipart
-//! - Customizable redirect policy
-//! - Proxies
+//! - Plain bodies, [JSON](#json), [urlencoded](#forms), [multipart](multipart)
+//! - Customizable [redirect policy](#redirect-policy)
+//! - HTTP [Proxies](proxies)
+//! - Uses system-native [TLS](#tls)
 //! - Cookies (only rudimentary support, full support is TODO)
 //!
 //! The rudimentary cookie support means that the cookies need to be manually
@@ -21,9 +22,14 @@
 //! support as of now. The tracking issue for this feature is available
 //! [on GitHub][cookiejar_issue].
 //!
-//! The `reqwest::Client` is synchronous, making it a great fit for
+//! The [`reqwest::Client`][client] is synchronous, making it a great fit for
 //! applications that only require a few HTTP requests, and wish to handle
 //! them synchronously.
+//!
+//! Additional learning resources include:
+//!
+//! - [The Rust Cookbook](https://rust-lang-nursery.github.io/rust-cookbook/web/clients.html)
+//! - [Reqwest Repositiory Examples](https://github.com/seanmonstar/reqwest/tree/master/examples
 //!
 //! ## Making a GET request
 //!
@@ -116,6 +122,30 @@
 //! # }
 //! ```
 //!
+//! ## Redirect Policies
+//!
+//! By default, a `Client` will automatically handle HTTP redirects, detecting
+//! loops, and having a maximum redirect chain of 10 hops. To customize this
+//! behavior, a [`RedirectPolicy`][redirect] can used with a `ClientBuilder`.
+//!
+//! ## Proxies
+//!
+//! A `Client` can be configured to make use of HTTP proxies by adding
+//! [`Proxy`](Proxy)s to a `ClientBuilder`.
+//!
+//! ## TLS
+//!
+//! By default, a `Client` will make use of system-native transport layer
+//! security to connect to HTTPS destinations. This means schannel on Windows,
+//! Security-Framework on macOS, and OpenSSL on Linux.
+//!
+//! - Additional X509 certicates can be configured on a `ClientBuilder` with the
+//!   [`Certificate`](Certificate) type.
+//! - Client certificates can be add to a `ClientBuilder` with the
+//!   [`Identity`][Identity] type.
+//! - Various parts of TLS can also be configured or even disabled on the
+//!   `ClientBuilder`.
+//!
 //! ## Optional Features
 //!
 //! The following are a list of [Cargo features][cargo-features] that can be
@@ -135,6 +165,8 @@
 //! [builder]: ./struct.RequestBuilder.html
 //! [serde]: http://serde.rs
 //! [cookiejar_issue]: https://github.com/seanmonstar/reqwest/issues/14
+//! [redirect]: ./struct.RedirectPolicy.html
+//! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
 
 extern crate base64;
@@ -218,9 +250,6 @@ mod wait;
 pub mod multipart;
 
 /// An 'async' implementation of the reqwest `Client`.
-///
-/// Relies on the `futures` crate, which is unstable, hence this module
-/// is **unstable**.
 pub mod async {
     pub use ::async_impl::{
         Body,

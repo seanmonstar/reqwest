@@ -16,7 +16,8 @@ use {Certificate, Identity};
 /// A `Client` to make Requests with.
 ///
 /// The Client has various configuration values to tweak, but the defaults
-/// are set to what is usually the most commonly desired value.
+/// are set to what is usually the most commonly desired value. To configure a
+/// `Client`, use `Client::builder()`.
 ///
 /// The `Client` holds a connection pool internally, so it is advised that
 /// you create one and **reuse** it.
@@ -60,7 +61,9 @@ pub struct ClientBuilder {
 }
 
 impl ClientBuilder {
-    /// Constructs a new `ClientBuilder`
+    /// Constructs a new `ClientBuilder`.
+    ///
+    /// This is the same as `Client::builder()`.
     pub fn new() -> ClientBuilder {
         ClientBuilder {
             inner: async_impl::ClientBuilder::new(),
@@ -93,8 +96,9 @@ impl ClientBuilder {
 
     /// Add a custom root certificate.
     ///
-    /// This can be used to connect to a server that has a self-signed
-    /// certificate for example.
+    /// This allows connecting to a server that has a self-signed
+    /// certificate for example. This **does not** replace the existing
+    /// trusted store.
     ///
     /// # Example
     /// ```
@@ -306,6 +310,8 @@ impl Client {
     }
 
     /// Creates a `ClientBuilder` to configure a `Client`.
+    ///
+    /// This is the same as `ClientBuilder::new()`.
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }

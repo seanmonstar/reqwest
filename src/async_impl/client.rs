@@ -43,7 +43,8 @@ static DEFAULT_USER_AGENT: &'static str =
 /// An asynchronous `Client` to make Requests with.
 ///
 /// The Client has various configuration values to tweak, but the defaults
-/// are set to what is usually the most commonly desired value.
+/// are set to what is usually the most commonly desired value. To configure a
+/// `Client`, use `Client::builder()`.
 ///
 /// The `Client` holds a connection pool internally, so it is advised that
 /// you create one and **reuse** it.
@@ -52,7 +53,7 @@ pub struct Client {
     inner: Arc<ClientRef>,
 }
 
-/// A `ClientBuilder` can be used to create a `Client` with  custom configuration:
+/// A `ClientBuilder` can be used to create a `Client` with  custom configuration.
 pub struct ClientBuilder {
     config: Config,
 }
@@ -77,7 +78,9 @@ struct Config {
 }
 
 impl ClientBuilder {
-    /// Constructs a new `ClientBuilder`
+    /// Constructs a new `ClientBuilder`.
+    ///
+    /// This is the same as `Client::builder()`.
     pub fn new() -> ClientBuilder {
         let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(2);
         headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
@@ -369,6 +372,8 @@ impl Client {
     }
 
     /// Creates a `ClientBuilder` to configure a `Client`.
+    ///
+    /// This is the same as `ClientBuilder::new()`.
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }
