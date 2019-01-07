@@ -6,9 +6,9 @@ use serde_json;
 use serde_urlencoded;
 
 use super::body::{Body};
-use super::multipart as multipart_;
+use super::multipart;
 use super::client::{Client, Pending};
-use header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
+use header::{CONTENT_LENGTH, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
 use http::HttpTryFrom;
 use {Method, Url};
 
@@ -207,7 +207,7 @@ impl RequestBuilder {
     /// rt.block_on(response)
     /// # }
     /// ```
-    pub fn multipart(self, multipart: multipart_::Form) -> RequestBuilder {
+    pub fn multipart(self, mut multipart: multipart::Form) -> RequestBuilder {
         let mut builder = self.header(
             CONTENT_TYPE,
             format!(
@@ -215,6 +215,12 @@ impl RequestBuilder {
                 multipart.boundary()
             ).as_str()
         );
+
+        builder = match multipart.compute_length() {
+            Some(length) => builder.header(CONTENT_LENGTH, length),
+            None => builder,
+        };
+
         if let Ok(ref mut req) = builder.request {
             *req.body_mut() = Some(Body::wrap(multipart.stream()))
         }

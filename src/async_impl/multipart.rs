@@ -3,35 +3,57 @@ use std::borrow::Cow;
 use std::fmt;
 
 use mime_guess::Mime;
+use url::percent_encoding::{self, EncodeSet, PATH_SEGMENT_ENCODE_SET};
 use uuid::Uuid;
 use http::HeaderMap;
 
 use futures::Stream;
 
 use super::Body;
-use multipart::{PercentEncoding, PartProp};
 
 /// An async multipart/form-data request.
 pub struct Form {
-    boundary: String,
-    fields: Vec<(Cow<'static, str>, Part)>,
-    percent_encoding: PercentEncoding,
+    inner: FormParts<Part>,
 }
+
+/// A field in a multipart form.
+pub struct Part {
+    meta: PartMetadata,
+    value: Body,
+}
+
+pub(crate) struct FormParts<P> {
+    pub(crate) boundary: String,
+    pub(crate) computed_headers: Vec<Vec<u8>>,
+    pub(crate) fields: Vec<(Cow<'static, str>, P)>,
+    pub(crate) percent_encoding: PercentEncoding,
+}
+
+pub(crate) struct PartMetadata {
+    mime: Option<Mime>,
+    file_name: Option<Cow<'static, str>>,
+    pub(crate) headers: HeaderMap,
+}
+
+pub(crate) trait PartProps {
+    fn value_len(&self) -> Option<u64>;
+    fn metadata(&self) -> &PartMetadata;
+}
+
+// ===== impl Form =====
 
 impl Form {
     /// Creates a new async Form without any content.
     pub fn new() -> Form {
         Form {
-            boundary: format!("{}", Uuid::new_v4().to_simple()),
-            fields: Vec::new(),
-            percent_encoding: PercentEncoding::PathSegment,
+            inner: FormParts::new(),
         }
     }
 
     /// Get the boundary that this form will use.
     #[inline]
     pub fn boundary(&self) -> &str {
-        &self.boundary
+        self.inner.boundary()
     }
 
     /// Add a data field with supplied name and value.
@@ -44,60 +66,62 @@ impl Form {
     ///     .text("password", "secret");
     /// ```
     pub fn text<T, U>(self, name: T, value: U) -> Form
-        where T: Into<Cow<'static, str>>,
-              U: Into<Cow<'static, str>>,
-              {
-                  self.part(name, Part::text(value))
-              }
+    where
+        T: Into<Cow<'static, str>>,
+        U: Into<Cow<'static, str>>,
+    {
+        self.part(name, Part::text(value))
+    }
 
     /// Adds a customized Part.
-    pub fn part<T>(mut self, name: T, part: Part) -> Form
-        where T: Into<Cow<'static, str>>,
-              {
-                  self.fields.push((name.into(), part));
-                  self
-              }
+    pub fn part<T>(self, name: T, part: Part) -> Form
+    where
+        T: Into<Cow<'static, str>>,
+    {
+        self.with_inner(move |inner| inner.part(name, part))
+    }
 
     /// Configure this `Form` to percent-encode using the `path-segment` rules.
-    pub fn percent_encode_path_segment(mut self) -> Form {
-        self.percent_encoding = PercentEncoding::PathSegment;
-        self
+    pub fn percent_encode_path_segment(self) -> Form {
+        self.with_inner(|inner| inner.percent_encode_path_segment())
     }
 
     /// Configure this `Form` to percent-encode using the `attr-char` rules.
-    pub fn percent_encode_attr_chars(mut self) -> Form {
-        self.percent_encoding = PercentEncoding::AttrChar;
-        self
+    pub fn percent_encode_attr_chars(self) -> Form {
+        self.with_inner(|inner| inner.percent_encode_attr_chars())
     }
 
     /// Consume this instance and transform into an instance of hyper::Body for use in a request.
     pub(crate) fn stream(mut self) -> hyper::Body {
-        if self.fields.len() == 0 {
+        if self.inner.fields.len() == 0 {
             return hyper::Body::empty();
         }
 
         // create initial part to init reduce chain
-        let (name, part) = self.fields.remove(0);
+        let (name, part) = self.inner.fields.remove(0);
         let start = self.part_stream(name, part);
 
-        let fields = self.take_fields();
+        let fields = self.inner.take_fields();
         // for each field, chain an additional stream
         let stream = fields.into_iter().fold(start, |memo, (name, part)| {
             let part_stream = self.part_stream(name, part);
             hyper::Body::wrap_stream(memo.chain(part_stream))
         });
         // append special ending boundary
-        let last = hyper::Body::from(format!("--{}--\r\n", self.boundary));
+        let last = hyper::Body::from(format!("--{}--\r\n", self.boundary()));
         hyper::Body::wrap_stream(stream.chain(last))
     }
 
     /// Generate a hyper::Body stream for a single Part instance of a Form request. 
-    pub(crate) fn part_stream<T: Into<Cow<'static, str>>>(&mut self, name: T, part: Part) -> hyper::Body {
+    pub(crate) fn part_stream<T>(&mut self, name: T, part: Part) -> hyper::Body
+    where
+        T: Into<Cow<'static, str>>,
+    {
         // start with boundary
-        let boundary = hyper::Body::from(format!("--{}\r\n", self.boundary));
+        let boundary = hyper::Body::from(format!("--{}\r\n", self.boundary()));
         // append headers
         let header = hyper::Body::from({
-            let mut h = self.percent_encoding.encode_headers(&name.into(), &part);
+            let mut h = self.inner.percent_encoding.encode_headers(&name.into(), &part.meta);
             h.extend_from_slice(b"\r\n\r\n");
             h
         });
@@ -105,128 +129,311 @@ impl Form {
         hyper::Body::wrap_stream(boundary.chain(header).chain(hyper::Body::wrap_stream(part.value)).chain(hyper::Body::from("\r\n".to_owned())))
     }
 
-    /// Take the fields vector of this instance, replacing with an empty vector.
-    fn take_fields(&mut self) -> Vec<(Cow<'static, str>, Part)> {
-        std::mem::replace(&mut self.fields, Vec::new())
+    pub(crate) fn compute_length(&mut self) -> Option<u64> {
+        self.inner.compute_length()
+    }
+
+    fn with_inner<F>(self, func: F) -> Self
+    where
+        F: FnOnce(FormParts<Part>) -> FormParts<Part>,
+    {
+        Form {
+            inner: func(self.inner),
+        }
     }
 }
 
 impl fmt::Debug for Form {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Form")
+        self.inner.fmt_fields("Form", f)
+    }
+}
+
+// ===== impl Part =====
+
+impl Part {
+    /// Makes a text parameter.
+    pub fn text<T>(value: T) -> Part
+    where
+        T: Into<Cow<'static, str>>,
+    {
+        let body = match value.into() {
+            Cow::Borrowed(slice) => Body::from(slice),
+            Cow::Owned(string) => Body::from(string),
+        };
+        Part::new(body)
+    }
+
+    /// Makes a new parameter from arbitrary bytes.
+    pub fn bytes<T>(value: T) -> Part
+    where
+        T: Into<Cow<'static, [u8]>>,
+    {
+        let body = match value.into() {
+            Cow::Borrowed(slice) => Body::from(slice),
+            Cow::Owned(vec) => Body::from(vec),
+        };
+        Part::new(body)
+    }
+
+    /// Makes a new parameter from an arbitrary stream.
+    pub fn stream<T>(value: T) -> Part
+    where
+        T: Stream + Send + 'static,
+        T::Error: std::error::Error + Send + Sync,
+        hyper::Chunk: std::convert::From<T::Item>,
+    {
+        Part::new(Body::wrap(hyper::Body::wrap_stream(value)))
+    }
+
+    fn new(value: Body) -> Part {
+        Part {
+            meta: PartMetadata::new(),
+            value,
+        }
+    }
+
+    /// Tries to set the mime of this part.
+    pub fn mime_str(self, mime: &str) -> ::Result<Part> {
+        Ok(self.mime(try_!(mime.parse())))
+    }
+
+    // Re-export when mime 0.4 is available, with split MediaType/MediaRange.
+    fn mime(self, mime: Mime) -> Part {
+        self.with_inner(move |inner| inner.mime(mime))
+    }
+
+    /// Sets the filename, builder style.
+    pub fn file_name<T>(self, filename: T) -> Part
+    where
+        T: Into<Cow<'static, str>>,
+    {
+        self.with_inner(move |inner| inner.file_name(filename))
+    }
+
+    fn with_inner<F>(self, func: F) -> Self
+    where
+        F: FnOnce(PartMetadata) -> PartMetadata,
+    {
+        Part {
+            meta: func(self.meta),
+            value: self.value,
+        }
+    }
+}
+
+impl fmt::Debug for Part {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut dbg = f.debug_struct("Part");
+        dbg.field("value", &self.value);
+        self.meta.fmt_fields(&mut dbg);
+        dbg.finish()
+    }
+}
+
+impl PartProps for Part {
+    fn value_len(&self) -> Option<u64> {
+        self.value.content_length()
+    }
+
+    fn metadata(&self) -> &PartMetadata {
+        &self.meta
+    }
+}
+
+// ===== impl FormParts =====
+
+impl<P: PartProps> FormParts<P> {
+    pub(crate) fn new() -> Self {
+        FormParts {
+            boundary: format!("{}", Uuid::new_v4().to_simple()),
+            computed_headers: Vec::new(),
+            fields: Vec::new(),
+            percent_encoding: PercentEncoding::PathSegment,
+        }
+    }
+
+    pub(crate) fn boundary(&self) -> &str {
+        &self.boundary
+    }
+
+    /// Adds a customized Part.
+    pub(crate) fn part<T>(mut self, name: T, part: P) -> Self
+    where
+        T: Into<Cow<'static, str>>,
+    {
+        self.fields.push((name.into(), part));
+        self
+    }
+
+    /// Configure this `Form` to percent-encode using the `path-segment` rules.
+    pub(crate) fn percent_encode_path_segment(mut self) -> Self {
+        self.percent_encoding = PercentEncoding::PathSegment;
+        self
+    }
+
+    /// Configure this `Form` to percent-encode using the `attr-char` rules.
+    pub(crate) fn percent_encode_attr_chars(mut self) -> Self {
+        self.percent_encoding = PercentEncoding::AttrChar;
+        self
+    }
+
+    // If predictable, computes the length the request will have
+    // The length should be preditable if only String and file fields have been added,
+    // but not if a generic reader has been added;
+    pub(crate) fn compute_length(&mut self) -> Option<u64> {
+        let mut length = 0u64;
+        for &(ref name, ref field) in self.fields.iter() {
+            match field.value_len() {
+                Some(value_length) => {
+                    // We are constructing the header just to get its length. To not have to
+                    // construct it again when the request is sent we cache these headers.
+                    let header = self.percent_encoding.encode_headers(name, field.metadata());
+                    let header_length = header.len();
+                    self.computed_headers.push(header);
+                    // The additions mimick the format string out of which the field is constructed
+                    // in Reader. Not the cleanest solution because if that format string is
+                    // ever changed then this formula needs to be changed too which is not an
+                    // obvious dependency in the code.
+                    length += 2 + self.boundary().len() as u64 + 2 + header_length as u64 + 4 + value_length + 2
+                }
+                _ => return None,
+            }
+        }
+        // If there is a at least one field there is a special boundary for the very last field.
+        if !self.fields.is_empty() {
+            length += 2 + self.boundary().len() as u64 + 4
+        }
+        Some(length)
+    }
+
+    /// Take the fields vector of this instance, replacing with an empty vector.
+    fn take_fields(&mut self) -> Vec<(Cow<'static, str>, P)> {
+        std::mem::replace(&mut self.fields, Vec::new())
+    }
+}
+
+impl<P: fmt::Debug> FormParts<P> {
+    pub(crate) fn fmt_fields(&self, ty_name: &'static str, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct(ty_name)
             .field("boundary", &self.boundary)
             .field("parts", &self.fields)
             .finish()
     }
 }
 
+// ===== impl PartMetadata =====
 
-/// A field in a multipart form.
-pub struct Part {
-    value: Body,
-    mime: Option<Mime>,
-    file_name: Option<Cow<'static, str>>,
-    headers: HeaderMap,
-}
-
-impl Part {
-    /// Makes a text parameter.
-    pub fn text<T>(value: T) -> Part
-        where T: Into<Cow<'static, str>>,
-              {
-                  let body = match value.into() {
-                      Cow::Borrowed(slice) => Body::from(slice),
-                      Cow::Owned(string) => Body::from(string),
-                  };
-                  Part::new(body)
-              }
-
-    /// Makes a new parameter from arbitrary bytes
-    pub fn bytes<T>(value: T) -> Part
-        where T: Into<Cow<'static, [u8]>>
-        {
-            let body = match value.into() {
-                Cow::Borrowed(slice) => Body::from(slice),
-                Cow::Owned(vec) => Body::from(vec),
-            };
-            Part::new(body)
-        }
-
-    /// Makes a new parameter from an arbitrary stream.
-    pub fn stream<T: Stream + Send + 'static>(value: T) -> Part
-        where hyper::Chunk: std::convert::From<<T as futures::Stream>::Item>,
-              <T as futures::Stream>::Error: std::error::Error + Send + Sync {
-                  Part::new(Body::wrap(hyper::Body::wrap_stream(value)))
-              }
-
-    fn new(value: Body) -> Part {
-        Part {
-            value: value,
+impl PartMetadata {
+    pub(crate) fn new() -> Self {
+        PartMetadata {
             mime: None,
             file_name: None,
             headers: HeaderMap::default()
         }
     }
 
-    /// Tries to set the mime of this part.
-    pub fn mime_str(mut self, mime: &str) -> ::Result<Part> {
-        self.mime = Some(try_!(mime.parse()));
-        Ok(self)
-    }
-
-    // Re-enable when mime 0.4 is available, with split MediaType/MediaRange.
-    #[cfg(test)]
-    fn mime(mut self, mime: Mime) -> Part {
+    pub(crate) fn mime(mut self, mime: Mime) -> Self {
         self.mime = Some(mime);
         self
     }
 
-    /// Sets the filename, builder style.
-    pub fn file_name<T: Into<Cow<'static, str>>>(mut self, filename: T) -> Part {
+    pub(crate) fn file_name<T>(mut self, filename: T) -> Self
+    where
+        T: Into<Cow<'static, str>>,
+    {
         self.file_name = Some(filename.into());
         self
     }
-
-    
 }
 
-impl PartProp for Part {
-    fn mime(&self) -> &Option<Mime> {
-        &self.mime
-    }
 
-    fn mime_mut(&mut self) -> &mut Option<Mime> {
-        &mut self.mime
-    }
-
-    fn file_name(&self) -> &Option<Cow<'static, str>> {
-        &self.file_name
-    }
-
-    fn file_name_mut(&mut self) -> &mut Option<Cow<'static, str>> {
-        &mut self.file_name
-    }
-
-    fn headers(&self) -> &HeaderMap {
-        &self.headers
-    }
-
-    fn headers_mut(&mut self) -> &mut HeaderMap {
-        &mut self.headers
-    }
-}
-
-impl fmt::Debug for Part {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Part")
-            .field("value", &self.value)
+impl PartMetadata {
+    pub(crate) fn fmt_fields<'f, 'fa, 'fb>(
+        &self,
+        debug_struct: &'f mut fmt::DebugStruct<'fa, 'fb>
+    ) -> &'f mut fmt::DebugStruct<'fa, 'fb> {
+        debug_struct
             .field("mime", &self.mime)
             .field("file_name", &self.file_name)
             .field("headers", &self.headers)
-            .finish()
     }
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct AttrCharEncodeSet;
+
+impl EncodeSet for AttrCharEncodeSet {
+    fn contains(&self, ch: u8) -> bool {
+        match ch as char {
+             '!'  => false,
+             '#'  => false,
+             '$'  => false,
+             '&'  => false,
+             '+'  => false,
+             '-'  => false,
+             '.' => false,
+             '^'  => false,
+             '_'  => false,
+             '`'  => false,
+             '|'  => false,
+             '~' => false,
+              _ => {
+                  let is_alpha_numeric = ch >= 0x41 && ch <= 0x5a || ch >= 0x61 && ch <= 0x7a || ch >= 0x30 && ch <= 0x39;
+                  !is_alpha_numeric
+              }
+        }
+    }
+}
+
+pub(crate) enum PercentEncoding {
+    PathSegment,
+    AttrChar,
+}
+
+impl PercentEncoding {
+    pub(crate) fn encode_headers(&self, name: &str, field: &PartMetadata) -> Vec<u8> {
+        let s = format!(
+            "Content-Disposition: form-data; {}{}{}",
+            self.format_parameter("name", name),
+            match field.file_name {
+                Some(ref file_name) => format!("; {}", self.format_parameter("filename", file_name)),
+                None => String::new(),
+            },
+            match field.mime {
+                Some(ref mime) => format!("\r\nContent-Type: {}", mime),
+                None => "".to_string(),
+            },
+        );
+        field.headers.iter().fold(s.into_bytes(), |mut header, (k,v)| {
+            header.extend_from_slice(b"\r\n");
+            header.extend_from_slice(k.as_str().as_bytes());
+            header.extend_from_slice(b": ");
+            header.extend_from_slice(v.as_bytes());
+            header
+        })
+    }
+
+    fn format_parameter(&self, name: &str, value: &str) -> String {
+        let legal_value = match *self {
+            PercentEncoding::PathSegment => {
+                percent_encoding::utf8_percent_encode(value, PATH_SEGMENT_ENCODE_SET)
+                    .to_string()
+            },
+            PercentEncoding::AttrChar => {
+                percent_encoding::utf8_percent_encode(value, AttrCharEncodeSet)
+                    .to_string()
+            },
+        };
+        if value.len() == legal_value.len() {
+            // nothing has been percent encoded
+            format!("{}=\"{}\"", name, value)
+        } else {
+            // something has been percent encoded
+            format!("{}*=utf-8''{}", name, legal_value)
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -258,7 +465,7 @@ mod tests {
                 "key3",
                 Part::text("value3").file_name("filename"),
             );
-        form.boundary = "boundary".to_string();
+        form.inner.boundary = "boundary".to_string();
         let expected = "--boundary\r\n\
                         Content-Disposition: form-data; name=\"reader1\"\r\n\r\n\
                         part1\r\n\
@@ -291,9 +498,9 @@ mod tests {
     #[test]
     fn stream_to_end_with_header() {
         let mut part = Part::text("value2").mime(::mime::IMAGE_BMP);
-        part.headers_mut().insert("Hdr3", "/a/b/c".parse().unwrap());
+        part.meta.headers.insert("Hdr3", "/a/b/c".parse().unwrap());
         let mut form = Form::new().part("key2", part);
-        form.boundary = "boundary".to_string();
+        form.inner.boundary = "boundary".to_string();
         let expected = "--boundary\r\n\
                         Content-Disposition: form-data; name=\"key2\"\r\n\
                         Content-Type: image/bmp\r\n\
@@ -320,12 +527,12 @@ mod tests {
         let field = Part::text("");
 
         assert_eq!(
-            PercentEncoding::PathSegment.encode_headers(name, &field),
+            PercentEncoding::PathSegment.encode_headers(name, &field.meta),
             &b"Content-Disposition: form-data; name*=utf-8''start%25'%22%0D%0A%C3%9Fend"[..]
         );
 
         assert_eq!(
-            PercentEncoding::AttrChar.encode_headers(name, &field),
+            PercentEncoding::AttrChar.encode_headers(name, &field.meta),
             &b"Content-Disposition: form-data; name*=utf-8''start%25%27%22%0D%0A%C3%9Fend"[..]
         );
     }
