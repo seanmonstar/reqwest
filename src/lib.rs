@@ -29,7 +29,7 @@
 //! Additional learning resources include:
 //!
 //! - [The Rust Cookbook](https://rust-lang-nursery.github.io/rust-cookbook/web/clients.html)
-//! - [Reqwest Repositiory Examples](https://github.com/seanmonstar/reqwest/tree/master/examples
+//! - [Reqwest Repository Examples](https://github.com/seanmonstar/reqwest/tree/master/examples)
 //!
 //! ## Making a GET request
 //!
