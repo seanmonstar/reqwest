@@ -397,7 +397,7 @@ impl PercentEncoding {
             "Content-Disposition: form-data; {}{}{}",
             self.format_parameter("name", name),
             match field.file_name {
-                Some(ref file_name) => format!("; {}", self.format_parameter("filename", file_name)),
+                Some(ref file_name) => format!("; {}", self.format_filename(file_name)),
                 None => String::new(),
             },
             match field.mime {
@@ -412,6 +412,16 @@ impl PercentEncoding {
             header.extend_from_slice(v.as_bytes());
             header
         })
+    }
+
+    // According to RFC7578 Section 4.2, `filename*=` syntax is invalid.
+    // See https://github.com/seanmonstar/reqwest/issues/419.
+    fn format_filename(&self, filename: &str) -> String {
+        let legal_filename = filename.replace("\\", "\\\\")
+                                     .replace("\"", "\\\"")
+                                     .replace("\r", "\\\r")
+                                     .replace("\n", "\\\n");
+        format!("filename=\"{}\"", legal_filename)
     }
 
     fn format_parameter(&self, name: &str, value: &str) -> String {
