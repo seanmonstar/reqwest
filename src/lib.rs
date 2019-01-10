@@ -13,7 +13,7 @@
 //!
 //! - Plain bodies, [JSON](#json), [urlencoded](#forms), [multipart](multipart)
 //! - Customizable [redirect policy](#redirect-policy)
-//! - HTTP [Proxies](proxies)
+//! - HTTP [Proxies](#proxies)
 //! - Uses system-native [TLS](#tls)
 //! - Cookies (only rudimentary support, full support is TODO)
 //!
