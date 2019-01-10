@@ -26,6 +26,13 @@ matrix:
         - rust: stable
           env: FEATURES="--features hyper-011"
 
+        # android
+        - rust: stable
+          env: TARGET=aarch64-linux-android
+          install: rustup target add "$TARGET"
+          # disable default-tls feature since cross-compiling openssl is dragons
+          script: cargo build --target "$TARGET" --no-default-features
+
         # minimum version
         - rust: 1.30.0
           script: cargo build

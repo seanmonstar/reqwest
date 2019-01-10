@@ -196,6 +196,7 @@ extern crate serde_urlencoded;
 extern crate tokio;
 #[cfg_attr(feature = "default-tls", macro_use)]
 extern crate tokio_io;
+#[cfg(not(target_os = "android"))]
 extern crate trust_dns_resolver;
 extern crate url;
 extern crate uuid;
@@ -237,6 +238,7 @@ mod connect;
 mod connect_async;
 mod body;
 mod client;
+#[cfg(not(target_os = "android"))]
 mod dns;
 mod into_url;
 mod proxy;
