@@ -23,6 +23,23 @@ On Windows and macOS:
 
 Reqwest uses [rust-native-tls](https://github.com/sfackler/rust-native-tls), which will use the operating system TLS framework if available, meaning Windows and macOS. On Linux, it will use OpenSSL 1.1.
 
+## Example
+
+Fetch json
+
+```
+extern crate reqwest;
+#[macro_use] extern crate serde_json;
+
+fn main() -> Result<(), reqwest::Error> {
+    let mut reqwest_responce = reqwest::get("https://jsonplaceholder.typicode.com/todos/1").unwrap();
+    let jsonplaceholder: serde_json::Value = reqwest_responce.json().unwrap();
+    println!("{:#?}", jsonplaceholder);
+    
+    Ok(())
+}
+```
+
 ## License
 
 Licensed under either of
