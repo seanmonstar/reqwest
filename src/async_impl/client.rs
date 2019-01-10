@@ -112,7 +112,8 @@ impl ClientBuilder {
     ///
     /// # Errors
     ///
-    /// This method fails if TLS backend cannot be initialized.
+    /// This method fails if TLS backend cannot be initialized, or the resolver
+    /// cannot load the system configuration.
     pub fn build(self) -> ::Result<Client> {
         let config = self.config;
         let proxies = Arc::new(config.proxies);
@@ -208,7 +209,7 @@ impl ClientBuilder {
             }
 
             #[cfg(not(feature = "tls"))]
-            Connector::new(proxies.clone())
+            Connector::new(proxies.clone())?
         };
 
         let hyper_client = ::hyper::Client::builder()
@@ -362,13 +363,15 @@ impl Client {
     ///
     /// # Panics
     ///
-    /// This method panics if TLS backend cannot be created or
-    /// initialized. Use `Client::builder()` if you wish to handle the failure
-    /// as an `Error` instead of panicking.
+    /// This method panics if TLS backend cannot initialized, or the resolver
+    /// cannot load the system configuration.
+    ///
+    /// Use `Client::builder()` if you wish to handle the failure as an `Error`
+    /// instead of panicking.
     pub fn new() -> Client {
         ClientBuilder::new()
             .build()
-            .expect("TLS failed to initialize")
+            .expect("Client::new()")
     }
 
     /// Creates a `ClientBuilder` to configure a `Client`.
