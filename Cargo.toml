@@ -31,13 +31,15 @@ tokio-executor = "0.1.4" # a minimum version so trust-dns-resolver compiles
 tokio-io = "0.1"
 tokio-threadpool = "0.1.8" # a minimum version so tokio compiles
 tokio-timer = "0.2.6" # a minimum version so trust-dns-resolver compiles
-trust-dns-resolver = "0.10"
 url = "1.2"
 uuid = { version = "0.7", features = ["v4"] }
 hyper-rustls = { version = "0.15", optional = true }
 tokio-rustls = { version = "0.8", optional = true }
 webpki-roots = { version = "0.15", optional = true }
 rustls = { version = "0.14", features = ["dangerous_configuration"], optional = true }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+trust-dns-resolver = "0.10"
 
 [dev-dependencies]
 env_logger = "0.6"
