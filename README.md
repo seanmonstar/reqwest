@@ -27,7 +27,7 @@ Reqwest uses [rust-native-tls](https://github.com/sfackler/rust-native-tls), whi
 
 Fetch json
 
-```
+```rust
 extern crate reqwest;
 #[macro_use] extern crate serde_json;
 
