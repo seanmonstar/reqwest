@@ -1,3 +1,10 @@
+## v0.9.7
+
+### Fixes
+
+- Fix DNS resolver on Android (reverted back to `getaddrinfo`).
+- Fix sending unicode `filename`s in `multipart/form-data` requests.
+
 ## v0.9.6
 
 ### Features
