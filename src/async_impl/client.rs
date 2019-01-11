@@ -35,7 +35,7 @@ use {IntoUrl, Method, Proxy, StatusCode, Url};
 #[cfg(feature = "tls")]
 use {Certificate, Identity};
 #[cfg(feature = "tls")]
-use ::tls::{TlsBackend, inner as tls_inner};
+use ::tls::TlsBackend;
 
 static DEFAULT_USER_AGENT: &'static str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -128,32 +128,17 @@ impl ClientBuilder {
                     tls.danger_accept_invalid_certs(!config.certs_verification);
 
                     for cert in config.root_certs {
-                        let cert = match cert.inner {
-                            tls_inner::Certificate::Der(buf) =>
-                                try_!(::native_tls::Certificate::from_der(&buf)),
-                            tls_inner::Certificate::Pem(buf) =>
-                                try_!(::native_tls::Certificate::from_pem(&buf))
-                        };
-                        tls.add_root_certificate(cert);
+                        cert.add_to_native_tls(&mut tls);
                     }
 
                     if let Some(id) = config.identity {
-                        let id = match id.inner {
-                            tls_inner::Identity::Pkcs12(buf, passwd) =>
-                                try_!(::native_tls::Identity::from_pkcs12(&buf, &passwd)),
-                            #[cfg(feature = "rustls-tls")]
-                            _ => return Err(::error::from(::error::Kind::TlsIncompatible))
-                        };
-                        tls.identity(id);
+                        id.add_to_native_tls(&mut tls)?;
                     }
 
                     Connector::new_default_tls(tls, proxies.clone())?
                 },
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::Rustls => {
-                    use std::io::Cursor;
-                    use rustls::TLSError;
-                    use rustls::internal::pemfile;
                     use ::tls::NoVerifier;
 
                     let mut tls = ::rustls::ClientConfig::new();
@@ -164,44 +149,11 @@ impl ClientBuilder {
                     }
 
                     for cert in config.root_certs {
-                        match cert.inner {
-                            tls_inner::Certificate::Der(buf) => try_!(tls.root_store.add(&::rustls::Certificate(buf))
-                                .map_err(TLSError::WebPKIError)),
-                            tls_inner::Certificate::Pem(buf) => {
-                                let mut pem = Cursor::new(buf);
-                                let mut certs = try_!(pemfile::certs(&mut pem)
-                                    .map_err(|_| TLSError::General(String::from("No valid certificate was found"))));
-                                for c in certs {
-                                    try_!(tls.root_store.add(&c)
-                                        .map_err(TLSError::WebPKIError));
-                                }
-                            }
-                        }
+                        cert.add_to_rustls(&mut tls)?;
                     }
 
                     if let Some(id) = config.identity {
-                        let (key, certs) = match id.inner {
-                            tls_inner::Identity::Pem(buf) => {
-                                let mut pem = Cursor::new(buf);
-                                let mut certs = try_!(pemfile::certs(&mut pem)
-                                    .map_err(|_| TLSError::General(String::from("No valid certificate was found"))));
-                                pem.set_position(0);
-                                let mut sk = try_!(pemfile::pkcs8_private_keys(&mut pem)
-                                    .or_else(|_| {
-                                        pem.set_position(0);
-                                        pemfile::rsa_private_keys(&mut pem)
-                                    })
-                                    .map_err(|_| TLSError::General(String::from("No valid private key was found"))));
-                                if let (Some(sk), false) = (sk.pop(), certs.is_empty()) {
-                                    (sk, certs)
-                                } else {
-                                    return Err(::error::from(TLSError::General(String::from("private key or certificate not found"))));
-                                }
-                            },
-                            #[cfg(feature = "default-tls")]
-                            _ => return Err(::error::from(::error::Kind::TlsIncompatible))
-                        };
-                        tls.set_single_client_cert(certs, key);
+                        id.add_to_rustls(&mut tls)?;
                     }
 
                     Connector::new_rustls_tls(tls, proxies.clone())?
