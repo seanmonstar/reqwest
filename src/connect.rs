@@ -13,13 +13,13 @@ use bytes::BufMut;
 use std::io;
 use std::sync::Arc;
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", windows)))]
 use dns::TrustDnsResolver;
 use Proxy;
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", windows)))]
 type HttpConnector = ::hyper::client::HttpConnector<TrustDnsResolver>;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", windows))]
 type HttpConnector = ::hyper::client::HttpConnector;
 
 
@@ -74,14 +74,14 @@ impl Connector {
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", windows)))]
 fn http_connector() -> ::Result<HttpConnector> {
     TrustDnsResolver::new()
         .map(HttpConnector::new_with_resolver)
         .map_err(::error::dns_system_conf)
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", windows))]
 fn http_connector() -> ::Result<HttpConnector> {
     Ok(HttpConnector::new(4))
 }
