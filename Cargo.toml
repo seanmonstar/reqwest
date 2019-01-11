@@ -38,7 +38,7 @@ tokio-rustls = { version = "0.8", optional = true }
 webpki-roots = { version = "0.15", optional = true }
 rustls = { version = "0.14", features = ["dangerous_configuration"], optional = true }
 
-[target.'cfg(not(target_os = "android"))'.dependencies]
+[target.'cfg(not(any(target_os = "android", windows)))'.dependencies]
 trust-dns-resolver = "0.10"
 
 [dev-dependencies]
