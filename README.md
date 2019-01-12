@@ -31,12 +31,10 @@ Fetch json
 extern crate reqwest;
 #[macro_use] extern crate serde_json;
 
-fn main() -> Result<(), reqwest::Error> {
+fn main() {
     let mut reqwest_responce = reqwest::get("https://jsonplaceholder.typicode.com/todos/1").unwrap();
     let jsonplaceholder: serde_json::Value = reqwest_responce.json().unwrap();
     println!("{:#?}", jsonplaceholder);
-    
-    Ok(())
 }
 ```
 
