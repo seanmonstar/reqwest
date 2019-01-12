@@ -26,6 +26,9 @@ matrix:
         - rust: stable
           env: FEATURES="--features hyper-011"
 
+        - rust: stable
+          env: FEATURES="--features trust-dns"
+
         # android
         - rust: stable
           env: TARGET=aarch64-linux-android
