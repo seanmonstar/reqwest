@@ -1,3 +1,10 @@
+## v0.9.8
+
+### Fixes
+
+- Revert default DNS resolver to `getaddrinfo` in a threadpool. There is now a `trust-dns` optional feature to enable the Trust-DNS resolver.
+- Detect `Certificate` and `Identity` errors at construction time.
+
 ## v0.9.7
 
 ### Fixes
