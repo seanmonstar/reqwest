@@ -13,13 +13,13 @@ use bytes::BufMut;
 use std::io;
 use std::sync::Arc;
 
-#[cfg(not(any(target_os = "android", windows)))]
+#[cfg(feature = "trust-dns")]
 use dns::TrustDnsResolver;
 use Proxy;
 
-#[cfg(not(any(target_os = "android", windows)))]
+#[cfg(feature = "trust-dns")]
 type HttpConnector = ::hyper::client::HttpConnector<TrustDnsResolver>;
-#[cfg(any(target_os = "android", windows))]
+#[cfg(not(feature = "trust-dns"))]
 type HttpConnector = ::hyper::client::HttpConnector;
 
 
@@ -74,14 +74,14 @@ impl Connector {
     }
 }
 
-#[cfg(not(any(target_os = "android", windows)))]
+#[cfg(feature = "trust-dns")]
 fn http_connector() -> ::Result<HttpConnector> {
     TrustDnsResolver::new()
         .map(HttpConnector::new_with_resolver)
         .map_err(::error::dns_system_conf)
 }
 
-#[cfg(any(target_os = "android", windows))]
+#[cfg(not(feature = "trust-dns"))]
 fn http_connector() -> ::Result<HttpConnector> {
     Ok(HttpConnector::new(4))
 }
@@ -279,12 +279,14 @@ fn tunnel_eof() -> io::Error {
 #[cfg(feature = "tls")]
 #[cfg(test)]
 mod tests {
+    extern crate tokio_tcp;
+
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::thread;
     use futures::Future;
     use tokio::runtime::current_thread::Runtime;
-    use tokio::net::TcpStream;
+    use self::tokio_tcp::TcpStream;
     use super::tunnel;
     use proxy;
 

@@ -155,6 +155,8 @@
 //!   `native-tls` library to connect over HTTPS.
 //! - **default-tls-vendored**: Enables the `vendored` feature of `native-tls`.
 //! - **rustls-tls**: Provides TLS support via the `rustls` library.
+//! - **trust-dns**: Enables a trust-dns async resolver instead of default
+//!   threadpool using `getaddrinfo`.
 //! - **hyper-011**: Provides support for hyper's old typed headers.
 //!
 //!
@@ -196,7 +198,7 @@ extern crate serde_urlencoded;
 extern crate tokio;
 #[cfg_attr(feature = "default-tls", macro_use)]
 extern crate tokio_io;
-#[cfg(not(any(target_os = "android", windows)))]
+#[cfg(feature = "trust-dns")]
 extern crate trust_dns_resolver;
 extern crate url;
 extern crate uuid;
@@ -238,7 +240,7 @@ mod connect;
 mod connect_async;
 mod body;
 mod client;
-#[cfg(not(any(target_os = "android", windows)))]
+#[cfg(feature = "trust-dns")]
 mod dns;
 mod into_url;
 mod proxy;
