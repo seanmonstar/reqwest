@@ -1,7 +1,7 @@
 # reqwest
 
 [![Travis CI Status](https://travis-ci.org/seanmonstar/reqwest.svg?branch=master)](https://travis-ci.org/seanmonstar/reqwest)
-[![Appveyor CI Status](https://ci.appveyor.com/api/projects/status/9ol6jcamwdcxq9gr?svg=true)](https://ci.appveyor.com/project/seanmonstar/reqwest)
+[![Appveyor CI Status](https://ci.appveyor.com/api/projects/status/9ol6jcamwdcxq9gr/branch/master?svg=true)](https://ci.appveyor.com/project/seanmonstar/reqwest)
 [![crates.io](https://img.shields.io/crates/v/reqwest.svg)](https://crates.io/crates/reqwest)
 
 An ergonomic HTTP Client for Rust.

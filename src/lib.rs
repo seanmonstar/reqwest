@@ -1,7 +1,7 @@
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
 #![cfg_attr(test, deny(warnings))]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.9.6")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.9.8")]
 
 //! # reqwest
 //!
@@ -13,7 +13,7 @@
 //!
 //! - Plain bodies, [JSON](#json), [urlencoded](#forms), [multipart](multipart)
 //! - Customizable [redirect policy](#redirect-policy)
-//! - HTTP [Proxies](proxies)
+//! - HTTP [Proxies](#proxies)
 //! - Uses system-native [TLS](#tls)
 //! - Cookies (only rudimentary support, full support is TODO)
 //!
@@ -155,6 +155,8 @@
 //!   `native-tls` library to connect over HTTPS.
 //! - **default-tls-vendored**: Enables the `vendored` feature of `native-tls`.
 //! - **rustls-tls**: Provides TLS support via the `rustls` library.
+//! - **trust-dns**: Enables a trust-dns async resolver instead of default
+//!   threadpool using `getaddrinfo`.
 //! - **hyper-011**: Provides support for hyper's old typed headers.
 //!
 //!
@@ -196,6 +198,7 @@ extern crate serde_urlencoded;
 extern crate tokio;
 #[cfg_attr(feature = "default-tls", macro_use)]
 extern crate tokio_io;
+#[cfg(feature = "trust-dns")]
 extern crate trust_dns_resolver;
 extern crate url;
 extern crate uuid;
@@ -237,6 +240,7 @@ mod connect;
 mod connect_async;
 mod body;
 mod client;
+#[cfg(feature = "trust-dns")]
 mod dns;
 mod into_url;
 mod proxy;

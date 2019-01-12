@@ -75,7 +75,8 @@ impl ClientBuilder {
     ///
     /// # Errors
     ///
-    /// This method fails if native TLS backend cannot be initialized.
+    /// This method fails if TLS backend cannot be initialized, or the resolver
+    /// cannot load the system configuration.
     pub fn build(self) -> ::Result<Client> {
         ClientHandle::new(self).map(|handle| Client {
             inner: handle,
@@ -300,13 +301,15 @@ impl Client {
     ///
     /// # Panic
     ///
-    /// This method panics if native TLS backend cannot be created or
-    /// initialized. Use `Client::builder()` if you wish to handle the failure
-    /// as an `Error` instead of panicking.
+    /// This method panics if TLS backend cannot initialized, or the resolver
+    /// cannot load the system configuration.
+    ///
+    /// Use `Client::builder()` if you wish to handle the failure as an `Error`
+    /// instead of panicking.
     pub fn new() -> Client {
         ClientBuilder::new()
             .build()
-            .expect("Client failed to initialize")
+            .expect("Client::new()")
     }
 
     /// Creates a `ClientBuilder` to configure a `Client`.

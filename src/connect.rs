@@ -13,10 +13,14 @@ use bytes::BufMut;
 use std::io;
 use std::sync::Arc;
 
+#[cfg(feature = "trust-dns")]
 use dns::TrustDnsResolver;
 use Proxy;
 
+#[cfg(feature = "trust-dns")]
 type HttpConnector = ::hyper::client::HttpConnector<TrustDnsResolver>;
+#[cfg(not(feature = "trust-dns"))]
+type HttpConnector = ::hyper::client::HttpConnector;
 
 
 pub(crate) struct Connector {
@@ -35,19 +39,19 @@ enum Inner {
 
 impl Connector {
     #[cfg(not(feature = "tls"))]
-    pub(crate) fn new(proxies: Arc<Vec<Proxy>>) -> Connector {
-        let http = http_connector();
-        Connector {
+    pub(crate) fn new(proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
+        let http = http_connector()?;
+        Ok(Connector {
             proxies,
             inner: Inner::Http(http)
-        }
+        })
     }
 
     #[cfg(feature = "default-tls")]
     pub(crate) fn new_default_tls(tls: TlsConnectorBuilder, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
         let tls = try_!(tls.build());
 
-        let mut http = http_connector();
+        let mut http = http_connector()?;
         http.enforce_http(false);
         let http = ::hyper_tls::HttpsConnector::from((http, tls.clone()));
 
@@ -59,7 +63,7 @@ impl Connector {
 
     #[cfg(feature = "rustls-tls")]
     pub(crate) fn new_rustls_tls(tls: rustls::ClientConfig, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
-        let mut http = http_connector();
+        let mut http = http_connector()?;
         http.enforce_http(false);
         let http = ::hyper_rustls::HttpsConnector::from((http, tls.clone()));
 
@@ -70,9 +74,16 @@ impl Connector {
     }
 }
 
-fn http_connector() -> HttpConnector {
-    let http = HttpConnector::new_with_resolver(TrustDnsResolver::new());
-    http
+#[cfg(feature = "trust-dns")]
+fn http_connector() -> ::Result<HttpConnector> {
+    TrustDnsResolver::new()
+        .map(HttpConnector::new_with_resolver)
+        .map_err(::error::dns_system_conf)
+}
+
+#[cfg(not(feature = "trust-dns"))]
+fn http_connector() -> ::Result<HttpConnector> {
+    Ok(HttpConnector::new(4))
 }
 
 impl Connect for Connector {
@@ -268,12 +279,14 @@ fn tunnel_eof() -> io::Error {
 #[cfg(feature = "tls")]
 #[cfg(test)]
 mod tests {
+    extern crate tokio_tcp;
+
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::thread;
     use futures::Future;
     use tokio::runtime::current_thread::Runtime;
-    use tokio::net::TcpStream;
+    use self::tokio_tcp::TcpStream;
     use super::tunnel;
     use proxy;
 

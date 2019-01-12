@@ -1,3 +1,17 @@
+## v0.9.8
+
+### Fixes
+
+- Revert default DNS resolver to `getaddrinfo` in a threadpool. There is now a `trust-dns` optional feature to enable the Trust-DNS resolver.
+- Detect `Certificate` and `Identity` errors at construction time.
+
+## v0.9.7
+
+### Fixes
+
+- Fix DNS resolver on Android (reverted back to `getaddrinfo`).
+- Fix sending unicode `filename`s in `multipart/form-data` requests.
+
 ## v0.9.6
 
 ### Features

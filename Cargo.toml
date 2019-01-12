@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.9.6" # remember to update html_root_url
+version = "0.9.8" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 repository = "https://github.com/seanmonstar/reqwest"
@@ -31,7 +31,7 @@ tokio-executor = "0.1.4" # a minimum version so trust-dns-resolver compiles
 tokio-io = "0.1"
 tokio-threadpool = "0.1.8" # a minimum version so tokio compiles
 tokio-timer = "0.2.6" # a minimum version so trust-dns-resolver compiles
-trust-dns-resolver = "0.10"
+trust-dns-resolver = { version = "0.10", optional = true }
 url = "1.2"
 uuid = { version = "0.7", features = ["v4"] }
 hyper-rustls = { version = "0.15", optional = true }
@@ -42,6 +42,7 @@ rustls = { version = "0.14", features = ["dangerous_configuration"], optional = 
 [dev-dependencies]
 env_logger = "0.6"
 serde_derive = "1.0"
+tokio-tcp = "0.1"
 
 [features]
 default = ["default-tls"]
@@ -52,6 +53,8 @@ default-tls = ["hyper-tls", "native-tls", "tls"]
 default-tls-vendored = ["default-tls", "native-tls/vendored"]
 
 rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
+
+trust-dns = ["trust-dns-resolver"]
 
 hyper-011 = ["hyper-old-types"]
 

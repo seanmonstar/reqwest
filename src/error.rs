@@ -140,6 +140,8 @@ impl Error {
             Kind::NativeTls(ref e) => Some(e),
             #[cfg(feature = "rustls-tls")]
             Kind::Rustls(ref e) => Some(e),
+            #[cfg(feature = "trust-dns")]
+            Kind::DnsSystemConf(ref e) => Some(e),
             Kind::Io(ref e) => Some(e),
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
@@ -237,6 +239,10 @@ impl fmt::Display for Error {
             Kind::NativeTls(ref e) => fmt::Display::fmt(e, f),
             #[cfg(feature = "rustls-tls")]
             Kind::Rustls(ref e) => fmt::Display::fmt(e, f),
+            #[cfg(feature = "trust-dns")]
+            Kind::DnsSystemConf(ref e) => {
+                write!(f, "failed to load DNS system conf: {}", e)
+            },
             Kind::Io(ref e) => fmt::Display::fmt(e, f),
             Kind::UrlEncoded(ref e) => fmt::Display::fmt(e, f),
             Kind::Json(ref e) => fmt::Display::fmt(e, f),
@@ -268,6 +274,8 @@ impl StdError for Error {
             Kind::NativeTls(ref e) => e.description(),
             #[cfg(feature = "rustls-tls")]
             Kind::Rustls(ref e) => e.description(),
+            #[cfg(feature = "trust-dns")]
+            Kind::DnsSystemConf(_) => "failed to load DNS system conf",
             Kind::Io(ref e) => e.description(),
             Kind::UrlEncoded(ref e) => e.description(),
             Kind::Json(ref e) => e.description(),
@@ -291,6 +299,8 @@ impl StdError for Error {
             Kind::NativeTls(ref e) => e.cause(),
             #[cfg(feature = "rustls-tls")]
             Kind::Rustls(ref e) => e.cause(),
+            #[cfg(feature = "trust-dns")]
+            Kind::DnsSystemConf(ref e) => e.cause(),
             Kind::Io(ref e) => e.cause(),
             Kind::UrlEncoded(ref e) => e.cause(),
             Kind::Json(ref e) => e.cause(),
@@ -316,6 +326,8 @@ pub(crate) enum Kind {
     NativeTls(::native_tls::Error),
     #[cfg(feature = "rustls-tls")]
     Rustls(::rustls::TLSError),
+    #[cfg(feature = "trust-dns")]
+    DnsSystemConf(io::Error),
     Io(io::Error),
     UrlEncoded(::serde_urlencoded::ser::Error),
     Json(::serde_json::Error),
@@ -487,6 +499,11 @@ pub(crate) fn server_error(url: Url, status: StatusCode) -> Error {
 
 pub(crate) fn url_bad_scheme(url: Url) -> Error {
     Error::new(Kind::UrlBadScheme, Some(url))
+}
+
+#[cfg(feature = "trust-dns")]
+pub(crate) fn dns_system_conf(io: io::Error) -> Error {
+    Error::new(Kind::DnsSystemConf(io), None)
 }
 
 #[cfg(test)]
