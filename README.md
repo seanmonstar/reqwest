@@ -3,13 +3,29 @@
 [![Travis CI Status](https://travis-ci.org/seanmonstar/reqwest.svg?branch=master)](https://travis-ci.org/seanmonstar/reqwest)
 [![Appveyor CI Status](https://ci.appveyor.com/api/projects/status/9ol6jcamwdcxq9gr/branch/master?svg=true)](https://ci.appveyor.com/project/seanmonstar/reqwest)
 [![crates.io](https://img.shields.io/crates/v/reqwest.svg)](https://crates.io/crates/reqwest)
+[![Documentation](https://docs.rs/reqwest/badge.svg)](https://docs.rs/reqwest)
 
-An ergonomic HTTP Client for Rust.
+An ergonomic, batteries-included HTTP Client for Rust.
 
-Built on top of [hyper](http://hyper.rs), with a batteries-included mindset.
-
-- [Documentation](https://docs.rs/reqwest)
+- Plain bodies, JSON, urlencoded, multipart
+- Customizable redirect policy
+- HTTP Proxies
+- HTTPS via system-native TLS (or optionally, rustls)
 - [Changelog](CHANGELOG.md)
+
+## Example
+
+```rust
+extern crate reqwest;
+
+use std::collections::HashMap;
+
+fn main() -> Result<(), Box<std::error::Error> {
+    let res: HashMap<String, String> = reqwest::get("https://httpbin.org/ip")?
+        .json()?;
+    println!("{:#?}", resp);
+}
+```
 
 ## Requirements
 
@@ -23,20 +39,6 @@ On Windows and macOS:
 
 Reqwest uses [rust-native-tls](https://github.com/sfackler/rust-native-tls), which will use the operating system TLS framework if available, meaning Windows and macOS. On Linux, it will use OpenSSL 1.1.
 
-## Example
-
-Fetch json
-
-```rust
-extern crate reqwest;
-#[macro_use] extern crate serde_json;
-
-fn main() {
-    let mut reqwest_responce = reqwest::get("https://jsonplaceholder.typicode.com/todos/1").unwrap();
-    let jsonplaceholder: serde_json::Value = reqwest_responce.json().unwrap();
-    println!("{:#?}", jsonplaceholder);
-}
-```
 
 ## License
 
