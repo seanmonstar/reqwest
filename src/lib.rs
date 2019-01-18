@@ -236,8 +236,6 @@ mod error;
 
 mod async_impl;
 mod connect;
-#[cfg(feature = "default-tls")]
-mod connect_async;
 mod body;
 mod client;
 #[cfg(feature = "trust-dns")]
