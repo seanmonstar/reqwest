@@ -30,7 +30,7 @@ use bytes::{Buf, BufMut, BytesMut};
 use libflate::non_blocking::gzip;
 use futures::{Async, Future, Poll, Stream};
 use hyper::{HeaderMap};
-use hyper::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING, HeaderValue};
+use hyper::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
 
 use super::{Body, Chunk};
 use error;
@@ -118,17 +118,17 @@ impl Decoder {
             content_encoding_gzip = headers
                 .get_all(CONTENT_ENCODING)
                 .iter()
-                .fold(false, |acc, enc| acc || enc == HeaderValue::from_static("gzip"));
+                .fold(false, |acc, enc| acc || enc == "gzip");
             content_encoding_gzip ||
             headers
                 .get_all(TRANSFER_ENCODING)
                 .iter()
-                .fold(false, |acc, enc| acc || enc == HeaderValue::from_static("gzip"))
+                .fold(false, |acc, enc| acc || enc == "gzip")
         };
         if is_gzip {
             if let Some(content_length) = headers.get(CONTENT_LENGTH) {
                 if content_length == "0" {
-                    warn!("GZipped response with content-length of 0");
+                    warn!("gzip response with content-length of 0");
                     is_gzip = false;
                 }
             }

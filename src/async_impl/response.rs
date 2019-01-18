@@ -7,6 +7,7 @@ use futures::{Async, Future, Poll, Stream};
 use futures::stream::Concat2;
 use hyper::{HeaderMap, StatusCode, Version};
 use hyper::client::connect::HttpInfo;
+use hyper::header::{CONTENT_LENGTH};
 use serde::de::DeserializeOwned;
 use serde_json;
 use url::Url;
@@ -49,19 +50,6 @@ impl Response {
         }
     }
 
-    /// Get the final `Url` of this `Response`.
-    #[inline]
-    pub fn url(&self) -> &Url {
-        &self.url
-    }
-
-    /// Get the remote address used to get this `Response`.
-    pub fn remote_addr(&self) -> Option<SocketAddr> {
-        self
-            .extensions
-            .get::<HttpInfo>()
-            .map(|info| info.remote_addr())
-    }
 
     /// Get the `StatusCode` of this `Response`.
     #[inline]
@@ -79,6 +67,35 @@ impl Response {
     #[inline]
     pub fn headers_mut(&mut self) -> &mut HeaderMap {
         &mut self.headers
+    }
+
+    /// Get the final `Url` of this `Response`.
+    #[inline]
+    pub fn url(&self) -> &Url {
+        &self.url
+    }
+
+    /// Get the remote address used to get this `Response`.
+    pub fn remote_addr(&self) -> Option<SocketAddr> {
+        self
+            .extensions
+            .get::<HttpInfo>()
+            .map(|info| info.remote_addr())
+    }
+
+    /// Get the content-length of this response, if known.
+    ///
+    /// Reasons it may not be known:
+    ///
+    /// - The server didn't send a `content-length` header.
+    /// - The response is gzipped and automatically decoded (thus changing
+    ///   the actual decoded length).
+    pub fn content_length(&self) -> Option<u64> {
+        self
+            .headers()
+            .get(CONTENT_LENGTH)
+            .and_then(|ct_len| ct_len.to_str().ok())
+            .and_then(|ct_len| ct_len.parse().ok())
     }
 
     /// Consumes the response, returning the body

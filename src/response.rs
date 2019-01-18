@@ -46,6 +46,88 @@ impl Response {
         }
     }
 
+    /// Get the `StatusCode` of this `Response`.
+    ///
+    /// # Examples
+    ///
+    /// Checking for general status class:
+    ///
+    /// ```rust
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let resp = reqwest::get("http://httpbin.org/get")?;
+    /// if resp.status().is_success() {
+    ///     println!("success!");
+    /// } else if resp.status().is_server_error() {
+    ///     println!("server error!");
+    /// } else {
+    ///     println!("Something else happened. Status: {:?}", resp.status());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// Checking for specific status codes:
+    ///
+    /// ```rust
+    /// use reqwest::Client;
+    /// use reqwest::StatusCode;
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let client = Client::new();
+    ///
+    /// let resp = client.post("http://httpbin.org/post")
+    ///     .body("possibly too large")
+    ///     .send()?;
+    ///
+    /// match resp.status() {
+    ///     StatusCode::OK => println!("success!"),
+    ///     StatusCode::PAYLOAD_TOO_LARGE => {
+    ///         println!("Request payload is too large!");
+    ///     }
+    ///     s => println!("Received response status: {:?}", s),
+    /// };
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[inline]
+    pub fn status(&self) -> StatusCode {
+        self.inner.status()
+    }
+
+    /// Get the `Headers` of this `Response`.
+    ///
+    /// # Example
+    ///
+    /// Saving an etag when caching a file:
+    ///
+    /// ```
+    /// use reqwest::Client;
+    /// use reqwest::header::ETAG;
+    ///
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let client = Client::new();
+    ///
+    /// let mut resp = client.get("http://httpbin.org/cache").send()?;
+    /// if resp.status().is_success() {
+    ///     if let Some(etag) = resp.headers().get(ETAG) {
+    ///         std::fs::write("etag", etag.as_bytes());
+    ///     }
+    ///     let mut file = std::fs::File::create("file")?;
+    ///     resp.copy_to(&mut file)?;
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[inline]
+    pub fn headers(&self) -> &HeaderMap {
+        self.inner.headers()
+    }
+
+    /// Get the HTTP `Version` of this `Response`.
+    #[inline]
+    pub fn version(&self) -> Version {
+        self.inner.version()
+    }
+
     /// Get the final `Url` of this `Response`.
     ///
     /// # Example
@@ -75,90 +157,17 @@ impl Response {
     /// ```
     pub fn remote_addr(&self) -> Option<SocketAddr> {
         self.inner.remote_addr()
-
     }
 
-    /// Get the `StatusCode` of this `Response`.
+    /// Get the content-length of the response, if it is known.
     ///
-    /// # Examples
+    /// Reasons it may not be known:
     ///
-    /// ```rust
-    /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let resp = reqwest::get("http://httpbin.org/get")?;
-    /// if resp.status().is_success() {
-    ///     println!("success!");
-    /// } else if resp.status().is_server_error() {
-    ///     println!("server error!");
-    /// } else {
-    ///     println!("Something else happened. Status: {:?}", resp.status());
-    /// }
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// ```rust
-    /// use reqwest::Client;
-    /// use reqwest::StatusCode;
-    /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let client = Client::new();
-    /// let resp = client.post("http://httpbin.org/post")
-    ///             .body("possibly too large")
-    ///             .send()?;
-    /// match resp.status() {
-    ///     StatusCode::OK => println!("success!"),
-    ///     StatusCode::PAYLOAD_TOO_LARGE => {
-    ///         println!("Request payload is too large!");
-    ///     }
-    ///     s => println!("Received response status: {:?}", s),
-    /// };
-    /// # Ok(())
-    /// # }
-    /// ```
-    #[inline]
-    pub fn status(&self) -> StatusCode {
-        self.inner.status()
-    }
-
-    /// Get the `Headers` of this `Response`.
-    ///
-    /// # Example
-    ///
-    /// Checking the `Content-Length` header before reading the response body.
-    ///
-    /// ```rust
-    /// # use std::io::{Read, Write};
-    /// # use reqwest::Client;
-    /// # use reqwest::header::CONTENT_LENGTH;
-    /// #
-    /// # fn run() -> Result<(), Box<::std::error::Error>> {
-    /// let client = Client::new();
-    /// let mut resp = client.head("http://httpbin.org/bytes/3000").send()?;
-    /// if resp.status().is_success() {
-    ///     let len = resp.headers().get(CONTENT_LENGTH)
-    ///                 .and_then(|ct_len| ct_len.to_str().ok())
-    ///                 .and_then(|ct_len| ct_len.parse().ok())
-    ///                 .unwrap_or(0);
-    ///     // limit 1mb response
-    ///     if len <= 1_000_000 {
-    ///         let mut buf = Vec::with_capacity(len as usize);
-    ///         let mut resp = reqwest::get("http://httpbin.org/bytes/3000")?;
-    ///         if resp.status().is_success() {
-    ///             ::std::io::copy(&mut resp, &mut buf)?;
-    ///         }
-    ///     }
-    /// }
-    /// # Ok(())
-    /// # }
-    /// ```
-    #[inline]
-    pub fn headers(&self) -> &HeaderMap {
-        self.inner.headers()
-    }
-
-    /// Get the HTTP `Version` of this `Response`.
-    #[inline]
-    pub fn version(&self) -> Version {
-        self.inner.version()
+    /// - The server didn't send a `content-length` header.
+    /// - The response is gzipped and automatically decoded (thus changing
+    ///   the actual decoded length).
+    pub fn content_length(&self) -> Option<u64> {
+        self.inner.content_length()
     }
 
     /// Try and deserialize the response body as JSON using `serde`.
