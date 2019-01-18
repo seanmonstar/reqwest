@@ -142,6 +142,10 @@ impl ClientBuilder {
                     use ::tls::NoVerifier;
 
                     let mut tls = ::rustls::ClientConfig::new();
+                    tls.set_protocols(&[
+                        "h2".into(),
+                        "http/1.1".into(),
+                    ]);
                     tls.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
 
                     if !config.certs_verification {
