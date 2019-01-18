@@ -75,6 +75,7 @@ struct Config {
     identity: Option<Identity>,
     #[cfg(feature = "tls")]
     tls: TlsBackend,
+    http2_only: bool,
 }
 
 impl ClientBuilder {
@@ -104,6 +105,7 @@ impl ClientBuilder {
                 identity: None,
                 #[cfg(feature = "tls")]
                 tls: TlsBackend::default(),
+                http2_only: false,
             },
         }
     }
@@ -142,10 +144,14 @@ impl ClientBuilder {
                     use ::tls::NoVerifier;
 
                     let mut tls = ::rustls::ClientConfig::new();
-                    tls.set_protocols(&[
-                        "h2".into(),
-                        "http/1.1".into(),
-                    ]);
+                    if config.http2_only {
+                        tls.set_protocols(&["h2".into()]);
+                    } else {
+                        tls.set_protocols(&[
+                            "h2".into(),
+                            "http/1.1".into(),
+                        ]);
+                    }
                     tls.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
 
                     if !config.certs_verification {
@@ -168,8 +174,11 @@ impl ClientBuilder {
             Connector::new(proxies.clone())?
         };
 
-        let hyper_client = ::hyper::Client::builder()
-            .build(connector);
+        let mut builder = ::hyper::Client::builder();
+        if config.http2_only {
+            builder.http2_only(true);
+        }
+        let hyper_client = builder.build(connector);
 
         let proxies_maybe_http_auth = proxies
             .iter()
@@ -302,6 +311,12 @@ impl ClientBuilder {
     /// Set a timeout for both the read and write operations of a client.
     pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
         self.config.timeout = Some(timeout);
+        self
+    }
+
+    /// Only use HTTP/2.
+    pub fn h2_prior_knowledge(mut self) -> ClientBuilder {
+        self.config.http2_only = true;
         self
     }
 
