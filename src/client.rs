@@ -293,6 +293,19 @@ impl ClientBuilder {
         self.inner = func(self.inner);
         self
     }
+
+    /// Only use HTTP/2.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let client = reqwest::Client::builder()
+    ///     .h2_prior_knowledge()
+    ///     .build().unwrap();
+    /// ```
+    pub fn h2_prior_knowledge(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.h2_prior_knowledge())
+    }
 }
 
 
