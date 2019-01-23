@@ -1,4 +1,41 @@
 //! multipart/form-data
+//!
+//! To send a `multipart/form-data` body, a [`Form`](Form) is built up, adding
+//! fields or customized [`Part`](Part)s, and then calling the
+//! [`multipart`][builder] method on the `RequestBuilder`.
+//!
+//! # Example
+//!
+//! ```
+//! use reqwest::multipart;
+//!
+//! # fn run() -> Result<(), Box<::std::error::Error>> {
+//! let form = multipart::Form::new()
+//!     // Adding just a simple text field...
+//!     .text("username", "seanmonstar")
+//!     // And a file...
+//!     .file("photo", "/path/to/photo.png")?;
+//!
+//! // Customize all the details of a Part if needed...
+//! let bio = multipart::Part::text("hallo peeps")
+//!     .file_name("bio.txt")
+//!     .mime_str("text/plain")?;
+//!
+//! // Add the custom part to our form...
+//! let form = form.part("biography", bio);
+//!
+//! // And finally, send the form
+//! let client = reqwest::Client::new();
+//! let resp = client
+//!     .post("http://localhost:8080/user")
+//!     .multipart(form)
+//!     .send()?;
+//! # Ok(())
+//! # }
+//! # fn main() {}
+//! ```
+//!
+//! [builder]: ../struct.RequestBuilder.html#method.multipart
 use std::borrow::Cow;
 use std::fmt;
 use std::fs::File;
