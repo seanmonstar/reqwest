@@ -1,3 +1,11 @@
+## v0.9.9
+
+### Features
+
+- Add `ClientBuilder::h2_prior_knowledge()` option to force HTTP2.
+- Add `Response::content_length()` to get the content-length of a response.
+- Enable ALPN h2 with the rustls-tls backend.
+
 ## v0.9.8
 
 ### Fixes
