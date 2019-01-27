@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<std::error::Error>> {
 
     println!("GET https://www.rust-lang.org");
 
-    let mut res = reqwest::get("https://www.rust-lang.org/en-US/")?;
+    let mut res = reqwest::get("https://www.rust-lang.org/")?;
 
     println!("Status: {}", res.status());
     println!("Headers:\n{:?}", res.headers());
