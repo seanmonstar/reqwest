@@ -12,6 +12,7 @@ use serde::de::DeserializeOwned;
 use serde_json;
 use url::Url;
 use http;
+use tokio_threadpool::blocking;
 
 use super::Decoder;
 use super::body::Body;
@@ -209,9 +210,16 @@ impl<T: DeserializeOwned> Future for Json<T> {
     type Item = T;
     type Error = ::Error;
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+
         let bytes = try_ready!(self.concat.poll());
-        let t = try_!(serde_json::from_slice(&bytes));
-        Ok(Async::Ready(t))
+         let res = try_ready!(blocking(|| {
+           serde_json::from_slice(&bytes).map_err(::error::from)
+        }).map_err(::error::from));
+        
+        match res {
+            Ok(val) => Ok(Async::Ready(val)),
+            Err(err) => Err(err),
+        }
     }
 }
 

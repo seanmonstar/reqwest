@@ -150,6 +150,7 @@ impl Error {
             Kind::RedirectLoop |
             Kind::ClientError(_) |
             Kind::ServerError(_) => None,
+            Kind::TokioBlocking(ref e) => Some(e),
         }
     }
 
@@ -255,7 +256,9 @@ impl fmt::Display for Error {
             Kind::ServerError(ref code) => {
                 f.write_str("Server Error: ")?;
                 fmt::Display::fmt(code, f)
-            }
+            },
+            Kind::TokioBlocking(ref e) => fmt::Display::fmt(e, f),
+
         }
     }
 }
@@ -283,6 +286,7 @@ impl StdError for Error {
             Kind::RedirectLoop => "Infinite redirect loop",
             Kind::ClientError(_) => "Client Error",
             Kind::ServerError(_) => "Server Error",
+            Kind::TokioBlocking(ref e) => e.description(),
         }
     }
 
@@ -309,6 +313,7 @@ impl StdError for Error {
             Kind::RedirectLoop |
             Kind::ClientError(_) |
             Kind::ServerError(_) => None,
+            Kind::TokioBlocking(ref e) => e.cause(),
         }
     }
 }
@@ -335,6 +340,7 @@ pub(crate) enum Kind {
     RedirectLoop,
     ClientError(StatusCode),
     ServerError(StatusCode),
+    TokioBlocking(tokio_threadpool::BlockingError)
 }
 
 
@@ -408,6 +414,12 @@ where T: Into<Kind> {
             ::wait::Waited::TimedOut =>  io_timeout().into(),
             ::wait::Waited::Err(e) => e.into(),
         }
+    }
+}
+
+impl From<tokio_threadpool::BlockingError> for Kind {
+    fn from(err: tokio_threadpool::BlockingError) -> Kind {
+        Kind::TokioBlocking(err)
     }
 }
 

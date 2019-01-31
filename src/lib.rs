@@ -202,6 +202,7 @@ extern crate tokio_io;
 extern crate trust_dns_resolver;
 extern crate url;
 extern crate uuid;
+extern crate tokio_threadpool;
 
 #[cfg(feature = "rustls-tls")]
 extern crate hyper_rustls;
