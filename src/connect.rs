@@ -3,6 +3,7 @@ use http::uri::Scheme;
 use hyper::client::connect::{Connect, Connected, Destination};
 use tokio_io::{AsyncRead, AsyncWrite};
 
+
 #[cfg(feature = "default-tls")]
 use native_tls::{TlsConnector, TlsConnectorBuilder};
 #[cfg(feature = "tls")]
@@ -12,6 +13,7 @@ use bytes::BufMut;
 
 use std::io;
 use std::sync::Arc;
+use std::net::IpAddr;
 
 #[cfg(feature = "trust-dns")]
 use dns::TrustDnsResolver;
@@ -71,6 +73,14 @@ impl Connector {
             proxies,
             inner: Inner::RustlsTls(http, Arc::new(tls))
         })
+    }
+
+    pub(crate) fn local_address(&self, _addr: Option<IpAddr>) {
+        match self.inner {
+        #[cfg(not(feature = "tls"))]
+           Inner::Http(http) => http.set_local_address(addr),
+            _ => ()
+        };
     }
 }
 

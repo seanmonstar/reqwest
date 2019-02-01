@@ -1,6 +1,7 @@
 use std::{fmt, str};
 use std::sync::Arc;
 use std::time::Duration;
+use std::net::IpAddr;
 
 use bytes::Bytes;
 use futures::{Async, Future, Poll};
@@ -76,6 +77,7 @@ struct Config {
     #[cfg(feature = "tls")]
     tls: TlsBackend,
     http2_only: bool,
+    local_address: Option<IpAddr>,
 }
 
 impl ClientBuilder {
@@ -106,6 +108,7 @@ impl ClientBuilder {
                 #[cfg(feature = "tls")]
                 tls: TlsBackend::default(),
                 http2_only: false,
+                local_address: None,
             },
         }
     }
@@ -178,6 +181,8 @@ impl ClientBuilder {
         if config.http2_only {
             builder.http2_only(true);
         }
+        connector.local_address(config.local_address);
+
         let hyper_client = builder.build(connector);
 
         let proxies_maybe_http_auth = proxies
@@ -323,6 +328,12 @@ impl ClientBuilder {
     #[doc(hidden)]
     #[deprecated(note = "DNS no longer uses blocking threads")]
     pub fn dns_threads(self, _threads: usize) -> ClientBuilder {
+        self
+    }
+
+    /// Bind to a local IP Address
+    pub fn local_address(mut self, addr: Option<IpAddr>) -> ClientBuilder {
+        self.config.local_address = addr;
         self
     }
 }
