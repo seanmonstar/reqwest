@@ -46,7 +46,7 @@ impl Connector {
         T: Into<Option<IpAddr>>
     {
 
-        let http = http_connector()?;
+        let mut http = http_connector()?;
         http.set_local_address(local_addr.into());
         Ok(Connector {
             proxies,
