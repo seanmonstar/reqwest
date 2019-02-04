@@ -41,8 +41,13 @@ enum Inner {
 
 impl Connector {
     #[cfg(not(feature = "tls"))]
-    pub(crate) fn new(proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
+    pub(crate) fn new<T>(proxies: Arc<Vec<Proxy>>, local_addr: T) -> ::Result<Connector>
+    where
+        T: Into<Option<IpAddr>>
+    {
+
         let http = http_connector()?;
+        http.set_local_address(local_addr);
         Ok(Connector {
             proxies,
             inner: Inner::Http(http)
@@ -50,10 +55,17 @@ impl Connector {
     }
 
     #[cfg(feature = "default-tls")]
-    pub(crate) fn new_default_tls(tls: TlsConnectorBuilder, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
+    pub(crate) fn new_default_tls<T>(
+        tls: TlsConnectorBuilder,
+        proxies: Arc<Vec<Proxy>>,
+        local_addr: T) -> ::Result<Connector>
+        where
+            T: Into<Option<IpAddr>>,
+    {
         let tls = try_!(tls.build());
 
         let mut http = http_connector()?;
+        http.set_local_address(local_addr.into());
         http.enforce_http(false);
         let http = ::hyper_tls::HttpsConnector::from((http, tls.clone()));
 
@@ -64,8 +76,15 @@ impl Connector {
     }
 
     #[cfg(feature = "rustls-tls")]
-    pub(crate) fn new_rustls_tls(tls: rustls::ClientConfig, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
+    pub(crate) fn new_rustls_tls<T>(
+        tls: rustls::ClientConfig,
+        proxies: Arc<Vec<Proxy>>,
+        local_addr: T) -> ::Result<Connector>
+        where
+            T: Into<Option<IpAddr>>,
+    {
         let mut http = http_connector()?;
+        http.set_local_address(local_addr);
         http.enforce_http(false);
         let http = ::hyper_rustls::HttpsConnector::from((http, tls.clone()));
 
@@ -73,14 +92,6 @@ impl Connector {
             proxies,
             inner: Inner::RustlsTls(http, Arc::new(tls))
         })
-    }
-
-    pub(crate) fn local_address(&self, _addr: Option<IpAddr>) {
-        match self.inner {
-        #[cfg(not(feature = "tls"))]
-           Inner::Http(http) => http.set_local_address(addr),
-            _ => ()
-        };
     }
 }
 

@@ -313,13 +313,16 @@ impl ClientBuilder {
     /// # Example
     ///
     /// ```
-    /// use std::net::Ipv4Addr;
-    /// let local_addr = Ipv4Addr::new(12, 4, 1, 8);
+    /// use std::net::IpAddr;
+    /// let local_addr = IpAddr::from([12, 4, 1, 8]);
     /// let client = reqwest::Client::builder()
-    ///     .local_address(Some(local_addr.into()))
+    ///     .local_address(local_addr)
     ///     .build().unwrap();
     /// ```
-    pub fn local_address(self, addr: Option<IpAddr>) -> ClientBuilder {
+    pub fn local_address<T>(self, addr: T) -> ClientBuilder
+    where
+        T: Into<Option<IpAddr>>,
+    {
         self.with_inner(move |inner| inner.local_address(addr))
     }
 }

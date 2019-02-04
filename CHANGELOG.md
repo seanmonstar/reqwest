@@ -5,7 +5,6 @@
 - Add `ClientBuilder::h2_prior_knowledge()` option to force HTTP2.
 - Add `Response::content_length()` to get the content-length of a response.
 - Enable ALPN h2 with the rustls-tls backend.
-- Add `ClientBuilder::local_address` option to bind to a local IP address
 
 ## v0.9.8
 

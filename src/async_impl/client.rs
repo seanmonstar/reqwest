@@ -140,7 +140,7 @@ impl ClientBuilder {
                         id.add_to_native_tls(&mut tls)?;
                     }
 
-                    Connector::new_default_tls(tls, proxies.clone())?
+                    Connector::new_default_tls(tls, proxies.clone(), config.local_address)?
                 },
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::Rustls => {
@@ -169,19 +169,18 @@ impl ClientBuilder {
                         id.add_to_rustls(&mut tls)?;
                     }
 
-                    Connector::new_rustls_tls(tls, proxies.clone())?
+                    Connector::new_rustls_tls(tls, proxies.clone(), config.local_address)?
                 }
             }
 
             #[cfg(not(feature = "tls"))]
-            Connector::new(proxies.clone())?
+            Connector::new(proxies.clone(), config.local_address)?
         };
 
         let mut builder = ::hyper::Client::builder();
         if config.http2_only {
             builder.http2_only(true);
         }
-        connector.local_address(config.local_address);
 
         let hyper_client = builder.build(connector);
 
@@ -332,8 +331,11 @@ impl ClientBuilder {
     }
 
     /// Bind to a local IP Address
-    pub fn local_address(mut self, addr: Option<IpAddr>) -> ClientBuilder {
-        self.config.local_address = addr;
+    pub fn local_address<T>(mut self, addr: T) -> ClientBuilder
+    where
+        T: Into<Option<IpAddr>>,
+    {
+        self.config.local_address = addr.into();
         self
     }
 }
