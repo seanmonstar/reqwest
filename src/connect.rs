@@ -47,7 +47,7 @@ impl Connector {
     {
 
         let http = http_connector()?;
-        http.set_local_address(local_addr);
+        http.set_local_address(local_addr.into());
         Ok(Connector {
             proxies,
             inner: Inner::Http(http)
@@ -84,7 +84,7 @@ impl Connector {
             T: Into<Option<IpAddr>>,
     {
         let mut http = http_connector()?;
-        http.set_local_address(local_addr);
+        http.set_local_address(local_addr.into());
         http.enforce_http(false);
         let http = ::hyper_rustls::HttpsConnector::from((http, tls.clone()));
 
