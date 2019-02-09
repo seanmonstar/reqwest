@@ -361,6 +361,7 @@ fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>, req: &Request
         .field("headers", &req.headers)
 }
 
+/*
 pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
 
     // IntoIter of HeaderMap yields (Option<HeaderName>, HeaderValue).
@@ -388,6 +389,7 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
         }
     }
 }
+*/
 
 #[cfg(test)]
 mod tests {
