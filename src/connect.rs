@@ -3,6 +3,7 @@ use http::uri::Scheme;
 use hyper::client::connect::{Connect, Connected, Destination};
 use tokio_io::{AsyncRead, AsyncWrite};
 
+
 #[cfg(feature = "default-tls")]
 use native_tls::{TlsConnector, TlsConnectorBuilder};
 #[cfg(feature = "tls")]
@@ -12,6 +13,7 @@ use bytes::BufMut;
 
 use std::io;
 use std::sync::Arc;
+use std::net::IpAddr;
 
 #[cfg(feature = "trust-dns")]
 use dns::TrustDnsResolver;
@@ -39,8 +41,13 @@ enum Inner {
 
 impl Connector {
     #[cfg(not(feature = "tls"))]
-    pub(crate) fn new(proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
-        let http = http_connector()?;
+    pub(crate) fn new<T>(proxies: Arc<Vec<Proxy>>, local_addr: T) -> ::Result<Connector>
+    where
+        T: Into<Option<IpAddr>>
+    {
+
+        let mut http = http_connector()?;
+        http.set_local_address(local_addr.into());
         Ok(Connector {
             proxies,
             inner: Inner::Http(http)
@@ -48,10 +55,17 @@ impl Connector {
     }
 
     #[cfg(feature = "default-tls")]
-    pub(crate) fn new_default_tls(tls: TlsConnectorBuilder, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
+    pub(crate) fn new_default_tls<T>(
+        tls: TlsConnectorBuilder,
+        proxies: Arc<Vec<Proxy>>,
+        local_addr: T) -> ::Result<Connector>
+        where
+            T: Into<Option<IpAddr>>,
+    {
         let tls = try_!(tls.build());
 
         let mut http = http_connector()?;
+        http.set_local_address(local_addr.into());
         http.enforce_http(false);
         let http = ::hyper_tls::HttpsConnector::from((http, tls.clone()));
 
@@ -62,8 +76,15 @@ impl Connector {
     }
 
     #[cfg(feature = "rustls-tls")]
-    pub(crate) fn new_rustls_tls(tls: rustls::ClientConfig, proxies: Arc<Vec<Proxy>>) -> ::Result<Connector> {
+    pub(crate) fn new_rustls_tls<T>(
+        tls: rustls::ClientConfig,
+        proxies: Arc<Vec<Proxy>>,
+        local_addr: T) -> ::Result<Connector>
+        where
+            T: Into<Option<IpAddr>>,
+    {
         let mut http = http_connector()?;
+        http.set_local_address(local_addr.into());
         http.enforce_http(false);
         let http = ::hyper_rustls::HttpsConnector::from((http, tls.clone()));
 

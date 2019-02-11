@@ -2,6 +2,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 use std::thread;
+use std::net::IpAddr;
 
 use futures::{Async, Future, Stream};
 use futures::future::{self, Either};
@@ -305,6 +306,24 @@ impl ClientBuilder {
     /// ```
     pub fn h2_prior_knowledge(self) -> ClientBuilder {
         self.with_inner(|inner| inner.h2_prior_knowledge())
+    }
+
+    /// Bind to a local IP Address
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::net::IpAddr;
+    /// let local_addr = IpAddr::from([12, 4, 1, 8]);
+    /// let client = reqwest::Client::builder()
+    ///     .local_address(local_addr)
+    ///     .build().unwrap();
+    /// ```
+    pub fn local_address<T>(self, addr: T) -> ClientBuilder
+    where
+        T: Into<Option<IpAddr>>,
+    {
+        self.with_inner(move |inner| inner.local_address(addr))
     }
 }
 

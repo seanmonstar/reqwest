@@ -1,6 +1,7 @@
 use std::{fmt, str};
 use std::sync::Arc;
 use std::time::Duration;
+use std::net::IpAddr;
 
 use bytes::Bytes;
 use futures::{Async, Future, Poll};
@@ -76,6 +77,7 @@ struct Config {
     #[cfg(feature = "tls")]
     tls: TlsBackend,
     http2_only: bool,
+    local_address: Option<IpAddr>,
 }
 
 impl ClientBuilder {
@@ -106,6 +108,7 @@ impl ClientBuilder {
                 #[cfg(feature = "tls")]
                 tls: TlsBackend::default(),
                 http2_only: false,
+                local_address: None,
             },
         }
     }
@@ -137,7 +140,7 @@ impl ClientBuilder {
                         id.add_to_native_tls(&mut tls)?;
                     }
 
-                    Connector::new_default_tls(tls, proxies.clone())?
+                    Connector::new_default_tls(tls, proxies.clone(), config.local_address)?
                 },
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::Rustls => {
@@ -166,18 +169,19 @@ impl ClientBuilder {
                         id.add_to_rustls(&mut tls)?;
                     }
 
-                    Connector::new_rustls_tls(tls, proxies.clone())?
+                    Connector::new_rustls_tls(tls, proxies.clone(), config.local_address)?
                 }
             }
 
             #[cfg(not(feature = "tls"))]
-            Connector::new(proxies.clone())?
+            Connector::new(proxies.clone(), config.local_address)?
         };
 
         let mut builder = ::hyper::Client::builder();
         if config.http2_only {
             builder.http2_only(true);
         }
+
         let hyper_client = builder.build(connector);
 
         let proxies_maybe_http_auth = proxies
@@ -323,6 +327,15 @@ impl ClientBuilder {
     #[doc(hidden)]
     #[deprecated(note = "DNS no longer uses blocking threads")]
     pub fn dns_threads(self, _threads: usize) -> ClientBuilder {
+        self
+    }
+
+    /// Bind to a local IP Address
+    pub fn local_address<T>(mut self, addr: T) -> ClientBuilder
+    where
+        T: Into<Option<IpAddr>>,
+    {
+        self.config.local_address = addr.into();
         self
     }
 }
