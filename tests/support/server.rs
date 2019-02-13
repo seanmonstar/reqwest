@@ -99,13 +99,15 @@ pub fn spawn(txns: Vec<Txn>) -> Server {
 
             match (::std::str::from_utf8(&expected), ::std::str::from_utf8(&buf[..n])) {
                 (Ok(expected), Ok(received)) => {
-                    assert_eq!(
-                        expected.len(),
-                        received.len(),
-                        "expected len = {}, received len = {}",
-                        expected.len(),
-                        received.len(),
-                    );
+                    if expected.len() > 300 && ::std::env::var("REQWEST_TEST_BODY_FULL").is_err() {
+                        assert_eq!(
+                            expected.len(),
+                            received.len(),
+                            "expected len = {}, received len = {}; to skip length check and see exact contents, re-run with REQWEST_TEST_BODY_FULL=1",
+                            expected.len(),
+                            received.len(),
+                        );
+                    }
                     assert_eq!(expected, received)
                 },
                 _ => {

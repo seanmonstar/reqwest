@@ -172,6 +172,41 @@ fn test_post() {
     assert_eq!(n, 0)
 }
 
+#[test]
+fn test_post_form() {
+    let server = server! {
+        request: b"\
+            POST /form HTTP/1.1\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            content-type: application/x-www-form-urlencoded\r\n\
+            content-length: 24\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
+            \r\n\
+            hello=world&sean=monstar\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Server: post-form\r\n\
+            Content-Length: 0\r\n\
+            \r\n\
+            "
+    };
+
+    let form = &[("hello", "world"), ("sean", "monstar")];
+
+    let url = format!("http://{}/form", server.addr());
+    let res = reqwest::Client::new()
+        .post(&url)
+        .form(form)
+        .send()
+        .expect("request send");
+
+    assert_eq!(res.url().as_str(), &url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
 /// Calling `Response::error_for_status`` on a response with status in 4xx
 /// returns a error.
 #[test]

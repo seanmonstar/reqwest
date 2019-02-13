@@ -43,6 +43,10 @@ matrix:
 sudo: false
 dist: trusty
 
+env:
+  global:
+    - REQWEST_TEST_BODY_FULL=1
+
 script:
   - cargo build $FEATURES
   - cargo test -v $FEATURES
