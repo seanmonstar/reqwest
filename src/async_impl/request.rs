@@ -1,13 +1,15 @@
 use std::fmt;
 
 use base64::{encode};
+use futures::Future;
 use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
 
 use super::body::{Body};
-use super::multipart;
 use super::client::{Client, Pending};
+use super::multipart;
+use super::response::Response;
 use header::{CONTENT_LENGTH, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
 use http::HttpTryFrom;
 use {Method, Url};
@@ -315,13 +317,14 @@ impl RequestBuilder {
         self.request
     }
 
-    /// Constructs the Request and sends it the target URL, returning a Response.
+    /// Constructs the Request and sends it to the target URL, returning a
+    /// future Response.
     ///
     /// # Errors
     ///
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
-    pub fn send(self) -> Pending {
+    pub fn send(self) -> impl Future<Item = Response, Error = ::Error> {
         match self.request {
             Ok(req) => self.client.execute(req),
             Err(err) => Pending::new_err(err),
