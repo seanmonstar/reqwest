@@ -167,6 +167,38 @@ impl Response {
             Ok(self)
         }
     }
+
+    /// Turn a reference to a response into an error if the server returned an error.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use reqwest::async::Response;
+    /// fn on_response(res: &Response) {
+    ///     match res.error_for_status_ref() {
+    ///         Ok(_res) => (),
+    ///         Err(err) => {
+    ///             // asserting a 400 as an example
+    ///             // it could be any status between 400...599
+    ///             assert_eq!(
+    ///                 err.status(),
+    ///                 Some(reqwest::StatusCode::BAD_REQUEST)
+    ///             );
+    ///         }
+    ///     }
+    /// }
+    /// # fn main() {}
+    /// ```
+    #[inline]
+    pub fn error_for_status_ref(&self) -> ::Result<&Self> {
+        if self.status.is_client_error() {
+            Err(::error::client_error(*self.url.clone(), self.status))
+        } else if self.status.is_server_error() {
+            Err(::error::server_error(*self.url.clone(), self.status))
+        } else {
+            Ok(self)
+        }
+    }
 }
 
 impl fmt::Debug for Response {

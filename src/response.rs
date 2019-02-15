@@ -329,6 +329,27 @@ impl Response {
             }
         })
     }
+
+    /// Turn a reference to a response into an error if the server returned an error.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # extern crate reqwest;
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let res = reqwest::get("http://httpbin.org/status/400")?;
+    /// let res = res.error_for_status_ref();
+    /// if let Err(err) = res {
+    ///     assert_eq!(err.status(), Some(reqwest::StatusCode::BAD_REQUEST));
+    /// }
+    /// # Ok(())
+    /// # }
+    /// # fn main() {}
+    /// ```
+    #[inline]
+    pub fn error_for_status_ref(&self) -> ::Result<&Self> {
+        self.inner.error_for_status_ref().and_then(|_| Ok(self))
+    }
 }
 
 impl Read for Response {
