@@ -127,7 +127,7 @@ impl Response {
 
     /// Try to deserialize the response body as JSON using `serde`.
     #[inline]
-    pub fn json<T: DeserializeOwned>(&mut self) -> Json<T> {
+    pub fn json<T: DeserializeOwned>(&mut self) -> impl Future<Item = T, Error = ::Error> {
         let body = mem::replace(&mut self.body, Decoder::empty());
 
         Json {
