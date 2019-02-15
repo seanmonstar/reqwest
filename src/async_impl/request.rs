@@ -324,6 +324,26 @@ impl RequestBuilder {
     ///
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # extern crate futures;
+    /// # extern crate reqwest;
+    /// #
+    /// # use reqwest::Error;
+    /// # use futures::future::Future;
+    /// #
+    /// # fn run() -> Result<(), Error> {
+    /// let response = reqwest::r#async::Client::new()
+    ///     .get("https://hyper.rs")
+    ///     .send()
+    ///     .map(|resp| println!("status: {}", resp.status()));
+    ///
+    /// let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
+    /// rt.block_on(response)
+    /// # }
+    /// ```
     pub fn send(self) -> impl Future<Item = Response, Error = ::Error> {
         match self.request {
             Ok(req) => self.client.execute(req),
