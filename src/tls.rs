@@ -187,6 +187,13 @@ impl Identity {
                 .map_err(|_| TLSError::General(String::from("No valid certificate was found"))));
             pem.set_position(0);
             let mut sk = try_!(pemfile::pkcs8_private_keys(&mut pem)
+                .and_then(|pkcs8_keys| {
+                    if pkcs8_keys.is_empty() {
+                        Err(())
+                    } else {
+                        Ok(pkcs8_keys)
+                    }
+                })
                 .or_else(|_| {
                     pem.set_position(0);
                     pemfile::rsa_private_keys(&mut pem)
@@ -311,5 +318,16 @@ mod tests {
     #[test]
     fn identity_from_pem_invalid() {
         Identity::from_pem(b"not pem").unwrap_err();
+    }
+
+    #[cfg(feature = "rustls-tls")]
+    #[test]
+    fn identity_from_pem_pkcs1_key() {
+        let pem = b"-----BEGIN CERTIFICATE-----\n\
+            -----END CERTIFICATE-----\n\
+            -----BEGIN RSA PRIVATE KEY-----\n\
+            -----END RSA PRIVATE KEY-----\n";
+
+        Identity::from_pem(pem).unwrap();
     }
 }
