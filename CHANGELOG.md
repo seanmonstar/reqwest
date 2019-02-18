@@ -1,3 +1,14 @@
+## v0.9.10
+
+### Features
+
+- Add `ClientBuilder::local_address()` to bind to a local IP address.
+- Add `Response::error_for_status_ref()` to return an `Error` while borrowing a `Response`.
+
+### Fixes
+
+- Fix `Identity::from_pem` with `rustls-tls` backend when using RSA private keys.
+
 ## v0.9.9
 
 ### Features
