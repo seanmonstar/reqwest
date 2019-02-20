@@ -163,6 +163,23 @@ impl Error {
         }
     }
 
+    /// Returns true if the error is related to a timeout.
+    pub fn is_timeout(&self) -> bool {
+        match self.inner.kind {
+            Kind::Io(ref io) => io.kind() == io::ErrorKind::TimedOut,
+            Kind::Hyper(ref error) => {
+                error
+                    .cause2()
+                    .and_then(|cause| {
+                        cause.downcast_ref::<io::Error>()
+                    })
+                    .map(|io| io.kind() == io::ErrorKind::TimedOut)
+                    .unwrap_or(false)
+            },
+            _ => false,
+        }
+    }
+
     /// Returns true if the error is serialization related.
     #[inline]
     pub fn is_serialization(&self) -> bool {
@@ -411,12 +428,6 @@ where T: Into<Kind> {
     }
 }
 
-#[cfg(unix)]
-fn io_timeout() -> io::Error {
-    io::Error::new(io::ErrorKind::WouldBlock, "timed out")
-}
-
-#[cfg(windows)]
 fn io_timeout() -> io::Error {
     io::Error::new(io::ErrorKind::TimedOut, "timed out")
 }
