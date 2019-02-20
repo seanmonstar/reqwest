@@ -346,7 +346,7 @@ impl RequestBuilder {
     /// ```
     pub fn send(self) -> impl Future<Item = Response, Error = ::Error> {
         match self.request {
-            Ok(req) => self.client.execute(req),
+            Ok(req) => self.client.execute_request(req),
             Err(err) => Pending::new_err(err),
         }
     }
