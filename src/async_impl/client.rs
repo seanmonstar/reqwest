@@ -464,12 +464,12 @@ impl Client {
     ///
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
-    pub fn execute(&self, request: Request) -> Pending {
+    pub fn execute(&self, request: Request) -> impl Future<Item = Response, Error = ::Error> {
         self.execute_request(request)
     }
 
 
-    fn execute_request(&self, req: Request) -> Pending {
+    pub(super) fn execute_request(&self, req: Request) -> Pending {
         let (
             method,
             url,
