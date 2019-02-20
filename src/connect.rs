@@ -2,6 +2,7 @@ use futures::Future;
 use http::uri::Scheme;
 use hyper::client::connect::{Connect, Connected, Destination};
 use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_timer::Timeout;
 
 
 #[cfg(feature = "default-tls")]
@@ -14,6 +15,7 @@ use bytes::BufMut;
 use std::io;
 use std::sync::Arc;
 use std::net::IpAddr;
+use std::time::Duration;
 
 #[cfg(feature = "trust-dns")]
 use dns::TrustDnsResolver;
@@ -26,8 +28,9 @@ type HttpConnector = ::hyper::client::HttpConnector;
 
 
 pub(crate) struct Connector {
+    inner: Inner,
     proxies: Arc<Vec<Proxy>>,
-    inner: Inner
+    timeout: Option<Duration>,
 }
 
 enum Inner {
@@ -49,8 +52,9 @@ impl Connector {
         let mut http = http_connector()?;
         http.set_local_address(local_addr.into());
         Ok(Connector {
+            inner: Inner::Http(http),
             proxies,
-            inner: Inner::Http(http)
+            timeout: None,
         })
     }
 
@@ -70,8 +74,9 @@ impl Connector {
         let http = ::hyper_tls::HttpsConnector::from((http, tls.clone()));
 
         Ok(Connector {
+            inner: Inner::DefaultTls(http, tls),
             proxies,
-            inner: Inner::DefaultTls(http, tls)
+            timeout: None,
         })
     }
 
@@ -89,9 +94,14 @@ impl Connector {
         let http = ::hyper_rustls::HttpsConnector::from((http, tls.clone()));
 
         Ok(Connector {
+            inner: Inner::RustlsTls(http, Arc::new(tls)),
             proxies,
-            inner: Inner::RustlsTls(http, Arc::new(tls))
+            timeout: None,
         })
+    }
+
+    pub(crate) fn set_timeout(&mut self, timeout: Option<Duration>) {
+        self.timeout = timeout;
     }
 }
 
@@ -113,9 +123,27 @@ impl Connect for Connector {
     type Future = Connecting;
 
     fn connect(&self, dst: Destination) -> Self::Future {
+        macro_rules! timeout {
+            ($future:expr) => {
+                if let Some(dur) = self.timeout {
+                    Box::new(Timeout::new($future, dur).map_err(|err| {
+                        if err.is_inner() {
+                            err.into_inner().expect("is_inner")
+                        } else if err.is_elapsed() {
+                            io::Error::new(io::ErrorKind::TimedOut, "connect timed out")
+                        } else {
+                            io::Error::new(io::ErrorKind::Other, err)
+                        }
+                    }))
+                } else {
+                    Box::new($future)
+                }
+            }
+        }
+
         macro_rules! connect {
             ( $http:expr, $dst:expr, $proxy:expr ) => {
-                Box::new($http.connect($dst)
+                timeout!($http.connect($dst)
                     .map(|(io, connected)| (Box::new(io) as Conn, connected.proxy($proxy))))
             };
             ( $dst:expr, $proxy:expr ) => {
@@ -158,7 +186,7 @@ impl Connect for Connector {
                         let host = dst.host().to_owned();
                         let port = dst.port().unwrap_or(443);
                         let tls = tls.clone();
-                        return Box::new(http.connect(ndst).and_then(move |(conn, connected)| {
+                        return timeout!(http.connect(ndst).and_then(move |(conn, connected)| {
                             trace!("tunneling HTTPS over proxy");
                             tunnel(conn, host.clone(), port, auth)
                                 .and_then(move |tunneled| {
@@ -178,7 +206,7 @@ impl Connect for Connector {
                         let host = dst.host().to_owned();
                         let port = dst.port().unwrap_or(443);
                         let tls = tls.clone();
-                        return Box::new(http.connect(ndst).and_then(move |(conn, connected)| {
+                        return timeout!(http.connect(ndst).and_then(move |(conn, connected)| {
                             trace!("tunneling HTTPS over proxy");
                             let maybe_dnsname = DNSNameRef::try_from_ascii_str(&host)
                                 .map(|dnsname| dnsname.to_owned())

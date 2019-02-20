@@ -66,14 +66,15 @@ struct Config {
     hostname_verification: bool,
     #[cfg(feature = "tls")]
     certs_verification: bool,
+    connect_timeout: Option<Duration>,
+    #[cfg(feature = "tls")]
+    identity: Option<Identity>,
     proxies: Vec<Proxy>,
     redirect_policy: RedirectPolicy,
     referer: bool,
     timeout: Option<Duration>,
     #[cfg(feature = "tls")]
     root_certs: Vec<Certificate>,
-    #[cfg(feature = "tls")]
-    identity: Option<Identity>,
     #[cfg(feature = "tls")]
     tls: TlsBackend,
     http2_only: bool,
@@ -97,6 +98,7 @@ impl ClientBuilder {
                 hostname_verification: true,
                 #[cfg(feature = "tls")]
                 certs_verification: true,
+                connect_timeout: None,
                 proxies: Vec::new(),
                 redirect_policy: RedirectPolicy::default(),
                 referer: true,
@@ -123,7 +125,7 @@ impl ClientBuilder {
         let config = self.config;
         let proxies = Arc::new(config.proxies);
 
-        let connector = {
+        let mut connector = {
             #[cfg(feature = "tls")]
             match config.tls {
                 #[cfg(feature = "default-tls")]
@@ -176,6 +178,8 @@ impl ClientBuilder {
             #[cfg(not(feature = "tls"))]
             Connector::new(proxies.clone(), config.local_address)?
         };
+
+        connector.set_timeout(config.connect_timeout);
 
         let mut builder = ::hyper::Client::builder();
         if config.http2_only {
@@ -312,7 +316,8 @@ impl ClientBuilder {
         self
     }
 
-    /// Set a timeout for both the read and write operations of a client.
+    // Currently not used, so hide from docs.
+    #[doc(hidden)]
     pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
         self.config.timeout = Some(timeout);
         self
@@ -321,6 +326,19 @@ impl ClientBuilder {
     /// Only use HTTP/2.
     pub fn h2_prior_knowledge(mut self) -> ClientBuilder {
         self.config.http2_only = true;
+        self
+    }
+
+    /// Set a timeout for only the connect phase of a `Client`.
+    ///
+    /// Default is `None`.
+    ///
+    /// # Note
+    ///
+    /// This **requires** the futures be executed in a tokio runtime with
+    /// a tokio timer enabled.
+    pub fn connect_timeout(mut self, timeout: Duration) -> ClientBuilder {
+        self.config.connect_timeout = Some(timeout);
         self
     }
 
