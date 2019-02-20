@@ -281,10 +281,26 @@ impl ClientBuilder {
     ///
     /// Pass `None` to disable timeout.
     pub fn timeout<T>(mut self, timeout: T) -> ClientBuilder
-    where T: Into<Option<Duration>>,
+    where
+        T: Into<Option<Duration>>,
     {
         self.timeout = Timeout(timeout.into());
         self
+    }
+
+    /// Set a timeout for only the connect phase of a `Client`.
+    ///
+    /// Default is `None`.
+    pub fn connect_timeout<T>(self, timeout: T) -> ClientBuilder
+    where
+        T: Into<Option<Duration>>,
+    {
+        let timeout = timeout.into();
+        if let Some(dur) = timeout {
+            self.with_inner(|inner| inner.connect_timeout(dur))
+        } else {
+            self
+        }
     }
 
     fn with_inner<F>(mut self, func: F) -> ClientBuilder
