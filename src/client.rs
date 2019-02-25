@@ -324,6 +324,19 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.h2_prior_knowledge())
     }
 
+    /// Enable case sensitive headers.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let client = reqwest::Client::builder()
+    ///     .http1_title_case_headers()
+    ///     .build().unwrap();
+    /// ```
+    pub fn http1_title_case_headers(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.http1_title_case_headers())
+    }
+
     /// Bind to a local IP Address
     ///
     /// # Example
