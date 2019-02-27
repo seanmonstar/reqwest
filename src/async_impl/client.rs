@@ -78,6 +78,7 @@ struct Config {
     #[cfg(feature = "tls")]
     tls: TlsBackend,
     http2_only: bool,
+    http1_title_case_headers: bool,
     local_address: Option<IpAddr>,
 }
 
@@ -110,6 +111,7 @@ impl ClientBuilder {
                 #[cfg(feature = "tls")]
                 tls: TlsBackend::default(),
                 http2_only: false,
+                http1_title_case_headers: false,
                 local_address: None,
             },
         }
@@ -184,6 +186,10 @@ impl ClientBuilder {
         let mut builder = ::hyper::Client::builder();
         if config.http2_only {
             builder.http2_only(true);
+        }
+
+        if config.http1_title_case_headers {
+            builder.http1_title_case_headers(true);
         }
 
         let hyper_client = builder.build(connector);
@@ -326,6 +332,12 @@ impl ClientBuilder {
     /// Only use HTTP/2.
     pub fn h2_prior_knowledge(mut self) -> ClientBuilder {
         self.config.http2_only = true;
+        self
+    }
+
+    /// Enable case sensitive headers.
+    pub fn http1_title_case_headers(mut self) -> ClientBuilder {
+        self.config.http1_title_case_headers = true;
         self
     }
 
