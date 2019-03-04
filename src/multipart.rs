@@ -131,8 +131,8 @@ impl Form {
     }
 
     /// Configure this `Form` to skip percent-encoding
-    pub fn no_percent_encode(self) -> Form {
-        self.with_inner(|inner| inner.no_percent_encode())
+    pub fn percent_encode_noop(self) -> Form {
+        self.with_inner(|inner| inner.percent_encode_noop())
     }
 
     pub(crate) fn reader(self) -> Reader {

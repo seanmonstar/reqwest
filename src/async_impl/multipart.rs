@@ -92,8 +92,8 @@ impl Form {
     }
 
     /// Configure this `Form` to skip percent-encoding
-    pub fn no_percent_encode(self) -> Form {
-        self.with_inner(|inner| inner.no_percent_encode())
+    pub fn percent_encode_noop(self) -> Form {
+        self.with_inner(|inner| inner.percent_encode_noop())
     }
 
     /// Consume this instance and transform into an instance of hyper::Body for use in a request.
@@ -284,7 +284,7 @@ impl<P: PartProps> FormParts<P> {
     }
 
     /// Configure this `Form` to skip percent-encoding
-    pub(crate) fn no_percent_encode(mut self) -> Self {
+    pub(crate) fn percent_encode_noop(mut self) -> Self {
         self.percent_encoding = PercentEncoding::NoOp;
         self
     }
