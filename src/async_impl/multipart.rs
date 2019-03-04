@@ -91,6 +91,11 @@ impl Form {
         self.with_inner(|inner| inner.percent_encode_attr_chars())
     }
 
+    /// Configure this `Form` to skip percent-encoding
+    pub fn percent_encode_noop(self) -> Form {
+        self.with_inner(|inner| inner.percent_encode_noop())
+    }
+
     /// Consume this instance and transform into an instance of hyper::Body for use in a request.
     pub(crate) fn stream(mut self) -> hyper::Body {
         if self.inner.fields.len() == 0 {
@@ -278,6 +283,12 @@ impl<P: PartProps> FormParts<P> {
         self
     }
 
+    /// Configure this `Form` to skip percent-encoding
+    pub(crate) fn percent_encode_noop(mut self) -> Self {
+        self.percent_encoding = PercentEncoding::NoOp;
+        self
+    }
+
     // If predictable, computes the length the request will have
     // The length should be preditable if only String and file fields have been added,
     // but not if a generic reader has been added;
@@ -389,6 +400,7 @@ impl EncodeSet for AttrCharEncodeSet {
 pub(crate) enum PercentEncoding {
     PathSegment,
     AttrChar,
+    NoOp,
 }
 
 impl PercentEncoding {
@@ -434,6 +446,7 @@ impl PercentEncoding {
                 percent_encoding::utf8_percent_encode(value, AttrCharEncodeSet)
                     .to_string()
             },
+            PercentEncoding::NoOp => { value.to_string() },
         };
         if value.len() == legal_value.len() {
             // nothing has been percent encoded
