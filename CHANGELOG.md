@@ -1,3 +1,11 @@
+## v0.9.11
+
+### Features
+
+- Add `multipart::Form::percent_encode_noop()` to allow for servers which don't support percent encoding of paramters.
+- Add `ClientBuilder::http1_title_case_headers()` to force request headers to use Title-Case.
+- Add `ClientBuilder::connect_timeout()` to allow setting only a connect timeout.
+
 ## v0.9.10
 
 ### Features
