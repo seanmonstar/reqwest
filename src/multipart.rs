@@ -130,6 +130,11 @@ impl Form {
         self.with_inner(|inner| inner.percent_encode_attr_chars())
     }
 
+    /// Configure this `Form` to skip percent-encoding
+    pub fn no_percent_encode(self) -> Form {
+        self.with_inner(|inner| inner.no_percent_encode())
+    }
+
     pub(crate) fn reader(self) -> Reader {
         Reader::new(self)
     }
