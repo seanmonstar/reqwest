@@ -91,11 +91,20 @@ impl Connector {
         let mut http = http_connector()?;
         http.set_local_address(local_addr.into());
         http.enforce_http(false);
-        let http = ::hyper_rustls::HttpsConnector::from((http, tls.clone()));
+
+        let inner = if proxies.is_empty() {
+            let tls = Arc::new(tls);
+            let http = ::hyper_rustls::HttpsConnector::from((http, tls.clone()));
+            Inner::RustlsTls(http, tls)
+        } else {
+            let mut tls_proxy = tls.clone();
+            tls_proxy.alpn_protocols.clear();
+            let http = ::hyper_rustls::HttpsConnector::from((http, tls_proxy));
+            Inner::RustlsTls(http, Arc::new(tls))
+        };
 
         Ok(Connector {
-            inner: Inner::RustlsTls(http, Arc::new(tls)),
-            proxies,
+            inner, proxies,
             timeout: None,
         })
     }
