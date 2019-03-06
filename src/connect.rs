@@ -91,11 +91,20 @@ impl Connector {
         let mut http = http_connector()?;
         http.set_local_address(local_addr.into());
         http.enforce_http(false);
-        let http = ::hyper_rustls::HttpsConnector::from((http, tls.clone()));
+
+        let inner = if proxies.is_empty() {
+            let tls = Arc::new(tls);
+            let http = ::hyper_rustls::HttpsConnector::from((http, tls.clone()));
+            Inner::RustlsTls(http, tls)
+        } else {
+            let mut tls_proxy = tls.clone();
+            tls_proxy.alpn_protocols.clear();
+            let http = ::hyper_rustls::HttpsConnector::from((http, tls_proxy));
+            Inner::RustlsTls(http, Arc::new(tls))
+        };
 
         Ok(Connector {
-            inner: Inner::RustlsTls(http, Arc::new(tls)),
-            proxies,
+            inner, proxies,
             timeout: None,
         })
     }
@@ -180,7 +189,6 @@ impl Connect for Connector {
                 match &self.inner {
                     #[cfg(feature = "default-tls")]
                     Inner::DefaultTls(http, tls) => if dst.scheme() == "https" {
-                        #[cfg(feature = "default-tls")]
                         use self::native_tls_async::TlsConnectorExt;
 
                         let host = dst.host().to_owned();
@@ -198,9 +206,8 @@ impl Connect for Connector {
                     },
                     #[cfg(feature = "rustls-tls")]
                     Inner::RustlsTls(http, tls) => if dst.scheme() == "https" {
-                        #[cfg(feature = "rustls-tls")]
+                        use rustls::Session;
                         use tokio_rustls::TlsConnector as RustlsConnector;
-                        #[cfg(feature = "rustls-tls")]
                         use tokio_rustls::webpki::DNSNameRef;
 
                         let host = dst.host().to_owned();
@@ -217,7 +224,14 @@ impl Connect for Connector {
                                     RustlsConnector::from(tls).connect(dnsname.as_ref(), tunneled)
                                         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
                                 })
-                                .map(|io| (Box::new(io) as Conn, connected.proxy(true)))
+                                .map(|io| {
+                                    let connected = if io.get_ref().1.get_alpn_protocol() == Some(b"h2") {
+                                        connected.negotiated_h2()
+                                    } else {
+                                        connected
+                                    };
+                                    (Box::new(io) as Conn, connected.proxy(true))
+                                })
                         }));
                     },
                     #[cfg(not(feature = "tls"))]
