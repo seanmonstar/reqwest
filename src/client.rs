@@ -288,6 +288,13 @@ impl ClientBuilder {
         self
     }
 
+    /// Sets the maximum idle connection per host allowed in the pool.
+    ///
+    /// Default is usize::MAX (no limit).
+    pub fn max_idle_per_host(self, max: usize) -> ClientBuilder {
+        self.with_inner(move |inner| inner.max_idle_per_host(max))
+    }
+
     /// Set a timeout for only the connect phase of a `Client`.
     ///
     /// Default is `None`.
