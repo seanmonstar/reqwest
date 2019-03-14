@@ -19,7 +19,7 @@ http = "0.1.15"
 hyper = "0.12.22"
 hyper-old-types = { version = "0.11", optional = true, features = ["compat"] }
 hyper-tls = { version = "0.3", optional = true }
-flate2 = { git = "https://github.com/alexcrichton/flate2-rs", features = ["rust_backend"] }
+flate2 = { git = "https://github.com/quininer/flate2-rs", branch = "fix-old", default-features = false, features = ["rust_backend"] }
 log = "0.4"
 mime = "0.3.7"
 mime_guess = "2.0.0-alpha.6"
