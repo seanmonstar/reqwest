@@ -14,15 +14,20 @@ This module consists of a few main types:
 
 - `ReadableChunks` is a `Read`-like wrapper around a stream
 - `Decoder` is a layer over `ReadableChunks` that applies the right decompression
+
+The following types directly support the gzip compression case:
+
+- `Pending` is a non-blocking constructor for a `Decoder` in case the body needs to be checked for EOF
 */
 
 use std::fmt;
+use std::mem;
 use std::cmp;
 use std::io::{self, Read};
 
 use bytes::{Buf, BufMut, BytesMut};
 use flate2::read::GzDecoder;
-use futures::{Async, Poll, Stream};
+use futures::{Async, Future, Poll, Stream};
 use hyper::{HeaderMap};
 use hyper::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
 
@@ -43,6 +48,13 @@ enum Inner {
     PlainText(Body),
     /// A `Gzip` decoder will uncompress the gzipped response content before returning it.
     Gzip(Gzip),
+    /// A decoder that doesn't have a value yet.
+    Pending(Pending)
+}
+
+/// A future attempt to poll the response body for EOF so we know whether to use gzip or not.
+struct Pending {
+    body: ReadableChunks<Body>,
 }
 
 /// A gzip decoder that reads from a `flate2::read::GzDecoder` into a `BytesMut` and emits the results
@@ -86,7 +98,7 @@ impl Decoder {
     #[inline]
     fn gzip(body: Body) -> Decoder {
         Decoder {
-            inner: Inner::Gzip(Gzip::new(ReadableChunks::new(body)))
+            inner: Inner::Pending(Pending { body: ReadableChunks::new(body) })
         }
     }
 
@@ -145,9 +157,39 @@ impl Stream for Decoder {
     type Error = error::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match self.inner {
-            Inner::PlainText(ref mut body) => body.poll(),
-            Inner::Gzip(ref mut decoder) => decoder.poll()
+        // Do a read or poll for a pendidng decoder value.
+        let new_value = match self.inner {
+            Inner::Pending(ref mut future) => {
+                match future.poll() {
+                    Ok(Async::Ready(inner)) => inner,
+                    Ok(Async::NotReady) => return Ok(Async::NotReady),
+                    Err(e) => return Err(e)
+                }
+            },
+            Inner::PlainText(ref mut body) => return body.poll(),
+            Inner::Gzip(ref mut decoder) => return decoder.poll()
+        };
+
+        self.inner = new_value;
+        self.poll()
+    }
+}
+
+impl Future for Pending {
+    type Item = Inner;
+    type Error = error::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let body_state = match self.body.poll_stream() {
+            Ok(Async::Ready(state)) => state,
+            Ok(Async::NotReady) => return Ok(Async::NotReady),
+            Err(e) => return Err(e)
+        };
+
+        let body = mem::replace(&mut self.body, ReadableChunks::new(Body::empty()));
+        match body_state {
+            StreamState::Eof => Ok(Async::Ready(Inner::PlainText(Body::empty()))),
+            StreamState::HasMore => Ok(Async::Ready(Inner::Gzip(Gzip::new(body))))
         }
     }
 }

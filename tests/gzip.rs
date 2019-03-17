@@ -75,9 +75,9 @@ fn test_gzip_empty_body() {
         .unwrap();
 
     let mut body = ::std::string::String::new();
-    let err = res.read_to_string(&mut body).unwrap_err();
+    res.read_to_string(&mut body).unwrap();
 
-    assert_eq!(::std::io::ErrorKind::UnexpectedEof, err.kind());
+    assert_eq!(body, "");
 }
 
 #[test]
