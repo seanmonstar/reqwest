@@ -84,6 +84,11 @@ impl ClientBuilder {
         })
     }
 
+    /// Set that all sockets have `SO_NODELAY` set to `true`.
+    pub fn tcp_nodelay(self) -> ClientBuilder {
+        self.with_inner(move |inner| inner.tcp_nodelay())
+    }
+
     /// Use native TLS backend.
     #[cfg(feature = "default-tls")]
     pub fn use_default_tls(self) -> ClientBuilder {
