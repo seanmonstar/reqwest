@@ -184,7 +184,7 @@ pub extern crate hyper_old_types as hyper_011;
 extern crate hyper_tls;
 #[macro_use]
 extern crate log;
-extern crate libflate;
+extern crate flate2;
 extern crate mime;
 extern crate mime_guess;
 #[cfg(feature = "default-tls")]
