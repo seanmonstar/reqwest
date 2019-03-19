@@ -67,6 +67,7 @@ struct Config {
     #[cfg(feature = "tls")]
     certs_verification: bool,
     connect_timeout: Option<Duration>,
+    max_idle_per_host: usize,
     #[cfg(feature = "tls")]
     identity: Option<Identity>,
     proxies: Vec<Proxy>,
@@ -100,6 +101,7 @@ impl ClientBuilder {
                 #[cfg(feature = "tls")]
                 certs_verification: true,
                 connect_timeout: None,
+                max_idle_per_host: ::std::usize::MAX,
                 proxies: Vec::new(),
                 redirect_policy: RedirectPolicy::default(),
                 referer: true,
@@ -187,6 +189,8 @@ impl ClientBuilder {
         if config.http2_only {
             builder.http2_only(true);
         }
+
+        builder.max_idle_per_host(config.max_idle_per_host);
 
         if config.http1_title_case_headers {
             builder.http1_title_case_headers(true);
@@ -326,6 +330,14 @@ impl ClientBuilder {
     #[doc(hidden)]
     pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
         self.config.timeout = Some(timeout);
+        self
+    }
+
+    /// Sets the maximum idle connection per host allowed in the pool.
+    //
+    // Default is usize::MAX (no limit).
+    pub fn max_idle_per_host(mut self, max: usize) -> ClientBuilder {
+        self.config.max_idle_per_host = max;
         self
     }
 
