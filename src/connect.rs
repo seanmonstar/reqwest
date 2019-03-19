@@ -31,6 +31,8 @@ pub(crate) struct Connector {
     inner: Inner,
     proxies: Arc<Vec<Proxy>>,
     timeout: Option<Duration>,
+    #[cfg(feature = "tls")]
+    nodelay: bool
 }
 
 enum Inner {
@@ -48,13 +50,14 @@ enum Inner {
 
 impl Connector {
     #[cfg(not(feature = "tls"))]
-    pub(crate) fn new<T>(proxies: Arc<Vec<Proxy>>, local_addr: T) -> ::Result<Connector>
+    pub(crate) fn new<T>(proxies: Arc<Vec<Proxy>>, local_addr: T, nodelay: bool) -> ::Result<Connector>
     where
         T: Into<Option<IpAddr>>
     {
 
         let mut http = http_connector()?;
         http.set_local_address(local_addr.into());
+        http.set_nodelay(nodelay);
         Ok(Connector {
             inner: Inner::Http(http),
             proxies,
@@ -66,7 +69,8 @@ impl Connector {
     pub(crate) fn new_default_tls<T>(
         tls: TlsConnectorBuilder,
         proxies: Arc<Vec<Proxy>>,
-        local_addr: T) -> ::Result<Connector>
+        local_addr: T,
+        nodelay: bool) -> ::Result<Connector>
         where
             T: Into<Option<IpAddr>>,
     {
@@ -80,6 +84,7 @@ impl Connector {
             inner: Inner::DefaultTls(http, tls),
             proxies,
             timeout: None,
+            nodelay
         })
     }
 
@@ -87,7 +92,8 @@ impl Connector {
     pub(crate) fn new_rustls_tls<T>(
         tls: rustls::ClientConfig,
         proxies: Arc<Vec<Proxy>>,
-        local_addr: T) -> ::Result<Connector>
+        local_addr: T,
+        nodelay: bool) -> ::Result<Connector>
         where
             T: Into<Option<IpAddr>>,
     {
@@ -108,6 +114,7 @@ impl Connector {
             inner: Inner::RustlsTls { http, tls, tls_proxy },
             proxies,
             timeout: None,
+            nodelay
         })
     }
 
@@ -134,6 +141,9 @@ impl Connect for Connector {
     type Future = Connecting;
 
     fn connect(&self, dst: Destination) -> Self::Future {
+        #[cfg(feature = "tls")]
+        let nodelay = self.nodelay;
+
         macro_rules! timeout {
             ($future:expr) => {
                 if let Some(dur) = self.timeout {
@@ -163,33 +173,27 @@ impl Connect for Connector {
                     Inner::Http(http) => connect!(http, $dst, $proxy),
                     #[cfg(feature = "default-tls")]
                     Inner::DefaultTls(http, tls) => {
-                        let http = ::hyper_tls::HttpsConnector::from((http.clone(), tls.clone()));
+                        let mut http = http.clone();
+                        http.set_nodelay(nodelay);
+                        let http = ::hyper_tls::HttpsConnector::from((http, tls.clone()));
                         connect!(http, $dst, $proxy)
                     },
                     #[cfg(feature = "rustls-tls")]
                     Inner::RustlsTls { http, tls, .. } => {
-                        use ::rustls::Session;
-
                         let mut http = http.clone();
 
                         // Disable Nagle's algorithm for TLS handshake
                         //
                         // https://www.openssl.org/docs/man1.1.1/man3/SSL_connect.html#NOTES
-                        if $dst.scheme() == "https" {
-                            http.set_nodelay(true);
-                        }
+                        http.set_nodelay(nodelay || ($dst.scheme() == "https"));
 
                         let http = ::hyper_rustls::HttpsConnector::from((http, tls.clone()));
-
                         timeout!(http.connect($dst)
-                            .and_then(|(mut io, connected)| {
-                                if let ::hyper_rustls::MaybeHttpsStream::Https(stream) = &mut io {
-                                    let (io, session) = stream.get_mut();
+                            .and_then(move |(io, connected)| {
+                                if let ::hyper_rustls::MaybeHttpsStream::Https(stream) = &io {
+                                    let (io, _) = stream.get_ref();
 
-                                    // keep nodelay for h2
-                                    //
-                                    // https://http2.github.io/faq/#will-i-need-tcp_nodelay-for-my-http2-connections
-                                    if session.get_alpn_protocol() != Some(b"h2") {
+                                    if !nodelay {
                                         io.set_nodelay(false)?;
                                     }
                                 }
@@ -227,7 +231,9 @@ impl Connect for Connector {
 
                         let host = dst.host().to_owned();
                         let port = dst.port().unwrap_or(443);
-                        let http = ::hyper_tls::HttpsConnector::from((http.clone(), tls.clone()));
+                        let mut http = http.clone();
+                        http.set_nodelay(nodelay);
+                        let http = ::hyper_tls::HttpsConnector::from((http, tls.clone()));
                         let tls = tls.clone();
                         return timeout!(http.connect(ndst).and_then(move |(conn, connected)| {
                             trace!("tunneling HTTPS over proxy");
@@ -247,7 +253,9 @@ impl Connect for Connector {
 
                         let host = dst.host().to_owned();
                         let port = dst.port().unwrap_or(443);
-                        let http = ::hyper_rustls::HttpsConnector::from((http.clone(), tls_proxy.clone()));
+                        let mut http = http.clone();
+                        http.set_nodelay(nodelay);
+                        let http = ::hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
                         let tls = tls.clone();
                         return timeout!(http.connect(ndst).and_then(move |(conn, connected)| {
                             trace!("tunneling HTTPS over proxy");

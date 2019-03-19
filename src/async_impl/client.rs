@@ -81,6 +81,7 @@ struct Config {
     http2_only: bool,
     http1_title_case_headers: bool,
     local_address: Option<IpAddr>,
+    nodelay: bool,
 }
 
 impl ClientBuilder {
@@ -115,6 +116,7 @@ impl ClientBuilder {
                 http2_only: false,
                 http1_title_case_headers: false,
                 local_address: None,
+                nodelay: false
             },
         }
     }
@@ -146,7 +148,7 @@ impl ClientBuilder {
                         id.add_to_native_tls(&mut tls)?;
                     }
 
-                    Connector::new_default_tls(tls, proxies.clone(), config.local_address)?
+                    Connector::new_default_tls(tls, proxies.clone(), config.local_address, config.nodelay)?
                 },
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::Rustls => {
@@ -175,12 +177,12 @@ impl ClientBuilder {
                         id.add_to_rustls(&mut tls)?;
                     }
 
-                    Connector::new_rustls_tls(tls, proxies.clone(), config.local_address)?
+                    Connector::new_rustls_tls(tls, proxies.clone(), config.local_address, config.nodelay)?
                 }
             }
 
             #[cfg(not(feature = "tls"))]
-            Connector::new(proxies.clone(), config.local_address)?
+            Connector::new(proxies.clone(), config.local_address, config.nodelay)?
         };
 
         connector.set_timeout(config.connect_timeout);
@@ -213,6 +215,12 @@ impl ClientBuilder {
                 proxies_maybe_http_auth,
             }),
         })
+    }
+
+    /// Set that all sockets have `SO_NODELAY` set to `true`.
+    pub fn tcp_nodelay(mut self) -> ClientBuilder {
+        self.config.nodelay = true;
+        self
     }
 
     /// Use native TLS backend.
