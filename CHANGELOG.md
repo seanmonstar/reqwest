@@ -1,3 +1,16 @@
+## v0.9.12
+
+### Features
+
+- Add `ClientBuilder::tcp_nodelay()` to allow disabling Nagle's algorithm.
+- Add `ClientBuilder::max_idle_per_host()` to allow reducing the number of idle pooled connections.
+- Add `RequestBuilder::bearer_auth()` method to async builder.
+
+### Fixes
+
+- Fix capitalization error in async `RequestBuilder::basic_auth()`.
+- Fix ALPN causing issues when using a Proxy.
+
 ## v0.9.11
 
 ### Features
