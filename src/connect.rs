@@ -174,9 +174,20 @@ impl Connect for Connector {
                     #[cfg(feature = "default-tls")]
                     Inner::DefaultTls(http, tls) => {
                         let mut http = http.clone();
-                        http.set_nodelay(nodelay);
+
+                        http.set_nodelay(nodelay || ($dst.scheme() == "https"));
+
                         let http = ::hyper_tls::HttpsConnector::from((http, tls.clone()));
-                        connect!(http, $dst, $proxy)
+                        timeout!(http.connect($dst)
+                            .and_then(move |(io, connected)| {
+                                if let ::hyper_tls::MaybeHttpsStream::Https(stream) = &io {
+                                    if !nodelay {
+                                        stream.get_ref().get_ref().set_nodelay(false)?;
+                                    }
+                                }
+
+                                Ok((Box::new(io) as Conn, connected.proxy($proxy)))
+                            }))
                     },
                     #[cfg(feature = "rustls-tls")]
                     Inner::RustlsTls { http, tls, .. } => {
@@ -191,9 +202,8 @@ impl Connect for Connector {
                         timeout!(http.connect($dst)
                             .and_then(move |(io, connected)| {
                                 if let ::hyper_rustls::MaybeHttpsStream::Https(stream) = &io {
-                                    let (io, _) = stream.get_ref();
-
                                     if !nodelay {
+                                        let (io, _) = stream.get_ref();
                                         io.set_nodelay(false)?;
                                     }
                                 }

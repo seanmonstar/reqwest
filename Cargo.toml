@@ -18,8 +18,8 @@ futures = "0.1.23"
 http = "0.1.15"
 hyper = "0.12.22"
 hyper-old-types = { version = "0.11", optional = true, features = ["compat"] }
-hyper-tls = { version = "0.3", optional = true }
 flate2 = { version = "^1.0.7", default-features = false, features = ["rust_backend"] }
+hyper-tls = { version = "0.3.2", optional = true }
 log = "0.4"
 mime = "0.3.7"
 mime_guess = "2.0.0-alpha.6"
