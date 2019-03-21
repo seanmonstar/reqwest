@@ -237,36 +237,42 @@ impl Sender {
                 return Ok(().into());
             }
 
-            try_ready!(tx
-                .as_mut()
-                .expect("tx only taken on error")
-                .poll_ready()
-                .map_err(::error::from));
+            if buf.len() == 0 {
+                if buf.remaining_mut() == 0 {
+                    buf.reserve(8192);
+                }
 
-            if buf.remaining_mut() == 0 {
-                buf.reserve(8192);
-            }
-
-            match body.read(unsafe { buf.bytes_mut() }) {
-                Ok(0) => {
-                    return Ok(().into())
-                },
-                Ok(n) => {
-                    unsafe { buf.advance_mut(n); }
-                    written += n as u64;
-                    let tx = tx.as_mut().expect("tx only taken on error");
-                    if let Err(_) = tx.send_data(buf.take().freeze().into()) {
-                        return Err(::error::timedout(None));
+                match body.read(unsafe { buf.bytes_mut() }) {
+                    Ok(n) => {
+                        if n > 0 {
+                            unsafe { buf.advance_mut(n); }
+                        }
+                    }
+                    Err(e) => {
+                        let ret = io::Error::new(e.kind(), e.to_string());
+                        tx
+                            .take()
+                            .expect("tx only taken on error")
+                            .abort();
+                        return Err(::error::from(ret));
                     }
                 }
-                Err(e) => {
-                    let ret = io::Error::new(e.kind(), e.to_string());
-                    tx
-                        .take()
-                        .expect("tx only taken on error")
-                        .abort();
-                    return Err(::error::from(ret));
+            }
+
+            if buf.len() > 0 {
+                try_ready!(tx
+                    .as_mut()
+                    .expect("tx only taken on error")
+                    .poll_ready()
+                    .map_err(::error::from));
+
+                written += buf.len() as u64;
+                let tx = tx.as_mut().expect("tx only taken on error");
+                if let Err(_) = tx.send_data(buf.take().freeze().into()) {
+                    return Err(::error::timedout(None));
                 }
+            } else {
+                return Ok(().into());
             }
         })
     }
