@@ -12,6 +12,7 @@ use mime::Mime;
 use serde::de::DeserializeOwned;
 use serde_json;
 
+use cookie;
 use client::KeepCoreThreadAlive;
 use hyper::header::HeaderMap;
 use {async_impl, StatusCode, Url, Version, wait};
@@ -121,6 +122,14 @@ impl Response {
     pub fn headers(&self) -> &HeaderMap {
         self.inner.headers()
     }
+
+    /// Retrieve the cookies contained in the response.
+    pub fn cookies<'a>(&'a self) -> impl Iterator<
+        Item = Result<cookie::Cookie<'a>, cookie::CookieParseError>
+    > + 'a {
+        cookie::extract_response_cookies(self.headers())
+    }
+
 
     /// Get the HTTP `Version` of this `Response`.
     #[inline]

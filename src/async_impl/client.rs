@@ -1,5 +1,5 @@
 use std::{fmt, str};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::net::IpAddr;
 
@@ -31,6 +31,7 @@ use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use connect::Connector;
 use into_url::{expect_uri, try_uri};
+use cookie;
 use redirect::{self, RedirectPolicy, remove_sensitive_headers};
 use {IntoUrl, Method, Proxy, StatusCode, Url};
 #[cfg(feature = "tls")]
@@ -82,6 +83,7 @@ struct Config {
     http1_title_case_headers: bool,
     local_address: Option<IpAddr>,
     nodelay: bool,
+    cookie_store: Option<cookie::CookieStore>,
 }
 
 impl ClientBuilder {
@@ -116,7 +118,8 @@ impl ClientBuilder {
                 http2_only: false,
                 http1_title_case_headers: false,
                 local_address: None,
-                nodelay: false
+                nodelay: false,
+                cookie_store: None,
             },
         }
     }
@@ -204,6 +207,8 @@ impl ClientBuilder {
             .iter()
             .any(|p| p.maybe_has_http_auth());
 
+        let cookie_store = config.cookie_store.map(RwLock::new);
+
         Ok(Client {
             inner: Arc::new(ClientRef {
                 gzip: config.gzip,
@@ -213,6 +218,7 @@ impl ClientBuilder {
                 referer: config.referer,
                 proxies,
                 proxies_maybe_http_auth,
+                cookie_store,
             }),
         })
     }
@@ -388,6 +394,21 @@ impl ClientBuilder {
         self.config.local_address = addr.into();
         self
     }
+
+    /// Enable a persistent cookie store for the client.
+    /// 
+    /// Cookies received in responses will be preserved and included in 
+    /// additional requests.
+    /// 
+    /// By default, no cookie store is used.
+    pub fn cookie_store(mut self, enable: bool) -> ClientBuilder {
+        self.config.cookie_store = if enable {
+            Some(cookie::CookieStore::default())
+        } else {
+            None
+        };
+        self
+    }
 }
 
 type HyperClient = ::hyper::Client<Connector>;
@@ -514,6 +535,23 @@ impl Client {
             headers.insert(key, value.clone());
         }
 
+        // Add cookies from the cookie store.
+        if let Some(cookie_store_wrapper) = self.inner.cookie_store.as_ref() {
+            if headers.get(::header::COOKIE).is_none() {
+                let cookie_store = cookie_store_wrapper.read().unwrap();
+                let header = cookie_store
+                    .0
+                    .get_request_cookies(&url)
+                    .map(|c| c.encoded().to_string())
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                if !header.is_empty() {
+                    // TODO: is it safe to unwrap here? Investigate if Cookie content is always valid.
+                    headers.insert(::header::COOKIE, HeaderValue::from_bytes(header.as_bytes()).unwrap());
+                }
+            }
+        }
+
         if self.inner.gzip &&
             !headers.contains_key(ACCEPT_ENCODING) &&
             !headers.contains_key(RANGE) {
@@ -620,6 +658,7 @@ struct ClientRef {
     referer: bool,
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
+    cookie_store: Option<RwLock<cookie::CookieStore>>,
 }
 
 pub struct Pending {
@@ -674,6 +713,13 @@ impl Future for PendingRequest {
                 Async::Ready(res) => res,
                 Async::NotReady => return Ok(Async::NotReady),
             };
+            if let Some(store_wrapper) = self.client.cookie_store.as_ref() {
+                let mut store = store_wrapper.write().unwrap();
+                let cookies = cookie::extract_response_cookies(&res.headers())
+                    .filter_map(|res| res.ok())
+                    .map(|cookie| cookie.into_inner().into_owned());
+                store.0.store_response_cookies(cookies, &self.url);
+            }
             let should_redirect = match res.status() {
                 StatusCode::MOVED_PERMANENTLY |
                 StatusCode::FOUND |

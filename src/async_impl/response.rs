@@ -13,6 +13,7 @@ use serde_json;
 use url::Url;
 use http;
 
+use cookie;
 use super::Decoder;
 use super::body::Body;
 
@@ -67,6 +68,13 @@ impl Response {
     #[inline]
     pub fn headers_mut(&mut self) -> &mut HeaderMap {
         &mut self.headers
+    }
+
+    /// Retrieve the cookies contained in the response.
+    pub fn cookies<'a>(&'a self) -> impl Iterator<
+        Item = Result<cookie::Cookie<'a>, cookie::CookieParseError>
+    > + 'a {
+        cookie::extract_response_cookies(&self.headers)
     }
 
     /// Get the final `Url` of this `Response`.

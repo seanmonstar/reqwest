@@ -366,6 +366,16 @@ impl ClientBuilder {
     {
         self.with_inner(move |inner| inner.local_address(addr))
     }
+
+    /// Enable a persistent cookie store for the client.
+    /// 
+    /// Cookies received in responses will be preserved and included in 
+    /// additional requests.
+    /// 
+    /// By default, no cookie store is used.
+    pub fn cookie_store(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.cookie_store(enable))
+    }
 }
 
 
