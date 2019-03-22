@@ -10,6 +10,9 @@ readme = "README.md"
 license = "MIT/Apache-2.0"
 categories = ["web-programming::http-client"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 base64 = "0.10"
 bytes = "0.4"
@@ -43,6 +46,9 @@ socks = { version = "0.3.2", optional = true }
 tokio-rustls = { version = "0.9", optional = true }
 trust-dns-resolver = { version = "0.10", optional = true }
 webpki-roots = { version = "0.16", optional = true }
+cookie_store = "0.5.1"
+cookie = "0.11.0"
+time = "0.1.42"
 
 [dev-dependencies]
 env_logger = "0.6"
@@ -63,6 +69,3 @@ rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 trust-dns = ["trust-dns-resolver"]
 
 hyper-011 = ["hyper-old-types"]
-
-[package.metadata.docs.rs]
-all-features = true

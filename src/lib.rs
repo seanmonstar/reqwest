@@ -173,6 +173,8 @@
 
 extern crate base64;
 extern crate bytes;
+extern crate cookie as cookie_crate;
+extern crate cookie_store;
 extern crate encoding_rs;
 #[macro_use]
 extern crate futures;
@@ -195,6 +197,7 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 extern crate serde_urlencoded;
+extern crate time;
 extern crate tokio;
 #[cfg_attr(feature = "default-tls", macro_use)]
 extern crate tokio_io;
@@ -241,6 +244,7 @@ mod async_impl;
 mod connect;
 mod body;
 mod client;
+pub mod cookie;
 #[cfg(feature = "trust-dns")]
 mod dns;
 mod into_url;
