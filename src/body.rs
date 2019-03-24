@@ -237,6 +237,19 @@ impl Sender {
                 return Ok(().into());
             }
 
+            // The input stream is read only if the buffer is empty so
+            // that there is only one read in the buffer at any time.
+            //
+            // We need to know whether there is any data to send before
+            // we check the transmission channel (with poll_ready below)
+            // because somestimes the receiver disappears as soon as is
+            // considers the data is completely transmitted, which may
+            // be true.
+            //
+            // The use case is a web server that closes its
+            // input stream as soon as the data received is valid JSON.
+            // This behaviour is questionable, but it exists and the
+            // fact is that there is actually no remaining data to read.
             if buf.len() == 0 {
                 if buf.remaining_mut() == 0 {
                     buf.reserve(8192);
@@ -260,6 +273,8 @@ impl Sender {
             }
 
             if buf.len() > 0 {
+                // Check the transmission channel only if there is data
+                // to send (len > 0).
                 try_ready!(tx
                     .as_mut()
                     .expect("tx only taken on error")
