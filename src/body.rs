@@ -237,36 +237,56 @@ impl Sender {
                 return Ok(().into());
             }
 
+            // The input stream is read only if the buffer is empty so
+            // that there is only one read in the buffer at any time.
+            //
+            // We need to know whether there is any data to send before
+            // we check the transmission channel (with poll_ready below)
+            // because somestimes the receiver disappears as soon as is
+            // considers the data is completely transmitted, which may
+            // be true.
+            //
+            // The use case is a web server that closes its
+            // input stream as soon as the data received is valid JSON.
+            // This behaviour is questionable, but it exists and the
+            // fact is that there is actually no remaining data to read.
+            if buf.len() == 0 {
+                if buf.remaining_mut() == 0 {
+                    buf.reserve(8192);
+                }
+
+                match body.read(unsafe { buf.bytes_mut() }) {
+                    Ok(0) => {
+                        // The buffer was empty and nothing's left to
+                        // read. Return.
+                        return Ok(().into());
+                    }
+                    Ok(n) => {
+                        unsafe { buf.advance_mut(n); }
+                    }
+                    Err(e) => {
+                        let ret = io::Error::new(e.kind(), e.to_string());
+                        tx
+                            .take()
+                            .expect("tx only taken on error")
+                            .abort();
+                        return Err(::error::from(ret));
+                    }
+                }
+            }
+
+            // The only way to get here is when the buffer is not empty.
+            // We can check the transmission channel
             try_ready!(tx
                 .as_mut()
                 .expect("tx only taken on error")
                 .poll_ready()
                 .map_err(::error::from));
 
-            if buf.remaining_mut() == 0 {
-                buf.reserve(8192);
-            }
-
-            match body.read(unsafe { buf.bytes_mut() }) {
-                Ok(0) => {
-                    return Ok(().into())
-                },
-                Ok(n) => {
-                    unsafe { buf.advance_mut(n); }
-                    written += n as u64;
-                    let tx = tx.as_mut().expect("tx only taken on error");
-                    if let Err(_) = tx.send_data(buf.take().freeze().into()) {
-                        return Err(::error::timedout(None));
-                    }
-                }
-                Err(e) => {
-                    let ret = io::Error::new(e.kind(), e.to_string());
-                    tx
-                        .take()
-                        .expect("tx only taken on error")
-                        .abort();
-                    return Err(::error::from(ret));
-                }
+            written += buf.len() as u64;
+            let tx = tx.as_mut().expect("tx only taken on error");
+            if let Err(_) = tx.send_data(buf.take().freeze().into()) {
+                return Err(::error::timedout(None));
             }
         })
     }
