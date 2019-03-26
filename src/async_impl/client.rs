@@ -546,7 +546,6 @@ impl Client {
                     .collect::<Vec<_>>()
                     .join("; ");
                 if !header.is_empty() {
-                    // TODO: is it safe to unwrap here? Investigate if Cookie content is always valid.
                     headers.insert(::header::COOKIE, HeaderValue::from_bytes(header.as_bytes()).unwrap());
                 }
             }

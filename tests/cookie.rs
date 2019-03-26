@@ -36,7 +36,7 @@ fn cookie_response_accessor() {
     let url = format!("http://{}/", server.addr());
     let res = rt.block_on(client.get(&url).send()).unwrap();
 
-    let cookies = res.cookies().map(|c| c.unwrap()).collect::<Vec<_>>();
+    let cookies = res.cookies().collect::<Vec<_>>();
 
     // key=val
     assert_eq!(cookies[0].name(), "key");
@@ -71,11 +71,11 @@ fn cookie_response_accessor() {
 
     // samesitelax
     assert_eq!(cookies[7].name(), "samesitelax");
-    assert_eq!(cookies[7].same_site().unwrap(), reqwest::cookie::SameSite::Lax);
+    assert!(cookies[7].same_site_lax());
 
     // samesitestrict
     assert_eq!(cookies[8].name(), "samesitestrict");
-    assert_eq!(cookies[8].same_site().unwrap(), reqwest::cookie::SameSite::Strict);
+    assert!(cookies[8].same_site_strict());
 }
 
 #[test]
