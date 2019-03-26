@@ -256,10 +256,13 @@ impl Sender {
                 }
 
                 match body.read(unsafe { buf.bytes_mut() }) {
+                    Ok(0) => {
+                        // The buffer was empty and nothing's left to
+                        // read. Return.
+                        return Ok(().into());
+                    }
                     Ok(n) => {
-                        if n > 0 {
-                            unsafe { buf.advance_mut(n); }
-                        }
+                        unsafe { buf.advance_mut(n); }
                     }
                     Err(e) => {
                         let ret = io::Error::new(e.kind(), e.to_string());
@@ -272,22 +275,18 @@ impl Sender {
                 }
             }
 
-            if buf.len() > 0 {
-                // Check the transmission channel only if there is data
-                // to send (len > 0).
-                try_ready!(tx
-                    .as_mut()
-                    .expect("tx only taken on error")
-                    .poll_ready()
-                    .map_err(::error::from));
+            // The only way to get here is when the buffer is not empty.
+            // We can check the transmission channel
+            try_ready!(tx
+                .as_mut()
+                .expect("tx only taken on error")
+                .poll_ready()
+                .map_err(::error::from));
 
-                written += buf.len() as u64;
-                let tx = tx.as_mut().expect("tx only taken on error");
-                if let Err(_) = tx.send_data(buf.take().freeze().into()) {
-                    return Err(::error::timedout(None));
-                }
-            } else {
-                return Ok(().into());
+            written += buf.len() as u64;
+            let tx = tx.as_mut().expect("tx only taken on error");
+            if let Err(_) = tx.send_data(buf.take().freeze().into()) {
+                return Err(::error::timedout(None));
             }
         })
     }
