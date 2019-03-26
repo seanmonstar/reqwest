@@ -71,10 +71,11 @@ impl Response {
     }
 
     /// Retrieve the cookies contained in the response.
-    pub fn cookies<'a>(&'a self) -> impl Iterator<
-        Item = Result<cookie::Cookie<'a>, cookie::CookieParseError>
-    > + 'a {
+    /// 
+    /// Note that invalid 'Set-Cookie' headers will be ignored.
+    pub fn cookies<'a>(&'a self) -> impl Iterator<Item = cookie::Cookie<'a>> + 'a {
         cookie::extract_response_cookies(&self.headers)
+            .filter_map(Result::ok)
     }
 
     /// Get the final `Url` of this `Response`.
