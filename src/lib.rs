@@ -229,6 +229,7 @@ pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
 #[cfg(feature = "tls")]
 pub use self::tls::{Certificate, Identity};
+pub use body::read_to_string2;
 
 
 // this module must be first because of the `try_` macro
