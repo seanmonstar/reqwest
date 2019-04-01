@@ -358,3 +358,32 @@ fn test_referer_is_not_set_if_disabled() {
         .send()
         .unwrap();
 }
+
+#[test]
+fn test_invalid_location_stops_redirect_gh484() {
+    let server = server! {
+        request: b"\
+            GET /yikes HTTP/1.1\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 302 Found\r\n\
+            Server: test-yikes\r\n\
+            Location: http://www.yikes{KABOOM}\r\n\
+            Content-Length: 0\r\n\
+            \r\n\
+            "
+    };
+
+    let url = format!("http://{}/yikes", server.addr());
+
+    let res = reqwest::get(&url).unwrap();
+
+    assert_eq!(res.url().as_str(), url);
+    assert_eq!(res.status(), reqwest::StatusCode::FOUND);
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test-yikes");
+}

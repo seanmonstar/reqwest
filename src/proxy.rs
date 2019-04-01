@@ -56,7 +56,7 @@ impl Proxy {
     /// # fn main() {}
     /// ```
     pub fn http<U: IntoUrl>(url: U) -> ::Result<Proxy> {
-        let uri = ::into_url::to_uri(&url.into_url()?);
+        let uri = ::into_url::expect_uri(&url.into_url()?);
         Ok(Proxy::new(Intercept::Http(uri)))
     }
 
@@ -75,7 +75,7 @@ impl Proxy {
     /// # fn main() {}
     /// ```
     pub fn https<U: IntoUrl>(url: U) -> ::Result<Proxy> {
-        let uri = ::into_url::to_uri(&url.into_url()?);
+        let uri = ::into_url::expect_uri(&url.into_url()?);
         Ok(Proxy::new(Intercept::Https(uri)))
     }
 
@@ -94,7 +94,7 @@ impl Proxy {
     /// # fn main() {}
     /// ```
     pub fn all<U: IntoUrl>(url: U) -> ::Result<Proxy> {
-        let uri = ::into_url::to_uri(&url.into_url()?);
+        let uri = ::into_url::expect_uri(&url.into_url()?);
         Ok(Proxy::new(Intercept::All(uri)))
     }
 
@@ -200,7 +200,7 @@ impl Proxy {
                         .parse()
                         .expect("should be valid Url")
                 )
-                    .map(|u| into_url::to_uri(&u) )
+                    .map(|u| into_url::expect_uri(&u) )
             },
         }
     }

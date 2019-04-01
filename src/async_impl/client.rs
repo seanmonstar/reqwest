@@ -30,7 +30,7 @@ use native_tls::TlsConnector;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use connect::Connector;
-use into_url::to_uri;
+use into_url::{expect_uri, try_uri};
 use redirect::{self, RedirectPolicy, remove_sensitive_headers};
 use {IntoUrl, Method, Proxy, StatusCode, Url};
 #[cfg(feature = "tls")]
@@ -520,7 +520,7 @@ impl Client {
             headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip"));
         }
 
-        let uri = to_uri(&url);
+        let uri = expect_uri(&url);
 
         let (reusable, body) = match body {
             Some(body) => {
@@ -709,6 +709,17 @@ impl Future for PendingRequest {
                             self.url.join(str::from_utf8(val.as_bytes()).ok()?).ok()
                         })();
 
+                        // Check that the `url` is also a valid `http::Uri`.
+                        //
+                        // If not, just log it and skip the redirect.
+                        let loc = loc.and_then(|url| {
+                            if try_uri(&url).is_some() {
+                                Some(url)
+                            } else {
+                                None
+                            }
+                        });
+
                         if loc.is_none() {
                             debug!("Location header had invalid URI: {:?}", val);
                         }
@@ -733,7 +744,7 @@ impl Future for PendingRequest {
 
                             remove_sensitive_headers(&mut self.headers, &self.url, &self.urls);
                             debug!("redirecting to {:?} '{}'", self.method, self.url);
-                            let uri = to_uri(&self.url);
+                            let uri = expect_uri(&self.url);
                             let body = match self.body {
                                 Some(Some(ref body)) => ::hyper::Body::from(body.clone()),
                                 _ => ::hyper::Body::empty(),
