@@ -1,3 +1,10 @@
+## v0.9.13
+
+### Fixes
+
+- Fix panic on some invalid `Location` headers during redirects (error is logged and redirect response is returned instead).
+- Fix instance when server notices streaming request body is complete before reqwest does.
+
 ## v0.9.12
 
 ### Features
