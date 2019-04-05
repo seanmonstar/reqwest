@@ -23,6 +23,10 @@ matrix:
         - rust: stable
           env: FEATURES="--features rustls-tls"
 
+        # default-tls, rustls, and socks!
+        - rust: stable
+          env: FEATURES="--features rustls-tls,socks"
+
         - rust: stable
           env: FEATURES="--features hyper-011"
 
