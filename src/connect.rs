@@ -19,7 +19,7 @@ use std::time::Duration;
 
 #[cfg(feature = "trust-dns")]
 use dns::TrustDnsResolver;
-use Proxy;
+use proxy::{Proxy, ProxyScheme};
 
 #[cfg(feature = "trust-dns")]
 type HttpConnector = ::hyper::client::HttpConnector<TrustDnsResolver>;
@@ -121,6 +121,79 @@ impl Connector {
     pub(crate) fn set_timeout(&mut self, timeout: Option<Duration>) {
         self.timeout = timeout;
     }
+
+    #[cfg(feature = "socks")]
+    fn connect_socks(&self, dst: Destination, proxy: ProxyScheme) -> Connecting {
+        macro_rules! timeout {
+            ($future:expr) => {
+                if let Some(dur) = self.timeout {
+                    Box::new(Timeout::new($future, dur).map_err(|err| {
+                        if err.is_inner() {
+                            err.into_inner().expect("is_inner")
+                        } else if err.is_elapsed() {
+                            io::Error::new(io::ErrorKind::TimedOut, "connect timed out")
+                        } else {
+                            io::Error::new(io::ErrorKind::Other, err)
+                        }
+                    }))
+                } else {
+                    Box::new($future)
+                }
+            }
+        }
+
+        let dns = match proxy {
+            ProxyScheme::Socks5 { remote_dns: false, .. } => socks::DnsResolve::Local,
+            ProxyScheme::Socks5 { remote_dns: true, .. } => socks::DnsResolve::Proxy,
+            ProxyScheme::Http { .. } => {
+                unreachable!("connect_socks is only called for socks proxies");
+            },
+        };
+
+
+        match &self.inner {
+            #[cfg(feature = "default-tls")]
+            Inner::DefaultTls(_http, tls) => if dst.scheme() == "https" {
+                use self::native_tls_async::TlsConnectorExt;
+
+                let tls = tls.clone();
+                let host = dst.host().to_owned();
+                let socks_connecting = socks::connect(proxy, dst, dns);
+                return timeout!(socks_connecting.and_then(move |(conn, connected)| {
+                    tls.connect_async(&host, conn)
+                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+                        .map(move |io| (Box::new(io) as Conn, connected))
+                }));
+            },
+            #[cfg(feature = "rustls-tls")]
+            Inner::RustlsTls { tls_proxy, .. } => if dst.scheme() == "https" {
+                use tokio_rustls::TlsConnector as RustlsConnector;
+                use tokio_rustls::webpki::DNSNameRef;
+
+                let tls = tls_proxy.clone();
+                let host = dst.host().to_owned();
+                let socks_connecting = socks::connect(proxy, dst, dns);
+                return timeout!(socks_connecting.and_then(move |(conn, connected)| {
+                    let maybe_dnsname = DNSNameRef::try_from_ascii_str(&host)
+                        .map(|dnsname| dnsname.to_owned())
+                        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Invalid DNS Name"));
+                    futures::future::result(maybe_dnsname)
+                        .and_then(move |dnsname| {
+                            RustlsConnector::from(tls).connect(dnsname.as_ref(), conn)
+                                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+                        })
+                        .map(move |io| {
+                            (Box::new(io) as Conn, connected)
+                        })
+                }));
+            },
+            #[cfg(not(feature = "tls"))]
+            Inner::Http(_) => ()
+        }
+
+        // else no TLS
+        socks::connect(proxy, dst, dns)
+    }
 }
 
 #[cfg(feature = "trust-dns")]
@@ -216,9 +289,17 @@ impl Connect for Connector {
         }
 
         for prox in self.proxies.iter() {
-            if let Some(puri) = prox.intercept(&dst) {
-                trace!("proxy({:?}) intercepts {:?}", puri, dst);
+            if let Some(proxy_scheme) = prox.intercept(&dst) {
+                trace!("proxy({:?}) intercepts {:?}", proxy_scheme, dst);
+
+                let (puri, _auth) = match proxy_scheme {
+                    ProxyScheme::Http { uri, auth, .. } => (uri, auth),
+                    #[cfg(feature = "socks")]
+                    ProxyScheme::Socks5 { .. } => return self.connect_socks(dst, proxy_scheme),
+                };
+
                 let mut ndst = dst.clone();
+
                 let new_scheme = puri
                     .scheme_part()
                     .map(Scheme::as_str)
@@ -232,7 +313,7 @@ impl Connect for Connector {
                 ndst.set_port(puri.port_part().map(|port| port.as_u16()));
 
                 #[cfg(feature = "tls")]
-                let auth = prox.auth().cloned();
+                let auth = _auth;
 
                 match &self.inner {
                     #[cfg(feature = "default-tls")]
@@ -307,14 +388,14 @@ pub(crate) type Conn = Box<dyn AsyncConn + Send + Sync + 'static>;
 pub(crate) type Connecting = Box<Future<Item=(Conn, Connected), Error=io::Error> + Send>;
 
 #[cfg(feature = "tls")]
-fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<::proxy::Auth>) -> Tunnel<T> {
+fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<::http::header::HeaderValue>) -> Tunnel<T> {
     let mut buf = format!("\
         CONNECT {0}:{1} HTTP/1.1\r\n\
         Host: {0}:{1}\r\n\
     ", host, port).into_bytes();
 
     match auth {
-        Some(::proxy::Auth::Basic(value)) => {
+        Some(value) => {
             debug!("tunnel to {}:{} using basic auth", host, port);
             buf.extend_from_slice(b"Proxy-Authorization: ");
             buf.extend_from_slice(value.as_bytes());
@@ -348,7 +429,9 @@ enum TunnelState {
 
 #[cfg(feature = "tls")]
 impl<T> Future for Tunnel<T>
-where T: AsyncRead + AsyncWrite {
+where
+    T: AsyncRead + AsyncWrite,
+{
     type Item = T;
     type Error = io::Error;
 
@@ -527,6 +610,72 @@ mod native_tls_async {
     }
 }
 
+
+#[cfg(feature = "socks")]
+mod socks {
+    use std::io;
+
+    use futures::{Future, future};
+    use hyper::client::connect::{Connected, Destination};
+    use socks::Socks5Stream;
+    use std::net::ToSocketAddrs;
+    use tokio::{net::TcpStream, reactor};
+
+    use super::{Connecting};
+    use proxy::{ProxyScheme};
+
+    pub(super) enum DnsResolve {
+        Local,
+        Proxy,
+    }
+
+    pub(super) fn connect(
+        proxy: ProxyScheme,
+        dst: Destination,
+        dns: DnsResolve,
+    ) -> Connecting {
+        let https = dst.scheme() == "https";
+        let original_host = dst.host().to_owned();
+        let mut host = original_host.clone();
+        let port = dst.port().unwrap_or_else(|| {
+            if https { 443 } else { 80 }
+        });
+
+        if let DnsResolve::Local = dns {
+            let maybe_new_target = match (host.as_str(), port).to_socket_addrs() {
+                Ok(mut iter) => iter.next(),
+                Err(err) => {
+                    return Box::new(future::err(err));
+                }
+            };
+            if let Some(new_target) = maybe_new_target {
+                host = new_target.ip().to_string();
+            }
+        }
+
+        let (socket_addr, auth) = match proxy {
+            ProxyScheme::Socks5 { addr, auth, .. } => (addr, auth),
+            _ => unreachable!(),
+        };
+
+        // Get a Tokio TcpStream
+        let stream = future::result(if let Some((username, password)) = auth {
+            Socks5Stream::connect_with_password(
+                socket_addr, (host.as_str(), port), &username, &password
+            )
+        } else {
+            Socks5Stream::connect(socket_addr, (host.as_str(), port))
+        }.and_then(|s| {
+            TcpStream::from_std(s.into_inner(), &reactor::Handle::default())
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+        }));
+
+        Box::new(
+            stream.map(|s| (Box::new(s) as super::Conn, Connected::new()))
+        )
+    }
+}
+
 #[cfg(feature = "tls")]
 #[cfg(test)]
 mod tests {
@@ -652,7 +801,7 @@ mod tests {
         let host = addr.ip().to_string();
         let port = addr.port();
         let work = work.and_then(|tcp| {
-            tunnel(tcp, host, port, Some(proxy::Auth::basic("Aladdin", "open sesame")))
+            tunnel(tcp, host, port, Some(proxy::encode_basic_auth("Aladdin", "open sesame")))
         });
 
         rt.block_on(work).unwrap();

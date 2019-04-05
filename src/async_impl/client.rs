@@ -579,11 +579,11 @@ impl Client {
 
         for proxy in self.inner.proxies.iter() {
             if proxy.is_match(dst) {
-                match proxy.auth() {
-                    Some(::proxy::Auth::Basic(ref header)) => {
+                match proxy.http_basic_auth(dst) {
+                    Some(header) => {
                         headers.insert(
                             PROXY_AUTHORIZATION,
-                            header.clone()
+                            header,
                         );
                     },
                     None => (),

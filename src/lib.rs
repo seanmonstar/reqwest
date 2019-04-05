@@ -203,6 +203,8 @@ extern crate tokio_timer;
 extern crate trust_dns_resolver;
 extern crate url;
 extern crate uuid;
+#[cfg(feature = "socks")]
+extern crate socks;
 
 #[cfg(feature = "rustls-tls")]
 extern crate hyper_rustls;

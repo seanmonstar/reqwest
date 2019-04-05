@@ -149,7 +149,8 @@ impl Error {
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
             Kind::ClientError(_) |
-            Kind::ServerError(_) => None,
+            Kind::ServerError(_) |
+            Kind::UnknownProxyScheme => None,
         }
     }
 
@@ -273,6 +274,7 @@ impl fmt::Display for Error {
                 f.write_str("Server Error: ")?;
                 fmt::Display::fmt(code, f)
             }
+            Kind::UnknownProxyScheme => f.write_str("Unknown proxy scheme"),
         }
     }
 }
@@ -300,6 +302,7 @@ impl StdError for Error {
             Kind::RedirectLoop => "Infinite redirect loop",
             Kind::ClientError(_) => "Client Error",
             Kind::ServerError(_) => "Server Error",
+            Kind::UnknownProxyScheme => "Unknown proxy scheme",
         }
     }
 
@@ -325,7 +328,8 @@ impl StdError for Error {
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
             Kind::ClientError(_) |
-            Kind::ServerError(_) => None,
+            Kind::ServerError(_) |
+            Kind::UnknownProxyScheme => None,
         }
     }
 }
@@ -352,6 +356,7 @@ pub(crate) enum Kind {
     RedirectLoop,
     ClientError(StatusCode),
     ServerError(StatusCode),
+    UnknownProxyScheme,
 }
 
 
@@ -515,6 +520,10 @@ pub(crate) fn url_bad_scheme(url: Url) -> Error {
 #[cfg(feature = "trust-dns")]
 pub(crate) fn dns_system_conf(io: io::Error) -> Error {
     Error::new(Kind::DnsSystemConf(io), None)
+}
+
+pub(crate) fn unknown_proxy_scheme() -> Error {
+    Error::new(Kind::UnknownProxyScheme, None)
 }
 
 #[cfg(test)]
