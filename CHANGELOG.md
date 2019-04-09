@@ -1,3 +1,9 @@
+## v0.9.14
+
+- Add optional support for SOCKS5 proxies, by enabling the `socks5` cargo feature.
+- Add Cookie Store support to `Client`, automatically handling cookies for a session.
+- Fix `Proxy` to check the URL for a username and password.
+
 ## v0.9.13
 
 ### Fixes
