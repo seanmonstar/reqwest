@@ -15,7 +15,7 @@
 //! - Customizable [redirect policy](#redirect-policy)
 //! - HTTP [Proxies](#proxies)
 //! - Uses system-native [TLS](#tls)
-//! - Cookies (only rudimentary support, full support is TODO)
+//! - Cookies
 //!
 //! The rudimentary cookie support means that the cookies need to be manually
 //! configured for every single request. In other words, there's no cookie jar
@@ -155,6 +155,7 @@
 //!   `native-tls` library to connect over HTTPS.
 //! - **default-tls-vendored**: Enables the `vendored` feature of `native-tls`.
 //! - **rustls-tls**: Provides TLS support via the `rustls` library.
+//! - **socks**: Provides SOCKS5 proxy support.
 //! - **trust-dns**: Enables a trust-dns async resolver instead of default
 //!   threadpool using `getaddrinfo`.
 //! - **hyper-011**: Provides support for hyper's old typed headers.

@@ -11,6 +11,7 @@ An ergonomic, batteries-included HTTP Client for Rust.
 - Customizable redirect policy
 - HTTP Proxies
 - HTTPS via system-native TLS (or optionally, rustls)
+- Cookie Store
 - [Changelog](CHANGELOG.md)
 
 ## Example
