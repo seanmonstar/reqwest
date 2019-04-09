@@ -50,7 +50,7 @@ impl Cookie<'static> {
         N: Into<Cow<'static, str>>,
         V: Into<Cow<'static, str>>,
     {
-        Self(cookie::Cookie::new(name, value))
+        Cookie(cookie::Cookie::new(name, value))
     }
 }
 
