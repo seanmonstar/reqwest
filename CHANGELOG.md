@@ -1,8 +1,9 @@
 ## v0.9.14
 
-- Add optional support for SOCKS5 proxies, by enabling the `socks5` cargo feature.
-- Add Cookie Store support to `Client`, automatically handling cookies for a session.
-- Fix `Proxy` to check the URL for a username and password.
+### Features
+
+* Added `ClientBuilder::cookiestore(enable: bool)` method to enable a cookie store that persists across requests.
+* Added `Response::cookies()` accessor that allows iterating over response cookies.
 
 ## v0.9.13
 
