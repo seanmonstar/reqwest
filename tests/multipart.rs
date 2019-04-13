@@ -21,10 +21,10 @@ fn text_part() {
     let server = server! {
         request: format!("\
             POST /multipart/1 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
             content-type: multipart/form-data; boundary={}\r\n\
             content-length: 125\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
             \r\n\
@@ -70,10 +70,10 @@ fn file() {
     let server = server! {
         request: format!("\
             POST /multipart/2 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
             content-type: multipart/form-data; boundary={}\r\n\
             content-length: {}\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
             \r\n\

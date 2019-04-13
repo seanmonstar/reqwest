@@ -116,9 +116,9 @@ fn test_redirect_307_and_308_tries_to_post_again() {
         let redirect = server! {
             request: format!("\
                 POST /{} HTTP/1.1\r\n\
+                content-length: 5\r\n\
                 user-agent: $USERAGENT\r\n\
                 accept: */*\r\n\
-                content-length: 5\r\n\
                 accept-encoding: gzip\r\n\
                 host: $HOST\r\n\
                 \r\n\
@@ -136,9 +136,9 @@ fn test_redirect_307_and_308_tries_to_post_again() {
 
             request: format!("\
                 POST /dst HTTP/1.1\r\n\
+                content-length: 5\r\n\
                 user-agent: $USERAGENT\r\n\
                 accept: */*\r\n\
-                content-length: 5\r\n\
                 accept-encoding: gzip\r\n\
                 referer: http://$HOST/{}\r\n\
                 host: $HOST\r\n\
@@ -211,9 +211,9 @@ fn test_redirect_removes_sensitive_headers() {
     let end_server = server! {
         request: b"\
             GET /otherhost HTTP/1.1\r\n\
+            accept-encoding: gzip\r\n\
             user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
-            accept-encoding: gzip\r\n\
             host: $HOST\r\n\
             \r\n\
             ",
@@ -228,9 +228,9 @@ fn test_redirect_removes_sensitive_headers() {
     let mid_server = server! {
         request: b"\
             GET /sensitive HTTP/1.1\r\n\
+            cookie: foo=bar\r\n\
             user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
-            cookie: foo=bar\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
             \r\n\

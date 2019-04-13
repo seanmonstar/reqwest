@@ -139,9 +139,9 @@ fn test_post() {
     let server = server! {
         request: b"\
             POST /2 HTTP/1.1\r\n\
+            content-length: 5\r\n\
             user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
-            content-length: 5\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
             \r\n\
@@ -177,10 +177,10 @@ fn test_post_form() {
     let server = server! {
         request: b"\
             POST /form HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
             content-type: application/x-www-form-urlencoded\r\n\
             content-length: 24\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
             \r\n\
@@ -339,9 +339,9 @@ fn test_override_default_headers() {
     let server = server! {
         request: b"\
             GET /3 HTTP/1.1\r\n\
+            authorization: secret\r\n\
             user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
-            authorization: secret\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
             \r\n\
