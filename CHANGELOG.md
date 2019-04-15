@@ -1,3 +1,7 @@
+## v0.9.15
+
+- Fix sending of "appended" request headers.
+
 ## v0.9.14
 
 - Add optional support for SOCKS5 proxies, by enabling the `socks5` cargo feature.
