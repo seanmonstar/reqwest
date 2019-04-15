@@ -6,6 +6,7 @@ use std::net::IpAddr;
 use bytes::Bytes;
 use futures::{Async, Future, Poll};
 use header::{
+    Entry,
     HeaderMap,
     HeaderValue,
     ACCEPT,
@@ -526,13 +527,16 @@ impl Client {
         let (
             method,
             url,
-            user_headers,
+            mut headers,
             body
         ) = req.pieces();
 
-        let mut headers = self.inner.headers.clone(); // default headers
-        for (key, value) in user_headers.iter() {
-            headers.insert(key, value.clone());
+        // insert default headers in the request headers
+        // without overwriting already appended headers.
+        for (key, value) in &self.inner.headers {
+            if let Ok(Entry::Vacant(entry)) = headers.entry(key) {
+                entry.insert(value.clone());
+            }
         }
 
         // Add cookies from the cookie store.

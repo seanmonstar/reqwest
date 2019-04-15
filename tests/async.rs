@@ -59,9 +59,9 @@ fn async_test_multipart() {
     let server = server! {
         request: format!("\
             POST /multipart/1 HTTP/1.1\r\n\
+            content-type: multipart/form-data; boundary={}\r\n\
             user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
-            content-type: multipart/form-data; boundary={}\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
             transfer-encoding: chunked\r\n\
