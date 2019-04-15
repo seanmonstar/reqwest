@@ -531,9 +531,9 @@ impl Client {
             body
         ) = req.pieces();
 
-        let default_headers = self.inner.headers.clone(); // default headers
-
-        for (key, value) in default_headers.iter() {
+        // insert default headers in the request headers
+        // without overwriting already appended headers.
+        for (key, value) in &self.inner.headers {
             if let Ok(Entry::Vacant(entry)) = headers.entry(key) {
                 entry.insert(value.clone());
             }

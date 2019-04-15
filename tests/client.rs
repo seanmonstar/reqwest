@@ -363,3 +363,68 @@ fn test_override_default_headers() {
     assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
 
 }
+
+#[test]
+fn test_appended_headers_not_overwritten() {
+    let client = reqwest::Client::new();
+
+    let server = server! {
+        request: b"\
+            GET /4 HTTP/1.1\r\n\
+            accept: application/json\r\n\
+            accept: application/json+hal\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Server: test\r\n\
+            Content-Length: 0\r\n\
+            \r\n\
+            "
+    };
+
+    let url = format!("http://{}/4", server.addr());
+    let res = client.get(&url).header(header::ACCEPT, "application/json").header(header::ACCEPT, "application/json+hal").send().unwrap();
+
+    assert_eq!(res.url().as_str(), &url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
+
+    // make sure this also works with default headers
+    use reqwest::header;
+    let mut headers = header::HeaderMap::with_capacity(1);
+    headers.insert(header::ACCEPT, header::HeaderValue::from_static("text/html"));
+    let client = reqwest::Client::builder()
+        .default_headers(headers)
+        .build().unwrap();
+    
+    let server = server! {
+        request: b"\
+            GET /4 HTTP/1.1\r\n\
+            accept: application/json\r\n\
+            accept: application/json+hal\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Server: test\r\n\
+            Content-Length: 0\r\n\
+            \r\n\
+            "
+    };
+
+    let url = format!("http://{}/4", server.addr());
+    let res = client.get(&url).header(header::ACCEPT, "application/json").header(header::ACCEPT, "application/json+hal").send().unwrap();
+
+    assert_eq!(res.url().as_str(), &url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
+}
