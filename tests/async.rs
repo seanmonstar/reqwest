@@ -138,6 +138,46 @@ fn request_timeout() {
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
 }
 
+#[test]
+fn response_timeout() {
+    let _ = env_logger::try_init();
+
+    let server = server! {
+        request: b"\
+            GET /slow HTTP/1.1\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Content-Length: 5\r\n\
+            \r\n\
+            Hello\
+            ",
+        write_timeout: Duration::from_secs(2)
+    };
+
+    let mut rt = Runtime::new().expect("new rt");
+
+    let client = Client::builder()
+        .timeout(Duration::from_millis(500))
+        .build()
+        .unwrap();
+
+    let url = format!("http://{}/slow", server.addr());
+    let fut = client
+        .get(&url)
+        .send()
+        .and_then(|res| res.into_body().concat2());
+
+    let err = rt.block_on(fut).unwrap_err();
+
+    assert!(err.is_timeout());
+}
+
 fn gzip_case(response_size: usize, chunk_size: usize) {
     let content: String = (0..response_size).into_iter().map(|i| format!("test {}", i)).collect();
     let mut encoder = ::libflate::gzip::Encoder::new(Vec::new()).unwrap();

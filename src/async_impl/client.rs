@@ -346,7 +346,7 @@ impl ClientBuilder {
     /// Enables a request timeout.
     ///
     /// The timeout is applied from the when the request starts connecting
-    /// until the response headers are received. Bodies are not affected.
+    /// until the response body has finished.
     ///
     /// Default is no timeout.
     pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
@@ -839,7 +839,7 @@ impl Future for PendingRequest {
                     }
                 }
             }
-            let res = Response::new(res, self.url.clone(), self.client.gzip);
+            let res = Response::new(res, self.url.clone(), self.client.gzip, self.timeout.take());
             return Ok(Async::Ready(res));
         }
     }
