@@ -26,6 +26,7 @@ use hyper::client::ResponseFuture;
 use mime;
 #[cfg(feature = "default-tls")]
 use native_tls::TlsConnector;
+use tokio::{clock, timer::Delay};
 
 
 use super::request::{Request, RequestBuilder};
@@ -212,14 +213,15 @@ impl ClientBuilder {
 
         Ok(Client {
             inner: Arc::new(ClientRef {
+                cookie_store,
                 gzip: config.gzip,
                 hyper: hyper_client,
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
+                request_timeout: config.timeout,
                 proxies,
                 proxies_maybe_http_auth,
-                cookie_store,
             }),
         })
     }
@@ -341,16 +343,20 @@ impl ClientBuilder {
         self
     }
 
-    // Currently not used, so hide from docs.
-    #[doc(hidden)]
+    /// Enables a request timeout.
+    ///
+    /// The timeout is applied from the when the request starts connecting
+    /// until the response headers are received. Bodies are not affected.
+    ///
+    /// Default is no timeout.
     pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
         self.config.timeout = Some(timeout);
         self
     }
 
     /// Sets the maximum idle connection per host allowed in the pool.
-    //
-    // Default is usize::MAX (no limit).
+    ///
+    /// Default is usize::MAX (no limit).
     pub fn max_idle_per_host(mut self, max: usize) -> ClientBuilder {
         self.config.max_idle_per_host = max;
         self
@@ -585,6 +591,10 @@ impl Client {
 
         let in_flight = self.inner.hyper.request(req);
 
+        let timeout = self.inner.request_timeout.map(|dur| {
+            Delay::new(clock::now() + dur)
+        });
+
         Pending {
             inner: PendingInner::Request(PendingRequest {
                 method: method,
@@ -597,6 +607,7 @@ impl Client {
                 client: self.inner.clone(),
 
                 in_flight: in_flight,
+                timeout,
             }),
         }
     }
@@ -654,17 +665,18 @@ impl fmt::Debug for ClientBuilder {
 }
 
 struct ClientRef {
+    cookie_store: Option<RwLock<cookie::CookieStore>>,
     gzip: bool,
     headers: HeaderMap,
     hyper: HyperClient,
     redirect_policy: RedirectPolicy,
     referer: bool,
+    request_timeout: Option<Duration>,
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
-    cookie_store: Option<RwLock<cookie::CookieStore>>,
 }
 
-pub struct Pending {
+pub(super) struct Pending {
     inner: PendingInner,
 }
 
@@ -684,6 +696,7 @@ struct PendingRequest {
     client: Arc<ClientRef>,
 
     in_flight: ResponseFuture,
+    timeout: Option<Delay>,
 }
 
 impl Pending {
@@ -711,6 +724,12 @@ impl Future for PendingRequest {
     type Error = ::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        if let Some(ref mut delay) = self.timeout {
+            if let Async::Ready(()) = try_!(delay.poll(), &self.url) {
+                return Err(::error::timedout(Some(self.url.clone())));
+            }
+        }
+
         loop {
             let res = match try_!(self.in_flight.poll(), &self.url) {
                 Async::Ready(res) => res,
