@@ -5,13 +5,15 @@ use std::net::SocketAddr;
 
 use futures::{Async, Future, Poll, Stream};
 use futures::stream::Concat2;
+use http;
 use hyper::{HeaderMap, StatusCode, Version};
 use hyper::client::connect::HttpInfo;
 use hyper::header::{CONTENT_LENGTH};
+use tokio::timer::Delay;
 use serde::de::DeserializeOwned;
 use serde_json;
 use url::Url;
-use http;
+
 
 use cookie;
 use super::Decoder;
@@ -31,14 +33,14 @@ pub struct Response {
 }
 
 impl Response {
-    pub(super) fn new(res: ::hyper::Response<::hyper::Body>, url: Url, gzip: bool) -> Response {
+    pub(super) fn new(res: ::hyper::Response<::hyper::Body>, url: Url, gzip: bool, timeout: Option<Delay>) -> Response {
         let (parts, body) = res.into_parts();
         let status = parts.status;
         let version = parts.version;
         let extensions = parts.extensions;
 
         let mut headers = parts.headers;
-        let decoder = Decoder::detect(&mut headers, Body::wrap(body), gzip);
+        let decoder = Decoder::detect(&mut headers, Body::response(body, timeout), gzip);
 
         debug!("Response: '{}' for {}", status, url);
         Response {

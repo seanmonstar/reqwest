@@ -1,8 +1,9 @@
-use std::{fmt, mem};
+use std::fmt;
 
-use futures::{Stream, Poll, Async};
+use futures::{Future, Stream, Poll, Async};
 use bytes::{Buf, Bytes};
 use hyper::body::Payload;
+use tokio::timer::Delay;
 
 /// An asynchronous `Stream`.
 pub struct Body {
@@ -11,48 +12,43 @@ pub struct Body {
 
 enum Inner {
     Reusable(Bytes),
-    Hyper(::hyper::Body),
+    Hyper {
+        body: ::hyper::Body,
+        timeout: Option<Delay>,
+    }
 }
 
 impl Body {
-    fn poll_inner(&mut self) -> &mut ::hyper::Body {
-        match self.inner {
-            Inner::Hyper(ref mut body) => return body,
-            Inner::Reusable(_) => (),
-        }
-
-        let bytes = match mem::replace(&mut self.inner, Inner::Reusable(Bytes::new())) {
-            Inner::Reusable(bytes) => bytes,
-            Inner::Hyper(_) => unreachable!(),
-        };
-
-        self.inner = Inner::Hyper(bytes.into());
-
-        match self.inner {
-            Inner::Hyper(ref mut body) => return body,
-            Inner::Reusable(_) => unreachable!(),
-        }
-    }
-
     pub(crate) fn content_length(&self) -> Option<u64> {
         match self.inner {
             Inner::Reusable(ref bytes) => Some(bytes.len() as u64),
-            Inner::Hyper(ref body) => body.content_length(),
+            Inner::Hyper { ref body, .. } => body.content_length(),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn response(body: ::hyper::Body, timeout: Option<Delay>) -> Body {
+        Body {
+            inner: Inner::Hyper {
+                body,
+                timeout,
+            },
         }
     }
 
     #[inline]
     pub(crate) fn wrap(body: ::hyper::Body) -> Body {
         Body {
-            inner: Inner::Hyper(body),
+            inner: Inner::Hyper {
+                body,
+                timeout: None,
+            },
         }
     }
 
     #[inline]
     pub(crate) fn empty() -> Body {
-        Body {
-            inner: Inner::Hyper(::hyper::Body::empty()),
-        }
+        Body::wrap(::hyper::Body::empty())
     }
 
     #[inline]
@@ -66,7 +62,10 @@ impl Body {
     pub(crate) fn into_hyper(self) -> (Option<Bytes>, ::hyper::Body) {
         match self.inner {
             Inner::Reusable(chunk) => (Some(chunk.clone()), chunk.into()),
-            Inner::Hyper(b) => (None, b),
+            Inner::Hyper { body, timeout } => {
+                debug_assert!(timeout.is_none());
+                (None, body)
+            },
         }
     }
 }
@@ -77,12 +76,29 @@ impl Stream for Body {
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match try_!(self.poll_inner().poll()) {
-            Async::Ready(opt) => Ok(Async::Ready(opt.map(|chunk| Chunk {
-                inner: chunk,
-            }))),
-            Async::NotReady => Ok(Async::NotReady),
-        }
+        let opt = match self.inner {
+            Inner::Hyper { ref mut body, ref mut timeout } => {
+                if let Some(ref mut timeout) = timeout {
+                    if let Async::Ready(()) = try_!(timeout.poll()) {
+                        return Err(::error::timedout(None));
+                    }
+                }
+                try_ready!(body.poll_data().map_err(::error::from))
+            },
+            Inner::Reusable(ref mut bytes) => {
+                return if bytes.is_empty() {
+                    Ok(Async::Ready(None))
+                } else {
+                    let chunk = Chunk::from_chunk(bytes.clone());
+                    *bytes = Bytes::new();
+                    Ok(Async::Ready(Some(chunk)))
+                };
+            },
+        };
+
+        Ok(Async::Ready(opt.map(|chunk| Chunk {
+            inner: chunk,
+        })))
     }
 }
 
