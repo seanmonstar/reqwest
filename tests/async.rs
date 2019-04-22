@@ -7,24 +7,27 @@ extern crate tokio;
 #[macro_use]
 mod support;
 
-use reqwest::async::Client;
-use reqwest::async::multipart::{Form, Part};
-use futures::{Future, Stream};
 use std::io::Write;
 use std::time::Duration;
 
+use futures::{Future, Stream};
+use tokio::runtime::current_thread::Runtime;
+
+use reqwest::async::Client;
+use reqwest::async::multipart::{Form, Part};
+
 #[test]
-fn async_test_gzip_response() {
-    test_gzip(10_000, 4096);
+fn gzip_response() {
+    gzip_case(10_000, 4096);
 }
 
 #[test]
-fn async_test_gzip_single_byte_chunks() {
-    test_gzip(10, 1);
+fn gzip_single_byte_chunks() {
+    gzip_case(10, 1);
 }
 
 #[test]
-fn async_test_multipart() {
+fn multipart() {
     let _ = env_logger::try_init();
 
     let stream = futures::stream::once::<_, hyper::Error>(Ok(hyper::Chunk::from("part1 part2".to_owned())));
@@ -78,7 +81,7 @@ fn async_test_multipart() {
 
     let url = format!("http://{}/multipart/1", server.addr());
 
-    let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
+    let mut rt = Runtime::new().expect("new rt");
 
     let client = Client::new();
 
@@ -95,7 +98,47 @@ fn async_test_multipart() {
     rt.block_on(res_future).unwrap();
 }
 
-fn test_gzip(response_size: usize, chunk_size: usize) {
+#[test]
+fn request_timeout() {
+    let _ = env_logger::try_init();
+
+    let server = server! {
+        request: b"\
+            GET /slow HTTP/1.1\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Content-Length: 5\r\n\
+            \r\n\
+            Hello\
+            ",
+        read_timeout: Duration::from_secs(2)
+    };
+
+    let mut rt = Runtime::new().expect("new rt");
+
+    let client = Client::builder()
+        .timeout(Duration::from_millis(500))
+        .build()
+        .unwrap();
+
+    let url = format!("http://{}/slow", server.addr());
+    let fut = client
+        .get(&url)
+        .send();
+
+    let err = rt.block_on(fut).unwrap_err();
+
+    assert!(err.is_timeout());
+    assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
+}
+
+fn gzip_case(response_size: usize, chunk_size: usize) {
     let content: String = (0..response_size).into_iter().map(|i| format!("test {}", i)).collect();
     let mut encoder = ::libflate::gzip::Encoder::new(Vec::new()).unwrap();
     match encoder.write(content.as_bytes()) {
@@ -128,7 +171,7 @@ fn test_gzip(response_size: usize, chunk_size: usize) {
         response: response
     };
 
-    let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
+    let mut rt = Runtime::new().expect("new rt");
 
     let client = Client::new();
 

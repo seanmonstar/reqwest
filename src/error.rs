@@ -150,7 +150,8 @@ impl Error {
             Kind::RedirectLoop |
             Kind::ClientError(_) |
             Kind::ServerError(_) |
-            Kind::UnknownProxyScheme => None,
+            Kind::UnknownProxyScheme |
+            Kind::Timer => None,
         }
     }
 
@@ -275,6 +276,7 @@ impl fmt::Display for Error {
                 fmt::Display::fmt(code, f)
             }
             Kind::UnknownProxyScheme => f.write_str("Unknown proxy scheme"),
+            Kind::Timer => f.write_str("timer unavailable"),
         }
     }
 }
@@ -303,6 +305,7 @@ impl StdError for Error {
             Kind::ClientError(_) => "Client Error",
             Kind::ServerError(_) => "Server Error",
             Kind::UnknownProxyScheme => "Unknown proxy scheme",
+            Kind::Timer => "timer unavailable",
         }
     }
 
@@ -329,7 +332,8 @@ impl StdError for Error {
             Kind::RedirectLoop |
             Kind::ClientError(_) |
             Kind::ServerError(_) |
-            Kind::UnknownProxyScheme => None,
+            Kind::UnknownProxyScheme |
+            Kind::Timer => None,
         }
     }
 }
@@ -357,6 +361,7 @@ pub(crate) enum Kind {
     ClientError(StatusCode),
     ServerError(StatusCode),
     UnknownProxyScheme,
+    Timer,
 }
 
 
@@ -430,6 +435,12 @@ where T: Into<Kind> {
             ::wait::Waited::TimedOut =>  io_timeout().into(),
             ::wait::Waited::Err(e) => e.into(),
         }
+    }
+}
+
+impl From<::tokio::timer::Error> for Kind {
+    fn from(_err: ::tokio::timer::Error) -> Kind {
+        Kind::Timer
     }
 }
 
