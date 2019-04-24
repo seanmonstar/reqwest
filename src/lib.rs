@@ -139,7 +139,7 @@
 //! security to connect to HTTPS destinations. This means schannel on Windows,
 //! Security-Framework on macOS, and OpenSSL on Linux.
 //!
-//! - Additional X509 certicates can be configured on a `ClientBuilder` with the
+//! - Additional X509 certificates can be configured on a `ClientBuilder` with the
 //!   [`Certificate`](Certificate) type.
 //! - Client certificates can be add to a `ClientBuilder` with the
 //!   [`Identity`][Identity] type.
