@@ -223,8 +223,9 @@ impl Stream for Gzip {
         };
 
         match read {
-            Ok(read) if read == 0 => {
-                Ok(Async::Ready(None))
+            Ok(read) if read == 0 => match self.inner.get_mut().stream.poll() {
+                Ok(Async::Ready(Some(_))) => Ok(Async::Ready(None)),
+                result => result
             },
             Ok(read) => {
                 unsafe { self.buf.advance_mut(read) };
