@@ -128,7 +128,7 @@ impl Error {
     /// # fn main() {}
     /// ```
     #[inline]
-    pub fn get_ref(&self) -> Option<&(StdError + Send + Sync + 'static)> {
+    pub fn get_ref(&self) -> Option<&(dyn StdError + Send + Sync + 'static)> {
         match self.inner.kind {
             Kind::Http(ref e) => Some(e),
             Kind::Hyper(ref e) => Some(e),
@@ -171,7 +171,7 @@ impl Error {
             Kind::Io(ref io) => io.kind() == io::ErrorKind::TimedOut,
             Kind::Hyper(ref error) => {
                 error
-                    .cause2()
+                    .source()
                     .and_then(|cause| {
                         cause.downcast_ref::<io::Error>()
                     })
@@ -315,24 +315,23 @@ impl StdError for Error {
         }
     }
 
-    #[allow(deprecated)]
-    fn cause(&self) -> Option<&StdError> {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self.inner.kind {
-            Kind::Http(ref e) => e.cause(),
-            Kind::Hyper(ref e) => e.cause(),
-            Kind::Mime(ref e) => e.cause(),
-            Kind::Url(ref e) => e.cause(),
+            Kind::Http(ref e) => e.source(),
+            Kind::Hyper(ref e) => e.source(),
+            Kind::Mime(ref e) => e.source(),
+            Kind::Url(ref e) => e.source(),
             #[cfg(all(feature = "default-tls", feature = "rustls-tls"))]
             Kind::TlsIncompatible => None,
             #[cfg(feature = "default-tls")]
-            Kind::NativeTls(ref e) => e.cause(),
+            Kind::NativeTls(ref e) => e.source(),
             #[cfg(feature = "rustls-tls")]
-            Kind::Rustls(ref e) => e.cause(),
+            Kind::Rustls(ref e) => e.source(),
             #[cfg(feature = "trust-dns")]
-            Kind::DnsSystemConf(ref e) => e.cause(),
-            Kind::Io(ref e) => e.cause(),
-            Kind::UrlEncoded(ref e) => e.cause(),
-            Kind::Json(ref e) => e.cause(),
+            Kind::DnsSystemConf(ref e) => e.source(),
+            Kind::Io(ref e) => e.source(),
+            Kind::UrlEncoded(ref e) => e.source(),
+            Kind::Json(ref e) => e.source(),
             Kind::UrlBadScheme |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
