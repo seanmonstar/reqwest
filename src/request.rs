@@ -842,4 +842,20 @@ mod tests {
         assert_eq!(foo[0], "bar");
         assert_eq!(foo[1], "baz");
     }
+
+    #[test]
+    fn normalize_empty_query() {
+        let client = Client::new();
+        let some_url = "https://google.com/";
+        let empty_query: &[(&str, &str)] = &[];
+
+        let req = client
+            .get(some_url)
+            .query(empty_query)
+            .build()
+            .expect("request build");
+
+        assert_eq!(req.url().query(), None);
+        assert_eq!(req.url().as_str(), "https://google.com/");
+    }
 }
