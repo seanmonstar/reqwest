@@ -223,8 +223,11 @@ impl Stream for Gzip {
         };
 
         match read {
-            Ok(read) if read == 0 => {
-                Ok(Async::Ready(None))
+            Ok(read) if read == 0 => match self.inner.get_mut().read(&mut [0]) {
+                Ok(0) => Ok(Async::Ready(None)),
+                Ok(_) => Err(error::from(io::Error::new(io::ErrorKind::InvalidData, "Unexpected Data"))),
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => Ok(Async::NotReady),
+                Err(e) => Err(error::from(e))
             },
             Ok(read) => {
                 unsafe { self.buf.advance_mut(read) };
