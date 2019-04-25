@@ -233,10 +233,16 @@ impl Error {
 
 impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Error")
-            .field("kind", &self.inner.kind)
-            .field("url", &self.inner.url)
-            .finish()
+        if let Some(ref url) = self.inner.url {
+            f.debug_tuple("Error")
+                .field(&self.inner.kind)
+                .field(url)
+                .finish()
+        } else {
+            f.debug_tuple("Error")
+                .field(&self.inner.kind)
+                .finish()
+        }
     }
 }
 
