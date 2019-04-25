@@ -354,13 +354,7 @@ impl RequestBuilder {
             }
         }
         if let Ok(ref mut req) = self.request {
-            let mut remove_query = false;
-            if let Some(ref q) = req.url().query() {
-                if q.is_empty() {
-                    remove_query = true;
-                }
-            }
-            if remove_query {
+            if let Some("") = req.url().query() {
                 req.url_mut().set_query(None);
             }
         }
