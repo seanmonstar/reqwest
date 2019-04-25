@@ -148,8 +148,7 @@ impl Error {
             Kind::UrlBadScheme |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
-            Kind::ClientError(_) |
-            Kind::ServerError(_) |
+            Kind::Status(_) |
             Kind::UnknownProxyScheme |
             Kind::Timer => None,
         }
@@ -206,7 +205,7 @@ impl Error {
     #[inline]
     pub fn is_client_error(&self) -> bool {
         match self.inner.kind {
-            Kind::ClientError(_) => true,
+            Kind::Status(code) => code.is_client_error(),
             _ => false,
         }
     }
@@ -215,7 +214,7 @@ impl Error {
     #[inline]
     pub fn is_server_error(&self) -> bool {
         match self.inner.kind {
-            Kind::ServerError(_) => true,
+            Kind::Status(code) => code.is_server_error(),
             _ => false,
         }
     }
@@ -224,8 +223,7 @@ impl Error {
     #[inline]
     pub fn status(&self) -> Option<StatusCode> {
         match self.inner.kind {
-            Kind::ClientError(code) |
-            Kind::ServerError(code) => Some(code),
+            Kind::Status(code) => Some(code),
             _ => None,
         }
     }
@@ -273,13 +271,15 @@ impl fmt::Display for Error {
             Kind::Json(ref e) => fmt::Display::fmt(e, f),
             Kind::TooManyRedirects => f.write_str("Too many redirects"),
             Kind::RedirectLoop => f.write_str("Infinite redirect loop"),
-            Kind::ClientError(ref code) => {
-                f.write_str("Client Error: ")?;
-                fmt::Display::fmt(code, f)
-            }
-            Kind::ServerError(ref code) => {
-                f.write_str("Server Error: ")?;
-                fmt::Display::fmt(code, f)
+            Kind::Status(ref code) => {
+                let prefix = if code.is_client_error() {
+                    "Client Error"
+                } else if code.is_server_error() {
+                    "Server Error"
+                } else {
+                    unreachable!("non-error status code: {:?}", code);
+                };
+                write!(f, "{}: {}", prefix, code)
             }
             Kind::UnknownProxyScheme => f.write_str("Unknown proxy scheme"),
             Kind::Timer => f.write_str("timer unavailable"),
@@ -308,8 +308,15 @@ impl StdError for Error {
             Kind::Json(ref e) => e.description(),
             Kind::TooManyRedirects => "Too many redirects",
             Kind::RedirectLoop => "Infinite redirect loop",
-            Kind::ClientError(_) => "Client Error",
-            Kind::ServerError(_) => "Server Error",
+            Kind::Status(code) => {
+                if code.is_client_error() {
+                    "Client Error"
+                } else if code.is_server_error() {
+                    "Server Error"
+                } else {
+                    unreachable!("non-error status code: {:?}", code);
+                }
+            }
             Kind::UnknownProxyScheme => "Unknown proxy scheme",
             Kind::Timer => "timer unavailable",
         }
@@ -335,8 +342,7 @@ impl StdError for Error {
             Kind::UrlBadScheme |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
-            Kind::ClientError(_) |
-            Kind::ServerError(_) |
+            Kind::Status(_) |
             Kind::UnknownProxyScheme |
             Kind::Timer => None,
         }
@@ -363,8 +369,7 @@ pub(crate) enum Kind {
     Json(::serde_json::Error),
     TooManyRedirects,
     RedirectLoop,
-    ClientError(StatusCode),
-    ServerError(StatusCode),
+    Status(StatusCode),
     UnknownProxyScheme,
     Timer,
 }
@@ -547,12 +552,8 @@ pub(crate) fn timedout(url: Option<Url>) -> Error {
     Error::new(Kind::Io(io_timeout()), url)
 }
 
-pub(crate) fn client_error(url: Url, status: StatusCode) -> Error {
-    Error::new(Kind::ClientError(status), Some(url))
-}
-
-pub(crate) fn server_error(url: Url, status: StatusCode) -> Error {
-    Error::new(Kind::ServerError(status), Some(url))
+pub(crate) fn status_code(url: Url, status: StatusCode) -> Error {
+    Error::new(Kind::Status(status), Some(url))
 }
 
 pub(crate) fn url_bad_scheme(url: Url) -> Error {

@@ -170,10 +170,8 @@ impl Response {
     /// ```
     #[inline]
     pub fn error_for_status(self) -> ::Result<Self> {
-        if self.status.is_client_error() {
-            Err(::error::client_error(*self.url, self.status))
-        } else if self.status.is_server_error() {
-            Err(::error::server_error(*self.url, self.status))
+        if self.status.is_client_error() || self.status.is_server_error() {
+            Err(::error::status_code(*self.url, self.status))
         } else {
             Ok(self)
         }
@@ -202,10 +200,8 @@ impl Response {
     /// ```
     #[inline]
     pub fn error_for_status_ref(&self) -> ::Result<&Self> {
-        if self.status.is_client_error() {
-            Err(::error::client_error(*self.url.clone(), self.status))
-        } else if self.status.is_server_error() {
-            Err(::error::server_error(*self.url.clone(), self.status))
+        if self.status.is_client_error() || self.status.is_server_error() {
+            Err(::error::status_code(*self.url.clone(), self.status))
         } else {
             Ok(self)
         }
