@@ -217,28 +217,30 @@ impl Stream for Gzip {
         //
         // To be safe, this memory could be zeroed before passing to `flate2`.
         // Otherwise we might need to deal with the case where `flate2` panics.
-        let read = {
-            let mut buf = unsafe { self.buf.bytes_mut() };
-            self.inner.read(&mut buf)
-        };
+        let read = try_io!(self.inner.read(unsafe { self.buf.bytes_mut() }));
 
-        match read {
-            Ok(read) if read == 0 => match self.inner.get_mut().read(&mut [0]) {
-                Ok(0) => Ok(Async::Ready(None)),
-                Ok(_) => Err(error::from(io::Error::new(io::ErrorKind::InvalidData, "Unexpected Data"))),
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => Ok(Async::NotReady),
-                Err(e) => Err(error::from(e))
-            },
-            Ok(read) => {
-                unsafe { self.buf.advance_mut(read) };
-                let chunk = Chunk::from_chunk(self.buf.split_to(read).freeze());
+        if read == 0 {
+            // If GzDecoder reports EOF, it doesn't necessarily mean the
+            // underlying stream reached EOF (such as the `0\r\n\r\n`
+            // header meaning a chunked transfer has completed). If it
+            // isn't polled till EOF, the connection may not be able
+            // to be re-used.
+            //
+            // See https://github.com/seanmonstar/reqwest/issues/508.
+            let inner_read = try_io!(self.inner.get_mut().read(&mut [0]));
+            if inner_read == 0 {
+                Ok(Async::Ready(None))
+            } else {
+                Err(error::from(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "unexpected data after gzip decoder signaled end-of-file",
+                )))
+            }
+        } else {
+            unsafe { self.buf.advance_mut(read) };
+            let chunk = Chunk::from_chunk(self.buf.split_to(read).freeze());
 
-                Ok(Async::Ready(Some(chunk)))
-            },
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                Ok(Async::NotReady)
-            },
-            Err(e) => Err(error::from(e))
+            Ok(Async::Ready(Some(chunk)))
         }
     }
 }

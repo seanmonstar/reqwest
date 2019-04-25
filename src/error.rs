@@ -484,6 +484,18 @@ pub(crate) fn into_io(e: Error) -> io::Error {
     }
 }
 
+pub(crate) fn from_io(e: io::Error) -> Error {
+    if e.get_ref().map(|r| r.is::<Error>()).unwrap_or(false) {
+        *e
+            .into_inner()
+            .expect("io::Error::get_ref was Some(_)")
+            .downcast::<Error>()
+            .expect("StdError::is() was true")
+    } else {
+        from(e)
+    }
+}
+
 
 macro_rules! try_ {
     ($e:expr) => (
@@ -499,6 +511,20 @@ macro_rules! try_ {
             Ok(v) => v,
             Err(err) => {
                 return Err(::Error::from(::error::InternalFrom(err, Some($url.clone()))));
+            }
+        }
+    )
+}
+
+macro_rules! try_io {
+    ($e:expr) => (
+        match $e {
+            Ok(v) => v,
+            Err(ref err) if err.kind() == ::std::io::ErrorKind::WouldBlock => {
+                return Ok(::futures::Async::NotReady);
+            }
+            Err(err) => {
+                return Err(::error::from_io(err));
             }
         }
     )
@@ -593,5 +619,19 @@ mod tests {
     fn mem_size_of() {
         use std::mem::size_of;
         assert_eq!(size_of::<Error>(), size_of::<usize>());
+    }
+
+    #[test]
+    fn roundtrip_io_error() {
+        let orig = unknown_proxy_scheme();
+        // Convert reqwest::Error into an io::Error...
+        let io = into_io(orig);
+        // Convert that io::Error back into a reqwest::Error...
+        let err = from_io(io);
+        // It should have pulled out the original, not nested it...
+        match err.inner.kind {
+            Kind::UnknownProxyScheme => (),
+            _ => panic!("{:?}", err),
+        }
     }
 }
