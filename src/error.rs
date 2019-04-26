@@ -322,6 +322,34 @@ impl StdError for Error {
         }
     }
 
+    // Keep this for now, as std::io::Error didn't support source() until 1.35
+    #[allow(deprecated)]
+    fn cause(&self) -> Option<&dyn StdError> {
+        match self.inner.kind {
+            Kind::Http(ref e) => e.cause(),
+            Kind::Hyper(ref e) => e.cause(),
+            Kind::Mime(ref e) => e.cause(),
+            Kind::Url(ref e) => e.cause(),
+            #[cfg(all(feature = "default-tls", feature = "rustls-tls"))]
+            Kind::TlsIncompatible => None,
+            #[cfg(feature = "default-tls")]
+            Kind::NativeTls(ref e) => e.cause(),
+            #[cfg(feature = "rustls-tls")]
+            Kind::Rustls(ref e) => e.cause(),
+            #[cfg(feature = "trust-dns")]
+            Kind::DnsSystemConf(ref e) => e.cause(),
+            Kind::Io(ref e) => e.cause(),
+            Kind::UrlEncoded(ref e) => e.cause(),
+            Kind::Json(ref e) => e.cause(),
+            Kind::UrlBadScheme |
+            Kind::TooManyRedirects |
+            Kind::RedirectLoop |
+            Kind::Status(_) |
+            Kind::UnknownProxyScheme |
+            Kind::Timer => None,
+        }
+    }
+
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self.inner.kind {
             Kind::Http(ref e) => e.source(),
