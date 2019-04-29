@@ -124,7 +124,7 @@ impl Response {
     }
 
     /// Retrieve the cookies contained in the response.
-    /// 
+    ///
     /// Note that invalid 'Set-Cookie' headers will be ignored.
     pub fn cookies<'a>(&'a self) -> impl Iterator< Item = cookie::Cookie<'a> > + 'a {
         cookie::extract_response_cookies(self.headers())
@@ -250,6 +250,33 @@ impl Response {
     /// This consumes the body. Trying to read more, or use of `response.json()`
     /// will return empty values.
     pub fn text(&mut self) -> ::Result<String> {
+        self.text_with_charset("utf-8")
+    }
+
+    /// Get the response text given a specific encoding.
+    ///
+    /// This method decodes the response body with BOM sniffing
+    /// and with malformed sequences replaced with the REPLACEMENT CHARACTER.
+    /// You can provide a default encoding for decoding the raw message, while the
+    /// `charset` parameter of `Content-Type` header is still prioritized. For more information
+    /// about the possible encoding name, please go to
+    /// https://docs.rs/encoding_rs/0.8.17/encoding_rs/#relationship-with-windows-code-pages
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # extern crate reqwest;
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let content = reqwest::get("http://httpbin.org/range/26")?.text_with_charset("utf-8")?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Note
+    ///
+    /// This consumes the body. Trying to read more, or use of `response.json()`
+    /// will return empty values.
+    pub fn text_with_charset(&mut self, default_encoding: &str) -> ::Result<String> {
         let len = self.content_length.unwrap_or(0);
         let mut content = Vec::with_capacity(len as usize);
         self.read_to_end(&mut content).map_err(::error::from)?;
@@ -267,7 +294,7 @@ impl Response {
                     .get_param("charset")
                     .map(|charset| charset.as_str())
             })
-            .unwrap_or("utf-8");
+            .unwrap_or(default_encoding);
         let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);
         // a block because of borrow checker
         {
