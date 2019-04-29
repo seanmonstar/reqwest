@@ -250,6 +250,10 @@ impl Response {
     /// This consumes the body. Trying to read more, or use of `response.json()`
     /// will return empty values.
     pub fn text(&mut self) -> ::Result<String> {
+        self.text_with_charset(UTF_8)
+    }
+
+    pub fn text_with_charset(&mut self, &'static enc) -> ::Result<String> {
         let len = self.content_length.unwrap_or(0);
         let mut content = Vec::with_capacity(len as usize);
         self.read_to_end(&mut content).map_err(::error::from)?;
@@ -267,8 +271,8 @@ impl Response {
                     .get_param("charset")
                     .map(|charset| charset.as_str())
             })
-            .unwrap_or("utf-8");
-        let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);
+            .unwrap_or(enc.name);
+        let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(enc);
         // a block because of borrow checker
         {
             let (text, _, _) = encoding.decode(&content);
