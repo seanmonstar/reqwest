@@ -253,7 +253,27 @@ impl Response {
         self.text_with_charset(UTF_8)
     }
 
-    pub fn text_with_charset(&mut self, &'static enc) -> ::Result<String> {
+    /// Get the response text given a specific encoding.
+    ///
+    /// This method decodes the response body with BOM sniffing
+    /// and with malformed sequences replaced with the REPLACEMENT CHARACTER.
+    /// Encoding is determinated from the `charset` parameter of `Content-Type` header,
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # extern crate reqwest;
+    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// let content = reqwest::get("http://httpbin.org/range/26")?.text_with_charset(encoding_rs::UTF_8)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Note
+    ///
+    /// This consumes the body. Trying to read more, or use of `response.json()`
+    /// will return empty values.
+    pub fn text_with_charset(&mut self, enc: &'static Encoding) -> ::Result<String> {
         let len = self.content_length.unwrap_or(0);
         let mut content = Vec::with_capacity(len as usize);
         self.read_to_end(&mut content).map_err(::error::from)?;
@@ -271,8 +291,8 @@ impl Response {
                     .get_param("charset")
                     .map(|charset| charset.as_str())
             })
-            .unwrap_or(enc.name);
-        let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(enc);
+            .unwrap_or(enc.name());
+        let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(&enc);
         // a block because of borrow checker
         {
             let (text, _, _) = encoding.decode(&content);
