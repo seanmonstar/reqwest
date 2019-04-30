@@ -16,7 +16,7 @@ An ergonomic, batteries-included HTTP Client for Rust.
 
 ## Example
 
-```rust
+```rust,no_run
 extern crate reqwest;
 
 use std::collections::HashMap;
