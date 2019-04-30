@@ -1,3 +1,12 @@
+## v0.9.16
+
+- Add `Response::text_with_charset()` to allow setting the default charset to decode.
+- Add `Error::source()` implementation.
+- Add `async::ClientBuilder::timeout()` option, will timeout the connect, request, and response body futures.
+- Fix gzip + chunked transfer encoding issue preventing connection reuse.
+- Fix `RequestBuilder::query()` to not add just `"?"` if the encoded query is empty.
+- Fix including new cookie headers when response is a redirect.
+
 ## v0.9.15
 
 - Fix sending of "appended" request headers.
