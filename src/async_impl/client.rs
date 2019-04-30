@@ -403,10 +403,10 @@ impl ClientBuilder {
     }
 
     /// Enable a persistent cookie store for the client.
-    /// 
-    /// Cookies received in responses will be preserved and included in 
+    ///
+    /// Cookies received in responses will be preserved and included in
     /// additional requests.
-    /// 
+    ///
     /// By default, no cookie store is used.
     pub fn cookie_store(mut self, enable: bool) -> ClientBuilder {
         self.config.cookie_store = if enable {
@@ -549,15 +549,7 @@ impl Client {
         if let Some(cookie_store_wrapper) = self.inner.cookie_store.as_ref() {
             if headers.get(::header::COOKIE).is_none() {
                 let cookie_store = cookie_store_wrapper.read().unwrap();
-                let header = cookie_store
-                    .0
-                    .get_request_cookies(&url)
-                    .map(|c| c.encoded().to_string())
-                    .collect::<Vec<_>>()
-                    .join("; ");
-                if !header.is_empty() {
-                    headers.insert(::header::COOKIE, HeaderValue::from_bytes(header.as_bytes()).unwrap());
-                }
+                add_cookie_header(&mut headers, &cookie_store, &url);
             }
         }
 
@@ -823,6 +815,12 @@ impl Future for PendingRequest {
                                 .body(body)
                                 .expect("valid request parts");
 
+                            // Add cookies from the cookie store.
+                            if let Some(cookie_store_wrapper) = self.client.cookie_store.as_ref() {
+                                let cookie_store = cookie_store_wrapper.read().unwrap();
+                                add_cookie_header(&mut self.headers, &cookie_store, &self.url);
+                            }
+
                             *req.headers_mut() = self.headers.clone();
                             self.in_flight = self.client.hyper.request(req);
                             continue;
@@ -873,4 +871,19 @@ fn make_referer(next: &Url, previous: &Url) -> Option<HeaderValue> {
     let _ = referer.set_password(None);
     referer.set_fragment(None);
     referer.as_str().parse().ok()
+}
+
+fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &cookie::CookieStore, url: &Url) {
+    let header = cookie_store
+        .0
+        .get_request_cookies(url)
+        .map(|c| c.encoded().to_string())
+        .collect::<Vec<_>>()
+        .join("; ");
+    if !header.is_empty() {
+        headers.insert(
+            ::header::COOKIE,
+            HeaderValue::from_bytes(header.as_bytes()).unwrap()
+        );
+    }
 }
