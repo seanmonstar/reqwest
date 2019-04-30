@@ -218,6 +218,12 @@ extern crate tokio_rustls;
 extern crate webpki_roots;
 #[cfg(feature = "rustls-tls")]
 extern crate rustls;
+#[cfg(test)]
+#[macro_use]
+extern crate doc_comment;
+
+#[cfg(test)]
+doctest!("../README.md");
 
 pub use hyper::header;
 pub use hyper::Method;

@@ -55,6 +55,7 @@ env_logger = "0.6"
 serde_derive = "1.0"
 tokio-tcp = "0.1"
 libflate = "0.1"
+doc-comment = "0.3"
 
 [features]
 default = ["default-tls"]
