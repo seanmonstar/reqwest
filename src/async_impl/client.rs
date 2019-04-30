@@ -549,7 +549,7 @@ impl Client {
         if let Some(cookie_store_wrapper) = self.inner.cookie_store.as_ref() {
             if headers.get(::header::COOKIE).is_none() {
                 let cookie_store = cookie_store_wrapper.read().unwrap();
-                attach_header(&mut headers, &cookie_store, &url);
+                add_cookie_header(&mut headers, &cookie_store, &url);
             }
         }
 
@@ -818,7 +818,7 @@ impl Future for PendingRequest {
                             // Add cookies from the cookie store.
                             if let Some(cookie_store_wrapper) = self.client.cookie_store.as_ref() {
                                 let cookie_store = cookie_store_wrapper.read().unwrap();
-                                attach_header(&mut self.headers, &cookie_store, &self.url);
+                                add_cookie_header(&mut self.headers, &cookie_store, &self.url);
                             }
 
                             *req.headers_mut() = self.headers.clone();
@@ -873,7 +873,7 @@ fn make_referer(next: &Url, previous: &Url) -> Option<HeaderValue> {
     referer.as_str().parse().ok()
 }
 
-fn attach_header(headers: &mut HeaderMap, cookie_store: &cookie::CookieStore, url: &Url) {
+fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &cookie::CookieStore, url: &Url) {
     let header = cookie_store
         .0
         .get_request_cookies(url)
