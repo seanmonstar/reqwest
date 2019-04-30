@@ -44,7 +44,7 @@ native-tls = { version = "0.2", optional = true }
 rustls = { version = "0.15", features = ["dangerous_configuration"], optional = true }
 socks = { version = "0.3.2", optional = true }
 tokio-rustls = { version = "0.9", optional = true }
-trust-dns-resolver = { version = "0.10", optional = true }
+trust-dns-resolver = { version = "0.11", optional = true }
 webpki-roots = { version = "0.16", optional = true }
 cookie_store = "0.5.1"
 cookie = "0.11.0"
