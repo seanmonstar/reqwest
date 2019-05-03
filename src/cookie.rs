@@ -126,41 +126,35 @@ pub(crate) fn extract_response_cookies<'a>(
         .iter()
         .map(|value| Cookie::parse(value))
 }
-/// The mutating aspects of a CookieStorage
-pub trait CookieStorageWriter {
+
+/// The read only aspects of a CookieStorage
+pub trait CookieStorageReader {
+    /// Retrieve the set of cookies allowed for `url`
+    fn get_request_cookies(&self, url: &url::Url) -> Box<dyn Iterator<Item = &cookie_crate::Cookie<'static>> + '_>;
+}
+
+/// A trait representing a `Session` that can store and retrieve cookies
+pub trait CookieStorage: CookieStorageReader + Send + Sync {
     /// Store a set of `cookies` from `url`
     fn store_response_cookies(&mut self, cookies: impl Iterator<Item = cookie_crate::Cookie<'static>>, url: &url::Url);
 }
 
-// FIXME: we are only using Vec here b/c we cannot impl Trait in a trait inherent method?
-/// The read only aspects of a CookieStorage
-pub trait CookieStorageReader {
-    /// Retrieve the set of cookies allowed for `url`
-    fn get_request_cookies(&self, url: &url::Url) -> Vec<&cookie_crate::Cookie<'static>>;
-}
-
-/// A trait representing a `Session` that can store and retrieve cookies
-pub trait CookieStorage : CookieStorageReader + CookieStorageWriter + Send + Sync {
-}
-
-impl<'a, R : CookieStorageReader> CookieStorageReader for &'a R {
-    fn get_request_cookies(&self, url: &url::Url) -> Vec<&cookie_crate::Cookie<'static>> {
+impl<'a, R: CookieStorageReader> CookieStorageReader for &'a R {
+    fn get_request_cookies(&self, url: &url::Url) -> Box<dyn Iterator<Item = &cookie_crate::Cookie<'static>> + '_> {
         (**self).get_request_cookies(url)
     }
 }
 
-impl CookieStorageWriter for cookie_store::CookieStore {
+impl CookieStorageReader for cookie_store::CookieStore {
+    fn get_request_cookies(&self, url: &url::Url) -> Box<dyn Iterator<Item = &cookie_crate::Cookie<'static>> + '_> {
+        Box::new(self.get_request_cookies(url))
+    }
+}
+impl CookieStorage for cookie_store::CookieStore {
     fn store_response_cookies(&mut self, cookies: impl Iterator<Item = cookie_crate::Cookie<'static>>, url: &url::Url) {
         self.store_response_cookies(cookies, url);
     }
 }
-impl CookieStorageReader for cookie_store::CookieStore {
-    fn get_request_cookies(&self, url: &url::Url) -> Vec<&cookie_crate::Cookie<'static>> {
-        self.get_request_cookies(url).collect::<Vec<_>>()
-    }
-}
-impl CookieStorage for cookie_store::CookieStore { }
-
 
 /// A persistent cookie store that provides session support.
 #[derive(Default)]
