@@ -149,6 +149,18 @@ impl<'a, R : CookieStorageReader> CookieStorageReader for &'a R {
     }
 }
 
+impl CookieStorageWriter for cookie_store::CookieStore {
+    fn store_response_cookies(&mut self, cookies: impl Iterator<Item = cookie_crate::Cookie<'static>>, url: &url::Url) {
+        self.store_response_cookies(cookies, url);
+    }
+}
+impl CookieStorageReader for cookie_store::CookieStore {
+    fn get_request_cookies(&self, url: &url::Url) -> Vec<&cookie_crate::Cookie<'static>> {
+        self.get_request_cookies(url).collect::<Vec<_>>()
+    }
+}
+impl CookieStorage for cookie_store::CookieStore { }
+
 
 /// A persistent cookie store that provides session support.
 #[derive(Default)]
