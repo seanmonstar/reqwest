@@ -126,6 +126,29 @@ pub(crate) fn extract_response_cookies<'a>(
         .iter()
         .map(|value| Cookie::parse(value))
 }
+/// The mutating aspects of a CookieStorage
+pub trait CookieStorageWriter {
+    /// Store a set of `cookies` from `url`
+    fn store_response_cookies(&mut self, cookies: impl Iterator<Item = cookie_crate::Cookie<'static>>, url: &url::Url);
+}
+
+// FIXME: we are only using Vec here b/c we cannot impl Trait in a trait inherent method?
+/// The read only aspects of a CookieStorage
+pub trait CookieStorageReader {
+    /// Retrieve the set of cookies allowed for `url`
+    fn get_request_cookies(&self, url: &url::Url) -> Vec<&cookie_crate::Cookie<'static>>;
+}
+
+/// A trait representing a `Session` that can store and retrieve cookies
+pub trait CookieStorage : CookieStorageReader + CookieStorageWriter + Send + Sync {
+}
+
+impl<'a, R : CookieStorageReader> CookieStorageReader for &'a R {
+    fn get_request_cookies(&self, url: &url::Url) -> Vec<&cookie_crate::Cookie<'static>> {
+        (**self).get_request_cookies(url)
+    }
+}
+
 
 /// A persistent cookie store that provides session support.
 #[derive(Default)]
