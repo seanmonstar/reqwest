@@ -81,7 +81,7 @@ fn cookie_response_accessor() {
 #[test]
 fn cookie_store_simple() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::async::Client::builder().cookie_store(cookie_store::CookieStore::default()).build().unwrap();
+    let session = reqwest::async::cookie::Session::new(cookie_store::CookieStore::default()).unwrap();
 
     let server = server! {
         request: b"\
@@ -100,7 +100,7 @@ fn cookie_store_simple() {
             "
     };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 
     let server = server! {
         request: b"\
@@ -119,61 +119,13 @@ fn cookie_store_simple() {
             "
     };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
-}
-
-#[test]
-fn cookie_store_take() {
-    let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let mut client = reqwest::async::Client::builder().cookie_store(cookie_store::CookieStore::default()).build().unwrap();
-
-    let server = server! {
-        request: b"\
-            GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Set-Cookie: key=val\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
-    let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
-
-    let cookie_store = client.take_cookie_store().expect("failed to take CookieStore");
-    assert!(client.take_cookie_store().is_none());
-    assert_eq!(cookie_store.get("127.0.0.1", "/", "key").map(|c| c.value()), Some("val"));
-
-    // verify that subsequent request does not send the cookie
-    let server = server! {
-        request: b"\
-            GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
-    let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 }
 
 #[test]
 fn cookie_store_replace() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let mut client = reqwest::async::Client::builder().cookie_store(cookie_store::CookieStore::default()).build().unwrap();
+    let mut session = reqwest::async::cookie::Session::new(cookie_store::CookieStore::default()).unwrap();
 
     let server = server! {
         request: b"\
@@ -192,9 +144,9 @@ fn cookie_store_replace() {
             "
     };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 
-    let original_store = client.replace_cookie_store(cookie_store::CookieStore::default()).expect("failed to replace CookieStore");
+    let original_store = session.replace_cookie_store(cookie_store::CookieStore::default());
     assert_eq!(original_store.get("127.0.0.1", "/", "key").map(|c| c.value()), Some("val"));
 
     // verify that subsequent request does not send the cookie, but will be populated from the new
@@ -216,10 +168,9 @@ fn cookie_store_replace() {
             "
     };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 
-    let new_store = client.take_cookie_store().expect("failed to take CookieStore");
-    assert!(client.take_cookie_store().is_none());
+    let new_store = session.end();
     assert_eq!(original_store.get("127.0.0.1", "/", "key").map(|c| c.value()), Some("val"));
     assert_eq!(new_store.get("127.0.0.1", "/", "key").map(|c| c.value()), Some("val2"));
 }
@@ -227,7 +178,7 @@ fn cookie_store_replace() {
 #[test]
 fn cookie_store_modify() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::async::Client::builder().cookie_store(cookie_store::CookieStore::default()).build().unwrap();
+    let session = reqwest::async::cookie::Session::new(cookie_store::CookieStore::default()).unwrap();
 
     let server = server! {
         request: b"\
@@ -246,7 +197,7 @@ fn cookie_store_modify() {
             "
     };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 
     // verify that subsequent request sees the modified cookies
     let server = server! {
@@ -267,14 +218,14 @@ fn cookie_store_modify() {
     };
     let url = format!("http://{}/", server.addr());
 
-    client.modify_cookie_store(|cookie_store| {
+    session.modify_cookie_store(|cookie_store| {
         let url = url::Url::parse(&url).unwrap();
         assert_eq!(cookie_store.get("127.0.0.1", "/", "key").map(|c| c.value()), Some("val"));
         // modify previous cookie
         cookie_store.insert(cookie_store::Cookie::parse("key=lav", &url).unwrap(), &url).unwrap();
     });
 
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 
     // expire out prior cookie, add a new one instead
     let server = server! {
@@ -295,7 +246,7 @@ fn cookie_store_modify() {
     };
 
     let url = format!("http://{}/", server.addr());
-    client.modify_cookie_store(|cookie_store| {
+    session.modify_cookie_store(|cookie_store| {
         let url = url::Url::parse(&url).unwrap();
         assert_eq!(cookie_store.get("127.0.0.1", "/", "key").map(|c| c.value()), Some("lav"));
         // remove previous cookie
@@ -306,13 +257,13 @@ fn cookie_store_modify() {
         cookie_store.insert(cookie_store::Cookie::parse("key2=val2", &url).unwrap(), &url).unwrap();
     });
 
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 }
 
 #[test]
 fn cookie_store_overwrite_existing() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::async::Client::builder().cookie_store(cookie_store::CookieStore::default()).build().unwrap();
+    let session = reqwest::async::cookie::Session::new(cookie_store::CookieStore::default()).unwrap();
 
     let server = server! {
         request: b"\
@@ -331,7 +282,7 @@ fn cookie_store_overwrite_existing() {
             "
     };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 
     let server = server! {
         request: b"\
@@ -351,7 +302,7 @@ fn cookie_store_overwrite_existing() {
             "
     };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 
     let server = server! {
         request: b"\
@@ -370,13 +321,13 @@ fn cookie_store_overwrite_existing() {
             "
     };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 }
 
 #[test]
 fn cookie_store_max_age() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::async::Client::builder().cookie_store(cookie_store::CookieStore::default()).build().unwrap();
+    let session = reqwest::async::cookie::Session::new(cookie_store::CookieStore::default()).unwrap();
 
     let server = server! {
         request: b"\
@@ -395,7 +346,7 @@ fn cookie_store_max_age() {
             "
     };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 
     let server = server! {
         request: b"\
@@ -413,13 +364,13 @@ fn cookie_store_max_age() {
             "
     };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 }
 
 #[test]
 fn cookie_store_expires() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::async::Client::builder().cookie_store(cookie_store::CookieStore::default()).build().unwrap();
+    let session = reqwest::async::cookie::Session::new(cookie_store::CookieStore::default()).unwrap();
 
     let server = server! {
         request: b"\
@@ -438,7 +389,7 @@ fn cookie_store_expires() {
             "
     };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 
     let server = server! {
         request: b"\
@@ -456,13 +407,13 @@ fn cookie_store_expires() {
             "
     };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 }
 
 #[test]
 fn cookie_store_path() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::async::Client::builder().cookie_store(cookie_store::CookieStore::default()).build().unwrap();
+    let session = reqwest::async::cookie::Session::new(cookie_store::CookieStore::default()).unwrap();
 
     let server = server! {
         request: b"\
@@ -481,7 +432,7 @@ fn cookie_store_path() {
             "
     };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 
     let server = server! {
         request: b"\
@@ -499,7 +450,7 @@ fn cookie_store_path() {
             "
     };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 
     let server = server! {
         request: b"\
@@ -518,5 +469,5 @@ fn cookie_store_path() {
             "
     };
     let url = format!("http://{}/subpath", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    rt.block_on(session.get(&url).send()).unwrap();
 }

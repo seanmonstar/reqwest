@@ -85,7 +85,7 @@ struct Config {
     http1_title_case_headers: bool,
     local_address: Option<IpAddr>,
     nodelay: bool,
-    cookie_store: Option<cookie::CookieStore>,
+    cookie_store: Option<Arc<RwLock<Box<dyn cookie::CookieStorage>>>>,
 }
 
 impl ClientBuilder {
@@ -209,11 +209,9 @@ impl ClientBuilder {
             .iter()
             .any(|p| p.maybe_has_http_auth());
 
-        let cookie_store = RwLock::new(config.cookie_store);
-
         Ok(Client {
             inner: Arc::new(ClientRef {
-                cookie_store,
+                cookie_store: config.cookie_store,
                 gzip: config.gzip,
                 hyper: hyper_client,
                 headers: config.headers,
@@ -402,14 +400,14 @@ impl ClientBuilder {
         self
     }
 
-    /// Set a persistent cookie store for the client.
+    /// Set a persistent cookie store for the client. Used internally by `Session`.
     ///
     /// Cookies received in responses will be preserved and included in
     /// additional requests.
     ///
     /// By default, no cookie store is used.
-    pub fn cookie_store(mut self, cookie_store: cookie_store::CookieStore) -> ClientBuilder {
-        self.config.cookie_store = Some(cookie::CookieStore(cookie_store));
+    pub(crate) fn cookie_store(mut self, cookie_store: Arc<RwLock<Box<dyn cookie::CookieStorage>>>) -> ClientBuilder {
+        self.config.cookie_store = Some(cookie_store);
         self
     }
 }
@@ -542,9 +540,10 @@ impl Client {
         }
 
         // Add cookies from the cookie store.
-        if let Some(cookie_store) = self.inner.cookie_store.read().unwrap().as_ref() {
+        if let Some(cookie_store) = self.inner.cookie_store.as_ref() {
+            let cookie_store = cookie_store.read().unwrap();
             if headers.get(::header::COOKIE).is_none() {
-                add_cookie_header(&mut headers, &cookie_store, &url);
+                add_cookie_header(&mut headers, &**cookie_store, &url);
             }
         }
 
@@ -597,40 +596,6 @@ impl Client {
                 timeout,
             }),
         }
-    }
-
-    /// Access any current `CookieStore` in the `Client` and modify it via `f`.
-    pub fn modify_cookie_store<F: Fn(&mut cookie_store::CookieStore)>(&self, f: F) {
-        self.inner
-            .cookie_store
-            .write()
-            .unwrap()
-            .as_mut()
-            .map(|cs| f(&mut cs.0));
-    }
-
-    /// Replace any current `CookieStore` in the `Client`, returning the old store if it was
-    /// present
-    pub fn replace_cookie_store(
-        &mut self,
-        new_store: cookie_store::CookieStore,
-    ) -> Option<cookie_store::CookieStore> {
-        self.inner
-            .cookie_store
-            .write()
-            .unwrap()
-            .replace(cookie::CookieStore(new_store))
-            .map(|old_store| old_store.0)
-    }
-
-    /// Remove any current `CookieStore` from the `Client`
-    pub fn take_cookie_store(&mut self) -> Option<cookie_store::CookieStore> {
-        self.inner
-            .cookie_store
-            .write()
-            .unwrap()
-            .take()
-            .map(|cs| cs.0)
     }
 
     fn proxy_auth(&self, dst: &Uri, headers: &mut HeaderMap) {
@@ -686,7 +651,7 @@ impl fmt::Debug for ClientBuilder {
 }
 
 struct ClientRef {
-    cookie_store: RwLock<Option<cookie::CookieStore>>,
+    cookie_store: Option<Arc<RwLock<Box<dyn cookie::CookieStorage>>>>,
     gzip: bool,
     headers: HeaderMap,
     hyper: HyperClient,
@@ -756,11 +721,13 @@ impl Future for PendingRequest {
                 Async::Ready(res) => res,
                 Async::NotReady => return Ok(Async::NotReady),
             };
-            if let Some(store) = self.client.cookie_store.write().unwrap().as_mut() {
-                let cookies = cookie::extract_response_cookies(&res.headers())
+            if let Some(cookie_store) = self.client.cookie_store.as_ref() {
+                let mut cookie_store = cookie_store.write().unwrap();
+                let cookies = Box::new(cookie::extract_response_cookies(&res.headers())
                     .filter_map(|res| res.ok())
-                    .map(|cookie| cookie.into_inner().into_owned());
-                store.0.store_response_cookies(cookies, &self.url);
+                    .map(|cookie| cookie.into_inner().into_owned()))
+                    .collect::<Vec<_>>();
+                cookie_store.store_response_cookies(Box::new(cookies.into_iter()), &self.url);
             }
             let should_redirect = match res.status() {
                 StatusCode::MOVED_PERMANENTLY |
@@ -844,8 +811,9 @@ impl Future for PendingRequest {
                                 .expect("valid request parts");
 
                             // Add cookies from the cookie store.
-                            if let Some(cookie_store) = self.client.cookie_store.read().unwrap().as_ref() {
-                                add_cookie_header(&mut self.headers, &cookie_store, &self.url);
+                            if let Some(cookie_store) = self.client.cookie_store.as_ref() {
+                                let cookie_store = cookie_store.read().unwrap();
+                                add_cookie_header(&mut self.headers, &**cookie_store, &self.url);
                             }
 
                             *req.headers_mut() = self.headers.clone();
@@ -900,9 +868,8 @@ fn make_referer(next: &Url, previous: &Url) -> Option<HeaderValue> {
     referer.as_str().parse().ok()
 }
 
-fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &cookie::CookieStore, url: &Url) {
+fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &dyn cookie::CookieStorage, url: &Url) {
     let header = cookie_store
-        .0
         .get_request_cookies(url)
         .map(|c| c.encoded().to_string())
         .collect::<Vec<_>>()

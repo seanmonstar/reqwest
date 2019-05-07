@@ -1,9 +1,13 @@
 //! The cookies module contains types for working with request and response cookies.
 
+use downcast::Any;
+
 use cookie_crate;
 use header;
 use std::borrow::Cow;
 use std::fmt;
+use std::marker::PhantomData;
+use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
 /// Convert a time::Tm time to SystemTime.
@@ -127,41 +131,113 @@ pub(crate) fn extract_response_cookies<'a>(
         .map(|value| Cookie::parse(value))
 }
 
-/// The read only aspects of a CookieStorage
-pub trait CookieStorageReader {
+/// A trait representing a `Session` that can store and retrieve cookies
+pub trait CookieStorage: Any + Send + Sync + std::fmt::Debug {
+    // cannot return impl Trait in trait inherent function, so Box<dyn...> it is
     /// Retrieve the set of cookies allowed for `url`
     fn get_request_cookies(&self, url: &url::Url) -> Box<dyn Iterator<Item = &cookie_crate::Cookie<'static>> + '_>;
-}
-
-/// A trait representing a `Session` that can store and retrieve cookies
-pub trait CookieStorage: CookieStorageReader + Send + Sync {
     /// Store a set of `cookies` from `url`
-    fn store_response_cookies(&mut self, cookies: impl Iterator<Item = cookie_crate::Cookie<'static>>, url: &url::Url);
+    fn store_response_cookies(
+        &mut self,
+        cookies: Box<dyn Iterator<Item = cookie_crate::Cookie<'static>>>,
+        url: &url::Url,
+    );
+
 }
 
-impl<'a, R: CookieStorageReader> CookieStorageReader for &'a R {
-    fn get_request_cookies(&self, url: &url::Url) -> Box<dyn Iterator<Item = &cookie_crate::Cookie<'static>> + '_> {
-        (**self).get_request_cookies(url)
-    }
-}
+// FIXME: how to deal w/ missing docs in macro generated code?
+#[allow(missing_docs)]
+downcast!(CookieStorage);
 
-impl CookieStorageReader for cookie_store::CookieStore {
+impl CookieStorage for cookie_store::CookieStore {
     fn get_request_cookies(&self, url: &url::Url) -> Box<dyn Iterator<Item = &cookie_crate::Cookie<'static>> + '_> {
         Box::new(self.get_request_cookies(url))
     }
-}
-impl CookieStorage for cookie_store::CookieStore {
-    fn store_response_cookies(&mut self, cookies: impl Iterator<Item = cookie_crate::Cookie<'static>>, url: &url::Url) {
+
+    fn store_response_cookies(
+        &mut self,
+        cookies: Box<dyn Iterator<Item = cookie_crate::Cookie<'static>>>,
+        url: &url::Url,
+    ) {
         self.store_response_cookies(cookies, url);
     }
 }
 
-/// A persistent cookie store that provides session support.
-#[derive(Default)]
-pub(crate) struct CookieStore(pub(crate) ::cookie_store::CookieStore);
+macro_rules! define_session {
+    ($client_ty:ty, $builder_ty:ty, $default_builder:expr) => (
+/// A session that provides cookie handling.
+#[derive(Debug)]
+pub struct Session<S: CookieStorage> {
+    cookie_store: Arc<RwLock<Box<dyn CookieStorage>>>,
+    client: $client_ty,
+    type_holder: PhantomData<S>,
+}
 
-impl<'a> fmt::Debug for CookieStore {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
+impl<S: CookieStorage + 'static> Session<S> {
+    /// Create a new session with a default `Client` configuration using
+    /// the supplied cookie storage
+    pub fn new(cookie_store: S) -> ::Result<Session<S>> {
+        Session::<S>::from_builder(cookie_store, $default_builder)
+    }
+
+    /// Create a new session with the configured `ClientBuilder`.
+    pub fn from_builder(cookie_store: S, client_builder: $builder_ty) -> ::Result<Session<S>> {
+        let cookie_store: Arc<RwLock<Box<dyn CookieStorage>>> =
+            Arc::new(RwLock::new(Box::new(cookie_store)));
+        client_builder
+            .cookie_store(cookie_store.clone())
+            .build()
+            .map(|client| {
+                Session {
+                    cookie_store,
+                    client,
+                    type_holder: PhantomData,
+                }
+            })
+    }
+
+    // FIXME: this seems like a bad idea in the face of async behavior? Would only want to do this
+    // when there are no requests in flight
+    /// Retrieve the currently used cookie storage, replacing it with the provided new instance
+    pub fn replace_cookie_store(&mut self, new_store: S) -> S {
+        let new_store = Box::new(new_store);
+        let mut prior_store = self.cookie_store.write().unwrap();
+        let prior_store = std::mem::replace(&mut *prior_store, new_store);
+        *prior_store
+            .downcast::<S>()
+            .expect("failed to downcast back to original type")
+    }
+
+    /// Modify the contents of the current cookie storage with `f`
+    pub fn modify_cookie_store<F: Fn(&mut S)>(&self, f: F) {
+        let mut lock = self.cookie_store.write().unwrap();
+        let store_ref = lock.downcast_mut::<S>().unwrap();
+        f(store_ref);
+    }
+
+    /// End the current session, returning the current cookie storage.
+    pub fn end(self) -> S {
+        drop(self.client);
+        let cookie_store = Arc::try_unwrap(self.cookie_store)
+            .map_err(|e| format!("Could not unwrap Arc: {:?}", e))
+            .and_then(|r| {
+                r.into_inner()
+                    .map_err(|e| format!("Could not remove RwLock: {:?}", e))
+            })
+        .expect("Could not retrieve S");
+        *cookie_store
+            .downcast::<S>()
+            .expect("failed to downcast back to original type")
     }
 }
+
+impl<S: CookieStorage> std::ops::Deref for Session<S> {
+    type Target = $client_ty;
+    fn deref(&self) -> &$client_ty {
+        &(*self).client
+    }
+}
+)
+}
+
+define_session!(::Client, ::ClientBuilder, ::ClientBuilder::new());

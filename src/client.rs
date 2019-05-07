@@ -1,5 +1,5 @@
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::thread;
 use std::net::IpAddr;
@@ -8,6 +8,7 @@ use futures::{Async, Future, Stream};
 use futures::future::{self, Either};
 use futures::sync::{mpsc, oneshot};
 
+use cookie::CookieStorage;
 use request::{Request, RequestBuilder};
 use response::Response;
 use {async_impl, header, Method, IntoUrl, Proxy, RedirectPolicy, wait};
@@ -367,13 +368,13 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.local_address(addr))
     }
 
-    /// Set a persistent cookie store for the client.
+    /// Set a persistent cookie store for the client. Used internally by `Session`.
     ///
     /// Cookies received in responses will be preserved and included in
     /// additional requests.
     ///
     /// By default, no cookie store is used.
-    pub fn cookie_store(self, cookie_store: cookie_store::CookieStore) -> ClientBuilder {
+    pub(crate) fn cookie_store(self, cookie_store: Arc<RwLock<Box<CookieStorage>>>) -> ClientBuilder {
         self.with_inner(|inner| inner.cookie_store(cookie_store))
     }
 }

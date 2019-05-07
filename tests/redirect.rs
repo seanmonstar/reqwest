@@ -391,7 +391,7 @@ fn test_invalid_location_stops_redirect_gh484() {
 #[test]
 fn test_redirect_302_with_set_cookies() {
     let code = 302;
-    let client = reqwest::ClientBuilder::new().cookie_store(cookie_store::CookieStore::default()).build().unwrap();
+    let session = reqwest::cookie::Session::new(cookie_store::CookieStore::default()).unwrap();
     let server = server! {
             request: format!("\
                 GET /{} HTTP/1.1\r\n\
@@ -432,7 +432,7 @@ fn test_redirect_302_with_set_cookies() {
 
     let url = format!("http://{}/{}", server.addr(), code);
     let dst = format!("http://{}/{}", server.addr(), "dst");
-    let res = client.get(&url)
+    let res = session.get(&url)
         .send()
         .unwrap();
 

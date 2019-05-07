@@ -1,4 +1,5 @@
-#![deny(missing_docs)]
+// FIXME: this is disabled due to the macro generated code
+//#![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
 #![cfg_attr(test, deny(warnings))]
 #![doc(html_root_url = "https://docs.rs/reqwest/0.9.16")]
@@ -176,6 +177,8 @@ extern crate base64;
 extern crate bytes;
 extern crate cookie as cookie_crate;
 extern crate cookie_store;
+#[macro_use]
+extern crate downcast;
 extern crate encoding_rs;
 #[macro_use]
 extern crate futures;
@@ -247,11 +250,14 @@ pub use self::tls::{Certificate, Identity};
 #[macro_use]
 mod error;
 
+// must be prior to async_impl for define_session macro
+#[macro_use]
+pub mod cookie;
+
 mod async_impl;
 mod connect;
 mod body;
 mod client;
-pub mod cookie;
 #[cfg(feature = "trust-dns")]
 mod dns;
 mod into_url;
@@ -279,6 +285,9 @@ pub mod async {
         ResponseBuilderExt,
         multipart
     };
+    pub mod cookie {
+        pub use ::async_impl::cookie::Session;
+    }
 }
 
 /// Shortcut method to quickly make a `GET` request.
