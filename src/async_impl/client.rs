@@ -27,6 +27,7 @@ use mime;
 #[cfg(feature = "default-tls")]
 use native_tls::TlsConnector;
 use tokio::{clock, timer::Delay};
+use url::percent_encoding::{percent_encode, USERINFO_ENCODE_SET};
 
 
 use super::request::{Request, RequestBuilder};
@@ -877,7 +878,11 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &cookie::CookieStore
     let header = cookie_store
         .0
         .get_request_cookies(url)
-        .map(|c| c.encoded().to_string())
+        .map(|c| {
+            let name = percent_encode(c.name().as_bytes(), USERINFO_ENCODE_SET);
+            let value = percent_encode(c.value().as_bytes(), USERINFO_ENCODE_SET);
+            format!("{}={}", name, value)
+        })
         .collect::<Vec<_>>()
         .join("; ");
     if !header.is_empty() {
