@@ -94,7 +94,7 @@ fn cookie_store_simple() {
             ",
         response: b"\
             HTTP/1.1 200 OK\r\n\
-            Set-Cookie: key=val\r\n\
+            Set-Cookie: key=val; HttpOnly\r\n\
             Content-Length: 0\r\n\
             \r\n\
             "
