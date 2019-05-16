@@ -186,9 +186,10 @@ impl Response {
     ///
     /// ```rust
     /// # extern crate reqwest;
-    /// # #[macro_use] extern crate serde_derive;
+    /// # extern crate serde;
     /// #
     /// # use reqwest::Error;
+    /// # use serde::Deserialize;
     /// #
     /// #[derive(Deserialize)]
     /// struct Ip {

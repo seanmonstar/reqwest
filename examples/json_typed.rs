@@ -4,8 +4,10 @@
 //! Rust compile-time type system guaranties though it requires a little bit
 //! more code.
 extern crate reqwest;
-#[macro_use] extern crate serde_derive;
+extern crate serde;
 extern crate serde_json;
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Post {

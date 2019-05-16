@@ -4,11 +4,11 @@ extern crate futures;
 extern crate reqwest;
 extern crate tokio;
 extern crate serde;
-#[macro_use] extern crate serde_derive;
 extern crate serde_json;
 
 use futures::Future;
 use reqwest::async::{Client, Response};
+use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 struct Slideshow {

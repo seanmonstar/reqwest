@@ -582,6 +582,7 @@ mod tests {
     use {body, Client, Method};
     use header::{ACCEPT, HOST, HeaderMap, HeaderValue, CONTENT_TYPE};
     use std::collections::{BTreeMap, HashMap};
+    use serde::Serialize;
     use serde_json;
     use serde_urlencoded;
 

@@ -9,9 +9,10 @@ use {StatusCode, Url};
 /// # Examples
 ///
 /// ```
-/// #[macro_use]
-/// extern crate serde_derive;
+/// extern crate serde;
 /// extern crate reqwest;
+///
+/// use serde::Deserialize;
 ///
 /// #[derive(Deserialize)]
 /// struct Simple {
