@@ -428,6 +428,7 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
 mod tests {
     use super::Client;
     use std::collections::BTreeMap;
+    use serde::Serialize;
 
     #[test]
     fn add_query_append() {
