@@ -1,3 +1,7 @@
+## v0.9.17
+
+- Fix `Cookie` headers so as to not include attributes from the `Set-Cookie` (like `HttpOnly`, `Secure`, etc).
+
 ## v0.9.16
 
 - Add `Response::text_with_charset()` to allow setting the default charset to decode.
