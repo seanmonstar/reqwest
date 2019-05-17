@@ -34,11 +34,16 @@ matrix:
           env: FEATURES="--features trust-dns"
 
         # android
-        #- rust: stable
-        #  env: TARGET=aarch64-linux-android
-        #  install: rustup target add "$TARGET"
-        #  # disable default-tls feature since cross-compiling openssl is dragons
-        #  script: cargo build --target "$TARGET" --no-default-features
+        - rust: stable
+          env: TARGET=aarch64-linux-android
+          before_install:
+            - wget https://dl.google.com/android/repository/android-ndk-r19c-linux-x86_64.zip;
+            - unzip -qq android-ndk*.zip;
+            - android-ndk*/build/tools/make_standalone_toolchain.py --arch arm64 --api 21 --install-dir /tmp/android-toolchain;
+            - export PATH=/tmp/android-toolchain/bin:$PATH;
+          install: rustup target add "$TARGET"
+          # disable default-tls feature since cross-compiling openssl is dragons
+          script: cargo build --target "$TARGET" --no-default-features
 
         # minimum version
         - rust: 1.31.0
