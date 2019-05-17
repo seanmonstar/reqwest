@@ -34,11 +34,11 @@ matrix:
           env: FEATURES="--features trust-dns"
 
         # android
-        #- rust: stable
-        #  env: TARGET=aarch64-linux-android
-        #  install: rustup target add "$TARGET"
-        #  # disable default-tls feature since cross-compiling openssl is dragons
-        #  script: cargo build --target "$TARGET" --no-default-features
+        - rust: stable
+          env: TARGET=aarch64-linux-android
+          install: rustup target add "$TARGET"
+          # disable default-tls feature since cross-compiling openssl is dragons
+          script: cargo build --target "$TARGET" --no-default-features
 
         # minimum version
         - rust: 1.31.0
