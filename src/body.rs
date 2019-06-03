@@ -118,7 +118,7 @@ impl Body {
 
 
 enum Kind {
-    Reader(Box<Read + Send>, Option<u64>),
+    Reader(Box<dyn Read + Send>, Option<u64>),
     Bytes(Bytes),
 }
 
@@ -197,7 +197,7 @@ impl<'a> fmt::Debug for DebugLength<'a> {
 }
 
 pub(crate) enum Reader {
-    Reader(Box<Read + Send>),
+    Reader(Box<dyn Read + Send>),
     Bytes(Cursor<Bytes>),
 }
 
@@ -211,7 +211,7 @@ impl Read for Reader {
 }
 
 pub(crate) struct Sender {
-    body: (Box<Read + Send>, Option<u64>),
+    body: (Box<dyn Read + Send>, Option<u64>),
     tx: hyper::body::Sender,
 }
 

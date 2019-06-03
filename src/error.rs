@@ -626,7 +626,7 @@ mod tests {
                     "root"
                 }
             }
-            fn cause(&self) -> Option<&StdError> {
+            fn cause(&self) -> Option<&dyn StdError> {
                 if let Some(ref e) = self.0 {
                     Some(e)
                 } else {

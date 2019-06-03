@@ -5,7 +5,7 @@
 extern crate reqwest;
 extern crate env_logger;
 
-fn main() -> Result<(), Box<std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
     println!("GET https://www.rust-lang.org");

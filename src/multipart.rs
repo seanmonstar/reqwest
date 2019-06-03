@@ -9,7 +9,7 @@
 //! ```
 //! use reqwest::multipart;
 //!
-//! # fn run() -> Result<(), Box<::std::error::Error>> {
+//! # fn run() -> Result<(), Box<dyn std::error::Error>> {
 //! let form = multipart::Form::new()
 //!     // Adding just a simple text field...
 //!     .text("username", "seanmonstar")
@@ -282,7 +282,7 @@ impl PartProps for Part {
 
 pub(crate) struct Reader {
     form: Form,
-    active_reader: Option<Box<Read + Send>>,
+    active_reader: Option<Box<dyn Read + Send>>,
 }
 
 impl fmt::Debug for Reader {

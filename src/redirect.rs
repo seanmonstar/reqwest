@@ -214,7 +214,7 @@ impl<'a> RedirectAttempt<'a> {
 }
 
 enum Policy {
-    Custom(Box<Fn(RedirectAttempt) -> RedirectAction + Send + Sync + 'static>),
+    Custom(Box<dyn Fn(RedirectAttempt) -> RedirectAction + Send + Sync + 'static>),
     Limit(usize),
     None,
 }

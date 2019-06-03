@@ -385,7 +385,7 @@ pub(crate) trait AsyncConn: AsyncRead + AsyncWrite {}
 impl<T: AsyncRead + AsyncWrite> AsyncConn for T {}
 pub(crate) type Conn = Box<dyn AsyncConn + Send + Sync + 'static>;
 
-pub(crate) type Connecting = Box<Future<Item=(Conn, Connected), Error=io::Error> + Send>;
+pub(crate) type Connecting = Box<dyn Future<Item=(Conn, Connected), Error=io::Error> + Send>;
 
 #[cfg(feature = "tls")]
 fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<::http::header::HeaderValue>) -> Tunnel<T> {

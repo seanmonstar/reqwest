@@ -379,7 +379,7 @@ impl Intercept {
 struct Custom {
     // This auth only applies if the returned ProxyScheme doesn't have an auth...
     auth: Option<HeaderValue>,
-    func: Arc<Fn(&Url) -> Option<::Result<ProxyScheme>> + Send + Sync + 'static>,
+    func: Arc<dyn Fn(&Url) -> Option<::Result<ProxyScheme>> + Send + Sync + 'static>,
 }
 
 impl Custom {
