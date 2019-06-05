@@ -411,7 +411,8 @@ impl Stream for WaitBody {
             Some(Err(e)) => {
                 let req_err = match e {
                     wait::Waited::TimedOut => ::error::timedout(None),
-                    wait::Waited::Err(e) => e,
+                    wait::Waited::Executor(e) => ::error::from(e),
+                    wait::Waited::Inner(e) => e,
                 };
 
                 Err(req_err)

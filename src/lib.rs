@@ -197,6 +197,7 @@ extern crate serde_json;
 extern crate serde_urlencoded;
 extern crate time;
 extern crate tokio;
+extern crate tokio_executor;
 #[cfg_attr(feature = "default-tls", macro_use)]
 extern crate tokio_io;
 extern crate tokio_timer;
