@@ -2,6 +2,8 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 
+use tokio_executor::EnterError;
+
 use {StatusCode, Url};
 
 /// The Errors that may occur when processing a `Request`.
@@ -146,6 +148,7 @@ impl Error {
             Kind::Io(ref e) => Some(e),
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
+            Kind::Executor(ref e) => Some(e),
             Kind::UrlBadScheme |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
@@ -284,6 +287,7 @@ impl fmt::Display for Error {
             }
             Kind::UnknownProxyScheme => f.write_str("Unknown proxy scheme"),
             Kind::Timer => f.write_str("timer unavailable"),
+            Kind::Executor(ref e) => fmt::Display::fmt(e, f),
         }
     }
 }
@@ -320,6 +324,7 @@ impl StdError for Error {
             }
             Kind::UnknownProxyScheme => "Unknown proxy scheme",
             Kind::Timer => "timer unavailable",
+            Kind::Executor(ref e) => e.description(),
         }
     }
 
@@ -342,6 +347,7 @@ impl StdError for Error {
             Kind::Io(ref e) => e.cause(),
             Kind::UrlEncoded(ref e) => e.cause(),
             Kind::Json(ref e) => e.cause(),
+            Kind::Executor(ref e) => e.cause(),
             Kind::UrlBadScheme |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
@@ -368,6 +374,7 @@ impl StdError for Error {
             Kind::Io(ref e) => e.source(),
             Kind::UrlEncoded(ref e) => e.source(),
             Kind::Json(ref e) => e.source(),
+            Kind::Executor(ref e) => e.source(),
             Kind::UrlBadScheme |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
@@ -401,6 +408,7 @@ pub(crate) enum Kind {
     Status(StatusCode),
     UnknownProxyScheme,
     Timer,
+    Executor(EnterError),
 }
 
 
@@ -472,8 +480,15 @@ where T: Into<Kind> {
     fn from(err: ::wait::Waited<T>) -> Kind {
         match err {
             ::wait::Waited::TimedOut =>  io_timeout().into(),
-            ::wait::Waited::Err(e) => e.into(),
+            ::wait::Waited::Executor(e) => e.into(),
+            ::wait::Waited::Inner(e) => e.into(),
         }
+    }
+}
+
+impl From<EnterError> for Kind {
+    fn from(err: EnterError) -> Kind {
+        Kind::Executor(err)
     }
 }
 
