@@ -1,7 +1,7 @@
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
 #![cfg_attr(test, deny(warnings))]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.9.17")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.9.18")]
 
 //! # reqwest
 //!
@@ -16,11 +16,6 @@
 //! - HTTP [Proxies](#proxies)
 //! - Uses system-native [TLS](#tls)
 //! - Cookies
-//!
-//! The rudimentary cookie support means that the cookies need to be manually
-//! configured for every single request. In other words, there's no cookie jar
-//! support as of now. The tracking issue for this feature is available
-//! [on GitHub][cookiejar_issue].
 //!
 //! The [`reqwest::Client`][client] is synchronous, making it a great fit for
 //! applications that only require a few HTTP requests, and wish to handle
@@ -128,6 +123,11 @@
 //! loops, and having a maximum redirect chain of 10 hops. To customize this
 //! behavior, a [`RedirectPolicy`][redirect] can used with a `ClientBuilder`.
 //!
+//! ## Cookies
+//!
+//! The automatic storing and sending of session cookies can be enabled with
+//! the [`cookie_store`][ClientBuilder::cookie_store] method on `ClientBuilder`.
+//!
 //! ## Proxies
 //!
 //! A `Client` can be configured to make use of HTTP proxies by adding
@@ -167,7 +167,6 @@
 //! [get]: ./fn.get.html
 //! [builder]: ./struct.RequestBuilder.html
 //! [serde]: http://serde.rs
-//! [cookiejar_issue]: https://github.com/seanmonstar/reqwest/issues/14
 //! [redirect]: ./struct.RedirectPolicy.html
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section

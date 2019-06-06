@@ -368,11 +368,20 @@ impl ClientBuilder {
     }
 
     /// Enable a persistent cookie store for the client.
-    /// 
+    ///
     /// Cookies received in responses will be preserved and included in 
     /// additional requests.
-    /// 
+    ///
     /// By default, no cookie store is used.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let client = reqwest::Client::builder()
+    ///     .cookie_store(true)
+    ///     .build()
+    ///     .unwrap();
+    /// ```
     pub fn cookie_store(self, enable: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.cookie_store(enable))
     }
