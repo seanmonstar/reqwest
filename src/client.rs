@@ -636,9 +636,12 @@ impl ClientHandle {
         let res = match wait::timeout(fut, self.timeout.0) {
             Ok(res) => res,
             Err(wait::Waited::TimedOut) => return Err(::error::timedout(Some(url))),
-            Err(wait::Waited::Err(err)) => {
+            Err(wait::Waited::Executor(err)) => {
+                return Err(::error::from(err).with_url(url))
+            },
+            Err(wait::Waited::Inner(err)) => {
                 return Err(err.with_url(url));
-            }
+            },
         };
         res.map(|res| {
             Response::new(res, self.timeout.0, KeepCoreThreadAlive(Some(self.inner.clone())))

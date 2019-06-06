@@ -2,34 +2,18 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use futures::{Async, Future, Stream};
+use futures::{Async, Future, Poll, Stream};
 use futures::executor::{self, Notify};
+use tokio_executor::{enter, EnterError};
 
 pub(crate) fn timeout<F>(fut: F, timeout: Option<Duration>) -> Result<F::Item, Waited<F::Error>>
-where F: Future {
-    if let Some(dur) = timeout {
-        let start = Instant::now();
-        let deadline = start + dur;
-        let mut task = executor::spawn(fut);
-        let notify = Arc::new(ThreadNotify {
-            thread: thread::current(),
-        });
-
-        loop {
-            let now = Instant::now();
-            if now >= deadline {
-                return Err(Waited::TimedOut);
-            }
-            match task.poll_future_notify(&notify, 0)? {
-                Async::Ready(val) => return Ok(val),
-                Async::NotReady => {
-                    thread::park_timeout(deadline - now);
-                }
-            }
-        }
-    } else {
-        fut.wait().map_err(From::from)
-    }
+where
+    F: Future,
+{
+    let mut spawn = executor::spawn(fut);
+    block_on(timeout, |notify| {
+        spawn.poll_future_notify(notify, 0)
+    })
 }
 
 pub(crate) fn stream<S>(stream: S, timeout: Option<Duration>) -> WaitStream<S>
@@ -43,12 +27,13 @@ where S: Stream {
 #[derive(Debug)]
 pub(crate) enum Waited<E> {
     TimedOut,
-    Err(E),
+    Executor(EnterError),
+    Inner(E),
 }
 
 impl<E> From<E> for Waited<E> {
     fn from(err: E) -> Waited<E> {
-        Waited::Err(err)
+        Waited::Inner(err)
     }
 }
 
@@ -62,42 +47,14 @@ where S: Stream {
     type Item = Result<S::Item, Waited<S::Error>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(dur) = self.timeout {
-            let start = Instant::now();
-            let deadline = start + dur;
-            let notify = Arc::new(ThreadNotify {
-                thread: thread::current(),
-            });
+        let res = block_on(self.timeout, |notify| {
+            self.stream.poll_stream_notify(notify, 0)
+        });
 
-            loop {
-                let now = Instant::now();
-                if now >= deadline {
-                    return Some(Err(Waited::TimedOut));
-                }
-                match self.stream.poll_stream_notify(&notify, 0) {
-                    Ok(Async::Ready(Some(val))) => return Some(Ok(val)),
-                    Ok(Async::Ready(None)) => return None,
-                    Ok(Async::NotReady) => {
-                        thread::park_timeout(deadline - now);
-                    },
-                    Err(e) => return Some(Err(Waited::Err(e))),
-                }
-            }
-        } else {
-            let notify = Arc::new(ThreadNotify {
-                thread: thread::current(),
-            });
-
-            loop {
-                match self.stream.poll_stream_notify(&notify, 0) {
-                    Ok(Async::Ready(Some(val))) => return Some(Ok(val)),
-                    Ok(Async::Ready(None)) => return None,
-                    Ok(Async::NotReady) => {
-                        thread::park();
-                    },
-                    Err(e) => return Some(Err(Waited::Err(e))),
-                }
-            }
+        match res {
+            Ok(Some(val)) => Some(Ok(val)),
+            Ok(None) => None,
+            Err(err) => Some(Err(err)),
         }
     }
 }
@@ -111,3 +68,36 @@ impl Notify for ThreadNotify {
         self.thread.unpark();
     }
 }
+
+fn block_on<F, U, E>(timeout: Option<Duration>, mut poll: F) -> Result<U, Waited<E>>
+where
+    F: FnMut(&Arc<ThreadNotify>) -> Poll<U, E>,
+{
+    let _entered = enter().map_err(Waited::Executor)?;
+    let deadline = timeout.map(|d| {
+        Instant::now() + d
+    });
+    let notify = Arc::new(ThreadNotify {
+        thread: thread::current(),
+    });
+
+    loop {
+        match poll(&notify)? {
+            Async::Ready(val) => return Ok(val),
+            Async::NotReady => {}
+        }
+
+        if let Some(deadline) = deadline {
+            let now = Instant::now();
+            if now >= deadline {
+                return Err(Waited::TimedOut);
+            }
+
+            thread::park_timeout(deadline - now);
+        } else {
+            thread::park();
+        }
+    }
+}
+
+

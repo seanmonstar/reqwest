@@ -99,7 +99,6 @@ impl Certificate {
         tls: &mut ::rustls::ClientConfig,
     ) -> ::Result<()> {
         use std::io::Cursor;
-        use rustls::TLSError;
         use rustls::internal::pemfile;
 
         match self.original {
@@ -178,7 +177,6 @@ impl Identity {
     #[cfg(feature = "rustls-tls")]
     pub fn from_pem(buf: &[u8]) -> ::Result<Identity> {
         use std::io::Cursor;
-        use rustls::TLSError;
         use rustls::internal::pemfile;
 
         let (key, certs) = {
