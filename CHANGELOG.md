@@ -1,3 +1,7 @@
+## v0.9.18
+
+- Fix `Cookie` headers to no longer send as percent-encoded (instead, exactly as sent by the server).
+
 ## v0.9.17
 
 - Fix `Cookie` headers so as to not include attributes from the `Set-Cookie` (like `HttpOnly`, `Secure`, etc).
