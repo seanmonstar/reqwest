@@ -63,7 +63,6 @@ fn multipart() {
         request: format!("\
             POST /multipart/1 HTTP/1.1\r\n\
             content-type: multipart/form-data; boundary={}\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -105,7 +104,6 @@ fn request_timeout() {
     let server = server! {
         request: b"\
             GET /slow HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -145,7 +143,6 @@ fn response_timeout() {
     let server = server! {
         request: b"\
             GET /slow HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -200,7 +197,6 @@ fn gzip_case(response_size: usize, chunk_size: usize) {
     let server = server! {
         request: b"\
             GET /gzip HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\

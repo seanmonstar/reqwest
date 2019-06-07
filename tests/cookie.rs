@@ -11,7 +11,6 @@ fn cookie_response_accessor() {
     let server = server! {
         request: b"\
             GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -86,7 +85,6 @@ fn cookie_store_simple() {
     let server = server! {
         request: b"\
             GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -105,7 +103,6 @@ fn cookie_store_simple() {
     let server = server! {
         request: b"\
             GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             cookie: key=val\r\n\
             accept-encoding: gzip\r\n\
@@ -130,7 +127,6 @@ fn cookie_store_overwrite_existing() {
     let server = server! {
         request: b"\
             GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -149,7 +145,6 @@ fn cookie_store_overwrite_existing() {
     let server = server! {
         request: b"\
             GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             cookie: key=val\r\n\
             accept-encoding: gzip\r\n\
@@ -169,7 +164,6 @@ fn cookie_store_overwrite_existing() {
     let server = server! {
         request: b"\
             GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             cookie: key=val2\r\n\
             accept-encoding: gzip\r\n\
@@ -194,7 +188,6 @@ fn cookie_store_max_age() {
     let server = server! {
         request: b"\
             GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -213,7 +206,6 @@ fn cookie_store_max_age() {
     let server = server! {
         request: b"\
             GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -237,7 +229,6 @@ fn cookie_store_expires() {
     let server = server! {
         request: b"\
             GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -256,7 +247,6 @@ fn cookie_store_expires() {
     let server = server! {
         request: b"\
             GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -280,7 +270,6 @@ fn cookie_store_path() {
     let server = server! {
         request: b"\
             GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -299,7 +288,6 @@ fn cookie_store_path() {
     let server = server! {
         request: b"\
             GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -317,7 +305,6 @@ fn cookie_store_path() {
     let server = server! {
         request: b"\
             GET /subpath HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             cookie: key=val\r\n\
             accept-encoding: gzip\r\n\

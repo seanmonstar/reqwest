@@ -1,3 +1,8 @@
+## Unreleased
+
+- Reqwest no longer sets a User-Agent header by default. If you are interacting
+  with services which require a user agent, you will need to set one manually.
+
 ## v0.9.18
 
 - Fix `Cookie` headers to no longer send as percent-encoded (instead, exactly as sent by the server).

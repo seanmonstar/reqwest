@@ -10,7 +10,6 @@ fn test_response_text() {
     let server = server! {
         request: b"\
             GET /text HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -41,7 +40,6 @@ fn test_response_non_utf_8_text() {
     let server = server! {
         request: b"\
             GET /text HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -74,7 +72,6 @@ fn test_response_copy_to() {
     let server = server! {
         request: b"\
             GET /1 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -106,7 +103,6 @@ fn test_get() {
     let server = server! {
         request: b"\
             GET /1 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -140,7 +136,6 @@ fn test_post() {
         request: b"\
             POST /2 HTTP/1.1\r\n\
             content-length: 5\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -179,7 +174,6 @@ fn test_post_form() {
             POST /form HTTP/1.1\r\n\
             content-type: application/x-www-form-urlencoded\r\n\
             content-length: 24\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -214,7 +208,6 @@ fn test_error_for_status_4xx() {
     let server = server! {
         request: b"\
             GET /1 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -243,7 +236,6 @@ fn test_error_for_status_5xx() {
     let server = server! {
         request: b"\
             GET /1 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -277,7 +269,6 @@ fn test_default_headers() {
     let server = server! {
         request: b"\
             GET /1 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             cookie: a=b;c=d\r\n\
             accept-encoding: gzip\r\n\
@@ -303,7 +294,6 @@ fn test_default_headers() {
     let server = server! {
         request: b"\
             GET /2 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             cookie: a=b;c=d\r\n\
             accept-encoding: gzip\r\n\
@@ -340,7 +330,6 @@ fn test_override_default_headers() {
         request: b"\
             GET /3 HTTP/1.1\r\n\
             authorization: secret\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -373,7 +362,6 @@ fn test_appended_headers_not_overwritten() {
             GET /4 HTTP/1.1\r\n\
             accept: application/json\r\n\
             accept: application/json+hal\r\n\
-            user-agent: $USERAGENT\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
             \r\n\
@@ -407,7 +395,6 @@ fn test_appended_headers_not_overwritten() {
             GET /4 HTTP/1.1\r\n\
             accept: application/json\r\n\
             accept: application/json+hal\r\n\
-            user-agent: $USERAGENT\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
             \r\n\

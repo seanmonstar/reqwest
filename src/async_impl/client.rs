@@ -19,7 +19,6 @@ use header::{
     RANGE,
     REFERER,
     TRANSFER_ENCODING,
-    USER_AGENT,
 };
 use http::Uri;
 use hyper::client::ResponseFuture;
@@ -40,9 +39,6 @@ use {IntoUrl, Method, Proxy, StatusCode, Url};
 use {Certificate, Identity};
 #[cfg(feature = "tls")]
 use ::tls::TlsBackend;
-
-static DEFAULT_USER_AGENT: &'static str =
-    concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 /// An asynchronous `Client` to make Requests with.
 ///
@@ -94,7 +90,6 @@ impl ClientBuilder {
     /// This is the same as `Client::builder()`.
     pub fn new() -> ClientBuilder {
         let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(2);
-        headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
         headers.insert(ACCEPT, HeaderValue::from_str(mime::STAR_STAR.as_ref()).expect("unable to parse mime"));
 
         ClientBuilder {

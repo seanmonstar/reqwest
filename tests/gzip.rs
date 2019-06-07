@@ -31,7 +31,6 @@ fn test_gzip_response() {
     let server = server! {
         request: b"\
             GET /gzip HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -54,7 +53,6 @@ fn test_gzip_empty_body() {
     let server = server! {
         request: b"\
             HEAD /gzip HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -85,7 +83,6 @@ fn test_gzip_invalid_body() {
     let server = server! {
         request: b"\
             GET /gzip HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -114,7 +111,6 @@ fn test_accept_header_is_not_changed_if_set() {
         request: b"\
             GET /accept HTTP/1.1\r\n\
             accept: application/json\r\n\
-            user-agent: $USERAGENT\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
             \r\n\
@@ -143,7 +139,6 @@ fn test_accept_encoding_header_is_not_changed_if_set() {
         request: b"\
             GET /accept-encoding HTTP/1.1\r\n\
             accept-encoding: identity\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             host: $HOST\r\n\
             \r\n\

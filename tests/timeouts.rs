@@ -21,7 +21,6 @@ fn timeout_closes_connection() {
     let server = server! {
         request: b"\
             GET /closes HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -63,7 +62,6 @@ fn write_timeout_large_body() {
     let server = server! {
         request: format!("\
             POST /write-timeout HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             content-length: {}\r\n\
             accept-encoding: gzip\r\n\
@@ -100,7 +98,6 @@ fn test_response_timeout() {
     let server = server! {
         request: b"\
             GET /response-timeout HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\
@@ -132,7 +129,6 @@ fn test_read_timeout() {
     let server = server! {
         request: b"\
             GET /read-timeout HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: $HOST\r\n\

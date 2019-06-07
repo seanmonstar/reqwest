@@ -8,7 +8,6 @@ fn http_proxy() {
     let server = server! {
         request: b"\
             GET http://hyper.rs/prox HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             host: hyper.rs\r\n\
@@ -43,7 +42,6 @@ fn http_proxy_basic_auth() {
     let server = server! {
         request: b"\
             GET http://hyper.rs/prox HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             proxy-authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==\r\n\
@@ -83,7 +81,6 @@ fn http_proxy_basic_auth_parsed() {
     let server = server! {
         request: b"\
             GET http://hyper.rs/prox HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
             accept: */*\r\n\
             accept-encoding: gzip\r\n\
             proxy-authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==\r\n\
