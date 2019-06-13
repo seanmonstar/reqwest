@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, io};
 
 use futures::{Future, Stream, Poll, Async};
 use bytes::{Buf, Bytes};
@@ -134,6 +134,13 @@ impl From<&'static str> for Body {
     #[inline]
     fn from(s: &'static str) -> Body {
         s.as_bytes().into()
+    }
+}
+
+impl From<Box<dyn Stream<Item = Bytes, Error = io::Error> + Send>> for Body {
+    #[inline]
+    fn from(s: Box<dyn Stream<Item = Bytes, Error = io::Error> + Send>) -> Body {
+        Body::wrap(::hyper::Body::wrap_stream(s))
     }
 }
 

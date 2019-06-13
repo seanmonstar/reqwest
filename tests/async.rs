@@ -3,11 +3,12 @@ extern crate libflate;
 extern crate reqwest;
 extern crate hyper;
 extern crate tokio;
+extern crate bytes;
 
 #[macro_use]
 mod support;
 
-use std::io::Write;
+use std::io::{self, Write};
 use std::time::Duration;
 
 use futures::{Future, Stream};
@@ -15,6 +16,8 @@ use tokio::runtime::current_thread::Runtime;
 
 use reqwest::async::Client;
 use reqwest::async::multipart::{Form, Part};
+
+use bytes::Bytes;
 
 #[test]
 fn gzip_response() {
@@ -225,6 +228,54 @@ fn gzip_case(response_size: usize, chunk_size: usize) {
             let body = ::std::str::from_utf8(&buf).unwrap();
 
             assert_eq!(body, &content);
+
+            Ok(())
+        });
+
+    rt.block_on(res_future).unwrap();
+}
+
+#[test]
+fn body_stream() {
+    let _ = env_logger::try_init();
+
+    let source: Box<Stream<Item = Bytes, Error = io::Error> + Send>
+        = Box::new(futures::stream::iter_ok::<_, io::Error>(
+            vec![Bytes::from_static(b"123"), Bytes::from_static(b"4567")]));
+
+    let expected_body = "3\r\n123\r\n4\r\n4567\r\n0\r\n\r\n";
+
+    let server = server! {
+        request: format!("\
+            POST /post HTTP/1.1\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
+            transfer-encoding: chunked\r\n\
+            \r\n\
+            {}\
+            ", expected_body),
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Server: post\r\n\
+            Content-Length: 7\r\n\
+            \r\n\
+            "
+    };
+
+    let url = format!("http://{}/post", server.addr());
+
+    let mut rt = Runtime::new().expect("new rt");
+
+    let client = Client::new();
+
+    let res_future = client.post(&url)
+        .body(source)
+        .send()
+        .and_then(|res| {
+            assert_eq!(res.url().as_str(), &url);
+            assert_eq!(res.status(), reqwest::StatusCode::OK);
 
             Ok(())
         });
