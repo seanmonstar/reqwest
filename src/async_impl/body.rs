@@ -137,6 +137,18 @@ impl From<&'static str> for Body {
     }
 }
 
+impl<I, E> From<Box<dyn Stream<Item = I, Error = E> + Send>> for Body
+where
+    hyper::Chunk: From<I>,
+    I: 'static,
+    E: std::error::Error + Send + Sync + 'static,
+{
+    #[inline]
+    fn from(s: Box<dyn Stream<Item = I, Error = E> + Send>) -> Body {
+        Body::wrap(::hyper::Body::wrap_stream(s))
+    }
+}
+
 /// A chunk of bytes for a `Body`.
 ///
 /// A `Chunk` can be treated like `&[u8]`.

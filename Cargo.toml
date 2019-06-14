@@ -53,9 +53,11 @@ time = "0.1.42"
 [dev-dependencies]
 env_logger = "0.6"
 serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "0.1.7", default-features = false, features = ["rt-full", "tcp", "fs"] }
 tokio-tcp = "0.1"
 libflate = "0.1"
 doc-comment = "0.3"
+bytes = "0.4"
 
 [features]
 default = ["default-tls"]
