@@ -481,11 +481,11 @@ impl Dst for Uri {
 ///
 /// It can only support Linux, Unix like, and windows system.  Note that it will always
 /// return a HashMap, even if something runs into error when find registry information in
-/// Windows system.
+/// Windows system.  Note that invalid proxy url in the system setting will be ignored.
 ///
 /// Returns:
 ///     System proxies information as a hashmap like
-///     {"http": "http://127.0.0.1:80", "https": "https://127.0.0.1:80"}
+///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}
 pub fn get_proxies() -> HashMap<String, Url> {
     let proxies: HashMap<String, Url> = get_from_environment();
 
