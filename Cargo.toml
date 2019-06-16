@@ -72,3 +72,6 @@ rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 trust-dns = ["trust-dns-resolver"]
 
 hyper-011 = ["hyper-old-types"]
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.6"

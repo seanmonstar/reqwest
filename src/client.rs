@@ -13,6 +13,7 @@ use response::Response;
 use {async_impl, header, Method, IntoUrl, Proxy, RedirectPolicy, wait};
 #[cfg(feature = "tls")]
 use {Certificate, Identity};
+use proxy::{get_proxies};
 
 /// A `Client` to make Requests with.
 ///
@@ -65,10 +66,26 @@ impl ClientBuilder {
     /// Constructs a new `ClientBuilder`.
     ///
     /// This is the same as `Client::builder()`.
-    pub fn new() -> ClientBuilder {
-        ClientBuilder {
-            inner: async_impl::ClientBuilder::new(),
-            timeout: Timeout::default(),
+    pub fn new(need_proxy: bool) -> ClientBuilder {
+        if need_proxy == false {
+            ClientBuilder {
+                inner: async_impl::ClientBuilder::new(),
+                timeout: Timeout::default(),
+            }
+        }
+        else {
+            let proxies = get_proxies();
+            let builder = ClientBuilder {
+                inner: async_impl::ClientBuilder::new(),
+                timeout: Timeout::default(),
+            };
+            builder.proxy(Proxy::custom(move |url| {
+                if proxies.contains_key(url.scheme()) {
+                    return Some((*proxies.get(url.scheme()).unwrap()).clone());
+                } else {
+                    return None;
+                }
+            }))
         }
     }
 
@@ -369,7 +386,7 @@ impl ClientBuilder {
 
     /// Enable a persistent cookie store for the client.
     ///
-    /// Cookies received in responses will be preserved and included in 
+    /// Cookies received in responses will be preserved and included in
     /// additional requests.
     ///
     /// By default, no cookie store is used.
@@ -399,7 +416,7 @@ impl Client {
     /// Use `Client::builder()` if you wish to handle the failure as an `Error`
     /// instead of panicking.
     pub fn new() -> Client {
-        ClientBuilder::new()
+        ClientBuilder::new(true)
             .build()
             .expect("Client::new()")
     }
@@ -408,7 +425,7 @@ impl Client {
     ///
     /// This is the same as `ClientBuilder::new()`.
     pub fn builder() -> ClientBuilder {
-        ClientBuilder::new()
+        ClientBuilder::new(true)
     }
 
     /// Convenience method to make a `GET` request to a URL.
