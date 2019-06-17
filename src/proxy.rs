@@ -671,21 +671,27 @@ mod tests {
 
     #[test]
     fn test_get_proxies() {
+        // save system setting first.
+        let system_proxy = env::var("http_pxoxy");
+
+        // remove proxy.
         env::remove_var("http_proxy");
+        assert_eq!(get_proxies().len(), 0);
+
+        // the system proxy setting url is invalid.
+        env::set_var("http_proxy", "123465");
+        assert_eq!(get_proxies().len(), 0);
+
+        // set valid proxy
         env::set_var("http_proxy", "http://127.0.0.1/");
         let proxies = get_proxies();
         let http_target = proxies.get("http").unwrap().as_str();
         assert_eq!(http_target, "http://127.0.0.1/");
-        // clean job.
-        env::remove_var("http_proxy");
-    }
 
-    #[test]
-    fn test_get_proxies_when_proxy_url_is_invalid() {
-        env::remove_var("http_proxy");
-        env::set_var("http_proxy", "123465");
-        assert_eq!(get_proxies().len(), 0);
-        // clean job.
-        env::remove_var("http_proxy");
+        // reset user setting.
+        match system_proxy {
+            Err(_) => env::remove_var("http_proxy"),
+            Ok(proxy) => env::set_var("http_proxy", proxy)
+        }
     }
 }
