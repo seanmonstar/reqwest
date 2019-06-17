@@ -206,6 +206,8 @@ extern crate url;
 extern crate uuid;
 #[cfg(feature = "socks")]
 extern crate socks;
+#[cfg(target_os = "windows")]
+extern crate winreg;
 
 #[cfg(feature = "rustls-tls")]
 extern crate hyper_rustls;
