@@ -668,4 +668,24 @@ mod tests {
         assert_eq!(intercepted_uri(&p, https), target1);
         assert!(p.intercept(&url(other)).is_none());
     }
+
+    #[test]
+    fn test_get_proxies() {
+        env::remove_var("http_proxy");
+        env::set_var("http_proxy", "http://127.0.0.1/");
+        let proxies = get_proxies();
+        let http_target = proxies.get("http").unwrap().as_str();
+        assert_eq!(http_target, "http://127.0.0.1/");
+        // clean job.
+        env::remove_var("http_proxy");
+    }
+
+    #[test]
+    fn test_get_proxies_when_proxy_url_is_invalid() {
+        env::remove_var("http_proxy");
+        env::set_var("http_proxy", "123465");
+        assert_eq!(get_proxies().len(), 0);
+        // clean job.
+        env::remove_var("http_proxy");
+    }
 }
