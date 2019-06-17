@@ -133,14 +133,20 @@ fn test_get_proxies() {
 
     // remove proxy.
     env::remove_var("http_proxy");
+    // ensure that the proxy is removed
+    assert_eq!(env::var("http_proxy").is_err(), true);
     assert_eq!(reqwest::get_proxies().len(), 0);
 
     // the system proxy setting url is invalid.
     env::set_var("http_proxy", "123465");
+    // ensure that the proxy is set
+    assert_eq!(env::var("http_proxy").is_ok(), true);
     assert_eq!(reqwest::get_proxies().len(), 0);
 
     // set valid proxy
     env::set_var("http_proxy", "http://127.0.0.1/");
+    // ensure that the proxy is set
+    assert_eq!(env::var("http_proxy").is_ok(), true);
     let proxies = reqwest::get_proxies();
     let http_target = proxies.get("http").unwrap().as_str();
     assert_eq!(http_target, "http://127.0.0.1/");
@@ -176,6 +182,8 @@ fn test_system_proxy_is_used() {
 
     // set-up http proxy.
     env::set_var("http_proxy", format!("http://{}", server.addr()));
+    // ensure that the proxy is set
+    assert_eq!(env::var("http_proxy").is_ok(), true);
 
     let url = "http://hyper.rs/prox";
     let res = reqwest::get(url).unwrap();
