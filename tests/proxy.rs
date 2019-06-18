@@ -3,6 +3,8 @@ extern crate reqwest;
 #[macro_use]
 mod support;
 
+use std::env;
+
 #[test]
 fn http_proxy() {
     let server = server! {
@@ -114,4 +116,30 @@ fn http_proxy_basic_auth_parsed() {
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"proxied");
+}
+
+#[test]
+fn test_get_proxies() {
+    // save system setting first.
+    let system_proxy = env::var("http_pxoxy");
+
+    // remove proxy.
+    env::remove_var("http_proxy");
+    assert_eq!(reqwest::get_proxies().contains_key("http"), false);
+
+    // the system proxy setting url is invalid.
+    env::set_var("http_proxy", "123465");
+    assert_eq!(reqwest::get_proxies().contains_key("http"), false);
+
+    // set valid proxy
+    env::set_var("http_proxy", "http://127.0.0.1/");
+    let proxies = reqwest::get_proxies();
+    let http_target = proxies.get("http").unwrap().as_str();
+
+    assert_eq!(http_target, "http://127.0.0.1/");
+    // reset user setting.
+    match system_proxy {
+        Err(_) => env::remove_var("http_proxy"),
+        Ok(proxy) => env::set_var("http_proxy", proxy)
+    }
 }
