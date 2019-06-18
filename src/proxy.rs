@@ -489,12 +489,12 @@ impl Dst for Uri {
 pub fn get_proxies() -> HashMap<String, Url> {
     let proxies: HashMap<String, Url> = get_from_environment();
 
-    if proxies.len() == 0 {
+    if proxies.is_empty() {
         // don't care errors if can't get proxies from registry, just return an empty HashMap.
         #[cfg(target_os = "windows")]
         return get_from_registry();
     }
-    return proxies;
+    proxies
 }
 
 fn insert_proxy(proxies: &mut HashMap<String, Url>, schema: String, addr: String)
@@ -517,7 +517,7 @@ fn get_from_environment() -> HashMap<String, Url> {
             insert_proxy(&mut proxies, String::from(schema), String::from(value));
         }
     }
-    return proxies;
+    proxies
 }
 
 
@@ -561,16 +561,12 @@ fn get_from_registry_impl() -> Result<HashMap<String, Url>, Box<dyn Error>> {
             insert_proxy(&mut proxies, String::from("ftp"), format!("https://{}", proxy_server));
         }
     }
-    return Ok(proxies);
+    Ok(proxies)
 }
 
 #[cfg(target_os = "windows")]
 fn get_from_registry() -> HashMap<String, Url> {
-    let results = get_from_registry_impl();
-    match results {
-        Ok(proxies) => proxies,
-        Err(_) => HashMap::new(),
-    }
+    get_from_registry_impl().unwrap_or(HashMap::new())
 }
 
 #[cfg(test)]
