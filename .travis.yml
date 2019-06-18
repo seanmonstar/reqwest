@@ -58,4 +58,4 @@ env:
 
 script:
   - cargo build $FEATURES
-  - cargo test -v $FEATURES
+  - cargo test -v $FEATURES -- --test-threads=1
