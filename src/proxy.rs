@@ -490,13 +490,11 @@ pub fn get_proxies() -> HashMap<String, Url> {
     let proxies: HashMap<String, Url> = get_from_environment();
 
     if proxies.len() == 0 {
-        // don't cared if we can't get proxies from registry, just return an empty proxies.
+        // don't care errors if can't get proxies from registry, just return an empty HashMap.
         #[cfg(target_os = "windows")]
-        let proxies = get_from_registry();
-        return proxies;
-    } else {
-        return proxies;
+        return get_from_registry();
     }
+    return proxies;
 }
 
 fn insert_proxy(proxies: &mut HashMap<String, Url>, schema: String, addr: String)

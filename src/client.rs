@@ -67,7 +67,7 @@ impl ClientBuilder {
     ///
     /// This is the same as `Client::builder()`.
     pub fn new(need_proxy: bool) -> ClientBuilder {
-        if need_proxy == false {
+        if !need_proxy {
             ClientBuilder {
                 inner: async_impl::ClientBuilder::new(),
                 timeout: Timeout::default(),
