@@ -91,7 +91,7 @@ impl ClientBuilder {
     }
 
     /// Enable system proxy setting.
-    pub fn system_proxy(self) -> ClientBuilder {
+    pub fn use_sys_proxy(self) -> ClientBuilder {
         let proxies = get_proxies();
         self.proxy(Proxy::custom(move |url| {
             if proxies.contains_key(url.scheme()) {
