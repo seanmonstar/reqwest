@@ -13,7 +13,7 @@ use response::Response;
 use {async_impl, header, Method, IntoUrl, Proxy, RedirectPolicy, wait};
 #[cfg(feature = "tls")]
 use {Certificate, Identity};
-use proxy::{get_proxies};
+use proxy::get_proxies;
 
 /// A `Client` to make Requests with.
 ///
