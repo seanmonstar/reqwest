@@ -121,7 +121,7 @@ fn http_proxy_basic_auth_parsed() {
 #[test]
 fn test_get_proxies() {
     // save system setting first.
-    let system_proxy = env::var("http_pxoxy");
+    let system_proxy = env::var("http_proxy");
 
     // remove proxy.
     env::remove_var("http_proxy");

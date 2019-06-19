@@ -480,7 +480,7 @@ fn test_system_proxy_is_used() {
             "
     };
     // save system setting first.
-    let system_proxy = env::var("http_pxoxy");
+    let system_proxy = env::var("http_proxy");
 
     // set-up http proxy.
     env::set_var("http_proxy", format!("http://{}", server.addr()));
