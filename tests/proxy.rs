@@ -136,14 +136,14 @@ fn test_no_proxy() {
             \r\n\
             "
     };
-    // save system setting first.
-    let system_proxy = env::var("http_proxy");
-    // set-up http proxy.
-    env::set_var("http_proxy", format!("http://{}", server.addr()));
-
+    let proxy = format!("http://{}", server.addr());
     let url = format!("http://{}/4", server.addr());
+
+    // set up proxy and use no_proxy to clear up client builder proxies.
     let res = reqwest::Client::builder()
-        .use_sys_proxy()
+        .proxy(
+            reqwest::Proxy::http(&proxy).unwrap()
+        )
         .no_proxy()
         .build()
         .unwrap()
@@ -153,12 +153,6 @@ fn test_no_proxy() {
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-
-    // reset user setting.
-    match system_proxy {
-        Err(_) => env::remove_var("http_proxy"),
-        Ok(proxy) => env::set_var("http_proxy", proxy)
-    }
 }
 
 #[test]
