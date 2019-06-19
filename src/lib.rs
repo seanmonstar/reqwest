@@ -234,7 +234,7 @@ pub use self::client::{Client, ClientBuilder};
 pub use self::error::{Error, Result};
 pub use self::body::Body;
 pub use self::into_url::IntoUrl;
-pub use self::proxy::{Proxy};
+pub use self::proxy::Proxy;
 pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
