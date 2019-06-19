@@ -327,6 +327,12 @@ impl ClientBuilder {
         self
     }
 
+    /// Clear all `Proxies`, so `Client` will use no proxy anymore.
+    pub fn no_proxy(mut self) -> ClientBuilder {
+        self.config.proxies.clear();
+        self
+    }
+
     /// Set a `RedirectPolicy` for this client.
     ///
     /// Default will follow redirects up to a maximum of 10.

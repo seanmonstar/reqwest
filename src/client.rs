@@ -66,26 +66,10 @@ impl ClientBuilder {
     /// Constructs a new `ClientBuilder`.
     ///
     /// This is the same as `Client::builder()`.
-    pub fn new(need_proxy: bool) -> ClientBuilder {
-        if !need_proxy {
-            ClientBuilder {
-                inner: async_impl::ClientBuilder::new(),
-                timeout: Timeout::default(),
-            }
-        }
-        else {
-            let proxies = get_proxies();
-            let builder = ClientBuilder {
-                inner: async_impl::ClientBuilder::new(),
-                timeout: Timeout::default(),
-            };
-            builder.proxy(Proxy::custom(move |url| {
-                if proxies.contains_key(url.scheme()) {
-                    return Some((*proxies.get(url.scheme()).unwrap()).clone());
-                } else {
-                    return None;
-                }
-            }))
+    pub fn new() -> ClientBuilder {
+        ClientBuilder {
+            inner: async_impl::ClientBuilder::new(),
+            timeout: Timeout::default(),
         }
     }
 
@@ -99,6 +83,23 @@ impl ClientBuilder {
         ClientHandle::new(self).map(|handle| Client {
             inner: handle,
         })
+    }
+
+    /// Disable proxy setting.
+    pub fn no_proxy(self) -> ClientBuilder {
+        self.with_inner(move |inner| inner.no_proxy())
+    }
+
+    /// Enable system proxy setting.
+    pub fn system_proxy(self) -> ClientBuilder {
+        let proxies = get_proxies();
+        self.proxy(Proxy::custom(move |url| {
+            if proxies.contains_key(url.scheme()) {
+                return Some((*proxies.get(url.scheme()).unwrap()).clone());
+            } else {
+                return None;
+            }
+        }))
     }
 
     /// Set that all sockets have `SO_NODELAY` set to `true`.
@@ -416,7 +417,7 @@ impl Client {
     /// Use `Client::builder()` if you wish to handle the failure as an `Error`
     /// instead of panicking.
     pub fn new() -> Client {
-        ClientBuilder::new(true)
+        ClientBuilder::new()
             .build()
             .expect("Client::new()")
     }
@@ -425,7 +426,7 @@ impl Client {
     ///
     /// This is the same as `ClientBuilder::new()`.
     pub fn builder() -> ClientBuilder {
-        ClientBuilder::new(true)
+        ClientBuilder::new()
     }
 
     /// Convenience method to make a `GET` request to a URL.
