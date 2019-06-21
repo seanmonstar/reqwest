@@ -36,6 +36,7 @@ use into_url::{expect_uri, try_uri};
 use cookie;
 use redirect::{self, RedirectPolicy, remove_sensitive_headers};
 use {IntoUrl, Method, Proxy, StatusCode, Url};
+use ::proxy::get_proxies;
 #[cfg(feature = "tls")]
 use {Certificate, Identity};
 #[cfg(feature = "tls")]
@@ -332,6 +333,20 @@ impl ClientBuilder {
         self.config.proxies.clear();
         self
     }
+
+    /// Add system proxy setting to the list of proxies
+    pub fn use_sys_proxy(mut self) -> ClientBuilder {
+        let proxies = get_proxies();
+        self.config.proxies.push(Proxy::custom(move |url| {
+            if proxies.contains_key(url.scheme()) {
+                return Some((*proxies.get(url.scheme()).unwrap()).clone());
+            } else {
+                return None;
+            }
+        }));
+        self
+    }
+
 
     /// Set a `RedirectPolicy` for this client.
     ///

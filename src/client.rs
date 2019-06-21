@@ -13,7 +13,6 @@ use response::Response;
 use {async_impl, header, Method, IntoUrl, Proxy, RedirectPolicy, wait};
 #[cfg(feature = "tls")]
 use {Certificate, Identity};
-use proxy::get_proxies;
 
 /// A `Client` to make Requests with.
 ///
@@ -92,14 +91,7 @@ impl ClientBuilder {
 
     /// Enable system proxy setting.
     pub fn use_sys_proxy(self) -> ClientBuilder {
-        let proxies = get_proxies();
-        self.proxy(Proxy::custom(move |url| {
-            if proxies.contains_key(url.scheme()) {
-                return Some((*proxies.get(url.scheme()).unwrap()).clone());
-            } else {
-                return None;
-            }
-        }))
+        self.with_inner(move |inner| inner.use_sys_proxy())
     }
 
     /// Set that all sockets have `SO_NODELAY` set to `true`.
