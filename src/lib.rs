@@ -311,7 +311,6 @@ pub mod async {
 /// - redirect limit was exhausted
 pub fn get<T: IntoUrl>(url: T) -> ::Result<Response> {
     Client::builder()
-        .use_sys_proxy()
         .build()?
         .get(url)
         .send()
