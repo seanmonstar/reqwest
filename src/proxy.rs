@@ -489,11 +489,13 @@ impl Dst for Uri {
 pub fn get_proxies() -> HashMap<String, Url> {
     let proxies: HashMap<String, Url> = get_from_environment();
 
-    if proxies.is_empty() {
-        // TODO: move the following #[cfg] to `if expression` when attributes on `if` expressions allowed
-        // don't care errors if can't get proxies from registry, just return an empty HashMap.
-        #[cfg(target_os = "windows")]
-        return get_from_registry();
+    // TODO: move the following #[cfg] to `if expression` when attributes on `if` expressions allowed
+    #[cfg(target_os = "windows")]
+    {
+        if proxies.is_empty() {
+            // don't care errors if can't get proxies from registry, just return an empty HashMap.
+            return get_from_registry();
+        }
     }
     proxies
 }
