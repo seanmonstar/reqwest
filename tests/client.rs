@@ -70,6 +70,37 @@ fn test_response_non_utf_8_text() {
 }
 
 #[test]
+fn test_response_json() {
+    let server = server! {
+        request: b"\
+            GET /json HTTP/1.1\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Server: test\r\n\
+            Content-Length: 7\r\n\
+            \r\n\
+            \"Hello\"\
+            "
+    };
+
+    let url = format!("http://{}/json", server.addr());
+    let mut res = reqwest::get(&url).unwrap();
+    assert_eq!(res.url().as_str(), &url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"7");
+
+    let body = res.json::<String>().unwrap();
+    assert_eq!("Hello", body);
+}
+
+#[test]
 fn test_response_copy_to() {
     let server = server! {
         request: b"\

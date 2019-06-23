@@ -66,6 +66,42 @@ fn response_text() {
 }
 
 #[test]
+fn response_json() {
+    let _ = env_logger::try_init();
+
+    let server = server! {
+        request: b"\
+            GET /json HTTP/1.1\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Content-Length: 7\r\n\
+            \r\n\
+            \"Hello\"\
+            "
+    };
+
+    let mut rt = Runtime::new().expect("new rt");
+
+    let client = Client::new();
+
+    let res_future = client.get(&format!("http://{}/json", server.addr()))
+        .send()
+        .and_then(|mut res| res.json::<String>())
+        .and_then(|text| {
+            assert_eq!("Hello", text);
+            Ok(())
+        });
+
+    rt.block_on(res_future).unwrap();
+}
+
+#[test]
 fn multipart() {
     let _ = env_logger::try_init();
 
