@@ -2,13 +2,16 @@ use std::fmt;
 use std::mem;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
+use std::borrow::Cow;
 
+use encoding_rs::{Encoding, UTF_8};
 use futures::{Async, Future, Poll, Stream};
 use futures::stream::Concat2;
 use http;
 use hyper::{HeaderMap, StatusCode, Version};
 use hyper::client::connect::HttpInfo;
 use hyper::header::{CONTENT_LENGTH};
+use mime::Mime;
 use tokio::timer::Delay;
 use serde::de::DeserializeOwned;
 use serde_json;
@@ -135,6 +138,35 @@ impl Response {
         self.version
     }
 
+    /// Get the response text
+    pub fn text(&mut self) -> impl Future<Item = String, Error = ::Error> {
+        self.text_with_charset("utf-8")
+    }
+
+    /// Get the response text given a specific encoding
+    pub fn text_with_charset(&mut self, default_encoding: &str) -> impl Future<Item = String, Error = ::Error> {
+        let body = mem::replace(&mut self.body, Decoder::empty());
+        let content_type = self.headers.get(::header::CONTENT_TYPE)
+            .and_then(|value| {
+                value.to_str().ok()
+            })
+            .and_then(|value| {
+                value.parse::<Mime>().ok()
+            });
+        let encoding_name = content_type
+            .as_ref()
+            .and_then(|mime| {
+                mime
+                    .get_param("charset")
+                    .map(|charset| charset.as_str())
+            })
+            .unwrap_or(default_encoding);
+        let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);
+        Text {
+            concat: body.concat2(),
+            encoding
+        }
+    }
 
     /// Try to deserialize the response body as JSON using `serde`.
     #[inline]
@@ -258,6 +290,33 @@ impl<T> fmt::Debug for Json<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Json")
             .finish()
+    }
+}
+
+#[derive(Debug)]
+pub struct Text {
+    concat: Concat2<Decoder>,
+    encoding: &'static Encoding,
+}
+
+impl Future for Text {
+    type Item = String;
+    type Error = ::Error;
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let bytes = try_ready!(self.concat.poll());
+        // a block because of borrow checker
+        {
+            let (text, _, _) = self.encoding.decode(&bytes);
+            match text {
+                Cow::Owned(s) => return Ok(Async::Ready(s)),
+                _ => (),
+            }
+        }
+        unsafe {
+            // decoding returned Cow::Borrowed, meaning these bytes
+            // are already valid utf8
+            Ok(Async::Ready(String::from_utf8_unchecked(bytes.to_vec())))
+        }
     }
 }
 
