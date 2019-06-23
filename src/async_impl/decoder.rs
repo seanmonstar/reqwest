@@ -142,14 +142,6 @@ impl Decoder {
             Decoder::plain_text(body)
         }
     }
-
-
-    pub(crate) fn content_length(&self) -> Option<u64> {
-        match self.inner {
-            Inner::PlainText(ref body) => body.content_length(),
-            _ => None,
-        }
-    }
 }
 
 impl Stream for Decoder {

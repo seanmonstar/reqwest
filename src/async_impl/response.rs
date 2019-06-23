@@ -271,7 +271,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
 }
 
 /// A JSON object.
-pub struct Json<T> {
+struct Json<T> {
     concat: Concat2<Decoder>,
     _marker: PhantomData<T>,
 }
@@ -294,7 +294,7 @@ impl<T> fmt::Debug for Json<T> {
 }
 
 #[derive(Debug)]
-pub struct Text {
+struct Text {
     concat: Concat2<Decoder>,
     encoding: &'static Encoding,
 }
