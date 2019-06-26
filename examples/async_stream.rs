@@ -51,7 +51,7 @@ where
     File::open(path.as_ref().to_owned())
         .map_err(|err| println!("request error: {}", err))
         .and_then(|file| {
-            let source: Box<Stream<Item = Bytes, Error = io::Error> + Send> =
+            let source: Box<dyn Stream<Item = Bytes, Error = io::Error> + Send> =
                 Box::new(FileSource::new(file));
 
             Client::new()

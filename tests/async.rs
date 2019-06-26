@@ -239,7 +239,7 @@ fn gzip_case(response_size: usize, chunk_size: usize) {
 fn body_stream() {
     let _ = env_logger::try_init();
 
-    let source: Box<Stream<Item = Bytes, Error = io::Error> + Send>
+    let source: Box<dyn Stream<Item = Bytes, Error = io::Error> + Send>
         = Box::new(futures::stream::iter_ok::<_, io::Error>(
             vec![Bytes::from_static(b"123"), Bytes::from_static(b"4567")]));
 
