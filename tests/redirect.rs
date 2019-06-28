@@ -388,6 +388,7 @@ fn test_invalid_location_stops_redirect_gh484() {
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test-yikes");
 }
 
+#[cfg(feature = "cookies")]
 #[test]
 fn test_redirect_302_with_set_cookies() {
     let code = 302;
