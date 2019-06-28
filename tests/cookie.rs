@@ -3,6 +3,7 @@ extern crate reqwest;
 #[macro_use]
 mod support;
 
+#[cfg(feature = "cookies")]
 #[test]
 fn cookie_response_accessor() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
@@ -78,6 +79,7 @@ fn cookie_response_accessor() {
     assert!(cookies[8].same_site_strict());
 }
 
+#[cfg(feature = "cookies")]
 #[test]
 fn cookie_store_simple() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
@@ -122,6 +124,7 @@ fn cookie_store_simple() {
     rt.block_on(client.get(&url).send()).unwrap();
 }
 
+#[cfg(feature = "cookies")]
 #[test]
 fn cookie_store_overwrite_existing() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
@@ -186,6 +189,7 @@ fn cookie_store_overwrite_existing() {
     rt.block_on(client.get(&url).send()).unwrap();
 }
 
+#[cfg(feature = "cookies")]
 #[test]
 fn cookie_store_max_age() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
@@ -229,6 +233,7 @@ fn cookie_store_max_age() {
     rt.block_on(client.get(&url).send()).unwrap();
 }
 
+#[cfg(feature = "cookies")]
 #[test]
 fn cookie_store_expires() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
@@ -272,6 +277,7 @@ fn cookie_store_expires() {
     rt.block_on(client.get(&url).send()).unwrap();
 }
 
+#[cfg(feature = "cookies")]
 #[test]
 fn cookie_store_path() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
