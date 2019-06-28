@@ -159,6 +159,9 @@
 //! - **trust-dns**: Enables a trust-dns async resolver instead of default
 //!   threadpool using `getaddrinfo`.
 //! - **hyper-011**: Provides support for hyper's old typed headers.
+//! - **cookies**: *(enabled by default)*: Enables support for automatic storing
+//!   and sending of cookies by depending on the `cookie` and `cookie_store`
+//!   crates.
 //!
 //!
 //! [hyper]: http://hyper.rs
@@ -173,7 +176,9 @@
 
 extern crate base64;
 extern crate bytes;
+#[cfg(feature = "cookies")]
 extern crate cookie as cookie_crate;
+#[cfg(feature = "cookies")]
 extern crate cookie_store;
 extern crate encoding_rs;
 #[macro_use]
@@ -248,6 +253,7 @@ mod async_impl;
 mod connect;
 mod body;
 mod client;
+#[cfg(feature = "cookies")]
 pub mod cookie;
 #[cfg(feature = "trust-dns")]
 mod dns;

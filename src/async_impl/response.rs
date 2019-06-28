@@ -18,6 +18,7 @@ use serde_json;
 use url::Url;
 
 
+#[cfg(feature = "cookies")]
 use cookie;
 use super::Decoder;
 use super::body::Body;
@@ -78,6 +79,7 @@ impl Response {
     /// Retrieve the cookies contained in the response.
     /// 
     /// Note that invalid 'Set-Cookie' headers will be ignored.
+    #[cfg(feature = "cookies")]
     pub fn cookies<'a>(&'a self) -> impl Iterator<Item = cookie::Cookie<'a>> + 'a {
         cookie::extract_response_cookies(&self.headers)
             .filter_map(Result::ok)

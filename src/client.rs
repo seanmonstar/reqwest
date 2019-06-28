@@ -382,6 +382,7 @@ impl ClientBuilder {
     ///     .build()
     ///     .unwrap();
     /// ```
+    #[cfg(feature = "cookies")]
     pub fn cookie_store(self, enable: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.cookie_store(enable))
     }
