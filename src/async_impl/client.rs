@@ -338,10 +338,10 @@ impl ClientBuilder {
     pub fn use_sys_proxy(mut self) -> ClientBuilder {
         let proxies = get_proxies();
         self.config.proxies.push(Proxy::custom(move |url| {
-            if proxies.contains_key(url.scheme()) {
-                return Some((*proxies.get(url.scheme()).unwrap()).clone());
+            return if proxies.contains_key(url.scheme()) {
+                Some((*proxies.get(url.scheme()).unwrap()).clone())
             } else {
-                return None;
+                None
             }
         }));
         self

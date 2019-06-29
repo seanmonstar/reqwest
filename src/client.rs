@@ -410,7 +410,6 @@ impl Client {
     /// instead of panicking.
     pub fn new() -> Client {
         ClientBuilder::new()
-            .use_sys_proxy()
             .build()
             .expect("Client::new()")
     }
@@ -420,7 +419,7 @@ impl Client {
     /// This builder will use system proxy setting, you can use
     /// `reqwest::Client::builder().no_proxy()` to disable it.
     pub fn builder() -> ClientBuilder {
-        ClientBuilder::new().use_sys_proxy()
+        ClientBuilder::new()
     }
 
     /// Convenience method to make a `GET` request to a URL.
