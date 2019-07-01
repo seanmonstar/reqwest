@@ -7,6 +7,14 @@ use http::{header::HeaderValue, Uri};
 use hyper::client::connect::Destination;
 use url::percent_encoding::percent_decode;
 use {IntoUrl, Url};
+use std::collections::HashMap;
+use std::env;
+#[cfg(target_os = "windows")]
+use std::error::Error;
+#[cfg(target_os = "windows")]
+use winreg::enums::HKEY_CURRENT_USER;
+#[cfg(target_os = "windows")]
+use winreg::RegKey;
 
 /// Configuration of a proxy that a `Client` should pass requests to.
 ///
@@ -469,6 +477,101 @@ impl Dst for Uri {
     }
 }
 
+/// Get system proxies information.
+///
+/// It can only support Linux, Unix like, and windows system.  Note that it will always
+/// return a HashMap, even if something runs into error when find registry information in
+/// Windows system.  Note that invalid proxy url in the system setting will be ignored.
+///
+/// Returns:
+///     System proxies information as a hashmap like
+///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}
+pub fn get_proxies() -> HashMap<String, Url> {
+    let proxies: HashMap<String, Url> = get_from_environment();
+
+    // TODO: move the following #[cfg] to `if expression` when attributes on `if` expressions allowed
+    #[cfg(target_os = "windows")]
+    {
+        if proxies.is_empty() {
+            // don't care errors if can't get proxies from registry, just return an empty HashMap.
+            return get_from_registry();
+        }
+    }
+    proxies
+}
+
+fn insert_proxy(proxies: &mut HashMap<String, Url>, schema: String, addr: String)
+{
+    if let Ok(valid_addr) = Url::parse(&addr) {
+        proxies.insert(schema, valid_addr);
+    }
+}
+
+fn get_from_environment() -> HashMap<String, Url> {
+    let mut proxies: HashMap<String, Url> = HashMap::new();
+
+    const PROXY_KEY_ENDS: &str = "_proxy";
+
+    for (key, value) in env::vars() {
+        let key: String = key.to_lowercase();
+        if key.ends_with(PROXY_KEY_ENDS) {
+            let end_indx = key.len() - PROXY_KEY_ENDS.len();
+            let schema = &key[..end_indx];
+            insert_proxy(&mut proxies, String::from(schema), String::from(value));
+        }
+    }
+    proxies
+}
+
+
+#[cfg(target_os = "windows")]
+fn get_from_registry_impl() -> Result<HashMap<String, Url>, Box<dyn Error>> {
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let internet_setting: RegKey =
+        hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")?;
+    // ensure the proxy is enable, if the value doesn't exist, an error will returned.
+    let proxy_enable: u32 = internet_setting.get_value("ProxyEnable")?;
+    let proxy_server: String = internet_setting.get_value("ProxyServer")?;
+
+    if proxy_enable == 0 {
+        return Ok(HashMap::new());
+    }
+
+    let mut proxies: HashMap<String, Url> = HashMap::new();
+    if proxy_server.contains("=") {
+        // per-protocol settings.
+        for p in proxy_server.split(";") {
+            let protocol_parts: Vec<&str> = p.split("=").collect();
+            match protocol_parts.as_slice() {
+                [protocol, address] => {
+                    insert_proxy(&mut proxies, String::from(*protocol), String::from(*address));
+                }
+                _ => {
+                    // Contains invalid protocol setting, just break the loop
+                    // And make proxies to be empty.
+                    proxies.clear();
+                    break;
+                }
+            }
+        }
+    } else {
+        // Use one setting for all protocols.
+        if proxy_server.starts_with("http:") {
+            insert_proxy(&mut proxies, String::from("http"), proxy_server);
+        } else {
+            insert_proxy(&mut proxies, String::from("http"), format!("http://{}", proxy_server));
+            insert_proxy(&mut proxies, String::from("https"), format!("https://{}", proxy_server));
+            insert_proxy(&mut proxies, String::from("ftp"), format!("https://{}", proxy_server));
+        }
+    }
+    Ok(proxies)
+}
+
+#[cfg(target_os = "windows")]
+fn get_from_registry() -> HashMap<String, Url> {
+    get_from_registry_impl().unwrap_or(HashMap::new())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -561,5 +664,31 @@ mod tests {
         assert_eq!(intercepted_uri(&p, http), target2);
         assert_eq!(intercepted_uri(&p, https), target1);
         assert!(p.intercept(&url(other)).is_none());
+    }
+
+    #[test]
+    fn test_get_proxies() {
+        // save system setting first.
+        let system_proxy = env::var("http_proxy");
+
+        // remove proxy.
+        env::remove_var("http_proxy");
+        assert_eq!(get_proxies().contains_key("http"), false);
+
+        // the system proxy setting url is invalid.
+        env::set_var("http_proxy", "123465");
+        assert_eq!(get_proxies().contains_key("http"), false);
+
+        // set valid proxy
+        env::set_var("http_proxy", "http://127.0.0.1/");
+        let proxies = get_proxies();
+        let http_target = proxies.get("http").unwrap().as_str();
+
+        assert_eq!(http_target, "http://127.0.0.1/");
+        // reset user setting.
+        match system_proxy {
+            Err(_) => env::remove_var("http_proxy"),
+            Ok(proxy) => env::set_var("http_proxy", proxy)
+        }
     }
 }

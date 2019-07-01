@@ -84,6 +84,16 @@ impl ClientBuilder {
         })
     }
 
+    /// Disable proxy setting.
+    pub fn no_proxy(self) -> ClientBuilder {
+        self.with_inner(move |inner| inner.no_proxy())
+    }
+
+    /// Enable system proxy setting.
+    pub fn use_sys_proxy(self) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_sys_proxy())
+    }
+
     /// Set that all sockets have `SO_NODELAY` set to `true`.
     pub fn tcp_nodelay(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.tcp_nodelay())
@@ -369,7 +379,7 @@ impl ClientBuilder {
 
     /// Enable a persistent cookie store for the client.
     ///
-    /// Cookies received in responses will be preserved and included in 
+    /// Cookies received in responses will be preserved and included in
     /// additional requests.
     ///
     /// By default, no cookie store is used.
@@ -406,7 +416,8 @@ impl Client {
 
     /// Creates a `ClientBuilder` to configure a `Client`.
     ///
-    /// This is the same as `ClientBuilder::new()`.
+    /// This builder will use system proxy setting, you can use
+    /// `reqwest::Client::builder().no_proxy()` to disable it.
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }

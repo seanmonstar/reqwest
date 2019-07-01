@@ -432,7 +432,7 @@ fn test_appended_headers_not_overwritten() {
     let client = reqwest::Client::builder()
         .default_headers(headers)
         .build().unwrap();
-    
+
     let server = server! {
         request: b"\
             GET /4 HTTP/1.1\r\n\
