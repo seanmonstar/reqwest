@@ -416,8 +416,7 @@ impl Client {
 
     /// Creates a `ClientBuilder` to configure a `Client`.
     ///
-    /// This builder will use system proxy setting, you can use
-    /// `reqwest::Client::builder().no_proxy()` to disable it.
+    /// This is the same as `ClientBuilder::new()`.
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }
