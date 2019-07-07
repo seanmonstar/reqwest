@@ -2,7 +2,6 @@ use std::fmt;
 use std::mem;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
-use std::borrow::Cow;
 
 use encoding_rs::{Encoding, UTF_8};
 use futures::{Async, Future, Poll, Stream};
@@ -304,19 +303,8 @@ impl Future for Text {
     type Error = ::Error;
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let bytes = try_ready!(self.concat.poll());
-        // a block because of borrow checker
-        {
-            let (text, _, _) = self.encoding.decode(&bytes);
-            match text {
-                Cow::Owned(s) => return Ok(Async::Ready(s)),
-                _ => (),
-            }
-        }
-        unsafe {
-            // decoding returned Cow::Borrowed, meaning these bytes
-            // are already valid utf8
-            Ok(Async::Ready(String::from_utf8_unchecked(bytes.to_vec())))
-        }
+        let (text, _, _) = self.encoding.decode(&bytes);
+        Ok(Async::Ready(text.into_owned()))
     }
 }
 
