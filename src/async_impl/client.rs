@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::{fmt, str};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -155,6 +156,22 @@ impl ClientBuilder {
 
                     Connector::new_default_tls(tls, proxies.clone(), config.local_address, config.nodelay)?
                 },
+                #[cfg(feature = "default-tls")]
+                TlsBackend::BuiltDefault(conn) => {
+                    Connector::from_built_default(
+                        conn,
+                        proxies.clone(),
+                        config.local_address,
+                        config.nodelay)?
+                },
+                #[cfg(feature = "rustls-tls")]
+                TlsBackend::BuiltRustls(conn) => {
+                    Connector::new_rustls_tls(
+                        conn,
+                        proxies.clone(),
+                        config.local_address,
+                        config.nodelay)?
+                },
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::Rustls => {
                     use ::tls::NoVerifier;
@@ -183,7 +200,10 @@ impl ClientBuilder {
                     }
 
                     Connector::new_rustls_tls(tls, proxies.clone(), config.local_address, config.nodelay)?
-                }
+                },
+                TlsBackend::UnknownPreconfigured => {
+                    return Err(::error::from(::error::Kind::UnknownPreconfiguredTls));
+                },
             }
 
             #[cfg(not(feature = "tls"))]
@@ -228,10 +248,43 @@ impl ClientBuilder {
         self
     }
 
+
     /// Use rustls TLS backend.
     #[cfg(feature = "rustls-tls")]
     pub fn use_rustls_tls(mut self) -> ClientBuilder {
         self.config.tls = TlsBackend::Rustls;
+        self
+    }
+
+    /// Use a preconfigured TLS backend.
+    ///
+    /// If the passed `Any` argument is not a TLS backend that reqwest
+    /// understands, the `ClientBuilder` will error when calling `build`.
+    #[cfg(feature = "tls")]
+    pub fn use_preconfigured_tls(mut self, tls: impl Any) -> ClientBuilder {
+        let mut tls = Some(tls);
+        #[cfg(feature = "default-tls")]
+        {
+            if let Some(conn) = (&mut tls as &mut dyn Any).downcast_mut::<Option<native_tls::TlsConnector>>() {
+                let tls = conn.take().expect("is definitely Some");
+                let tls = ::tls::TlsBackend::BuiltDefault(tls);
+                self.config.tls = tls;
+                return self;
+            }
+        }
+        #[cfg(feature = "rustls-tls")]
+        {
+            if let Some(conn) = (&mut tls as &mut dyn Any).downcast_mut::<Option<rustls::ClientConfig>>() {
+
+                let tls = conn.take().expect("is definitely Some");
+                let tls = ::tls::TlsBackend::BuiltRustls(tls);
+                self.config.tls = tls;
+                return self;
+            }
+        }
+
+        // Otherwise, we don't recognize the TLS backend!
+        self.config.tls = ::tls::TlsBackend::UnknownPreconfigured;
         self
     }
 

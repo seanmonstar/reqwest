@@ -262,8 +262,13 @@ impl fmt::Debug for Identity {
 pub(crate) enum TlsBackend {
     #[cfg(feature = "default-tls")]
     Default,
+    #[cfg(feature = "default-tls")]
+    BuiltDefault(native_tls::TlsConnector),
     #[cfg(feature = "rustls-tls")]
-    Rustls
+    Rustls,
+    #[cfg(feature = "rustls-tls")]
+    BuiltRustls(rustls::ClientConfig),
+    UnknownPreconfigured,
 }
 
 impl Default for TlsBackend {

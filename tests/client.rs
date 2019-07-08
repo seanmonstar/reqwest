@@ -459,3 +459,42 @@ fn test_appended_headers_not_overwritten() {
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
     assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
 }
+
+#[cfg(feature = "tls")]
+#[test]
+fn use_preconfigured_tls_with_bogus_backend() {
+    struct DefinitelyNotTls;
+
+    reqwest::Client::builder()
+        .use_preconfigured_tls(DefinitelyNotTls)
+        .build()
+        .expect_err("definitely is not TLS");
+}
+
+#[cfg(feature = "default-tls")]
+#[test]
+fn use_preconfigured_tls_default() {
+    extern crate native_tls;
+
+    let tls = native_tls::TlsConnector::builder()
+        .build()
+        .expect("tls builder");
+
+    reqwest::Client::builder()
+        .use_preconfigured_tls(tls)
+        .build()
+        .expect("preconfigured default tls");
+}
+
+#[cfg(feature = "rustls-tls")]
+#[test]
+fn use_preconfigured_tls_default() {
+    extern crate rustls;
+
+    let tls = rustls::ClientConfig::new();
+
+    reqwest::Client::builder()
+        .use_preconfigured_tls(tls)
+        .build()
+        .expect("preconfigured rustls tls");
+}

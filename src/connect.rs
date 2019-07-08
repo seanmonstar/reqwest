@@ -88,6 +88,28 @@ impl Connector {
         })
     }
 
+    #[cfg(feature = "default-tls")]
+    pub(crate) fn from_built_default<T> (
+        tls: TlsConnector,
+        proxies: Arc<Vec<Proxy>>,
+        local_addr: T,
+        nodelay: bool) -> ::Result<Connector>
+        where
+            T: Into<Option<IpAddr>>,
+    {
+
+        let mut http = http_connector()?;
+        http.set_local_address(local_addr.into());
+        http.enforce_http(false);
+
+        Ok(Connector {
+            inner: Inner::DefaultTls(http, tls),
+            proxies,
+            timeout: None,
+            nodelay
+        })
+    }
+
     #[cfg(feature = "rustls-tls")]
     pub(crate) fn new_rustls_tls<T>(
         tls: rustls::ClientConfig,

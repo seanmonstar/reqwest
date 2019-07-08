@@ -148,6 +148,8 @@ impl Error {
             Kind::Io(ref e) => Some(e),
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
+            #[cfg(feature = "tls")]
+            Kind::UnknownPreconfiguredTls => None,
             Kind::UrlBadScheme |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
@@ -290,6 +292,8 @@ impl fmt::Display for Error {
             Kind::UnknownProxyScheme => f.write_str("Unknown proxy scheme"),
             Kind::Timer => f.write_str("timer unavailable"),
             Kind::BlockingClientInFutureContext => f.write_str(BLOCK_IN_FUTURE),
+            #[cfg(feature = "tls")]
+            Kind::UnknownPreconfiguredTls => f.write_str("Unknown TLS backend passed to `use_preconfigured_tls`"),
         }
     }
 }
@@ -327,6 +331,8 @@ impl StdError for Error {
             Kind::UnknownProxyScheme => "Unknown proxy scheme",
             Kind::Timer => "timer unavailable",
             Kind::BlockingClientInFutureContext => BLOCK_IN_FUTURE,
+            #[cfg(feature = "tls")]
+            Kind::UnknownPreconfiguredTls => "Unknown TLS backend passed to `use_preconfigured_tls`",
         }
     }
 
@@ -349,6 +355,8 @@ impl StdError for Error {
             Kind::Io(ref e) => e.cause(),
             Kind::UrlEncoded(ref e) => e.cause(),
             Kind::Json(ref e) => e.cause(),
+            #[cfg(feature = "tls")]
+            Kind::UnknownPreconfiguredTls => None,
             Kind::UrlBadScheme |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
@@ -376,6 +384,8 @@ impl StdError for Error {
             Kind::Io(ref e) => e.source(),
             Kind::UrlEncoded(ref e) => e.source(),
             Kind::Json(ref e) => e.source(),
+            #[cfg(feature = "tls")]
+            Kind::UnknownPreconfiguredTls => None,
             Kind::UrlBadScheme |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
@@ -411,6 +421,8 @@ pub(crate) enum Kind {
     UnknownProxyScheme,
     Timer,
     BlockingClientInFutureContext,
+    #[cfg(feature = "tls")]
+    UnknownPreconfiguredTls,
 }
 
 

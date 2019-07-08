@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::thread;
 use std::net::IpAddr;
+use std::any::Any;
 
 use futures::{Async, Future, Stream};
 use futures::future::{self, Either};
@@ -105,10 +106,20 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.use_default_tls())
     }
 
+
     /// Use rustls TLS backend.
     #[cfg(feature = "rustls-tls")]
     pub fn use_rustls_tls(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.use_rustls_tls())
+    }
+
+    /// Use a preconfigured TLS backend.
+    ///
+    /// If the passed `Any` argument is not a TLS backend that reqwest
+    /// understands, the `ClientBuilder` will error when calling `build`.
+    #[cfg(feature = "tls")]
+    pub fn use_preconfigured_tls(self, tls: impl Any) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_preconfigured_tls(tls))
     }
 
     /// Add a custom root certificate.
@@ -550,12 +561,12 @@ impl ClientHandle {
         let builder = builder.inner;
         let (tx, rx) = mpsc::unbounded();
         let (spawn_tx, spawn_rx) = oneshot::channel::<::Result<()>>();
+        let client = builder.build()?;
         let handle = try_!(thread::Builder::new().name("reqwest-internal-sync-runtime".into()).spawn(move || {
             use tokio::runtime::current_thread::Runtime;
 
             let built = (|| {
                 let rt = try_!(Runtime::new());
-                let client = builder.build()?;
                 Ok((rt, client))
             })();
 
