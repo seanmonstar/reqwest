@@ -266,12 +266,32 @@ impl fmt::Debug for Identity {
     }
 }
 
-#[derive(Debug)]
 pub(crate) enum TlsBackend {
     #[cfg(feature = "default-tls")]
     Default,
+    #[cfg(feature = "default-tls")]
+    BuiltDefault(native_tls_crate::TlsConnector),
     #[cfg(feature = "rustls-tls")]
     Rustls,
+    #[cfg(feature = "rustls-tls")]
+    BuiltRustls(rustls::ClientConfig),
+    UnknownPreconfigured,
+}
+
+impl fmt::Debug for TlsBackend {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            #[cfg(feature = "default-tls")]
+            TlsBackend::Default => write!(f, "Default"),
+            #[cfg(feature = "default-tls")]
+            TlsBackend::BuiltDefault(_) => write!(f, "BuiltDefault"),
+            #[cfg(feature = "rustls-tls")]
+            TlsBackend::Rustls => write!(f, "Rustls"),
+            #[cfg(feature = "rustls-tls")]
+            TlsBackend::BuiltRustls(_) => write!(f, "BuiltRustls"),
+            TlsBackend::UnknownPreconfigured => write!(f, "UnknownPreconfigured"),
+        }
+    }
 }
 
 impl Default for TlsBackend {

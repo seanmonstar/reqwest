@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::convert::TryInto;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -187,6 +188,7 @@ impl ClientBuilder {
                         }
                     }
 
+
                     Connector::new_default_tls(
                         tls,
                         proxies.clone(),
@@ -194,7 +196,25 @@ impl ClientBuilder {
                         config.local_address,
                         config.nodelay,
                     )?
-                }
+                },
+                #[cfg(feature = "default-tls")]
+                TlsBackend::BuiltDefault(conn) => {
+                    Connector::from_built_default(
+                        conn,
+                        proxies.clone(),
+                        user_agent(&config.headers),
+                        config.local_address,
+                        config.nodelay)?
+                },
+                #[cfg(feature = "rustls-tls")]
+                TlsBackend::BuiltRustls(conn) => {
+                    Connector::new_rustls_tls(
+                        conn,
+                        proxies.clone(),
+                        user_agent(&config.headers),
+                        config.local_address,
+                        config.nodelay)?
+                },
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::Rustls => {
                     use crate::tls::NoVerifier;
@@ -228,7 +248,10 @@ impl ClientBuilder {
                         config.local_address,
                         config.nodelay,
                     )?
-                }
+                },
+                TlsBackend::UnknownPreconfigured => {
+                    return Err(crate::error::unknown_preconfigured_tls());
+                },
             }
 
             #[cfg(not(feature = "__tls"))]
@@ -666,6 +689,38 @@ impl ClientBuilder {
     #[cfg(feature = "rustls-tls")]
     pub fn use_rustls_tls(mut self) -> ClientBuilder {
         self.config.tls = TlsBackend::Rustls;
+        self
+    }
+
+    /// Use a preconfigured TLS backend.
+    ///
+    /// If the passed `Any` argument is not a TLS backend that reqwest
+    /// understands, the `ClientBuilder` will error when calling `build`.
+    #[cfg(feature = "__tls")]
+    pub fn use_preconfigured_tls(mut self, tls: impl Any) -> ClientBuilder {
+        let mut tls = Some(tls);
+        #[cfg(feature = "default-tls")]
+        {
+            if let Some(conn) = (&mut tls as &mut dyn Any).downcast_mut::<Option<native_tls_crate::TlsConnector>>() {
+                let tls = conn.take().expect("is definitely Some");
+                let tls = crate::tls::TlsBackend::BuiltDefault(tls);
+                self.config.tls = tls;
+                return self;
+            }
+        }
+        #[cfg(feature = "rustls-tls")]
+        {
+            if let Some(conn) = (&mut tls as &mut dyn Any).downcast_mut::<Option<rustls::ClientConfig>>() {
+
+                let tls = conn.take().expect("is definitely Some");
+                let tls = crate::tls::TlsBackend::BuiltRustls(tls);
+                self.config.tls = tls;
+                return self;
+            }
+        }
+
+        // Otherwise, we don't recognize the TLS backend!
+        self.config.tls = crate::tls::TlsBackend::UnknownPreconfigured;
         self
     }
 }
