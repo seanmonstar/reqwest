@@ -156,6 +156,22 @@ impl ClientBuilder {
 
                     Connector::new_default_tls(tls, proxies.clone(), config.local_address, config.nodelay)?
                 },
+                #[cfg(feature = "default-tls")]
+                TlsBackend::BuiltDefault(conn) => {
+                    Connector::from_built_default(
+                        conn,
+                        proxies.clone(),
+                        config.local_address,
+                        config.nodelay)?
+                },
+                #[cfg(feature = "rustls-tls")]
+                TlsBackend::BuiltRustls(conn) => {
+                    Connector::new_rustls_tls(
+                        conn,
+                        proxies.clone(),
+                        config.local_address,
+                        config.nodelay)?
+                },
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::Rustls => {
                     use ::tls::NoVerifier;
@@ -237,6 +253,16 @@ impl ClientBuilder {
     #[cfg(feature = "default-tls")]
     pub fn use_default_tls(mut self) -> ClientBuilder {
         self.config.tls = TlsBackend::Default;
+        self
+    }
+
+    /// Use a preconfigured backed.
+    /// If you are planning on using this, you should have a unit test that builds a reqwest Client
+    /// using this option, and verifying no panics, which means the provided Any was succesfully cast
+    /// to a compatible backend connector
+    #[cfg(feature = "tls")]
+    pub(crate) fn with_preconfigured_connector(mut self, connector: TlsBackend) -> ClientBuilder {
+        self.config.tls = connector;
         self
     }
 

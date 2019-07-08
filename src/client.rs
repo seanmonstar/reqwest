@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::thread;
 use std::net::IpAddr;
+use std::any::Any;
 
 use futures::{Async, Future, Stream};
 use futures::future::{self, Either};
@@ -103,6 +104,40 @@ impl ClientBuilder {
     #[cfg(feature = "default-tls")]
     pub fn use_default_tls(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.use_default_tls())
+    }
+
+    /// Return false if the provided connector could not be cast into a type that reqwest understands
+    /// Therefore it is highly suggested to have a unit test that verifies that the provided type of
+    /// connector works correctly
+    pub fn with_preconfigured_connector(self, mut connector: impl Any) -> bool {
+        // mem::replace is used to allow moving out of the borrow that downcast_mut provides
+        #[cfg(feature = "default-tls")]
+        {
+            if let Some(conn) = (&mut connector as &mut dyn Any).downcast_mut::<native_tls::TlsConnector>() {
+                self.with_inner(move |inner| {
+                    inner.with_preconfigured_connector(
+                        crate::tls::TlsBackend::BuiltDefault(
+                            std::mem::replace(conn, native_tls::TlsConnector::new().unwrap())
+                        )
+                    )
+                });
+                return true;
+            }
+        }
+        #[cfg(feature = "rustls-tls")]
+        {
+            if let Some(conn) = (&mut connector as &mut dyn Any).downcast_mut::<rustls::ClientConfig>() {
+                self.with_inner(move |inner| {
+                    inner.with_preconfigured_connector(
+                        crate::tls::TlsBackend::BuiltRustls(
+                            std::mem::replace(conn, rustls::ClientConfig::new())
+                        )
+                    )
+                });
+                return true
+            }
+        }
+        false
     }
 
     /// Use rustls TLS backend.
@@ -550,12 +585,12 @@ impl ClientHandle {
         let builder = builder.inner;
         let (tx, rx) = mpsc::unbounded();
         let (spawn_tx, spawn_rx) = oneshot::channel::<::Result<()>>();
+        let client = builder.build()?;
         let handle = try_!(thread::Builder::new().name("reqwest-internal-sync-runtime".into()).spawn(move || {
             use tokio::runtime::current_thread::Runtime;
 
             let built = (|| {
                 let rt = try_!(Runtime::new());
-                let client = builder.build()?;
                 Ok((rt, client))
             })();
 
