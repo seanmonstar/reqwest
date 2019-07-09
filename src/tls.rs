@@ -106,7 +106,7 @@ impl Certificate {
                 .map_err(TLSError::WebPKIError)),
             Cert::Pem(buf) => {
                 let mut pem = Cursor::new(buf);
-                let mut certs = try_!(pemfile::certs(&mut pem)
+                let certs = try_!(pemfile::certs(&mut pem)
                     .map_err(|_| TLSError::General(String::from("No valid certificate was found"))));
                 for c in certs {
                     try_!(tls.root_store.add(&c)
@@ -181,7 +181,7 @@ impl Identity {
 
         let (key, certs) = {
             let mut pem = Cursor::new(buf);
-            let mut certs = try_!(pemfile::certs(&mut pem)
+            let certs = try_!(pemfile::certs(&mut pem)
                 .map_err(|_| TLSError::General(String::from("No valid certificate was found"))));
             pem.set_position(0);
             let mut sk = try_!(pemfile::pkcs8_private_keys(&mut pem)
