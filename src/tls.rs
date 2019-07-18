@@ -5,6 +5,7 @@ use rustls::{TLSError, ServerCertVerifier, RootCertStore, ServerCertVerified};
 use tokio_rustls::webpki::DNSNameRef;
 
 /// Represent a server X509 certificate.
+#[derive(Clone)]
 pub struct Certificate {
     #[cfg(feature = "default-tls")]
     native: ::native_tls::Certificate,
@@ -13,6 +14,7 @@ pub struct Certificate {
 }
 
 #[cfg(feature = "rustls-tls")]
+#[derive(Clone)]
 enum Cert {
     Der(Vec<u8>),
     Pem(Vec<u8>)
