@@ -1,3 +1,11 @@
+## v0.9.19
+
+- Add `ClientBuilder::use_sys_proxy()` to enable automatic detect of HTTP proxies configured on the system.
+- Add `ClientBuilder::no_proxy()` to disable system proxies. This is the default for 0.9, but will change to detecting system proxies by default in 0.10.
+- Add support for streaming request bodies in the async client.
+- Add `async::Response::text()` that returns a `Future` of the full body decoded to a `String`.
+- Add `Clone` for `Certificate`.
+
 ## v0.9.18
 
 - Fix `Cookie` headers to no longer send as percent-encoded (instead, exactly as sent by the server).
