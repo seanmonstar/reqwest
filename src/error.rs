@@ -148,13 +148,13 @@ impl Error {
             Kind::Io(ref e) => Some(e),
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
-            Kind::Executor(ref e) => Some(e),
             Kind::UrlBadScheme |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
             Kind::Status(_) |
             Kind::UnknownProxyScheme |
-            Kind::Timer => None,
+            Kind::Timer |
+            Kind::BlockingClientInFutureContext => None,
         }
     }
 
@@ -248,6 +248,8 @@ impl fmt::Debug for Error {
     }
 }
 
+static BLOCK_IN_FUTURE: &'static str = "blocking Client used inside a Future context";
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(ref url) = self.inner.url {
@@ -287,7 +289,7 @@ impl fmt::Display for Error {
             }
             Kind::UnknownProxyScheme => f.write_str("Unknown proxy scheme"),
             Kind::Timer => f.write_str("timer unavailable"),
-            Kind::Executor(ref e) => fmt::Display::fmt(e, f),
+            Kind::BlockingClientInFutureContext => f.write_str(BLOCK_IN_FUTURE),
         }
     }
 }
@@ -324,7 +326,7 @@ impl StdError for Error {
             }
             Kind::UnknownProxyScheme => "Unknown proxy scheme",
             Kind::Timer => "timer unavailable",
-            Kind::Executor(ref e) => e.description(),
+            Kind::BlockingClientInFutureContext => BLOCK_IN_FUTURE,
         }
     }
 
@@ -347,13 +349,13 @@ impl StdError for Error {
             Kind::Io(ref e) => e.cause(),
             Kind::UrlEncoded(ref e) => e.cause(),
             Kind::Json(ref e) => e.cause(),
-            Kind::Executor(ref e) => e.cause(),
             Kind::UrlBadScheme |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
             Kind::Status(_) |
             Kind::UnknownProxyScheme |
-            Kind::Timer => None,
+            Kind::Timer |
+            Kind::BlockingClientInFutureContext => None,
         }
     }
 
@@ -374,13 +376,13 @@ impl StdError for Error {
             Kind::Io(ref e) => e.source(),
             Kind::UrlEncoded(ref e) => e.source(),
             Kind::Json(ref e) => e.source(),
-            Kind::Executor(ref e) => e.source(),
             Kind::UrlBadScheme |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
             Kind::Status(_) |
             Kind::UnknownProxyScheme |
-            Kind::Timer => None,
+            Kind::Timer |
+            Kind::BlockingClientInFutureContext => None,
         }
     }
 }
@@ -408,7 +410,7 @@ pub(crate) enum Kind {
     Status(StatusCode),
     UnknownProxyScheme,
     Timer,
-    Executor(EnterError),
+    BlockingClientInFutureContext,
 }
 
 
@@ -487,8 +489,8 @@ where T: Into<Kind> {
 }
 
 impl From<EnterError> for Kind {
-    fn from(err: EnterError) -> Kind {
-        Kind::Executor(err)
+    fn from(_err: EnterError) -> Kind {
+        Kind::BlockingClientInFutureContext
     }
 }
 
