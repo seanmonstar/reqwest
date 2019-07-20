@@ -180,6 +180,7 @@ extern crate cookie_store;
 extern crate encoding_rs;
 #[macro_use]
 extern crate futures;
+extern crate futures_util;
 extern crate http;
 extern crate hyper;
 #[cfg(feature = "hyper-011")]

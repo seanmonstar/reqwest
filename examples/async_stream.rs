@@ -10,9 +10,11 @@ extern crate tokio_threadpool;
 use std::io::{self, Cursor};
 use std::mem;
 use std::path::Path;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use bytes::Bytes;
-use futures::{Async, Future, Poll, Stream};
+use futures::{Future, Poll, Stream};
 use reqwest::async::{Client, Decoder};
 use tokio::fs::File;
 use tokio::io::AsyncRead;
@@ -33,13 +35,13 @@ impl Stream for FileSource {
     type Item = Bytes;
     type Error = io::Error;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll(&mut self) -> Poll<Result<Option<Self::Item>, Self::Error>> {
         let mut buf = [0; CHUNK_SIZE];
-        let size = try_ready!(self.inner.poll_read(&mut buf));
+        let size = ready!(self.inner.poll_read(&mut buf))?;
         if size > 0 {
-            Ok(Async::Ready(Some(buf[0..size].into())))
+            Ok(Poll::Ready(Some(buf[0..size].into())))
         } else {
-            Ok(Async::Ready(None))
+            Ok(Poll::Ready(None))
         }
     }
 }

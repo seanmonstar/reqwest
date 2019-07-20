@@ -8,13 +8,12 @@ use tokio_timer::Timeout;
 #[cfg(feature = "default-tls")]
 use native_tls::{TlsConnector, TlsConnectorBuilder};
 #[cfg(feature = "tls")]
-use futures::Poll;
-#[cfg(feature = "tls")]
 use bytes::BufMut;
 
 use std::io;
-use std::sync::Arc;
 use std::net::IpAddr;
+use std::sync::Arc;
+use std::task::Poll;
 use std::time::Duration;
 
 #[cfg(feature = "trust-dns")]
@@ -385,7 +384,7 @@ pub(crate) trait AsyncConn: AsyncRead + AsyncWrite {}
 impl<T: AsyncRead + AsyncWrite> AsyncConn for T {}
 pub(crate) type Conn = Box<dyn AsyncConn + Send + Sync + 'static>;
 
-pub(crate) type Connecting = Box<dyn Future<Item=(Conn, Connected), Error=io::Error> + Send>;
+pub(crate) type Connecting = Box<dyn Future<Output=Result<(Conn, Connected), io::Error>> + Send>;
 
 #[cfg(feature = "tls")]
 fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<::http::header::HeaderValue>) -> Tunnel<T> {
@@ -432,13 +431,12 @@ impl<T> Future for Tunnel<T>
 where
     T: AsyncRead + AsyncWrite,
 {
-    type Item = T;
-    type Error = io::Error;
+    type Output = Result<T, io::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(&mut self) -> Poll<Self::Output> {
         loop {
             if let TunnelState::Writing = self.state {
-                let n = try_ready!(self.conn.as_mut().unwrap().write_buf(&mut self.buf));
+                let n = ready!(self.conn.as_mut().unwrap().write_buf(&mut self.buf))?;
                 if !self.buf.has_remaining_mut() {
                     self.state = TunnelState::Reading;
                     self.buf.get_mut().truncate(0);
@@ -446,7 +444,7 @@ where
                     return Err(tunnel_eof());
                 }
             } else {
-                let n = try_ready!(self.conn.as_mut().unwrap().read_buf(&mut self.buf.get_mut()));
+                let n = ready!(self.conn.as_mut().unwrap().read_buf(&mut self.buf.get_mut()))?;
                 let read = &self.buf.get_ref()[..];
                 if n == 0 {
                     return Err(tunnel_eof());
@@ -479,8 +477,10 @@ fn tunnel_eof() -> io::Error {
 #[cfg(feature = "default-tls")]
 mod native_tls_async {
     use std::io::{self, Read, Write};
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
 
-    use futures::{Poll, Future, Async};
+    use futures::Future;
     use native_tls::{self, HandshakeError, Error, TlsConnector};
     use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -556,9 +556,8 @@ mod native_tls_async {
     }
 
     impl<S: AsyncRead + AsyncWrite> AsyncWrite for TlsStream<S> {
-        fn shutdown(&mut self) -> Poll<(), io::Error> {
-            try_nb!(self.inner.shutdown());
-            self.inner.get_mut().shutdown()
+        fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+            self.inner.get().shutdown()
         }
     }
 
@@ -578,20 +577,18 @@ mod native_tls_async {
 
     // TODO: change this to AsyncRead/AsyncWrite on next major version
     impl<S: Read + Write> Future for ConnectAsync<S> {
-        type Item = TlsStream<S>;
-        type Error = Error;
+        type Output = Result<TlsStream<S>, Error>;
 
-        fn poll(&mut self) -> Poll<TlsStream<S>, Error> {
+        fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
             self.inner.poll()
         }
     }
 
     // TODO: change this to AsyncRead/AsyncWrite on next major version
     impl<S: Read + Write> Future for MidHandshake<S> {
-        type Item = TlsStream<S>;
-        type Error = Error;
+        type Output = Result<TlsStream<S>, Error>;
 
-        fn poll(&mut self) -> Poll<TlsStream<S>, Error> {
+        fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
             match self.inner.take().expect("cannot poll MidHandshake twice") {
                 Ok(stream) => Ok(TlsStream { inner: stream }.into()),
                 Err(HandshakeError::Failure(e)) => Err(e),
@@ -601,7 +598,7 @@ mod native_tls_async {
                         Err(HandshakeError::Failure(e)) => Err(e),
                         Err(HandshakeError::WouldBlock(s)) => {
                             self.inner = Some(Err(HandshakeError::WouldBlock(s)));
-                            Ok(Async::NotReady)
+                            Ok(Poll::Pending)
                         }
                     }
                 }

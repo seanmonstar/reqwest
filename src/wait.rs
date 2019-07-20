@@ -2,15 +2,15 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use futures::{Async, Future, Poll, Stream};
+use futures::{Poll, Stream, TryFuture};
 use futures::executor::{self, Notify};
 use tokio_executor::{enter, EnterError};
 
-pub(crate) fn timeout<F>(fut: F, timeout: Option<Duration>) -> Result<F::Item, Waited<F::Error>>
+pub(crate) fn timeout<F>(fut: F, timeout: Option<Duration>) -> Result<F::Ok, Waited<F::Error>>
 where
-    F: Future,
+    F: TryFuture,
 {
-    let mut spawn = executor::spawn(fut);
+    let mut spawn = executor::spawn(Box::new(fut));
     block_on(timeout, |notify| {
         spawn.poll_future_notify(notify, 0)
     })
@@ -71,7 +71,7 @@ impl Notify for ThreadNotify {
 
 fn block_on<F, U, E>(timeout: Option<Duration>, mut poll: F) -> Result<U, Waited<E>>
 where
-    F: FnMut(&Arc<ThreadNotify>) -> Poll<U, E>,
+    F: FnMut(&Arc<ThreadNotify>) -> Poll<Result<Result<U, E>>>,
 {
     let _entered = enter().map_err(Waited::Executor)?;
     let deadline = timeout.map(|d| {
@@ -83,8 +83,8 @@ where
 
     loop {
         match poll(&notify)? {
-            Async::Ready(val) => return Ok(val),
-            Async::NotReady => {}
+            Poll::Ready(val) => return Ok(val),
+            Poll::Pending => {}
         }
 
         if let Some(deadline) = deadline {
@@ -99,5 +99,3 @@ where
         }
     }
 }
-
-

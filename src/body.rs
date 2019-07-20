@@ -277,11 +277,11 @@ impl Sender {
 
             // The only way to get here is when the buffer is not empty.
             // We can check the transmission channel
-            try_ready!(tx
+            ready!(tx
                 .as_mut()
                 .expect("tx only taken on error")
                 .poll_ready()
-                .map_err(::error::from));
+                .map_err(::error::from))?;
 
             written += buf.len() as u64;
             let tx = tx.as_mut().expect("tx only taken on error");

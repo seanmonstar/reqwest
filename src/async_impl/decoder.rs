@@ -27,7 +27,7 @@ use std::io::{self, Read};
 
 use bytes::{Buf, BufMut, BytesMut};
 use flate2::read::GzDecoder;
-use futures::{Async, Future, Poll, Stream};
+use futures::{Future, Poll, Stream};
 use hyper::{HeaderMap};
 use hyper::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
 
@@ -145,16 +145,15 @@ impl Decoder {
 }
 
 impl Stream for Decoder {
-    type Item = Chunk;
-    type Error = error::Error;
+    type Item = Result<Chunk, error::Error>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(&mut self) -> Poll<Option<Self::Item>> {
         // Do a read or poll for a pendidng decoder value.
         let new_value = match self.inner {
             Inner::Pending(ref mut future) => {
                 match future.poll() {
-                    Ok(Async::Ready(inner)) => inner,
-                    Ok(Async::NotReady) => return Ok(Async::NotReady),
+                    Ok(Poll::Ready(inner)) => inner,
+                    Ok(Poll::Pending) => return Ok(Poll::Pending),
                     Err(e) => return Err(e)
                 }
             },
@@ -168,20 +167,19 @@ impl Stream for Decoder {
 }
 
 impl Future for Pending {
-    type Item = Inner;
-    type Error = error::Error;
+    type Output = Result<Inner, error::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(&mut self) -> Poll<Self::Output> {
         let body_state = match self.body.poll_stream() {
-            Ok(Async::Ready(state)) => state,
-            Ok(Async::NotReady) => return Ok(Async::NotReady),
+            Ok(Poll::Ready(state)) => state,
+            Ok(Poll::Pending) => return Ok(Poll::Pending),
             Err(e) => return Err(e)
         };
 
         let body = mem::replace(&mut self.body, ReadableChunks::new(Body::empty()));
         match body_state {
-            StreamState::Eof => Ok(Async::Ready(Inner::PlainText(Body::empty()))),
-            StreamState::HasMore => Ok(Async::Ready(Inner::Gzip(Gzip::new(body))))
+            StreamState::Eof => Ok(Poll::Ready(Inner::PlainText(Body::empty()))),
+            StreamState::HasMore => Ok(Poll::Ready(Inner::Gzip(Gzip::new(body))))
         }
     }
 }
@@ -196,10 +194,9 @@ impl Gzip {
 }
 
 impl Stream for Gzip {
-    type Item = Chunk;
-    type Error = error::Error;
+    type Item = Result<Chunk, error::Error>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(&mut self) -> Poll<Option<Self::Item>> {
         if self.buf.remaining_mut() == 0 {
             self.buf.reserve(INIT_BUFFER_SIZE);
         }
@@ -221,7 +218,7 @@ impl Stream for Gzip {
             // See https://github.com/seanmonstar/reqwest/issues/508.
             let inner_read = try_io!(self.inner.get_mut().read(&mut [0]));
             if inner_read == 0 {
-                Ok(Async::Ready(None))
+                Ok(Poll::Ready(None))
             } else {
                 Err(error::from(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -232,7 +229,7 @@ impl Stream for Gzip {
             unsafe { self.buf.advance_mut(read) };
             let chunk = Chunk::from_chunk(self.buf.split_to(read).freeze());
 
-            Ok(Async::Ready(Some(chunk)))
+            Ok(Poll::Ready(Some(chunk)))
         }
     }
 }
@@ -278,7 +275,7 @@ impl<S> fmt::Debug for ReadableChunks<S> {
 
 impl<S> Read for ReadableChunks<S>
 where
-    S: Stream<Item = Chunk, Error = error::Error>,
+    S: Stream<Item = Result<Chunk, error::Error>>,
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         loop {
@@ -297,11 +294,11 @@ where
                 },
                 ReadState::NotReady => {
                     match self.poll_stream() {
-                        Ok(Async::Ready(StreamState::HasMore)) => continue,
-                        Ok(Async::Ready(StreamState::Eof)) => {
+                        Ok(Poll::Ready(StreamState::HasMore)) => continue,
+                        Ok(Poll::Ready(StreamState::Eof)) => {
                             return Ok(0)
                         },
-                        Ok(Async::NotReady) => {
+                        Ok(Poll::Pending) => {
                             return Err(io::ErrorKind::WouldBlock.into())
                         },
                         Err(e) => {
@@ -318,26 +315,26 @@ where
 }
 
 impl<S> ReadableChunks<S>
-    where S: Stream<Item = Chunk, Error = error::Error>
+    where S: Stream<Item = Result<Chunk, error::Error>>
 {
     /// Poll the readiness of the inner reader.
     ///
     /// This function will update the internal state and return a simplified
     /// version of the `ReadState`.
-    fn poll_stream(&mut self) -> Poll<StreamState, error::Error> {
+    fn poll_stream(&mut self) -> Poll<Result<StreamState, error::Error>> {
         match self.stream.poll() {
-            Ok(Async::Ready(Some(chunk))) => {
+            Ok(Poll::Ready(Some(chunk))) => {
                 self.state = ReadState::Ready(chunk);
 
-                Ok(Async::Ready(StreamState::HasMore))
+                Ok(Poll::Ready(StreamState::HasMore))
             },
-            Ok(Async::Ready(None)) => {
+            Ok(Poll::Ready(None)) => {
                 self.state = ReadState::Eof;
 
-                Ok(Async::Ready(StreamState::Eof))
+                Ok(Poll::Ready(StreamState::Eof))
             },
-            Ok(Async::NotReady) => {
-                Ok(Async::NotReady)
+            Ok(Poll::Pending) => {
+                Ok(Poll::Pending)
             },
             Err(e) => Err(e)
         }

@@ -1,10 +1,12 @@
 use std::{fmt, str};
+use std::pin::Pin;
 use std::sync::{Arc, RwLock};
+use std::task::{Context, Poll};
 use std::time::Duration;
 use std::net::IpAddr;
 
 use bytes::Bytes;
-use futures::{Async, Future, Poll};
+use futures::Future;
 use header::{
     Entry,
     HeaderMap,
@@ -721,10 +723,9 @@ impl Pending {
 }
 
 impl Future for Pending {
-    type Item = Response;
-    type Error = ::Error;
+    type Output = Result<Response, ::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         match self.inner {
             PendingInner::Request(ref mut req) => req.poll(),
             PendingInner::Error(ref mut err) => Err(err.take().expect("Pending error polled more than once")),
@@ -733,20 +734,19 @@ impl Future for Pending {
 }
 
 impl Future for PendingRequest {
-    type Item = Response;
-    type Error = ::Error;
+    type Output = Result<Response, ::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         if let Some(ref mut delay) = self.timeout {
-            if let Async::Ready(()) = try_!(delay.poll(), &self.url) {
+            if let Poll::Ready(()) = try_!(delay.poll(), &self.url) {
                 return Err(::error::timedout(Some(self.url.clone())));
             }
         }
 
         loop {
             let res = match try_!(self.in_flight.poll(), &self.url) {
-                Async::Ready(res) => res,
-                Async::NotReady => return Ok(Async::NotReady),
+                Poll::Ready(res) => res,
+                Poll::Pending => return Ok(Poll::Pending),
             };
             if let Some(store_wrapper) = self.client.cookie_store.as_ref() {
                 let mut store = store_wrapper.write().unwrap();
@@ -859,7 +859,7 @@ impl Future for PendingRequest {
                 }
             }
             let res = Response::new(res, self.url.clone(), self.client.gzip, self.timeout.take());
-            return Ok(Async::Ready(res));
+            return Ok(Poll::Ready(res));
         }
     }
 }

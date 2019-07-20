@@ -2,12 +2,11 @@
 use std::borrow::Cow;
 use std::fmt;
 
+use futures::TryStream;
 use mime_guess::Mime;
 use url::percent_encoding::{self, EncodeSet, PATH_SEGMENT_ENCODE_SET};
 use uuid::Uuid;
 use http::HeaderMap;
-
-use futures::Stream;
 
 use super::Body;
 
@@ -184,9 +183,9 @@ impl Part {
     /// Makes a new parameter from an arbitrary stream.
     pub fn stream<T>(value: T) -> Part
     where
-        T: Stream + Send + 'static,
+        T: TryStream + Send + 'static,
         T::Error: std::error::Error + Send + Sync,
-        hyper::Chunk: std::convert::From<T::Item>,
+        hyper::Chunk: std::convert::From<T::Ok>,
     {
         Part::new(Body::wrap(hyper::Body::wrap_stream(value)))
     }

@@ -16,45 +16,47 @@ all-features = true
 [dependencies]
 base64 = "0.10"
 bytes = "0.4"
+cookie = "0.12.0"
+cookie_store = "0.7.0"
 encoding_rs = "0.8"
-futures = "0.1.23"
+flate2 = { version = "^1.0.7", default-features = false, features = ["rust_backend"] }
+futures-util-preview = { version = "=0.3.0-alpha.17", features = ["async-await", "nightly"] }
+futures-preview = { version = "=0.3.0-alpha.17", features = ["async-await", "nightly"] }
 http = "0.1.15"
 hyper = "0.12.22"
-flate2 = { version = "^1.0.7", default-features = false, features = ["rust_backend"] }
 log = "0.4"
 mime = "0.3.7"
 mime_guess = "2.0.0-alpha.6"
 serde = "1.0"
 serde_json = "1.0"
 serde_urlencoded = "0.5"
-tokio = { version = "0.1.7", default-features = false, features = ["rt-full", "tcp"] }
-tokio-executor = "0.1.4" # a minimum version so trust-dns-resolver compiles
-tokio-io = "0.1"
-tokio-threadpool = "0.1.8" # a minimum version so tokio compiles
-tokio-timer = "0.2.6" # a minimum version so trust-dns-resolver compiles
+time = "0.1.42"
+tokio = { git = "https://github.com/tokio-rs/tokio.git", branch = "master", default-features = false, features = ["rt-full", "tcp"] }
+tokio-executor = { git = "https://github.com/tokio-rs/tokio.git", branch = "master" } # a minimum version so trust-dns-resolver compiles
+tokio-io = { git = "https://github.com/tokio-rs/tokio.git", branch = "master" }
+tokio-threadpool = { git = "https://github.com/tokio-rs/tokio.git", branch = "master" } # a minimum version so tokio compiles
+tokio-timer = { git = "https://github.com/tokio-rs/tokio.git", branch = "master" } # a minimum version so trust-dns-resolver compiles
 url = "1.2"
 uuid = { version = "0.7", features = ["v4"] }
 
 # Optional deps...
 
-hyper-old-types = { version = "0.11", optional = true, features = ["compat"] }
-hyper-rustls = { version = "0.16", optional = true }
-hyper-tls = { version = "0.3.2", optional = true }
+hyper-old-types = { git = "https://github.com/hyperium/hyper-old-types.git", branch = "master", optional = true, features = ["compat"] }
+# hyper-rustls = { version = "0.16", optional = true }
+hyper-tls = { git = "https://github.com/hyperium/hyper-tls.git", branch = "master", optional = true }
 native-tls = { version = "0.2", optional = true }
 rustls = { version = "0.15", features = ["dangerous_configuration"], optional = true }
 socks = { version = "0.3.2", optional = true }
-tokio-rustls = { version = "0.9", optional = true }
+# tokio-rustls = { git = "https://github.com/tokio-rs/tokio.git", branch = "master", optional = true }
 trust-dns-resolver = { version = "0.11", optional = true }
 webpki-roots = { version = "0.16", optional = true }
-cookie_store = "0.7.0"
-cookie = "0.12.0"
-time = "0.1.42"
+
 
 [dev-dependencies]
 env_logger = "0.6"
 serde = { version = "1.0", features = ["derive"] }
-tokio = { version = "0.1.7", default-features = false, features = ["rt-full", "tcp", "fs"] }
-tokio-tcp = "0.1"
+tokio = { git = "https://github.com/tokio-rs/tokio.git", branch = "master", default-features = false, features = ["rt-full", "tcp", "fs"] }
+tokio-tcp = { git = "https://github.com/tokio-rs/tokio.git", branch = "master" }
 libflate = "0.1"
 doc-comment = "0.3"
 bytes = "0.4"
@@ -67,7 +69,7 @@ tls = []
 default-tls = ["hyper-tls", "native-tls", "tls"]
 default-tls-vendored = ["default-tls", "native-tls/vendored"]
 
-rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
+# rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 
 trust-dns = ["trust-dns-resolver"]
 

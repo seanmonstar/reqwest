@@ -1,12 +1,15 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::mem;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
-use std::borrow::Cow;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use encoding_rs::{Encoding, UTF_8};
-use futures::{Async, Future, Poll, Stream};
-use futures::stream::Concat2;
+use futures::Future;
+use futures::stream::TryStreamExt;
+use futures_util::try_stream::TryConcat;
 use http;
 use hyper::{HeaderMap, StatusCode, Version};
 use hyper::client::connect::HttpInfo;
@@ -163,7 +166,7 @@ impl Response {
             .unwrap_or(default_encoding);
         let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);
         Text {
-            concat: body.concat2(),
+            concat: body.try_concat(),
             encoding
         }
     }
@@ -174,7 +177,7 @@ impl Response {
         let body = mem::replace(&mut self.body, Decoder::empty());
 
         Json {
-            concat: body.concat2(),
+            concat: body.try_concat(),
             _marker: PhantomData,
         }
     }
@@ -272,17 +275,16 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
 
 /// A JSON object.
 struct Json<T> {
-    concat: Concat2<Decoder>,
+    concat: TryConcat<Decoder>,
     _marker: PhantomData<T>,
 }
 
 impl<T: DeserializeOwned> Future for Json<T> {
-    type Item = T;
-    type Error = ::Error;
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let bytes = try_ready!(self.concat.poll());
+    type Output = Result<T, ::Error>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let bytes = ready!(self.concat.poll())?;
         let t = try_!(serde_json::from_slice(&bytes));
-        Ok(Async::Ready(t))
+        Ok(Poll::Ready(t))
     }
 }
 
@@ -295,27 +297,26 @@ impl<T> fmt::Debug for Json<T> {
 
 #[derive(Debug)]
 struct Text {
-    concat: Concat2<Decoder>,
+    concat: TryConcat<Decoder>,
     encoding: &'static Encoding,
 }
 
 impl Future for Text {
-    type Item = String;
-    type Error = ::Error;
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let bytes = try_ready!(self.concat.poll());
+    type Output = Result<String, ::Error>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let bytes = ready!(self.concat.poll())?;
         // a block because of borrow checker
         {
             let (text, _, _) = self.encoding.decode(&bytes);
             match text {
-                Cow::Owned(s) => return Ok(Async::Ready(s)),
+                Cow::Owned(s) => return Ok(Poll::Ready(s)),
                 _ => (),
             }
         }
         unsafe {
             // decoding returned Cow::Borrowed, meaning these bytes
             // are already valid utf8
-            Ok(Async::Ready(String::from_utf8_unchecked(bytes.to_vec())))
+            Ok(Poll::Ready(String::from_utf8_unchecked(bytes.to_vec())))
         }
     }
 }
