@@ -1,6 +1,6 @@
 use std::fmt;
 
-use base64::encode;
+use radix64 as base64;
 use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
@@ -238,7 +238,7 @@ impl RequestBuilder {
             Some(password) => format!("{}:{}", username, password),
             None => format!("{}:", username)
         };
-        let header_value = format!("Basic {}", encode(&auth));
+        let header_value = format!("Basic {}", base64::Display::new(base64::STD, &auth));
         self.header(::header::AUTHORIZATION, &*header_value)
     }
 

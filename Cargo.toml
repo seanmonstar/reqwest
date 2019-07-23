@@ -14,7 +14,7 @@ categories = ["web-programming::http-client"]
 all-features = true
 
 [dependencies]
-base64 = "0.10"
+radix64 = { version = "0.6", default-features = false }
 bytes = "0.4"
 encoding_rs = "0.8"
 futures = "0.1.23"

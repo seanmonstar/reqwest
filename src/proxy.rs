@@ -428,8 +428,9 @@ impl fmt::Debug for Custom {
 }
 
 pub(crate) fn encode_basic_auth(username: &str, password: &str) -> HeaderValue {
+    use radix64 as base64;
     let val = format!("{}:{}", username, password);
-    let mut header = format!("Basic {}", base64::encode(&val))
+    let mut header = format!("Basic {}", base64::Display::new(base64::STD, &val))
         .parse::<HeaderValue>()
         .expect("base64 is always valid HeaderValue");
     header.set_sensitive(true);

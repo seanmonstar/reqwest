@@ -173,7 +173,6 @@
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
 
-extern crate base64;
 extern crate bytes;
 extern crate cookie as cookie_crate;
 extern crate cookie_store;
@@ -193,6 +192,7 @@ extern crate mime;
 extern crate mime_guess;
 #[cfg(feature = "default-tls")]
 extern crate native_tls;
+extern crate radix64;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_urlencoded;
