@@ -13,19 +13,19 @@ matrix:
 
         # Disable default-tls
         - rust: stable
-          env: FEATURES="--no-default-features"
+          env: FEATURES="--no-default-features --features cookies"
 
         # rustls-tls
         - rust: stable
-          env: FEATURES="--no-default-features --features rustls-tls"
+          env: FEATURES="--no-default-features --features rustls-tls,cookies"
 
         # default-tls and rustls-tls
         - rust: stable
-          env: FEATURES="--features rustls-tls"
+          env: FEATURES="--features rustls-tls,cookies"
 
         # default-tls, rustls, and socks!
         - rust: stable
-          env: FEATURES="--features rustls-tls,socks"
+          env: FEATURES="--features rustls-tls,socks,cookies"
 
         - rust: stable
           env: FEATURES="--features hyper-011"
