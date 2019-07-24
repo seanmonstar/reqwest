@@ -155,6 +155,8 @@
 //!
 //! - **default-tls** *(enabled by default)*: Provides TLS support via the
 //!   `native-tls` library to connect over HTTPS.
+//! - **cookies** *(enabled by default)*: Adds an optional persistent cookie
+//!   storage to the client
 //! - **default-tls-vendored**: Enables the `vendored` feature of `native-tls`.
 //! - **rustls-tls**: Provides TLS support via the `rustls` library.
 //! - **socks**: Provides SOCKS5 proxy support.
@@ -175,7 +177,9 @@
 
 extern crate base64;
 extern crate bytes;
+#[cfg(feature = "cookies")]
 extern crate cookie as cookie_crate;
+#[cfg(feature = "cookies")]
 extern crate cookie_store;
 extern crate encoding_rs;
 #[macro_use]
@@ -196,6 +200,7 @@ extern crate native_tls;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_urlencoded;
+#[cfg(feature = "cookies")]
 extern crate time;
 extern crate tokio;
 extern crate tokio_executor;
@@ -252,6 +257,7 @@ mod async_impl;
 mod connect;
 mod body;
 mod client;
+#[cfg(feature = "cookies")]
 pub mod cookie;
 #[cfg(feature = "trust-dns")]
 mod dns;

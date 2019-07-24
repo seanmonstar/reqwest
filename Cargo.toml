@@ -46,9 +46,9 @@ socks = { version = "0.3.2", optional = true }
 tokio-rustls = { version = "0.9", optional = true }
 trust-dns-resolver = { version = "0.11", optional = true }
 webpki-roots = { version = "0.16", optional = true }
-cookie_store = "0.7.0"
-cookie = "0.12.0"
-time = "0.1.42"
+cookie_store = { version = "0.7.0", optional = true }
+cookie = { version = "0.12.0", optional = true }
+time = { version = "0.1.42", optional = true }
 
 [dev-dependencies]
 env_logger = "0.6"
@@ -60,7 +60,7 @@ doc-comment = "0.3"
 bytes = "0.4"
 
 [features]
-default = ["default-tls"]
+default = ["default-tls", "cookies"]
 
 tls = []
 
@@ -72,6 +72,8 @@ rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 trust-dns = ["trust-dns-resolver"]
 
 hyper-011 = ["hyper-old-types"]
+
+cookies = ["cookie", "cookie_store", "time"]
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.6"

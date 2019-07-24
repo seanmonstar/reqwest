@@ -8,6 +8,7 @@ use futures::{Async, Poll, Stream};
 use http;
 use serde::de::DeserializeOwned;
 
+#[cfg(feature = "cookies")]
 use cookie;
 use client::KeepCoreThreadAlive;
 use hyper::header::HeaderMap;
@@ -116,6 +117,7 @@ impl Response {
     /// Retrieve the cookies contained in the response.
     ///
     /// Note that invalid 'Set-Cookie' headers will be ignored.
+    #[cfg(feature = "cookies")]
     pub fn cookies<'a>(&'a self) -> impl Iterator< Item = cookie::Cookie<'a> > + 'a {
         cookie::extract_response_cookies(self.headers())
             .filter_map(Result::ok)
