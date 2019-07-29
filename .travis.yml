@@ -45,10 +45,6 @@ matrix:
           # disable default-tls feature since cross-compiling openssl is dragons
           script: cargo build --target "$TARGET" --no-default-features
 
-        # minimum version
-        - rust: 1.31.0
-          script: cargo build
-
 sudo: false
 dist: trusty
 
