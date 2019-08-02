@@ -185,7 +185,6 @@ impl Part {
     pub fn stream<T>(value: T) -> Part
     where
         T: Stream + Send + 'static,
-        T::Error: std::error::Error + Send + Sync,
         hyper::Chunk: std::convert::From<T::Item>,
     {
         Part::new(Body::wrap(hyper::Body::wrap_stream(value)))

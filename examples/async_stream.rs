@@ -35,7 +35,7 @@ impl Stream for FileSource {
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let mut buf = [0; CHUNK_SIZE];
-        let size = try_ready!(self.inner.poll_read(&mut buf));
+        let size = ready!(self.inner.poll_read(&mut buf));
         if size > 0 {
             Ok(Async::Ready(Some(buf[0..size].into())))
         } else {

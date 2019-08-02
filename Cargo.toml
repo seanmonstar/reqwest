@@ -17,7 +17,7 @@ all-features = true
 base64 = "0.10"
 bytes = "0.4"
 encoding_rs = "0.8"
-futures = "0.1.23"
+futures-preview = "=0.3.0-alpha.17"
 http = "0.1.15"
 hyper = "0.12.22"
 flate2 = { version = "^1.0.7", default-features = false, features = ["rust_backend"] }

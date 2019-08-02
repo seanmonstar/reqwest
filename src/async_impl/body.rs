@@ -1,6 +1,6 @@
 use std::fmt;
 
-use futures::{Future, Stream, Poll, Async};
+use futures::{Future, Stream, task::Poll, task::Context, ready};
 use bytes::{Buf, Bytes};
 use hyper::body::Payload;
 use tokio::timer::Delay;
@@ -71,32 +71,31 @@ impl Body {
 }
 
 impl Stream for Body {
-    type Item = Chunk;
-    type Error = ::Error;
+    type Item = Result<Chunk, ::error::Error>;
 
     #[inline]
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(self: &mut Self, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let opt = match self.inner {
             Inner::Hyper { ref mut body, ref mut timeout } => {
                 if let Some(ref mut timeout) = timeout {
-                    if let Async::Ready(()) = try_!(timeout.poll()) {
+                    if let Poll::Ready(()) = try_!(timeout.poll()) {
                         return Err(::error::timedout(None));
                     }
                 }
-                try_ready!(body.poll_data().map_err(::error::from))
+                ready!(body.poll_data().map_err(::error::from))
             },
             Inner::Reusable(ref mut bytes) => {
                 return if bytes.is_empty() {
-                    Ok(Async::Ready(None))
+                    Ok(Poll::Ready(None))
                 } else {
                     let chunk = Chunk::from_chunk(bytes.clone());
                     *bytes = Bytes::new();
-                    Ok(Async::Ready(Some(chunk)))
+                    Ok(Poll::Ready(Some(chunk)))
                 };
             },
         };
 
-        Ok(Async::Ready(opt.map(|chunk| Chunk {
+        Ok(Poll::Ready(opt.map(|chunk| Chunk {
             inner: chunk,
         })))
     }
@@ -137,14 +136,13 @@ impl From<&'static str> for Body {
     }
 }
 
-impl<I, E> From<Box<dyn Stream<Item = I, Error = E> + Send>> for Body
+impl<I, E> From<Box<dyn Stream<Item = Result<I, E>>>> for Body
 where
     hyper::Chunk: From<I>,
-    I: 'static,
     E: std::error::Error + Send + Sync + 'static,
 {
     #[inline]
-    fn from(s: Box<dyn Stream<Item = I, Error = E> + Send>) -> Body {
+    fn from(s: Box<dyn Stream<Item = Result<I, E>>>) -> Body {
         Body::wrap(::hyper::Body::wrap_stream(s))
     }
 }

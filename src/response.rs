@@ -4,7 +4,7 @@ use std::io::{self, Read};
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use futures::{Async, Poll, Stream};
+use futures::{Poll, Stream, task::Context};
 use http;
 use serde::de::DeserializeOwned;
 
@@ -369,12 +369,11 @@ struct WaitBody {
 }
 
 impl Stream for WaitBody {
-    type Item = <async_impl::Decoder as Stream>::Item;
-    type Error = <async_impl::Decoder as Stream>::Error;
+    type Output = <async_impl::Decoder as Stream>::Output;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(&mut self, cx: &mut Context) -> Poll<Option<Self::Output>> {
         match self.inner.next() {
-            Some(Ok(chunk)) => Ok(Async::Ready(Some(chunk))),
+            Some(Ok(chunk)) => Ok(Poll::Ready(Some(Ok(chunk)))),
             Some(Err(e)) => {
                 let req_err = match e {
                     wait::Waited::TimedOut => ::error::timedout(None),
@@ -384,7 +383,7 @@ impl Stream for WaitBody {
 
                 Err(req_err)
             },
-            None => Ok(Async::Ready(None)),
+            None => Ok(Poll::Ready(None)),
         }
     }
 }

@@ -5,8 +5,7 @@ use std::net::SocketAddr;
 use std::borrow::Cow;
 
 use encoding_rs::{Encoding, UTF_8};
-use futures::{Async, Future, Poll, Stream};
-use futures::stream::Concat2;
+use futures::{task::Poll, Future};
 use http;
 use hyper::{HeaderMap, StatusCode, Version};
 use hyper::client::connect::HttpInfo;
@@ -277,12 +276,11 @@ struct Json<T> {
 }
 
 impl<T: DeserializeOwned> Future for Json<T> {
-    type Item = T;
-    type Error = ::Error;
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let bytes = try_ready!(self.concat.poll());
+    type Output = Result<T, ::Error>;
+    fn poll(&mut self, cx: &mut Context) -> Poll<Self::Output> {
+        let bytes = ready!(self.concat.poll());
         let t = try_!(serde_json::from_slice(&bytes));
-        Ok(Async::Ready(t))
+        Ok(Poll::Ready(t))
     }
 }
 
@@ -300,22 +298,21 @@ struct Text {
 }
 
 impl Future for Text {
-    type Item = String;
-    type Error = ::Error;
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let bytes = try_ready!(self.concat.poll());
+    type Output = Result<String, ::Error>;
+    fn poll(&mut self, cx: &mut Context) -> Poll<Self::Output> {
+        let bytes = ready!(self.concat.poll());
         // a block because of borrow checker
         {
             let (text, _, _) = self.encoding.decode(&bytes);
             match text {
-                Cow::Owned(s) => return Ok(Async::Ready(s)),
+                Cow::Owned(s) => return Ok(Poll::Ready(s)),
                 _ => (),
             }
         }
         unsafe {
             // decoding returned Cow::Borrowed, meaning these bytes
             // are already valid utf8
-            Ok(Async::Ready(String::from_utf8_unchecked(bytes.to_vec())))
+            Ok(Poll::Ready(String::from_utf8_unchecked(bytes.to_vec())))
         }
     }
 }

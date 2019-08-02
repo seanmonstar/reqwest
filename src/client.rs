@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::thread;
 use std::net::IpAddr;
 
-use futures::{Async, Future, Stream};
+use futures::{task::Poll, Future};
 use futures::future::{self, Either};
 use futures::sync::{mpsc, oneshot};
 
@@ -586,11 +586,11 @@ impl ClientHandle {
 
                     if canceled {
                         trace!("response receiver is canceled");
-                        Ok(Async::Ready(()))
+                        Ok(Poll::Ready(()))
                     } else {
                         let result = match res_fut.poll() {
-                            Ok(Async::NotReady) => return Ok(Async::NotReady),
-                            Ok(Async::Ready(res)) => Ok(res),
+                            Ok(Poll::Pending) => return Ok(Poll::Pending),
+                            Ok(Poll::Ready(res)) => Ok(res),
                             Err(err) => Err(err),
                         };
 
@@ -598,7 +598,7 @@ impl ClientHandle {
                             .take()
                             .expect("polled after complete")
                             .send(result);
-                        Ok(Async::Ready(()))
+                        Ok(Poll::Ready(()))
                     }
                 });
                 ::tokio::spawn(task);

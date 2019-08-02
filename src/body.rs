@@ -277,7 +277,7 @@ impl Sender {
 
             // The only way to get here is when the buffer is not empty.
             // We can check the transmission channel
-            try_ready!(tx
+            ready!(tx
                 .as_mut()
                 .expect("tx only taken on error")
                 .poll_ready()

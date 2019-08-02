@@ -577,7 +577,7 @@ macro_rules! try_io {
         match $e {
             Ok(v) => v,
             Err(ref err) if err.kind() == ::std::io::ErrorKind::WouldBlock => {
-                return Ok(::futures::Async::NotReady);
+                return Ok(futures::task::Poll::Pending);
             }
             Err(err) => {
                 return Err(::error::from_io(err));
