@@ -6,7 +6,7 @@ use std::net::IpAddr;
 
 use futures::{task::Poll, Future};
 use futures::future::{self, Either};
-use futures::sync::{mpsc, oneshot};
+use futures::channel::{mpsc, oneshot};
 
 use request::{Request, RequestBuilder};
 use response::Response;

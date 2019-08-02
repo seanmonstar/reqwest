@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use std::borrow::Cow;
 
 use encoding_rs::{Encoding, UTF_8};
-use futures::{task::Poll, Future};
+use futures::{Poll, task::Context, Future, stream::Concat};
 use http;
 use hyper::{HeaderMap, StatusCode, Version};
 use hyper::client::connect::HttpInfo;
@@ -271,7 +271,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
 
 /// A JSON object.
 struct Json<T> {
-    concat: Concat2<Decoder>,
+    concat: Concat<Decoder>,
     _marker: PhantomData<T>,
 }
 
@@ -293,7 +293,7 @@ impl<T> fmt::Debug for Json<T> {
 
 #[derive(Debug)]
 struct Text {
-    concat: Concat2<Decoder>,
+    concat: Concat<Decoder>,
     encoding: &'static Encoding,
 }
 

@@ -369,9 +369,9 @@ struct WaitBody {
 }
 
 impl Stream for WaitBody {
-    type Output = <async_impl::Decoder as Stream>::Output;
+    type Item = <async_impl::Decoder as Stream>::Item;
 
-    fn poll_next(&mut self, cx: &mut Context) -> Poll<Option<Self::Output>> {
+    fn poll_next(&mut self, cx: &mut Context) -> Poll<Option<Self::Item>> {
         match self.inner.next() {
             Some(Ok(chunk)) => Ok(Poll::Ready(Some(Ok(chunk)))),
             Some(Err(e)) => {
