@@ -389,6 +389,7 @@ fn test_invalid_location_stops_redirect_gh484() {
 }
 
 #[test]
+#[cfg(feature = "cookies")]
 fn test_redirect_302_with_set_cookies() {
     let code = 302;
     let client = reqwest::ClientBuilder::new().cookie_store(true).build().unwrap();

@@ -1,6 +1,6 @@
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
-#![cfg_attr(test, deny(warnings))]
+//#![cfg_attr(test, deny(warnings))]
 #![doc(html_root_url = "https://docs.rs/reqwest/0.9.19")]
 
 //! # reqwest
@@ -175,7 +175,9 @@
 
 extern crate base64;
 extern crate bytes;
+#[cfg(feature = "cookies")]
 extern crate cookie as cookie_crate;
+#[cfg(feature = "cookies")]
 extern crate cookie_store;
 extern crate encoding_rs;
 #[macro_use]
@@ -252,6 +254,7 @@ mod async_impl;
 mod connect;
 mod body;
 mod client;
+#[cfg(feature = "cookies")]
 pub mod cookie;
 #[cfg(feature = "trust-dns")]
 mod dns;
