@@ -9,7 +9,7 @@ use http::HeaderMap;
 
 use futures::Stream;
 
-use super::Body;
+use super::{Body, Chunk};
 
 /// An async multipart/form-data request.
 pub struct Form {
@@ -185,10 +185,10 @@ impl Part {
     pub fn stream<T>(value: T) -> Part
     where
         T: Stream + Send + 'static,
+        T::Item: Into<Chunk>,
         T::Error: std::error::Error + Send + Sync,
-        hyper::Chunk: std::convert::From<T::Item>,
     {
-        Part::new(Body::wrap(hyper::Body::wrap_stream(value)))
+        Part::new(Body::wrap(hyper::Body::wrap_stream(value.map(|chunk| chunk.into()))))
     }
 
     fn new(value: Body) -> Part {
@@ -477,13 +477,13 @@ mod tests {
     #[test]
     fn stream_to_end() {
         let mut form = Form::new()
-            .part("reader1", Part::stream(futures::stream::once::<_, hyper::Error>(Ok(hyper::Chunk::from("part1".to_owned())))))
+            .part("reader1", Part::stream(futures::stream::once::<_, hyper::Error>(Ok(Chunk::from("part1".to_owned())))))
             .part("key1", Part::text("value1"))
             .part(
                 "key2",
                 Part::text("value2").mime(mime::IMAGE_BMP),
             )
-            .part("reader2", Part::stream(futures::stream::once::<_, hyper::Error>(Ok(hyper::Chunk::from("part2".to_owned())))))
+            .part("reader2", Part::stream(futures::stream::once::<_, hyper::Error>(Ok(Chunk::from("part2".to_owned())))))
             .part(
                 "key3",
                 Part::text("value3").file_name("filename"),

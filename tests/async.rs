@@ -14,7 +14,7 @@ use std::time::Duration;
 use futures::{Future, Stream};
 use tokio::runtime::current_thread::Runtime;
 
-use reqwest::r#async::Client;
+use reqwest::r#async::{Chunk, Client};
 use reqwest::r#async::multipart::{Form, Part};
 
 use bytes::Bytes;
@@ -105,7 +105,7 @@ fn response_json() {
 fn multipart() {
     let _ = env_logger::try_init();
 
-    let stream = futures::stream::once::<_, hyper::Error>(Ok(hyper::Chunk::from("part1 part2".to_owned())));
+    let stream = futures::stream::once::<_, hyper::Error>(Ok(Chunk::from("part1 part2".to_owned())));
     let part = Part::stream(stream);
 
     let form = Form::new()
