@@ -6,7 +6,7 @@ mod support;
 #[test]
 fn cookie_response_accessor() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::async::Client::new();
+    let client = reqwest::r#async::Client::new();
 
     let server = server! {
         request: b"\
@@ -81,7 +81,7 @@ fn cookie_response_accessor() {
 #[test]
 fn cookie_store_simple() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::async::Client::builder().cookie_store(true).build().unwrap();
+    let client = reqwest::r#async::Client::builder().cookie_store(true).build().unwrap();
 
     let server = server! {
         request: b"\
@@ -125,7 +125,7 @@ fn cookie_store_simple() {
 #[test]
 fn cookie_store_overwrite_existing() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::async::Client::builder().cookie_store(true).build().unwrap();
+    let client = reqwest::r#async::Client::builder().cookie_store(true).build().unwrap();
 
     let server = server! {
         request: b"\
@@ -189,7 +189,7 @@ fn cookie_store_overwrite_existing() {
 #[test]
 fn cookie_store_max_age() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::async::Client::builder().cookie_store(true).build().unwrap();
+    let client = reqwest::r#async::Client::builder().cookie_store(true).build().unwrap();
 
     let server = server! {
         request: b"\
@@ -232,7 +232,7 @@ fn cookie_store_max_age() {
 #[test]
 fn cookie_store_expires() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::async::Client::builder().cookie_store(true).build().unwrap();
+    let client = reqwest::r#async::Client::builder().cookie_store(true).build().unwrap();
 
     let server = server! {
         request: b"\
@@ -275,7 +275,7 @@ fn cookie_store_expires() {
 #[test]
 fn cookie_store_path() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::async::Client::builder().cookie_store(true).build().unwrap();
+    let client = reqwest::r#async::Client::builder().cookie_store(true).build().unwrap();
 
     let server = server! {
         request: b"\

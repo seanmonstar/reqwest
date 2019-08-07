@@ -19,7 +19,7 @@ use std::time::Duration;
 
 #[cfg(feature = "trust-dns")]
 use dns::TrustDnsResolver;
-use proxy::{Proxy, ProxyScheme};
+use crate::proxy::{Proxy, ProxyScheme};
 
 #[cfg(feature = "trust-dns")]
 type HttpConnector = ::hyper::client::HttpConnector<TrustDnsResolver>;
@@ -70,7 +70,7 @@ impl Connector {
         tls: TlsConnectorBuilder,
         proxies: Arc<Vec<Proxy>>,
         local_addr: T,
-        nodelay: bool) -> ::Result<Connector>
+        nodelay: bool) -> crate::Result<Connector>
         where
             T: Into<Option<IpAddr>>,
     {
@@ -204,7 +204,7 @@ fn http_connector() -> ::Result<HttpConnector> {
 }
 
 #[cfg(not(feature = "trust-dns"))]
-fn http_connector() -> ::Result<HttpConnector> {
+fn http_connector() -> crate::Result<HttpConnector> {
     Ok(HttpConnector::new(4))
 }
 
@@ -697,7 +697,7 @@ mod tests {
     use tokio::runtime::current_thread::Runtime;
     use self::tokio_tcp::TcpStream;
     use super::tunnel;
-    use proxy;
+    use crate::proxy;
 
     static TUNNEL_OK: &'static [u8] = b"\
         HTTP/1.1 200 OK\r\n\

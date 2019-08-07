@@ -8,10 +8,10 @@ use futures::{Async, Poll, Stream};
 use http;
 use serde::de::DeserializeOwned;
 
-use cookie;
-use client::KeepCoreThreadAlive;
+use crate::cookie;
+use crate::client::KeepCoreThreadAlive;
 use hyper::header::HeaderMap;
-use {async_impl, StatusCode, Url, Version, wait};
+use crate::{async_impl, StatusCode, Url, Version, wait};
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -201,11 +201,11 @@ impl Response {
     /// details please see [`serde_json::from_reader`].
     /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
     #[inline]
-    pub fn json<T: DeserializeOwned>(&mut self) -> ::Result<T> {
+    pub fn json<T: DeserializeOwned>(&mut self) -> crate::Result<T> {
         wait::timeout(self.inner.json(), self.timeout).map_err(|e| {
             match e {
-                wait::Waited::TimedOut => ::error::timedout(None),
-                wait::Waited::Executor(e) => ::error::from(e),
+                wait::Waited::TimedOut => crate::error::timedout(None),
+                wait::Waited::Executor(e) => crate::error::from(e),
                 wait::Waited::Inner(e) => e,
             }
         })
@@ -232,7 +232,7 @@ impl Response {
     ///
     /// This consumes the body. Trying to read more, or use of `response.json()`
     /// will return empty values.
-    pub fn text(&mut self) -> ::Result<String> {
+    pub fn text(&mut self) -> crate::Result<String> {
         self.text_with_charset("utf-8")
     }
 
@@ -259,11 +259,11 @@ impl Response {
     ///
     /// This consumes the body. Trying to read more, or use of `response.json()`
     /// will return empty values.
-    pub fn text_with_charset(&mut self, default_encoding: &str) -> ::Result<String> {
+    pub fn text_with_charset(&mut self, default_encoding: &str) -> crate::Result<String> {
         wait::timeout(self.inner.text_with_charset(default_encoding), self.timeout).map_err(|e| {
             match e {
-                wait::Waited::TimedOut => ::error::timedout(None),
-                wait::Waited::Executor(e) => ::error::from(e),
+                wait::Waited::TimedOut => crate::error::timedout(None),
+                wait::Waited::Executor(e) => crate::error::from(e),
                 wait::Waited::Inner(e) => e,
             }
         })
@@ -290,10 +290,10 @@ impl Response {
     /// # }
     /// ```
     #[inline]
-    pub fn copy_to<W: ?Sized>(&mut self, w: &mut W) -> ::Result<u64>
+    pub fn copy_to<W: ?Sized>(&mut self, w: &mut W) -> crate::Result<u64>
         where W: io::Write
     {
-        io::copy(self, w).map_err(::error::from)
+        io::copy(self, w).map_err(crate::error::from)
     }
 
     /// Turn a response into an error if the server returned an error.
@@ -313,7 +313,7 @@ impl Response {
     /// # fn main() {}
     /// ```
     #[inline]
-    pub fn error_for_status(self) -> ::Result<Self> {
+    pub fn error_for_status(self) -> crate::Result<Self> {
         let Response { body, inner, timeout, _thread_handle } = self;
         inner.error_for_status().map(move |inner| {
             Response {
@@ -342,7 +342,7 @@ impl Response {
     /// # fn main() {}
     /// ```
     #[inline]
-    pub fn error_for_status_ref(&self) -> ::Result<&Self> {
+    pub fn error_for_status_ref(&self) -> crate::Result<&Self> {
         self.inner.error_for_status_ref().and_then(|_| Ok(self))
     }
 }
@@ -377,8 +377,8 @@ impl Stream for WaitBody {
             Some(Ok(chunk)) => Ok(Async::Ready(Some(chunk))),
             Some(Err(e)) => {
                 let req_err = match e {
-                    wait::Waited::TimedOut => ::error::timedout(None),
-                    wait::Waited::Executor(e) => ::error::from(e),
+                    wait::Waited::TimedOut => crate::error::timedout(None),
+                    wait::Waited::Executor(e) => crate::error::from(e),
                     wait::Waited::Inner(e) => e,
                 };
 

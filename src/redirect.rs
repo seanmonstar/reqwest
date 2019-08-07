@@ -1,6 +1,6 @@
 use std::fmt;
 
-use header::{
+use crate::header::{
     HeaderMap,
     AUTHORIZATION,
     COOKIE,
@@ -10,7 +10,7 @@ use header::{
 };
 use hyper::StatusCode;
 
-use Url;
+use crate::Url;
 
 /// A type that controls the policy on how to handle the following of redirects.
 ///

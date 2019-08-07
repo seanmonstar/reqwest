@@ -10,9 +10,9 @@ use super::body::{Body};
 use super::client::{Client, Pending};
 use super::multipart;
 use super::response::Response;
-use header::{CONTENT_LENGTH, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
+use crate::header::{CONTENT_LENGTH, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
 use http::HttpTryFrom;
-use {Method, Url};
+use crate::{Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -25,7 +25,7 @@ pub struct Request {
 /// A builder to construct the properties of a `Request`.
 pub struct RequestBuilder {
     client: Client,
-    request: ::Result<Request>,
+    request: crate::Result<Request>,
 }
 
 impl Request {
@@ -94,7 +94,7 @@ impl Request {
 }
 
 impl RequestBuilder {
-    pub(super) fn new(client: Client, request: ::Result<Request>) -> RequestBuilder {
+    pub(super) fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
         RequestBuilder {
             client,
             request,
@@ -113,10 +113,10 @@ impl RequestBuilder {
                 Ok(key) => {
                     match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
                         Ok(value) => { req.headers_mut().append(key, value); }
-                        Err(e) => error = Some(::error::from(e.into())),
+                        Err(e) => error = Some(crate::error::from(e.into())),
                     }
                 },
-                Err(e) => error = Some(::error::from(e.into())),
+                Err(e) => error = Some(crate::error::from(e.into())),
             };
         }
         if let Some(err) = error {
@@ -128,7 +128,7 @@ impl RequestBuilder {
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
-    pub fn headers(mut self, headers: ::header::HeaderMap) -> RequestBuilder {
+    pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             replace_headers(req.headers_mut(), headers);
         }
@@ -171,7 +171,7 @@ impl RequestBuilder {
             None => format!("{}:", username)
         };
         let header_value = format!("Basic {}", encode(&auth));
-        self.header(::header::AUTHORIZATION, &*header_value)
+        self.header(crate::header::AUTHORIZATION, &*header_value)
     }
 
     /// Enable HTTP bearer authentication.
@@ -180,7 +180,7 @@ impl RequestBuilder {
         T: fmt::Display,
     {
         let header_value = format!("Bearer {}", token);
-        self.header(::header::AUTHORIZATION, &*header_value)
+        self.header(crate::header::AUTHORIZATION, &*header_value)
     }
 
     /// Set the request body.
@@ -264,7 +264,7 @@ impl RequestBuilder {
             let serializer = serde_urlencoded::Serializer::new(&mut pairs);
 
             if let Err(err) = query.serialize(serializer) {
-                error = Some(::error::from(err));
+                error = Some(crate::error::from(err));
             }
         }
         if let Ok(ref mut req) = self.request {
@@ -290,7 +290,7 @@ impl RequestBuilder {
                     );
                     *req.body_mut() = Some(body.into());
                 },
-                Err(err) => error = Some(::error::from(err)),
+                Err(err) => error = Some(crate::error::from(err)),
             }
         }
         if let Some(err) = error {
@@ -316,7 +316,7 @@ impl RequestBuilder {
                     );
                     *req.body_mut() = Some(body.into());
                 },
-                Err(err) => error = Some(::error::from(err)),
+                Err(err) => error = Some(crate::error::from(err)),
             }
         }
         if let Some(err) = error {
@@ -327,7 +327,7 @@ impl RequestBuilder {
 
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
-    pub fn build(self) -> ::Result<Request> {
+    pub fn build(self) -> crate::Result<Request> {
         self.request
     }
 
@@ -358,7 +358,7 @@ impl RequestBuilder {
     /// rt.block_on(response)
     /// # }
     /// ```
-    pub fn send(self) -> impl Future<Item = Response, Error = ::Error> {
+    pub fn send(self) -> impl Future<Item = Response, Error = crate::Error> {
         match self.request {
             Ok(req) => self.client.execute_request(req),
             Err(err) => Pending::new_err(err),

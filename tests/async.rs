@@ -14,8 +14,8 @@ use std::time::Duration;
 use futures::{Future, Stream};
 use tokio::runtime::current_thread::Runtime;
 
-use reqwest::async::Client;
-use reqwest::async::multipart::{Form, Part};
+use reqwest::r#async::Client;
+use reqwest::r#async::multipart::{Form, Part};
 
 use bytes::Bytes;
 

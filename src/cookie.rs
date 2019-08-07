@@ -1,7 +1,7 @@
 //! The cookies module contains types for working with request and response cookies.
 
-use cookie_crate;
-use header;
+use crate::cookie_crate;
+use crate::header;
 use std::borrow::Cow;
 use std::fmt;
 use std::time::SystemTime;
@@ -55,7 +55,7 @@ impl Cookie<'static> {
 }
 
 impl<'a> Cookie<'a> {
-    fn parse(value: &'a ::header::HeaderValue) -> Result<Cookie<'a>, CookieParseError> {
+    fn parse(value: &'a crate::header::HeaderValue) -> Result<Cookie<'a>, CookieParseError> {
         std::str::from_utf8(value.as_bytes())
             .map_err(cookie::ParseError::from)
             .and_then(cookie::Cookie::parse)

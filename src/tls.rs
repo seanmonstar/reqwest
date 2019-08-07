@@ -52,7 +52,7 @@ impl Certificate {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn from_der(der: &[u8]) -> ::Result<Certificate> {
+    pub fn from_der(der: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             #[cfg(feature = "default-tls")]
             native: try_!(::native_tls::Certificate::from_der(der)),
@@ -78,7 +78,7 @@ impl Certificate {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn from_pem(pem: &[u8]) -> ::Result<Certificate> {
+    pub fn from_pem(pem: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             #[cfg(feature = "default-tls")]
             native: try_!(::native_tls::Certificate::from_pem(pem)),
@@ -149,7 +149,7 @@ impl Identity {
     /// # }
     /// ```
     #[cfg(feature = "default-tls")]
-    pub fn from_pkcs12_der(der: &[u8], password: &str) -> ::Result<Identity> {
+    pub fn from_pkcs12_der(der: &[u8], password: &str) -> crate::Result<Identity> {
         Ok(Identity {
             inner: ClientCert::Pkcs12(
                 try_!(::native_tls::Identity::from_pkcs12(der, password))
@@ -218,7 +218,7 @@ impl Identity {
     pub(crate) fn add_to_native_tls(
         self,
         tls: &mut ::native_tls::TlsConnectorBuilder,
-    ) -> ::Result<()> {
+    ) -> crate::Result<()> {
         match self.inner {
             ClientCert::Pkcs12(id) => {
                 tls.identity(id);

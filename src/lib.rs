@@ -267,8 +267,8 @@ mod wait;
 pub mod multipart;
 
 /// An 'async' implementation of the reqwest `Client`.
-pub mod async {
-    pub use ::async_impl::{
+pub mod r#async {
+    pub use crate::async_impl::{
         Body,
         Chunk,
         Decoder,
@@ -311,7 +311,7 @@ pub mod async {
 /// - there was an error while sending request
 /// - redirect loop was detected
 /// - redirect limit was exhausted
-pub fn get<T: IntoUrl>(url: T) -> ::Result<Response> {
+pub fn get<T: IntoUrl>(url: T) -> crate::Result<Response> {
     Client::builder()
         .build()?
         .get(url)

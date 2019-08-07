@@ -6,7 +6,7 @@ use bytes::Bytes;
 use futures::Future;
 use hyper::{self};
 
-use {async_impl};
+use crate::{async_impl};
 
 /// The body of a `Request`.
 ///
@@ -218,7 +218,7 @@ pub(crate) struct Sender {
 impl Sender {
     // A `Future` that may do blocking read calls.
     // As a `Future`, this integrates easily with `wait::timeout`.
-    pub(crate) fn send(self) -> impl Future<Item=(), Error=::Error> {
+    pub(crate) fn send(self) -> impl Future<Item=(), Error=crate::Error> {
         use std::cmp;
         use bytes::{BufMut, BytesMut};
         use futures::future;
@@ -270,7 +270,7 @@ impl Sender {
                             .take()
                             .expect("tx only taken on error")
                             .abort();
-                        return Err(::error::from(ret));
+                        return Err(crate::error::from(ret));
                     }
                 }
             }
@@ -281,12 +281,12 @@ impl Sender {
                 .as_mut()
                 .expect("tx only taken on error")
                 .poll_ready()
-                .map_err(::error::from));
+                .map_err(crate::error::from));
 
             written += buf.len() as u64;
             let tx = tx.as_mut().expect("tx only taken on error");
             if let Err(_) = tx.send_data(buf.take().freeze().into()) {
-                return Err(::error::timedout(None));
+                return Err(crate::error::timedout(None));
             }
         })
     }

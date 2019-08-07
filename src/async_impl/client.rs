@@ -5,7 +5,7 @@ use std::net::IpAddr;
 
 use bytes::Bytes;
 use futures::{Async, Future, Poll};
-use header::{
+use crate::header::{
     Entry,
     HeaderMap,
     HeaderValue,
@@ -31,16 +31,16 @@ use tokio::{clock, timer::Delay};
 
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
-use connect::Connector;
-use into_url::{expect_uri, try_uri};
-use cookie;
-use redirect::{self, RedirectPolicy, remove_sensitive_headers};
-use {IntoUrl, Method, Proxy, StatusCode, Url};
-use ::proxy::get_proxies;
+use crate::connect::Connector;
+use crate::into_url::{expect_uri, try_uri};
+use crate::cookie;
+use crate::redirect::{self, RedirectPolicy, remove_sensitive_headers};
+use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
+use crate::proxy::get_proxies;
 #[cfg(feature = "tls")]
-use {Certificate, Identity};
+use crate::{Certificate, Identity};
 #[cfg(feature = "tls")]
-use ::tls::TlsBackend;
+use crate::tls::TlsBackend;
 
 static DEFAULT_USER_AGENT: &'static str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -133,7 +133,7 @@ impl ClientBuilder {
     ///
     /// This method fails if TLS backend cannot be initialized, or the resolver
     /// cannot load the system configuration.
-    pub fn build(self) -> ::Result<Client> {
+    pub fn build(self) -> crate::Result<Client> {
         let config = self.config;
         let proxies = Arc::new(config.proxies);
 
@@ -545,7 +545,7 @@ impl Client {
     ///
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
-    pub fn execute(&self, request: Request) -> impl Future<Item = Response, Error = ::Error> {
+    pub fn execute(&self, request: Request) -> impl Future<Item = Response, Error = crate::Error> {
         self.execute_request(request)
     }
 
@@ -568,7 +568,7 @@ impl Client {
 
         // Add cookies from the cookie store.
         if let Some(cookie_store_wrapper) = self.inner.cookie_store.as_ref() {
-            if headers.get(::header::COOKIE).is_none() {
+            if headers.get(crate::header::COOKIE).is_none() {
                 let cookie_store = cookie_store_wrapper.read().unwrap();
                 add_cookie_header(&mut headers, &cookie_store, &url);
             }
@@ -695,7 +695,7 @@ pub(super) struct Pending {
 
 enum PendingInner {
     Request(PendingRequest),
-    Error(Option<::Error>),
+    Error(Option<crate::Error>),
 }
 
 struct PendingRequest {
@@ -713,7 +713,7 @@ struct PendingRequest {
 }
 
 impl Pending {
-    pub(super) fn new_err(err: ::Error) -> Pending {
+    pub(super) fn new_err(err: crate::Error) -> Pending {
         Pending {
             inner: PendingInner::Error(Some(err)),
         }
@@ -722,7 +722,7 @@ impl Pending {
 
 impl Future for Pending {
     type Item = Response;
-    type Error = ::Error;
+    type Error = crate::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.inner {
@@ -734,12 +734,12 @@ impl Future for Pending {
 
 impl Future for PendingRequest {
     type Item = Response;
-    type Error = ::Error;
+    type Error = crate::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         if let Some(ref mut delay) = self.timeout {
             if let Async::Ready(()) = try_!(delay.poll(), &self.url) {
-                return Err(::error::timedout(Some(self.url.clone())));
+                return Err(crate::error::timedout(Some(self.url.clone())));
             }
         }
 
@@ -850,10 +850,10 @@ impl Future for PendingRequest {
                             debug!("redirect_policy disallowed redirection to '{}'", loc);
                         },
                         redirect::Action::LoopDetected => {
-                            return Err(::error::loop_detected(self.url.clone()));
+                            return Err(crate::error::loop_detected(self.url.clone()));
                         },
                         redirect::Action::TooManyRedirects => {
-                            return Err(::error::too_many_redirects(self.url.clone()));
+                            return Err(crate::error::too_many_redirects(self.url.clone()));
                         }
                     }
                 }
@@ -903,7 +903,7 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &cookie::CookieStore
         .join("; ");
     if !header.is_empty() {
         headers.insert(
-            ::header::COOKIE,
+            crate::header::COOKIE,
             HeaderValue::from_bytes(header.as_bytes()).unwrap()
         );
     }
