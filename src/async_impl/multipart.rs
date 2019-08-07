@@ -61,7 +61,7 @@ impl Form {
     /// # Examples
     ///
     /// ```
-    /// let form = reqwest::async::multipart::Form::new()
+    /// let form = reqwest::r#async::multipart::Form::new()
     ///     .text("username", "seanmonstar")
     ///     .text("password", "secret");
     /// ```
@@ -98,7 +98,7 @@ impl Form {
 
     /// Consume this instance and transform into an instance of hyper::Body for use in a request.
     pub(crate) fn stream(mut self) -> hyper::Body {
-        if self.inner.fields.len() == 0 {
+        if self.inner.fields.is_empty(){
             return hyper::Body::empty();
         }
 

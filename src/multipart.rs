@@ -296,7 +296,7 @@ impl fmt::Debug for Reader {
 impl Reader {
     fn new(form: Form) -> Reader {
         let mut reader = Reader {
-            form: form,
+            form,
             active_reader: None,
         };
         reader.next_reader();
@@ -304,13 +304,13 @@ impl Reader {
     }
 
     fn next_reader(&mut self) {
-        self.active_reader = if self.form.inner.fields.len() != 0 {
+        self.active_reader = if !self.form.inner.fields.is_empty() {
             // We need to move out of the vector here because we are consuming the field's reader
             let (name, field) = self.form.inner.fields.remove(0);
             let boundary = Cursor::new(format!("--{}\r\n", self.form.boundary()));
             let header = Cursor::new({
                 // Try to use cached headers created by compute_length
-                let mut h = if self.form.inner.computed_headers.len() > 0 {
+                let mut h = if !self.form.inner.computed_headers.is_empty() {
                     self.form.inner.computed_headers.remove(0)
                 } else {
                     self.form.inner.percent_encoding.encode_headers(&name, field.metadata())
@@ -324,7 +324,7 @@ impl Reader {
                 .chain(Cursor::new("\r\n"));
             // According to https://tools.ietf.org/html/rfc2046#section-5.1.1
             // the very last field has a special boundary
-            if self.form.inner.fields.len() != 0 {
+            if !self.form.inner.fields.is_empty() {
                 Some(Box::new(reader))
             } else {
                 Some(Box::new(reader.chain(Cursor::new(
@@ -352,7 +352,7 @@ impl Read for Reader {
                 }
                 None => return Ok(total_bytes_read),
             };
-            if last_read_bytes == 0 && buf.len() != 0 {
+            if last_read_bytes == 0 && !buf.is_empty() {
                 self.next_reader();
             }
         }

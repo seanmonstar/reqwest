@@ -248,7 +248,7 @@ impl fmt::Debug for Error {
     }
 }
 
-static BLOCK_IN_FUTURE: &'static str = "blocking Client used inside a Future context";
+static BLOCK_IN_FUTURE: &str = "blocking Client used inside a Future context";
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
