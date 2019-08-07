@@ -8,6 +8,8 @@ use futures::{Async, Future, Stream};
 use futures::future::{self, Either};
 use futures::sync::{mpsc, oneshot};
 
+use log::{trace};
+
 use crate::request::{Request, RequestBuilder};
 use crate::response::Response;
 use crate::{async_impl, header, Method, IntoUrl, Proxy, RedirectPolicy, wait};

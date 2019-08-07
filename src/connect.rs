@@ -1,9 +1,9 @@
-use futures::Future;
+use futures::{Future, try_ready};
 use http::uri::Scheme;
 use hyper::client::connect::{Connect, Connected, Destination};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Timeout;
-
+use log::{trace, debug};
 
 #[cfg(feature = "default-tls")]
 use native_tls::{TlsConnector, TlsConnectorBuilder};
@@ -488,7 +488,7 @@ mod native_tls_async {
 
     use futures::{Poll, Future, Async};
     use native_tls::{self, HandshakeError, Error, TlsConnector};
-    use tokio_io::{AsyncRead, AsyncWrite};
+    use tokio_io::{AsyncRead, AsyncWrite, try_nb};
 
     /// A wrapper around an underlying raw stream which implements the TLS or SSL
     /// protocol.

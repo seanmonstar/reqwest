@@ -31,6 +31,8 @@ use futures::{Async, Future, Poll, Stream};
 use hyper::{HeaderMap};
 use hyper::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
 
+use log::{warn};
+
 use super::{Body, Chunk};
 use crate::error;
 

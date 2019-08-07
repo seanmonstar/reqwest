@@ -1,6 +1,6 @@
 use std::fmt;
 
-use futures::{Future, Stream, Poll, Async};
+use futures::{Future, Stream, Poll, Async, try_ready};
 use bytes::{Buf, Bytes};
 use hyper::body::Payload;
 use tokio::timer::Delay;

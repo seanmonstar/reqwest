@@ -28,6 +28,8 @@ use mime;
 use native_tls::TlsConnector;
 use tokio::{clock, timer::Delay};
 
+use log::{debug};
+
 
 use super::request::{Request, RequestBuilder};
 use super::response::Response;

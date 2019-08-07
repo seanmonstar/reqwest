@@ -3,7 +3,7 @@ use std::fmt;
 use std::io::{self, Cursor, Read};
 
 use bytes::Bytes;
-use futures::Future;
+use futures::{Future, try_ready};
 use hyper::{self};
 
 use crate::{async_impl};

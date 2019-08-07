@@ -173,52 +173,10 @@
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
 
-extern crate base64;
-extern crate bytes;
 extern crate cookie as cookie_crate;
-extern crate cookie_store;
-extern crate encoding_rs;
-#[macro_use]
-extern crate futures;
-extern crate http;
-extern crate hyper;
 #[cfg(feature = "hyper-011")]
-pub extern crate hyper_old_types as hyper_011;
-#[cfg(feature = "default-tls")]
-extern crate hyper_tls;
-#[macro_use]
-extern crate log;
-extern crate flate2;
-extern crate mime;
-extern crate mime_guess;
-#[cfg(feature = "default-tls")]
-extern crate native_tls;
-extern crate serde;
-extern crate serde_json;
-extern crate serde_urlencoded;
-extern crate time;
-extern crate tokio;
-extern crate tokio_executor;
-#[cfg_attr(feature = "default-tls", macro_use)]
-extern crate tokio_io;
-extern crate tokio_timer;
-#[cfg(feature = "trust-dns")]
-extern crate trust_dns_resolver;
-extern crate url;
-extern crate uuid;
-#[cfg(feature = "socks")]
-extern crate socks;
-#[cfg(target_os = "windows")]
-extern crate winreg;
+pub use hyper_old_types as hyper_011;
 
-#[cfg(feature = "rustls-tls")]
-extern crate hyper_rustls;
-#[cfg(feature = "rustls-tls")]
-extern crate tokio_rustls;
-#[cfg(feature = "rustls-tls")]
-extern crate webpki_roots;
-#[cfg(feature = "rustls-tls")]
-extern crate rustls;
 #[cfg(test)]
 #[macro_use]
 extern crate doc_comment;
@@ -242,7 +200,6 @@ pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
 #[cfg(feature = "tls")]
 pub use self::tls::{Certificate, Identity};
-
 
 // this module must be first because of the `try_` macro
 #[macro_use]
