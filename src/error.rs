@@ -4,7 +4,7 @@ use std::io;
 
 use tokio_executor::EnterError;
 
-use {StatusCode, Url};
+use crate::{StatusCode, Url};
 
 /// The Errors that may occur when processing a `Request`.
 ///
@@ -253,8 +253,8 @@ static BLOCK_IN_FUTURE: &'static str = "blocking Client used inside a Future con
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(ref url) = self.inner.url {
-            try!(fmt::Display::fmt(url, f));
-            try!(f.write_str(": "));
+            r#try!(fmt::Display::fmt(url, f));
+            r#try!(f.write_str(": "));
         }
         match self.inner.kind {
             Kind::Http(ref e) => fmt::Display::fmt(e, f),
@@ -477,13 +477,13 @@ impl From<::rustls::TLSError> for Kind {
     }
 }
 
-impl<T> From<::wait::Waited<T>> for Kind
+impl<T> From<crate::wait::Waited<T>> for Kind
 where T: Into<Kind> {
-    fn from(err: ::wait::Waited<T>) -> Kind {
+    fn from(err: crate::wait::Waited<T>) -> Kind {
         match err {
-            ::wait::Waited::TimedOut =>  io_timeout().into(),
-            ::wait::Waited::Executor(e) => e.into(),
-            ::wait::Waited::Inner(e) => e.into(),
+            crate::wait::Waited::TimedOut =>  io_timeout().into(),
+            crate::wait::Waited::Executor(e) => e.into(),
+            crate::wait::Waited::Inner(e) => e.into(),
         }
     }
 }
@@ -558,7 +558,7 @@ macro_rules! try_ {
         match $e {
             Ok(v) => v,
             Err(err) => {
-                return Err(::error::from(err));
+                return Err(crate::error::from(err));
             }
         }
     );
@@ -566,7 +566,7 @@ macro_rules! try_ {
         match $e {
             Ok(v) => v,
             Err(err) => {
-                return Err(::Error::from(::error::InternalFrom(err, Some($url.clone()))));
+                return Err(crate::Error::from(crate::error::InternalFrom(err, Some($url.clone()))));
             }
         }
     )
@@ -580,7 +580,7 @@ macro_rules! try_io {
                 return Ok(::futures::Async::NotReady);
             }
             Err(err) => {
-                return Err(::error::from_io(err));
+                return Err(crate::error::from_io(err));
             }
         }
     )

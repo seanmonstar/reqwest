@@ -199,7 +199,7 @@ impl Part {
     }
 
     /// Tries to set the mime of this part.
-    pub fn mime_str(self, mime: &str) -> ::Result<Part> {
+    pub fn mime_str(self, mime: &str) -> crate::Result<Part> {
         Ok(self.mime(try_!(mime.parse())))
     }
 

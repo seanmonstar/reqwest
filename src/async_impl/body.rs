@@ -72,7 +72,7 @@ impl Body {
 
 impl Stream for Body {
     type Item = Chunk;
-    type Error = ::Error;
+    type Error = crate::Error;
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
@@ -80,10 +80,10 @@ impl Stream for Body {
             Inner::Hyper { ref mut body, ref mut timeout } => {
                 if let Some(ref mut timeout) = timeout {
                     if let Async::Ready(()) = try_!(timeout.poll()) {
-                        return Err(::error::timedout(None));
+                        return Err(crate::error::timedout(None));
                     }
                 }
-                try_ready!(body.poll_data().map_err(::error::from))
+                try_ready!(body.poll_data().map_err(crate::error::from))
             },
             Inner::Reusable(ref mut bytes) => {
                 return if bytes.is_empty() {

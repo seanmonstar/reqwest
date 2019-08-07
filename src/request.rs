@@ -5,10 +5,10 @@ use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
 
-use body::{self, Body};
-use header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
+use crate::body::{self, Body};
+use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 use http::HttpTryFrom;
-use {async_impl, Client, Method, Url};
+use crate::{async_impl, Client, Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -20,7 +20,7 @@ pub struct Request {
 #[derive(Debug)]
 pub struct RequestBuilder {
     client: Client,
-    request: ::Result<Request>,
+    request: crate::Result<Request>,
 }
 
 impl Request {
@@ -102,7 +102,7 @@ impl Request {
     }
 
     pub(crate) fn into_async(self) -> (async_impl::Request, Option<body::Sender>) {
-        use header::CONTENT_LENGTH;
+        use crate::header::CONTENT_LENGTH;
 
         let mut req_async = self.inner;
         let body = self.body.and_then(|body| {
@@ -118,7 +118,7 @@ impl Request {
 }
 
 impl RequestBuilder {
-    pub(crate) fn new(client: Client, request: ::Result<Request>) -> RequestBuilder {
+    pub(crate) fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
         RequestBuilder {
             client,
             request,
@@ -149,10 +149,10 @@ impl RequestBuilder {
                 Ok(key) => {
                     match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
                         Ok(value) => { req.headers_mut().append(key, value); }
-                        Err(e) => error = Some(::error::from(e.into())),
+                        Err(e) => error = Some(crate::error::from(e.into())),
                     }
                 },
-                Err(e) => error = Some(::error::from(e.into())),
+                Err(e) => error = Some(crate::error::from(e.into())),
             };
         }
         if let Some(err) = error {
@@ -186,7 +186,7 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn headers(mut self, headers: ::header::HeaderMap) -> RequestBuilder {
+    pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             async_impl::request::replace_headers(req.headers_mut(), headers);
         }
@@ -239,7 +239,7 @@ impl RequestBuilder {
             None => format!("{}:", username)
         };
         let header_value = format!("Basic {}", encode(&auth));
-        self.header(::header::AUTHORIZATION, &*header_value)
+        self.header(crate::header::AUTHORIZATION, &*header_value)
     }
 
     /// Enable HTTP bearer authentication.
@@ -258,7 +258,7 @@ impl RequestBuilder {
         T: fmt::Display,
     {
         let header_value = format!("Bearer {}", token);
-        self.header(::header::AUTHORIZATION, &*header_value)
+        self.header(crate::header::AUTHORIZATION, &*header_value)
     }
 
     /// Set the request body.
@@ -350,7 +350,7 @@ impl RequestBuilder {
             let serializer = serde_urlencoded::Serializer::new(&mut pairs);
 
             if let Err(err) = query.serialize(serializer) {
-                error = Some(::error::from(err));
+                error = Some(crate::error::from(err));
             }
         }
         if let Ok(ref mut req) = self.request {
@@ -401,7 +401,7 @@ impl RequestBuilder {
                     );
                     *req.body_mut() = Some(body.into());
                 },
-                Err(err) => error = Some(::error::from(err)),
+                Err(err) => error = Some(crate::error::from(err)),
             }
         }
         if let Some(err) = error {
@@ -446,7 +446,7 @@ impl RequestBuilder {
                     );
                     *req.body_mut() = Some(body.into());
                 },
-                Err(err) => error = Some(::error::from(err)),
+                Err(err) => error = Some(crate::error::from(err)),
             }
         }
         if let Some(err) = error {
@@ -474,7 +474,7 @@ impl RequestBuilder {
     /// ```
     ///
     /// See [`multipart`](multipart/) for more examples.
-    pub fn multipart(self, mut multipart: ::multipart::Form) -> RequestBuilder {
+    pub fn multipart(self, mut multipart: crate::multipart::Form) -> RequestBuilder {
         let mut builder = self.header(
             CONTENT_TYPE,
             format!(
@@ -493,7 +493,7 @@ impl RequestBuilder {
 
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
-    pub fn build(self) -> ::Result<Request> {
+    pub fn build(self) -> crate::Result<Request> {
         self.request
     }
 
@@ -503,7 +503,7 @@ impl RequestBuilder {
     ///
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
-    pub fn send(self) -> ::Result<::Response> {
+    pub fn send(self) -> crate::Result<crate::Response> {
         self.client.execute(self.request?)
     }
 
@@ -579,8 +579,8 @@ fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>, req: &Request
 
 #[cfg(test)]
 mod tests {
-    use {body, Client, Method};
-    use header::{ACCEPT, HOST, HeaderMap, HeaderValue, CONTENT_TYPE};
+    use crate::{body, Client, Method};
+    use crate::header::{ACCEPT, HOST, HeaderMap, HeaderValue, CONTENT_TYPE};
     use std::collections::{BTreeMap, HashMap};
     use serde::Serialize;
     use serde_json;

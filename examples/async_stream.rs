@@ -13,7 +13,7 @@ use std::path::Path;
 
 use bytes::Bytes;
 use futures::{Async, Future, Poll, Stream};
-use reqwest::async::{Client, Decoder};
+use reqwest::r#async::{Client, Decoder};
 use tokio::fs::File;
 use tokio::io::AsyncRead;
 

@@ -196,14 +196,14 @@ macro_rules! server {
                 $($f: $v,)+
             }),*
         ];
-        ::support::server::spawn(txns)
+        crate::support::server::spawn(txns)
     })
 }
 
 #[macro_export]
 macro_rules! __internal__txn {
     ($($field:ident: $val:expr,)+) => (
-        ::support::server::Txn {
+        crate::support::server::Txn {
             $( $field: __internal__prop!($field: $val), )+
             .. Default::default()
         }

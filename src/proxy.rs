@@ -6,7 +6,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use http::{header::HeaderValue, Uri};
 use hyper::client::connect::Destination;
 use url::percent_encoding::percent_decode;
-use {IntoUrl, Url};
+use crate::{IntoUrl, Url};
 use std::collections::HashMap;
 use std::env;
 #[cfg(target_os = "windows")]
@@ -66,17 +66,17 @@ pub enum ProxyScheme {
 /// parsing from a URL-like type, whilst also supporting proxy schemes
 /// built directly using the factory methods.
 pub trait IntoProxyScheme {
-    fn into_proxy_scheme(self) -> ::Result<ProxyScheme>;
+    fn into_proxy_scheme(self) -> crate::Result<ProxyScheme>;
 }
 
 impl<T: IntoUrl> IntoProxyScheme for T {
-    fn into_proxy_scheme(self) -> ::Result<ProxyScheme> {
+    fn into_proxy_scheme(self) -> crate::Result<ProxyScheme> {
         ProxyScheme::parse(self.into_url()?)
     }
 }
 
 impl IntoProxyScheme for ProxyScheme {
-    fn into_proxy_scheme(self) -> ::Result<ProxyScheme> {
+    fn into_proxy_scheme(self) -> crate::Result<ProxyScheme> {
         Ok(self)
     }
 }
@@ -96,7 +96,7 @@ impl Proxy {
     /// # }
     /// # fn main() {}
     /// ```
-    pub fn http<U: IntoProxyScheme>(proxy_scheme: U) -> ::Result<Proxy> {
+    pub fn http<U: IntoProxyScheme>(proxy_scheme: U) -> crate::Result<Proxy> {
         Ok(Proxy::new(Intercept::Http(
             proxy_scheme.into_proxy_scheme()?
         )))
@@ -116,7 +116,7 @@ impl Proxy {
     /// # }
     /// # fn main() {}
     /// ```
-    pub fn https<U: IntoProxyScheme>(proxy_scheme: U) -> ::Result<Proxy> {
+    pub fn https<U: IntoProxyScheme>(proxy_scheme: U) -> crate::Result<Proxy> {
         Ok(Proxy::new(Intercept::Https(
             proxy_scheme.into_proxy_scheme()?
         )))
@@ -136,7 +136,7 @@ impl Proxy {
     /// # }
     /// # fn main() {}
     /// ```
-    pub fn all<U: IntoProxyScheme>(proxy_scheme: U) -> ::Result<Proxy> {
+    pub fn all<U: IntoProxyScheme>(proxy_scheme: U) -> crate::Result<Proxy> {
         Ok(Proxy::new(Intercept::All(
             proxy_scheme.into_proxy_scheme()?
         )))
@@ -266,10 +266,10 @@ impl ProxyScheme {
     // To start conservative, keep builders private for now.
 
     /// Proxy traffic via the specified URL over HTTP
-    fn http<T: IntoUrl>(url: T) -> ::Result<Self> {
+    fn http<T: IntoUrl>(url: T) -> crate::Result<Self> {
         Ok(ProxyScheme::Http {
             auth: None,
-            uri: ::into_url::expect_uri(&url.into_url()?),
+            uri: crate::into_url::expect_uri(&url.into_url()?),
         })
     }
 
@@ -326,7 +326,7 @@ impl ProxyScheme {
     ///
     /// Supported schemes: HTTP, HTTPS, (SOCKS5, SOCKS5H if `socks` feature is enabled).
     // Private for now...
-    fn parse(url: Url) -> ::Result<Self> {
+    fn parse(url: Url) -> crate::Result<Self> {
         // Resolve URL to a host and port
         #[cfg(feature = "socks")]
         let to_addr = || {
@@ -346,7 +346,7 @@ impl ProxyScheme {
             "socks5" => Self::socks5(to_addr()?)?,
             #[cfg(feature = "socks")]
             "socks5h" => Self::socks5h(to_addr()?)?,
-            _ => return Err(::error::unknown_proxy_scheme())
+            _ => return Err(crate::error::unknown_proxy_scheme())
         };
 
         if let Some(pwd) = url.password() {
@@ -387,7 +387,7 @@ impl Intercept {
 struct Custom {
     // This auth only applies if the returned ProxyScheme doesn't have an auth...
     auth: Option<HeaderValue>,
-    func: Arc<dyn Fn(&Url) -> Option<::Result<ProxyScheme>> + Send + Sync + 'static>,
+    func: Arc<dyn Fn(&Url) -> Option<crate::Result<ProxyScheme>> + Send + Sync + 'static>,
 }
 
 impl Custom {

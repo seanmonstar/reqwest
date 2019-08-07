@@ -18,7 +18,7 @@ use serde_json;
 use url::Url;
 
 
-use cookie;
+use crate::cookie;
 use super::Decoder;
 use super::body::Body;
 
@@ -139,14 +139,14 @@ impl Response {
     }
 
     /// Get the response text
-    pub fn text(&mut self) -> impl Future<Item = String, Error = ::Error> {
+    pub fn text(&mut self) -> impl Future<Item = String, Error = crate::Error> {
         self.text_with_charset("utf-8")
     }
 
     /// Get the response text given a specific encoding
-    pub fn text_with_charset(&mut self, default_encoding: &str) -> impl Future<Item = String, Error = ::Error> {
+    pub fn text_with_charset(&mut self, default_encoding: &str) -> impl Future<Item = String, Error = crate::Error> {
         let body = mem::replace(&mut self.body, Decoder::empty());
-        let content_type = self.headers.get(::header::CONTENT_TYPE)
+        let content_type = self.headers.get(crate::header::CONTENT_TYPE)
             .and_then(|value| {
                 value.to_str().ok()
             })
@@ -170,7 +170,7 @@ impl Response {
 
     /// Try to deserialize the response body as JSON using `serde`.
     #[inline]
-    pub fn json<T: DeserializeOwned>(&mut self) -> impl Future<Item = T, Error = ::Error> {
+    pub fn json<T: DeserializeOwned>(&mut self) -> impl Future<Item = T, Error = crate::Error> {
         let body = mem::replace(&mut self.body, Decoder::empty());
 
         Json {
@@ -201,9 +201,9 @@ impl Response {
     /// # fn main() {}
     /// ```
     #[inline]
-    pub fn error_for_status(self) -> ::Result<Self> {
+    pub fn error_for_status(self) -> crate::Result<Self> {
         if self.status.is_client_error() || self.status.is_server_error() {
-            Err(::error::status_code(*self.url, self.status))
+            Err(crate::error::status_code(*self.url, self.status))
         } else {
             Ok(self)
         }
@@ -231,9 +231,9 @@ impl Response {
     /// # fn main() {}
     /// ```
     #[inline]
-    pub fn error_for_status_ref(&self) -> ::Result<&Self> {
+    pub fn error_for_status_ref(&self) -> crate::Result<&Self> {
         if self.status.is_client_error() || self.status.is_server_error() {
-            Err(::error::status_code(*self.url.clone(), self.status))
+            Err(crate::error::status_code(*self.url.clone(), self.status))
         } else {
             Ok(self)
         }
@@ -278,7 +278,7 @@ struct Json<T> {
 
 impl<T: DeserializeOwned> Future for Json<T> {
     type Item = T;
-    type Error = ::Error;
+    type Error = crate::Error;
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let bytes = try_ready!(self.concat.poll());
         let t = try_!(serde_json::from_slice(&bytes));
@@ -301,7 +301,7 @@ struct Text {
 
 impl Future for Text {
     type Item = String;
-    type Error = ::Error;
+    type Error = crate::Error;
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let bytes = try_ready!(self.concat.poll());
         // a block because of borrow checker

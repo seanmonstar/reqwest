@@ -44,8 +44,8 @@ use std::path::Path;
 
 use mime_guess::{self, Mime};
 
-use async_impl::multipart::{FormParts, PartMetadata, PartProps};
-use {Body};
+use crate::async_impl::multipart::{FormParts, PartMetadata, PartProps};
+use crate::{Body};
 
 /// A multipart/form-data request.
 pub struct Form {
@@ -233,7 +233,7 @@ impl Part {
     }
 
     /// Tries to set the mime of this part.
-    pub fn mime_str(self, mime: &str) -> ::Result<Part> {
+    pub fn mime_str(self, mime: &str) -> crate::Result<Part> {
         Ok(self.mime(try_!(mime.parse())))
     }
 
