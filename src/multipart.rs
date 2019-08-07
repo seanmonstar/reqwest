@@ -213,7 +213,7 @@ impl Part {
         let ext = path.extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("");
-        let mime = mime_guess::get_mime_type(ext);
+        let mime = mime_guess::from_ext(ext).first_or_octet_stream();
         let file = File::open(path)?;
         let field = Part::new(Body::from(file))
             .mime(mime);
