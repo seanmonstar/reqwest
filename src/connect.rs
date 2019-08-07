@@ -394,7 +394,7 @@ fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<http::header::Header
     ", host, port).into_bytes();
 
         if let Some(value) = auth {
-            log::debug!("tunnel to {}:{} using basic auth", host, port);
+            debug!("tunnel to {}:{} using basic auth", host, port);
             buf.extend_from_slice(b"Proxy-Authorization: ");
             buf.extend_from_slice(value.as_bytes());
             buf.extend_from_slice(b"\r\n");
