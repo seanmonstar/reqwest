@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use std::borrow::Cow;
 
 use encoding_rs::{Encoding, UTF_8};
-use futures::{Async, Future, Poll, Stream};
+use futures::{Async, Future, Poll, Stream, try_ready};
 use futures::stream::Concat2;
 use http;
 use hyper::{HeaderMap, StatusCode, Version};
@@ -16,6 +16,7 @@ use tokio::timer::Delay;
 use serde::de::DeserializeOwned;
 use serde_json;
 use url::Url;
+use log::{debug};
 
 
 use crate::cookie;
