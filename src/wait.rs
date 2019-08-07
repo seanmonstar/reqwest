@@ -20,7 +20,7 @@ pub(crate) fn stream<S>(stream: S, timeout: Option<Duration>) -> WaitStream<S>
 where S: Stream {
     WaitStream {
         stream: executor::spawn(stream),
-        timeout: timeout,
+        timeout,
     }
 }
 

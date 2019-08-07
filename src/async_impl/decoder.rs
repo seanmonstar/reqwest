@@ -117,12 +117,12 @@ impl Decoder {
             content_encoding_gzip = headers
                 .get_all(CONTENT_ENCODING)
                 .iter()
-                .fold(false, |acc, enc| acc || enc == "gzip");
+                .any(|enc| enc == "gzip");
             content_encoding_gzip ||
             headers
                 .get_all(TRANSFER_ENCODING)
                 .iter()
-                .fold(false, |acc, enc| acc || enc == "gzip")
+                .any(|enc| enc == "gzip")
         };
         if is_gzip {
             if let Some(content_length) = headers.get(CONTENT_LENGTH) {
@@ -264,7 +264,7 @@ impl<S> ReadableChunks<S> {
     pub(crate) fn new(stream: S) -> Self {
         ReadableChunks {
             state: ReadState::NotReady,
-            stream: stream,
+            stream,
         }
     }
 }

@@ -184,7 +184,7 @@ impl Response {
     /// # Example
     ///
     /// ```
-    /// # use reqwest::async::Response;
+    /// # use reqwest::r#async::Response;
     /// fn on_response(res: Response) {
     ///     match res.error_for_status() {
     ///         Ok(_res) => (),
@@ -214,7 +214,7 @@ impl Response {
     /// # Example
     ///
     /// ```
-    /// # use reqwest::async::Response;
+    /// # use reqwest::r#async::Response;
     /// fn on_response(res: &Response) {
     ///     match res.error_for_status_ref() {
     ///         Ok(_res) => (),
@@ -263,7 +263,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
             status: parts.status,
             headers: parts.headers,
             url: Box::new(url),
-            body: body,
+            body,
             version: parts.version,
             extensions: parts.extensions,
         }
@@ -307,10 +307,7 @@ impl Future for Text {
         // a block because of borrow checker
         {
             let (text, _, _) = self.encoding.decode(&bytes);
-            match text {
-                Cow::Owned(s) => return Ok(Async::Ready(s)),
-                _ => (),
-            }
+            if let Cow::Owned(s) = text { return Ok(Async::Ready(s)) }
         }
         unsafe {
             // decoding returned Cow::Borrowed, meaning these bytes
@@ -339,8 +336,8 @@ pub trait ResponseBuilderExt {
     /// # use std::error::Error;
     /// use url::Url;
     /// use http::response::Builder;
-    /// use reqwest::async::ResponseBuilderExt;
-    /// # fn main() -> Result<(), Box<Error>> {
+    /// use reqwest::r#async::ResponseBuilderExt;
+    /// # fn main() -> Result<(), Box<dyn Error>> {
     /// let response = Builder::new()
     ///     .status(200)
     ///     .url(Url::parse("http://example.com")?)

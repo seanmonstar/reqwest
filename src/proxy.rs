@@ -397,8 +397,7 @@ impl Custom {
             uri.scheme(),
             uri.host(),
             uri.port().map(|_| ":").unwrap_or(""),
-            uri.port().map(|p| p.to_string()).unwrap_or(String::new())
-        )
+            uri.port().map(|p| p.to_string()).unwrap_or_default())
             .parse()
             .expect("should be valid Url");
 
@@ -517,7 +516,7 @@ fn get_from_environment() -> HashMap<String, Url> {
         if key.ends_with(PROXY_KEY_ENDS) {
             let end_indx = key.len() - PROXY_KEY_ENDS.len();
             let schema = &key[..end_indx];
-            insert_proxy(&mut proxies, String::from(schema), String::from(value));
+            insert_proxy(&mut proxies, String::from(schema), value);
         }
     }
     proxies

@@ -394,15 +394,12 @@ fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<::http::header::Head
         Host: {0}:{1}\r\n\
     ", host, port).into_bytes();
 
-    match auth {
-        Some(value) => {
+        if let Some(value) = auth {
             debug!("tunnel to {}:{} using basic auth", host, port);
             buf.extend_from_slice(b"Proxy-Authorization: ");
             buf.extend_from_slice(value.as_bytes());
             buf.extend_from_slice(b"\r\n");
-        },
-        None => (),
-    }
+        }
 
     // headers end
     buf.extend_from_slice(b"\r\n");
@@ -699,7 +696,7 @@ mod tests {
     use super::tunnel;
     use crate::proxy;
 
-    static TUNNEL_OK: &'static [u8] = b"\
+    static TUNNEL_OK: &[u8] = b"\
         HTTP/1.1 200 OK\r\n\
         \r\n\
     ";

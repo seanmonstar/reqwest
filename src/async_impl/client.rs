@@ -42,7 +42,7 @@ use crate::{Certificate, Identity};
 #[cfg(feature = "tls")]
 use crate::tls::TlsBackend;
 
-static DEFAULT_USER_AGENT: &'static str =
+static DEFAULT_USER_AGENT: &str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 /// An asynchronous `Client` to make Requests with.
@@ -101,7 +101,7 @@ impl ClientBuilder {
         ClientBuilder {
             config: Config {
                 gzip: true,
-                headers: headers,
+                headers,
                 #[cfg(feature = "default-tls")]
                 hostname_verification: true,
                 #[cfg(feature = "tls")]
@@ -338,7 +338,7 @@ impl ClientBuilder {
     pub fn use_sys_proxy(mut self) -> ClientBuilder {
         let proxies = get_proxies();
         self.config.proxies.push(Proxy::custom(move |url| {
-            return if proxies.contains_key(url.scheme()) {
+            if proxies.contains_key(url.scheme()) {
                 Some((*proxies.get(url.scheme()).unwrap()).clone())
             } else {
                 None
@@ -610,16 +610,16 @@ impl Client {
 
         Pending {
             inner: PendingInner::Request(PendingRequest {
-                method: method,
-                url: url,
-                headers: headers,
+                method,
+                url,
+                headers,
                 body: reusable,
 
                 urls: Vec::new(),
 
                 client: self.inner.clone(),
 
-                in_flight: in_flight,
+                in_flight,
                 timeout,
             }),
         }
@@ -644,14 +644,11 @@ impl Client {
 
         for proxy in self.inner.proxies.iter() {
             if proxy.is_match(dst) {
-                match proxy.http_basic_auth(dst) {
-                    Some(header) => {
-                        headers.insert(
-                            PROXY_AUTHORIZATION,
-                            header,
-                        );
-                    },
-                    None => (),
+                if let Some(header) = proxy.http_basic_auth(dst) {
+                    headers.insert(
+                        PROXY_AUTHORIZATION,
+                        header,
+                    );
                 }
 
                 break;

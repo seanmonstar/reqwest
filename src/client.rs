@@ -561,7 +561,7 @@ impl ClientHandle {
 
             let (mut rt, client) = match built {
                 Ok((rt, c)) => {
-                    if let Err(_) = spawn_tx.send(Ok(())) {
+                    if spawn_tx.send(Ok(())).is_err() {
                         return;
                     }
                     (rt, c)
@@ -626,7 +626,7 @@ impl ClientHandle {
 
 
         Ok(ClientHandle {
-            timeout: timeout,
+            timeout,
             inner: inner_handle,
         })
     }

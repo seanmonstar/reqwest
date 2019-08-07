@@ -99,7 +99,7 @@ impl Body {
                 let (tx, rx) = hyper::Body::channel();
                 let tx = Sender {
                     body: (read, len),
-                    tx: tx,
+                    tx,
                 };
                 (Some(tx), async_impl::Body::wrap(rx), len)
             },
@@ -250,7 +250,7 @@ impl Sender {
             // input stream as soon as the data received is valid JSON.
             // This behaviour is questionable, but it exists and the
             // fact is that there is actually no remaining data to read.
-            if buf.len() == 0 {
+            if buf.is_empty() {
                 if buf.remaining_mut() == 0 {
                     buf.reserve(8192);
                 }
@@ -285,7 +285,7 @@ impl Sender {
 
             written += buf.len() as u64;
             let tx = tx.as_mut().expect("tx only taken on error");
-            if let Err(_) = tx.send_data(buf.take().freeze().into()) {
+            if tx.send_data(buf.take().freeze().into()).is_err() {
                 return Err(crate::error::timedout(None));
             }
         })

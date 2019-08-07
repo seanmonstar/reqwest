@@ -149,9 +149,9 @@ impl RedirectPolicy {
     ) -> Action {
         self
             .redirect(RedirectAttempt {
-                status: status,
-                next: next,
-                previous: previous,
+                status,
+                next,
+                previous,
             })
             .inner
     }

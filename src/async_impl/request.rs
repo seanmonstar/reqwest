@@ -201,8 +201,8 @@ impl RequestBuilder {
     /// # use futures::future::Future;
     ///
     /// # fn run() -> Result<(), Error> {
-    /// let client = reqwest::async::Client::new();
-    /// let form = reqwest::async::multipart::Form::new()
+    /// let client = reqwest::r#async::Client::new();
+    /// let form = reqwest::r#async::multipart::Form::new()
     ///     .text("key3", "value3")
     ///     .text("key4", "value4");
     ///
