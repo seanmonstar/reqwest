@@ -394,7 +394,7 @@ fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<http::header::Header
     ", host, port).into_bytes();
 
         if let Some(value) = auth {
-            debug!("tunnel to {}:{} using basic auth", host, port);
+            log::debug!("tunnel to {}:{} using basic auth", host, port);
             buf.extend_from_slice(b"Proxy-Authorization: ");
             buf.extend_from_slice(value.as_bytes());
             buf.extend_from_slice(b"\r\n");
@@ -496,7 +496,7 @@ mod native_tls_async {
     /// and both the server and the client are ready for receiving and sending
     /// data. Bytes read from a `TlsStream` are decrypted from `S` and bytes written
     /// to a `TlsStream` are encrypted when passing through to `S`.
-    #[derive(Debug)]
+    #[derive(log::debug)]
     pub struct TlsStream<S> {
         inner: native_tls::TlsStream<S>,
     }
