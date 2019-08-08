@@ -261,12 +261,12 @@ and the compiler could not infer the lifetimes of those references. That means
 people would need to annotate the closure's argument types, which is garbase.
 
 pub trait Redirect {
-    fn redirect(&self, next: &Url, previous: &[Url]) -> ::Result<bool>;
+    fn redirect(&self, next: &Url, previous: &[Url]) -> Result<bool>;
 }
 
 impl<F> Redirect for F
-where F: Fn(&Url, &[Url]) -> ::Result<bool> {
-    fn redirect(&self, next: &Url, previous: &[Url]) -> ::Result<bool> {
+where F: Fn(&Url, &[Url]) -> Result<bool> {
+    fn redirect(&self, next: &Url, previous: &[Url]) -> Result<bool> {
         self(next, previous)
     }
 }

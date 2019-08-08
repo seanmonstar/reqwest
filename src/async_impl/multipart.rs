@@ -512,7 +512,7 @@ mod tests {
         // These prints are for debug purposes in case the test fails
         println!(
             "START REAL\n{}\nEND REAL",
-            ::std::str::from_utf8(&out).unwrap()
+            std::str::from_utf8(&out).unwrap()
         );
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
         assert_eq!(::std::str::from_utf8(&out).unwrap(), expected);
@@ -538,10 +538,10 @@ mod tests {
         // These prints are for debug purposes in case the test fails
         println!(
             "START REAL\n{}\nEND REAL",
-            ::std::str::from_utf8(&out).unwrap()
+            std::str::from_utf8(&out).unwrap()
         );
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
-        assert_eq!(::std::str::from_utf8(&out).unwrap(), expected);
+        assert_eq!(std::str::from_utf8(&out).unwrap(), expected);
     }
 
     #[test]

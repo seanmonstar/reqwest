@@ -57,7 +57,7 @@ fn file() {
     let form = reqwest::multipart::Form::new()
         .file("foo", "Cargo.lock").unwrap();
 
-    let fcontents = ::std::fs::read_to_string("Cargo.lock").unwrap();
+    let fcontents = std::fs::read_to_string("Cargo.lock").unwrap();
 
     let expected_body = format!("\
         --{0}\r\n\

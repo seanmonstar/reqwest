@@ -38,7 +38,7 @@ impl<'a> PolyfillTryInto for &'a String {
     }
 }
 
-pub(crate) fn expect_uri(url: &Url) -> ::hyper::Uri {
+pub(crate) fn expect_uri(url: &Url) -> hyper::Uri {
     url.as_str().parse().expect("a parsed Url should always be a valid Uri")
 }
 

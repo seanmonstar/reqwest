@@ -8,7 +8,7 @@ use tokio_rustls::webpki::DNSNameRef;
 #[derive(Clone)]
 pub struct Certificate {
     #[cfg(feature = "default-tls")]
-    native: ::native_tls::Certificate,
+    native: native_tls::Certificate,
     #[cfg(feature = "rustls-tls")]
     original: Cert,
 }
@@ -30,7 +30,7 @@ enum ClientCert {
     Pkcs12(::native_tls::Identity),
     #[cfg(feature = "rustls-tls")]
     Pem {
-        key: ::rustls::PrivateKey,
+        key: rustls::PrivateKey,
         certs: Vec<::rustls::Certificate>,
     }
 }
@@ -90,7 +90,7 @@ impl Certificate {
     #[cfg(feature = "default-tls")]
     pub(crate) fn add_to_native_tls(
         self,
-        tls: &mut ::native_tls::TlsConnectorBuilder,
+        tls: &mut native_tls::TlsConnectorBuilder,
     ) {
         tls.add_root_certificate(self.native);
     }
@@ -98,8 +98,8 @@ impl Certificate {
     #[cfg(feature = "rustls-tls")]
     pub(crate) fn add_to_rustls(
         self,
-        tls: &mut ::rustls::ClientConfig,
-    ) -> ::Result<()> {
+        tls: &mut rustls::ClientConfig,
+    ) -> crate::Result<()> {
         use std::io::Cursor;
         use rustls::internal::pemfile;
 
@@ -177,7 +177,7 @@ impl Identity {
     /// # }
     /// ```
     #[cfg(feature = "rustls-tls")]
-    pub fn from_pem(buf: &[u8]) -> ::Result<Identity> {
+    pub fn from_pem(buf: &[u8]) -> crate::Result<Identity> {
         use std::io::Cursor;
         use rustls::internal::pemfile;
 
@@ -202,7 +202,7 @@ impl Identity {
             if let (Some(sk), false) = (sk.pop(), certs.is_empty()) {
                 (sk, certs)
             } else {
-                return Err(::error::from(TLSError::General(String::from("private key or certificate not found"))));
+                return Err(crate::error::from(TLSError::General(String::from("private key or certificate not found"))));
             }
         };
 
@@ -217,7 +217,7 @@ impl Identity {
     #[cfg(feature = "default-tls")]
     pub(crate) fn add_to_native_tls(
         self,
-        tls: &mut ::native_tls::TlsConnectorBuilder,
+        tls: &mut native_tls::TlsConnectorBuilder,
     ) -> crate::Result<()> {
         match self.inner {
             ClientCert::Pkcs12(id) => {
@@ -225,22 +225,22 @@ impl Identity {
                 Ok(())
             },
             #[cfg(feature = "rustls-tls")]
-            ClientCert::Pem { .. } => Err(::error::from(::error::Kind::TlsIncompatible))
+            ClientCert::Pem { .. } => Err(crate::error::from(crate::error::Kind::TlsIncompatible))
         }
     }
 
     #[cfg(feature = "rustls-tls")]
     pub(crate) fn add_to_rustls(
         self,
-        tls: &mut ::rustls::ClientConfig,
-    ) -> ::Result<()> {
+        tls: &mut rustls::ClientConfig,
+    ) -> crate::Result<()> {
         match self.inner {
             ClientCert::Pem { key, certs } => {
                 tls.set_single_client_cert(certs, key);
                 Ok(())
             },
             #[cfg(feature = "default-tls")]
-            ClientCert::Pkcs12(..) => return Err(::error::from(::error::Kind::TlsIncompatible))
+            ClientCert::Pkcs12(..) => Err(crate::error::from(crate::error::Kind::TlsIncompatible))
         }
     }
 }

@@ -11,7 +11,7 @@ use std::io::{Read, Write};
 fn test_gzip_response() {
     let content: String = (0..50).into_iter().map(|i| format!("test {}", i)).collect();
     let chunk_size = content.len() / 3;
-    let mut encoder = ::libflate::gzip::Encoder::new(Vec::new()).unwrap();
+    let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
     match encoder.write(content.as_bytes()) {
         Ok(n) => assert!(n > 0, "Failed to write to encoder."),
         _ => panic!("Failed to gzip encode string."),
@@ -74,7 +74,7 @@ fn test_gzip_empty_body() {
         .send()
         .unwrap();
 
-    let mut body = ::std::string::String::new();
+    let mut body = std::string::String::new();
     res.read_to_string(&mut body).unwrap();
 
     assert_eq!(body, "");
@@ -104,7 +104,7 @@ fn test_gzip_invalid_body() {
     // this tests that the request.send() didn't error, but that the error
     // is in reading the body
 
-    let mut body = ::std::string::String::new();
+    let mut body = std::string::String::new();
     res.read_to_string(&mut body).unwrap_err();
 }
 
