@@ -52,7 +52,7 @@ pub struct Proxy {
 pub enum ProxyScheme {
     Http {
         auth: Option<HeaderValue>,
-        uri: ::hyper::Uri,
+        uri: hyper::Uri,
     },
     #[cfg(feature = "socks")]
     Socks5 {
@@ -279,7 +279,7 @@ impl ProxyScheme {
     ///
     /// Current SOCKS5 support is provided via blocking IO.
     #[cfg(feature = "socks")]
-    fn socks5(addr: SocketAddr) -> ::Result<Self> {
+    fn socks5(addr: SocketAddr) -> crate::Result<Self> {
         Ok(ProxyScheme::Socks5 {
             addr,
             auth: None,
@@ -295,7 +295,7 @@ impl ProxyScheme {
     ///
     /// Current SOCKS5 support is provided via blocking IO.
     #[cfg(feature = "socks")]
-    fn socks5h(addr: SocketAddr) -> ::Result<Self> {
+    fn socks5h(addr: SocketAddr) -> crate::Result<Self> {
         Ok(ProxyScheme::Socks5 {
             addr,
             auth: None,
@@ -337,7 +337,7 @@ impl ProxyScheme {
             let mut addr = try_!(host_and_port.to_socket_addrs());
             addr
                 .next()
-                .ok_or_else(::error::unknown_proxy_scheme)
+                .ok_or_else(crate::error::unknown_proxy_scheme)
         };
 
         let mut scheme = match url.scheme() {

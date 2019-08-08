@@ -95,7 +95,7 @@ impl Form {
     /// # Examples
     ///
     /// ```no_run
-    /// # fn run() -> ::std::io::Result<()> {
+    /// # fn run() -> std::io::Result<()> {
     /// let files = reqwest::multipart::Form::new()
     ///     .file("key", "/path/to/file")?;
     /// # Ok(())
@@ -410,7 +410,7 @@ mod tests {
         // These prints are for debug purposes in case the test fails
         println!(
             "START REAL\n{}\nEND REAL",
-            ::std::str::from_utf8(&output).unwrap()
+            std::str::from_utf8(&output).unwrap()
         );
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
         assert_eq!(::std::str::from_utf8(&output).unwrap(), expected);
@@ -446,7 +446,7 @@ mod tests {
         // These prints are for debug purposes in case the test fails
         println!(
             "START REAL\n{}\nEND REAL",
-            ::std::str::from_utf8(&output).unwrap()
+            std::str::from_utf8(&output).unwrap()
         );
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
         assert_eq!(::std::str::from_utf8(&output).unwrap(), expected);
@@ -471,7 +471,7 @@ mod tests {
         // These prints are for debug purposes in case the test fails
         println!(
             "START REAL\n{}\nEND REAL",
-            ::std::str::from_utf8(&output).unwrap()
+            std::str::from_utf8(&output).unwrap()
         );
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
         assert_eq!(::std::str::from_utf8(&output).unwrap(), expected);

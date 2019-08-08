@@ -109,7 +109,7 @@ impl ClientBuilder {
                 #[cfg(feature = "tls")]
                 certs_verification: true,
                 connect_timeout: None,
-                max_idle_per_host: ::std::usize::MAX,
+                max_idle_per_host: std::usize::MAX,
                 proxies: Vec::new(),
                 redirect_policy: RedirectPolicy::default(),
                 referer: true,
@@ -160,9 +160,9 @@ impl ClientBuilder {
                 },
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::Rustls => {
-                    use ::tls::NoVerifier;
+                    use crate::tls::NoVerifier;
 
-                    let mut tls = ::rustls::ClientConfig::new();
+                    let mut tls = rustls::ClientConfig::new();
                     if config.http2_only {
                         tls.set_protocols(&["h2".into()]);
                     } else {
@@ -195,7 +195,7 @@ impl ClientBuilder {
 
         connector.set_timeout(config.connect_timeout);
 
-        let mut builder = ::hyper::Client::builder();
+        let mut builder = hyper::Client::builder();
         if config.http2_only {
             builder.http2_only(true);
         }
@@ -441,7 +441,7 @@ impl ClientBuilder {
     }
 }
 
-type HyperClient = ::hyper::Client<Connector>;
+type HyperClient = hyper::Client<Connector>;
 
 impl Client {
     /// Constructs a new `Client`.
@@ -590,13 +590,13 @@ impl Client {
                 (Some(reusable), body)
             },
             None => {
-                (None, ::hyper::Body::empty())
+                (None, hyper::Body::empty())
             }
         };
 
         self.proxy_auth(&uri, &mut headers);
 
-        let mut req = ::hyper::Request::builder()
+        let mut req = hyper::Request::builder()
             .method(method.clone())
             .uri(uri.clone())
             .body(body)
@@ -826,10 +826,10 @@ impl Future for PendingRequest {
                             debug!("redirecting to {:?} '{}'", self.method, self.url);
                             let uri = expect_uri(&self.url);
                             let body = match self.body {
-                                Some(Some(ref body)) => ::hyper::Body::from(body.clone()),
-                                _ => ::hyper::Body::empty(),
+                                Some(Some(ref body)) => hyper::Body::from(body.clone()),
+                                _ => hyper::Body::empty(),
                             };
-                            let mut req = ::hyper::Request::builder()
+                            let mut req = hyper::Request::builder()
                                 .method(self.method.clone())
                                 .uri(uri.clone())
                                 .body(body)

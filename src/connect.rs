@@ -1,9 +1,8 @@
-use futures::{Future, try_ready};
+use futures::Future;
 use http::uri::Scheme;
 use hyper::client::connect::{Connect, Connected, Destination};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Timeout;
-use log::{trace, debug};
 
 #[cfg(feature = "default-tls")]
 use native_tls::{TlsConnector, TlsConnectorBuilder};
@@ -18,13 +17,13 @@ use std::net::IpAddr;
 use std::time::Duration;
 
 #[cfg(feature = "trust-dns")]
-use dns::TrustDnsResolver;
+use crate::dns::TrustDnsResolver;
 use crate::proxy::{Proxy, ProxyScheme};
 
 #[cfg(feature = "trust-dns")]
-type HttpConnector = ::hyper::client::HttpConnector<TrustDnsResolver>;
+type HttpConnector = hyper::client::HttpConnector<TrustDnsResolver>;
 #[cfg(not(feature = "trust-dns"))]
-type HttpConnector = ::hyper::client::HttpConnector;
+type HttpConnector = hyper::client::HttpConnector;
 
 
 pub(crate) struct Connector {
@@ -50,7 +49,7 @@ enum Inner {
 
 impl Connector {
     #[cfg(not(feature = "tls"))]
-    pub(crate) fn new<T>(proxies: Arc<Vec<Proxy>>, local_addr: T, nodelay: bool) -> ::Result<Connector>
+    pub(crate) fn new<T>(proxies: Arc<Vec<Proxy>>, local_addr: T, nodelay: bool) -> crate::Result<Connector>
     where
         T: Into<Option<IpAddr>>
     {
@@ -93,7 +92,7 @@ impl Connector {
         tls: rustls::ClientConfig,
         proxies: Arc<Vec<Proxy>>,
         local_addr: T,
-        nodelay: bool) -> ::Result<Connector>
+        nodelay: bool) -> crate::Result<Connector>
         where
             T: Into<Option<IpAddr>>,
     {
@@ -197,10 +196,10 @@ impl Connector {
 }
 
 #[cfg(feature = "trust-dns")]
-fn http_connector() -> ::Result<HttpConnector> {
+fn http_connector() -> crate::Result<HttpConnector> {
     TrustDnsResolver::new()
         .map(HttpConnector::new_with_resolver)
-        .map_err(::error::dns_system_conf)
+        .map_err(crate::error::dns_system_conf)
 }
 
 #[cfg(not(feature = "trust-dns"))]
@@ -250,10 +249,10 @@ impl Connect for Connector {
 
                         http.set_nodelay(nodelay || ($dst.scheme() == "https"));
 
-                        let http = ::hyper_tls::HttpsConnector::from((http, tls.clone()));
+                        let http = hyper_tls::HttpsConnector::from((http, tls.clone()));
                         timeout!(http.connect($dst)
                             .and_then(move |(io, connected)| {
-                                if let ::hyper_tls::MaybeHttpsStream::Https(stream) = &io {
+                                if let hyper_tls::MaybeHttpsStream::Https(stream) = &io {
                                     if !nodelay {
                                         stream.get_ref().get_ref().set_nodelay(false)?;
                                     }
@@ -271,10 +270,10 @@ impl Connect for Connector {
                         // https://www.openssl.org/docs/man1.1.1/man3/SSL_connect.html#NOTES
                         http.set_nodelay(nodelay || ($dst.scheme() == "https"));
 
-                        let http = ::hyper_rustls::HttpsConnector::from((http, tls.clone()));
+                        let http = hyper_rustls::HttpsConnector::from((http, tls.clone()));
                         timeout!(http.connect($dst)
                             .and_then(move |(io, connected)| {
-                                if let ::hyper_rustls::MaybeHttpsStream::Https(stream) = &io {
+                                if let hyper_rustls::MaybeHttpsStream::Https(stream) = &io {
                                     if !nodelay {
                                         let (io, _) = stream.get_ref();
                                         io.set_nodelay(false)?;
@@ -290,7 +289,7 @@ impl Connect for Connector {
 
         for prox in self.proxies.iter() {
             if let Some(proxy_scheme) = prox.intercept(&dst) {
-                trace!("proxy({:?}) intercepts {:?}", proxy_scheme, dst);
+                log::trace!("proxy({:?}) intercepts {:?}", proxy_scheme, dst);
 
                 let (puri, _auth) = match proxy_scheme {
                     ProxyScheme::Http { uri, auth, .. } => (uri, auth),
@@ -324,10 +323,10 @@ impl Connect for Connector {
                         let port = dst.port().unwrap_or(443);
                         let mut http = http.clone();
                         http.set_nodelay(nodelay);
-                        let http = ::hyper_tls::HttpsConnector::from((http, tls.clone()));
+                        let http = hyper_tls::HttpsConnector::from((http, tls.clone()));
                         let tls = tls.clone();
                         return timeout!(http.connect(ndst).and_then(move |(conn, connected)| {
-                            trace!("tunneling HTTPS over proxy");
+                            log::trace!("tunneling HTTPS over proxy");
                             tunnel(conn, host.clone(), port, auth)
                                 .and_then(move |tunneled| {
                                     tls.connect_async(&host, tunneled)
@@ -346,10 +345,10 @@ impl Connect for Connector {
                         let port = dst.port().unwrap_or(443);
                         let mut http = http.clone();
                         http.set_nodelay(nodelay);
-                        let http = ::hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
+                        let http = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
                         let tls = tls.clone();
                         return timeout!(http.connect(ndst).and_then(move |(conn, connected)| {
-                            trace!("tunneling HTTPS over proxy");
+                            log::trace!("tunneling HTTPS over proxy");
                             let maybe_dnsname = DNSNameRef::try_from_ascii_str(&host)
                                 .map(|dnsname| dnsname.to_owned())
                                 .map_err(|_| io::Error::new(io::ErrorKind::Other, "Invalid DNS Name"));
@@ -395,7 +394,7 @@ fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<::http::header::Head
     ", host, port).into_bytes();
 
         if let Some(value) = auth {
-            debug!("tunnel to {}:{} using basic auth", host, port);
+            log::debug!("tunnel to {}:{} using basic auth", host, port);
             buf.extend_from_slice(b"Proxy-Authorization: ");
             buf.extend_from_slice(value.as_bytes());
             buf.extend_from_slice(b"\r\n");
@@ -435,7 +434,7 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             if let TunnelState::Writing = self.state {
-                let n = try_ready!(self.conn.as_mut().unwrap().write_buf(&mut self.buf));
+                let n = futures::try_ready!(self.conn.as_mut().unwrap().write_buf(&mut self.buf));
                 if !self.buf.has_remaining_mut() {
                     self.state = TunnelState::Reading;
                     self.buf.get_mut().truncate(0);
@@ -443,7 +442,7 @@ where
                     return Err(tunnel_eof());
                 }
             } else {
-                let n = try_ready!(self.conn.as_mut().unwrap().read_buf(&mut self.buf.get_mut()));
+                let n = futures::try_ready!(self.conn.as_mut().unwrap().read_buf(&mut self.buf.get_mut()));
                 let read = &self.buf.get_ref()[..];
                 if n == 0 {
                     return Err(tunnel_eof());
@@ -488,7 +487,7 @@ mod native_tls_async {
     /// and both the server and the client are ready for receiving and sending
     /// data. Bytes read from a `TlsStream` are decrypted from `S` and bytes written
     /// to a `TlsStream` are encrypted when passing through to `S`.
-    #[derive(Debug)]
+    #[derive(log::debug)]
     pub struct TlsStream<S> {
         inner: native_tls::TlsStream<S>,
     }
@@ -619,7 +618,7 @@ mod socks {
     use tokio::{net::TcpStream, reactor};
 
     use super::{Connecting};
-    use proxy::{ProxyScheme};
+    use crate::proxy::{ProxyScheme};
 
     pub(super) enum DnsResolve {
         Local,

@@ -7,7 +7,7 @@ use std::fmt;
 use std::time::SystemTime;
 
 /// Convert a time::Tm time to SystemTime.
-fn tm_to_systemtime(tm: ::time::Tm) -> SystemTime {
+fn tm_to_systemtime(tm: time::Tm) -> SystemTime {
     let seconds = tm.to_timespec().sec;
     let duration = std::time::Duration::from_secs(seconds.abs() as u64);
     if seconds > 0 {
@@ -129,7 +129,7 @@ pub(crate) fn extract_response_cookies<'a>(
 
 /// A persistent cookie store that provides session support.
 #[derive(Default)]
-pub(crate) struct CookieStore(pub(crate) ::cookie_store::CookieStore);
+pub(crate) struct CookieStore(pub(crate) cookie_store::CookieStore);
 
 impl<'a> fmt::Debug for CookieStore {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

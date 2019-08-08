@@ -13,7 +13,7 @@ pub struct Body {
 enum Inner {
     Reusable(Bytes),
     Hyper {
-        body: ::hyper::Body,
+        body: hyper::Body,
         timeout: Option<Delay>,
     }
 }
@@ -27,7 +27,7 @@ impl Body {
     }
 
     #[inline]
-    pub(crate) fn response(body: ::hyper::Body, timeout: Option<Delay>) -> Body {
+    pub(crate) fn response(body: hyper::Body, timeout: Option<Delay>) -> Body {
         Body {
             inner: Inner::Hyper {
                 body,
@@ -37,7 +37,7 @@ impl Body {
     }
 
     #[inline]
-    pub(crate) fn wrap(body: ::hyper::Body) -> Body {
+    pub(crate) fn wrap(body: hyper::Body) -> Body {
         Body {
             inner: Inner::Hyper {
                 body,
@@ -59,7 +59,7 @@ impl Body {
     }
 
     #[inline]
-    pub(crate) fn into_hyper(self) -> (Option<Bytes>, ::hyper::Body) {
+    pub(crate) fn into_hyper(self) -> (Option<Bytes>, hyper::Body) {
         match self.inner {
             Inner::Reusable(chunk) => (Some(chunk.clone()), chunk.into()),
             Inner::Hyper { body, timeout } => {
@@ -154,14 +154,14 @@ where
 /// A `Chunk` can be treated like `&[u8]`.
 #[derive(Default)]
 pub struct Chunk {
-    inner: ::hyper::Chunk,
+    inner: hyper::Chunk,
 }
 
 impl Chunk {
     #[inline]
     pub(crate) fn from_chunk(chunk: Bytes) -> Chunk {
         Chunk {
-            inner: ::hyper::Chunk::from(chunk)
+            inner: hyper::Chunk::from(chunk)
         }
     }
 }
@@ -186,7 +186,7 @@ impl AsRef<[u8]> for Chunk {
     }
 }
 
-impl ::std::ops::Deref for Chunk {
+impl std::ops::Deref for Chunk {
     type Target = [u8];
     #[inline]
     fn deref(&self) -> &Self::Target {

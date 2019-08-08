@@ -603,7 +603,7 @@ impl ClientHandle {
                         Ok(Async::Ready(()))
                     }
                 });
-                ::tokio::spawn(task);
+                tokio::spawn(task);
                 Ok(())
             });
 

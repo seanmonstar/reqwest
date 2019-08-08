@@ -255,7 +255,7 @@ fn response_timeout() {
 
 fn gzip_case(response_size: usize, chunk_size: usize) {
     let content: String = (0..response_size).into_iter().map(|i| format!("test {}", i)).collect();
-    let mut encoder = ::libflate::gzip::Encoder::new(Vec::new()).unwrap();
+    let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
     match encoder.write(content.as_bytes()) {
         Ok(n) => assert!(n > 0, "Failed to write to encoder."),
         _ => panic!("Failed to gzip encode string."),
@@ -297,7 +297,7 @@ fn gzip_case(response_size: usize, chunk_size: usize) {
             body.concat2()
         })
         .and_then(|buf| {
-            let body = ::std::str::from_utf8(&buf).unwrap();
+            let body = std::str::from_utf8(&buf).unwrap();
 
             assert_eq!(body, &content);
 

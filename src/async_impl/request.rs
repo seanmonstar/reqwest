@@ -142,11 +142,11 @@ impl RequestBuilder {
     #[cfg(feature = "hyper-011")]
     pub fn header_011<H>(self, header: H) -> RequestBuilder
     where
-        H: ::hyper_011::header::Header,
+        H: crate::hyper_011::header::Header,
     {
-        let mut headers = ::hyper_011::Headers::new();
+        let mut headers = crate::hyper_011::Headers::new();
         headers.set(header);
-        let map = ::header::HeaderMap::from(headers);
+        let map = crate::header::HeaderMap::from(headers);
         self.headers(map)
     }
 
@@ -155,8 +155,8 @@ impl RequestBuilder {
     /// This method is provided to ease migration, and requires the `hyper-011`
     /// Cargo feature enabled on `reqwest`.
     #[cfg(feature = "hyper-011")]
-    pub fn headers_011(self, headers: ::hyper_011::Headers) -> RequestBuilder {
-        let map = ::header::HeaderMap::from(headers);
+    pub fn headers_011(self, headers: crate::hyper_011::Headers) -> RequestBuilder {
+        let map = crate::header::HeaderMap::from(headers);
         self.headers(map)
     }
 

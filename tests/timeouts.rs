@@ -81,7 +81,7 @@ fn write_timeout_large_body() {
         read_closes: true
     };
 
-    let cursor = ::std::io::Cursor::new(body.into_bytes());
+    let cursor = std::io::Cursor::new(body.into_bytes());
     let url = format!("http://{}/write-timeout", server.addr());
     let err = client
         .post(&url)

@@ -64,7 +64,7 @@ struct Inner {
 
 
 /// A `Result` alias where the `Err` case is `reqwest::Error`.
-pub type Result<T> = ::std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 impl Error {
     fn new(kind: Kind, url: Option<Url>) -> Error {
@@ -416,21 +416,21 @@ pub(crate) enum Kind {
 
 impl From<::http::Error> for Kind {
     #[inline]
-    fn from(err: ::http::Error) -> Kind {
+    fn from(err: http::Error) -> Kind {
         Kind::Http(err)
     }
 }
 
 impl From<::hyper::Error> for Kind {
     #[inline]
-    fn from(err: ::hyper::Error) -> Kind {
+    fn from(err: hyper::Error) -> Kind {
         Kind::Hyper(err)
     }
 }
 
 impl From<::mime::FromStrError> for Kind {
     #[inline]
-    fn from(err: ::mime::FromStrError) -> Kind {
+    fn from(err: mime::FromStrError) -> Kind {
         Kind::Mime(err)
     }
 }
@@ -444,35 +444,35 @@ impl From<io::Error> for Kind {
 
 impl From<::url::ParseError> for Kind {
     #[inline]
-    fn from(err: ::url::ParseError) -> Kind {
+    fn from(err: url::ParseError) -> Kind {
         Kind::Url(err)
     }
 }
 
 impl From<::serde_urlencoded::ser::Error> for Kind {
     #[inline]
-    fn from(err: ::serde_urlencoded::ser::Error) -> Kind {
+    fn from(err: serde_urlencoded::ser::Error) -> Kind {
         Kind::UrlEncoded(err)
     }
 }
 
 impl From<::serde_json::Error> for Kind {
     #[inline]
-    fn from(err: ::serde_json::Error) -> Kind {
+    fn from(err: serde_json::Error) -> Kind {
         Kind::Json(err)
     }
 }
 
 #[cfg(feature = "default-tls")]
 impl From<::native_tls::Error> for Kind {
-    fn from(err: ::native_tls::Error) -> Kind {
+    fn from(err: native_tls::Error) -> Kind {
         Kind::NativeTls(err)
     }
 }
 
 #[cfg(feature = "rustls-tls")]
 impl From<::rustls::TLSError> for Kind {
-    fn from(err: ::rustls::TLSError) -> Kind {
+    fn from(err: rustls::TLSError) -> Kind {
         Kind::Rustls(err)
     }
 }
@@ -495,7 +495,7 @@ impl From<EnterError> for Kind {
 }
 
 impl From<::tokio::timer::Error> for Kind {
-    fn from(_err: ::tokio::timer::Error) -> Kind {
+    fn from(_err: tokio::timer::Error) -> Kind {
         Kind::Timer
     }
 }
@@ -576,7 +576,7 @@ macro_rules! try_io {
     ($e:expr) => (
         match $e {
             Ok(v) => v,
-            Err(ref err) if err.kind() == ::std::io::ErrorKind::WouldBlock => {
+            Err(ref err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                 return Ok(::futures::Async::NotReady);
             }
             Err(err) => {
@@ -653,15 +653,15 @@ mod tests {
         }
 
         let root = Chain(None::<Error>);
-        let io = ::std::io::Error::new(::std::io::ErrorKind::Other, root);
+        let io = std::io::Error::new(::std::io::ErrorKind::Other, root);
         let err = Error::new(Kind::Io(io), None);
         assert!(err.cause().is_none());
         assert_eq!(err.to_string(), "root");
 
 
-        let root = ::std::io::Error::new(::std::io::ErrorKind::Other, Chain(None::<Error>));
+        let root = std::io::Error::new(::std::io::ErrorKind::Other, Chain(None::<Error>));
         let link = Chain(Some(root));
-        let io = ::std::io::Error::new(::std::io::ErrorKind::Other, link);
+        let io = std::io::Error::new(::std::io::ErrorKind::Other, link);
         let err = Error::new(Kind::Io(io), None);
         assert!(err.cause().is_some());
         assert_eq!(err.to_string(), "chain: root");
