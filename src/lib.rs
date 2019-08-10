@@ -2,6 +2,7 @@
 #![deny(missing_debug_implementations)]
 #![cfg_attr(test, deny(warnings))]
 #![doc(html_root_url = "https://docs.rs/reqwest/0.9.19")]
+#![feature(async_await)]
 
 //! # reqwest
 //!

@@ -384,7 +384,7 @@ pub(crate) trait AsyncConn: AsyncRead + AsyncWrite {}
 impl<T: AsyncRead + AsyncWrite> AsyncConn for T {}
 pub(crate) type Conn = Box<dyn AsyncConn + Send + Sync + 'static>;
 
-pub(crate) type Connecting = Box<dyn Future<Item=(Conn, Connected), Error=io::Error> + Send>;
+pub(crate) type Connecting = Box<dyn Future<Output=Result<(Conn, Connected), io::Error>> + Send>;
 
 #[cfg(feature = "tls")]
 fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<http::header::HeaderValue>) -> Tunnel<T> {
@@ -428,13 +428,12 @@ impl<T> Future for Tunnel<T>
 where
     T: AsyncRead + AsyncWrite,
 {
-    type Item = T;
-    type Error = io::Error;
+    type Output = Result<T, io::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(&mut self) -> Poll<Self::Output> {
         loop {
             if let TunnelState::Writing = self.state {
-                let n = futures::try_ready!(self.conn.as_mut().unwrap().write_buf(&mut self.buf));
+                let n = futures::ready!(self.conn.as_mut().unwrap().write_buf(&mut self.buf));
                 if !self.buf.has_remaining_mut() {
                     self.state = TunnelState::Reading;
                     self.buf.get_mut().truncate(0);
@@ -442,7 +441,7 @@ where
                     return Err(tunnel_eof());
                 }
             } else {
-                let n = futures::try_ready!(self.conn.as_mut().unwrap().read_buf(&mut self.buf.get_mut()));
+                let n = futures::ready!(self.conn.as_mut().unwrap().read_buf(&mut self.buf.get_mut()));
                 let read = &self.buf.get_ref()[..];
                 if n == 0 {
                     return Err(tunnel_eof());
@@ -485,9 +484,11 @@ fn tunnel_eof() -> io::Error {
 mod native_tls_async {
     use std::io::{self, Read, Write};
 
-    use futures::{Poll, Future, Async};
+    use futures::Future;
+    use std::task::{Poll, Context};
+    use std::pin::Pin;
     use native_tls::{self, HandshakeError, Error, TlsConnector};
-    use tokio_io::{AsyncRead, AsyncWrite, try_nb};
+    use tokio_io::{AsyncRead, AsyncWrite};
 
     /// A wrapper around an underlying raw stream which implements the TLS or SSL
     /// protocol.
@@ -561,8 +562,9 @@ mod native_tls_async {
     }
 
     impl<S: AsyncRead + AsyncWrite> AsyncWrite for TlsStream<S> {
-        fn shutdown(&mut self) -> Poll<(), io::Error> {
-            try_nb!(self.inner.shutdown());
+        fn shutdown(&mut self) -> Poll<Result<(), io::Error>> {
+            //try_nb!(self.inner.shutdown());
+
             self.inner.get_mut().shutdown()
         }
     }
@@ -583,20 +585,18 @@ mod native_tls_async {
 
     // TODO: change this to AsyncRead/AsyncWrite on next major version
     impl<S: Read + Write> Future for ConnectAsync<S> {
-        type Item = TlsStream<S>;
-        type Error = Error;
+        type Output = Result<TlsStream<S>, Error>;
 
-        fn poll(&mut self) -> Poll<TlsStream<S>, Error> {
+        fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
             self.inner.poll()
         }
     }
 
     // TODO: change this to AsyncRead/AsyncWrite on next major version
     impl<S: Read + Write> Future for MidHandshake<S> {
-        type Item = TlsStream<S>;
-        type Error = Error;
+        type Output = crate::Result<TlsStream<S>>;
 
-        fn poll(&mut self) -> Poll<TlsStream<S>, Error> {
+        fn poll(&mut self) -> Poll<Self::Output> {
             match self.inner.take().expect("cannot poll MidHandshake twice") {
                 Ok(stream) => Ok(TlsStream { inner: stream }.into()),
                 Err(HandshakeError::Failure(e)) => Err(e),
@@ -606,7 +606,7 @@ mod native_tls_async {
                         Err(HandshakeError::Failure(e)) => Err(e),
                         Err(HandshakeError::WouldBlock(s)) => {
                             self.inner = Some(Err(HandshakeError::WouldBlock(s)));
-                            Ok(Async::NotReady)
+                            Ok(Poll::Pending)
                         }
                     }
                 }
@@ -689,7 +689,6 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::thread;
-    use futures::Future;
     use tokio::runtime::current_thread::Runtime;
     use self::tokio_tcp::TcpStream;
     use super::tunnel;

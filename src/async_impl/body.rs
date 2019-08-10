@@ -1,9 +1,11 @@
 use std::fmt;
-
-use futures::{Future, Stream, Poll, Async, try_ready};
 use bytes::{Buf, Bytes};
 use hyper::body::Payload;
 use tokio::timer::Delay;
+use std::pin::Pin;
+use std::future::Future;
+use futures::Stream;
+use std::task::{Poll, Context};
 
 /// An asynchronous `Stream`.
 pub struct Body {
@@ -71,32 +73,31 @@ impl Body {
 }
 
 impl Stream for Body {
-    type Item = Chunk;
-    type Error = crate::Error;
+    type Item = Result<Chunk, crate::Error>;
 
     #[inline]
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let opt = match self.inner {
             Inner::Hyper { ref mut body, ref mut timeout } => {
                 if let Some(ref mut timeout) = timeout {
-                    if let Async::Ready(()) = try_!(timeout.poll()) {
+                    if let Poll::Ready(()) = try_!(timeout.poll()) {
                         return Err(crate::error::timedout(None));
                     }
                 }
-                try_ready!(body.poll_data().map_err(crate::error::from))
+                futures::ready!(body.poll_data().map_err(crate::error::from))
             },
             Inner::Reusable(ref mut bytes) => {
                 return if bytes.is_empty() {
-                    Ok(Async::Ready(None))
+                    Ok(Poll::Ready(None))
                 } else {
                     let chunk = Chunk::from_chunk(bytes.clone());
                     *bytes = Bytes::new();
-                    Ok(Async::Ready(Some(chunk)))
+                    Ok(Poll::Ready(Some(chunk)))
                 };
             },
         };
 
-        Ok(Async::Ready(opt.map(|chunk| Chunk {
+        Ok(Poll::Ready(opt.map(|chunk| Chunk {
             inner: chunk,
         })))
     }
@@ -137,7 +138,7 @@ impl From<&'static str> for Body {
     }
 }
 
-impl<I, E> From<Box<dyn Stream<Item = I, Error = E> + Send>> for Body
+impl<I, E> From<Box<dyn Stream<Item = Result<I, E>> + Send>> for Body
 where
     hyper::Chunk: From<I>,
     I: 'static,

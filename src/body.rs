@@ -3,7 +3,7 @@ use std::fmt;
 use std::io::{self, Cursor, Read};
 
 use bytes::Bytes;
-use futures::{Future, try_ready};
+use futures::Future;
 use hyper::{self};
 
 use crate::{async_impl};
@@ -277,7 +277,7 @@ impl Sender {
 
             // The only way to get here is when the buffer is not empty.
             // We can check the transmission channel
-            try_ready!(tx
+            futures::ready!(tx
                 .as_mut()
                 .expect("tx only taken on error")
                 .poll_ready()

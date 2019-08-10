@@ -2,13 +2,14 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use futures::{Async, Future, Poll, Stream};
+use futures::{Future, Poll, Stream};
 use futures::executor::{self, Notify};
+use futures::spawn::Spawn;
 use tokio_executor::{enter, EnterError};
 
-pub(crate) fn timeout<F>(fut: F, timeout: Option<Duration>) -> Result<F::Item, Waited<F::Error>>
+pub(crate) fn timeout<F, I, E>(fut: F, timeout: Option<Duration>) -> Result<I, Waited<E>>
 where
-    F: Future,
+    F: Future<Output = Result<I,E>>,
 {
     let mut spawn = executor::spawn(fut);
     block_on(timeout, |notify| {
@@ -83,8 +84,8 @@ where
 
     loop {
         match poll(&notify)? {
-            Async::Ready(val) => return Ok(val),
-            Async::NotReady => {}
+            Poll::Ready(val) => return Ok(val),
+            Poll::Pending => {}
         }
 
         if let Some(deadline) = deadline {

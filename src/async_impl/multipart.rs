@@ -182,11 +182,11 @@ impl Part {
     }
 
     /// Makes a new parameter from an arbitrary stream.
-    pub fn stream<T>(value: T) -> Part
+    pub fn stream<T, I, E>(value: T) -> Part
     where
-        T: Stream + Send + 'static,
-        T::Error: std::error::Error + Send + Sync,
-        hyper::Chunk: std::convert::From<T::Item>,
+        T: Stream<Item = Result<I, E>> + Send + 'static,
+        E: std::error::Error + Send + Sync,
+        hyper::Chunk: std::convert::From<I>,
     {
         Part::new(Body::wrap(hyper::Body::wrap_stream(value)))
     }

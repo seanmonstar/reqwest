@@ -1,3 +1,4 @@
+use futures::stream::Concat;
 use std::fmt;
 use std::mem;
 use std::marker::PhantomData;
@@ -5,8 +6,7 @@ use std::net::SocketAddr;
 use std::borrow::Cow;
 
 use encoding_rs::{Encoding, UTF_8};
-use futures::{Async, Future, Poll, Stream, try_ready};
-use futures::stream::Concat2;
+use futures::{Future, Poll};
 use http;
 use hyper::{HeaderMap, StatusCode, Version};
 use hyper::client::connect::HttpInfo;
@@ -273,17 +273,17 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
 
 /// A JSON object.
 struct Json<T> {
-    concat: Concat2<Decoder>,
+    concat: Concat<Decoder>,
     _marker: PhantomData<T>,
 }
 
 impl<T: DeserializeOwned> Future for Json<T> {
-    type Item = T;
-    type Error = crate::Error;
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let bytes = try_ready!(self.concat.poll());
+    type Output = Result<T, crate::Error>;
+
+    fn poll(&mut self) -> Poll<Self::Output> {
+        let bytes = futures::ready!(self.concat.poll());
         let t = try_!(serde_json::from_slice(&bytes));
-        Ok(Async::Ready(t))
+        Poll::Ready(t)
     }
 }
 
@@ -296,24 +296,24 @@ impl<T> fmt::Debug for Json<T> {
 
 #[derive(Debug)]
 struct Text {
-    concat: Concat2<Decoder>,
+    concat: Concat<Decoder>,
     encoding: &'static Encoding,
 }
 
 impl Future for Text {
-    type Item = String;
-    type Error = crate::Error;
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let bytes = try_ready!(self.concat.poll());
+    type Output = Result<String, crate::Error>;
+
+    fn poll(&mut self) -> Poll<Self::Output> {
+        let bytes = futures::ready!(self.concat.poll());
         // a block because of borrow checker
         {
             let (text, _, _) = self.encoding.decode(&bytes);
-            if let Cow::Owned(s) = text { return Ok(Async::Ready(s)) }
+            if let Cow::Owned(s) = text { return Ok(Poll::Ready(s)) }
         }
         unsafe {
             // decoding returned Cow::Borrowed, meaning these bytes
             // are already valid utf8
-            Ok(Async::Ready(String::from_utf8_unchecked(bytes.to_vec())))
+            Ok(Poll::Ready(String::from_utf8_unchecked(bytes.to_vec())))
         }
     }
 }
