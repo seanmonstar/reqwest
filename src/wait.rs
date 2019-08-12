@@ -6,6 +6,8 @@ use futures::{Future, Poll, Stream};
 use futures::executor::{self, Notify};
 use futures::spawn::Spawn;
 use tokio_executor::{enter, EnterError};
+use std::pin::Pin;
+use std::task::Context;
 
 pub(crate) fn timeout<F, I, E>(fut: F, timeout: Option<Duration>) -> Result<I, Waited<E>>
 where
@@ -35,6 +37,23 @@ pub(crate) enum Waited<E> {
 impl<E> From<E> for Waited<E> {
     fn from(err: E) -> Waited<E> {
         Waited::Inner(err)
+    }
+}
+
+pub(crate) struct WaitFuture<F, I, E> 
+where F: Future<Output = Result<I, E>>
+{
+    future: F,
+    timeout: Option<Duration>,
+}
+
+impl<F, I, E> Future for WaitFuture<F, I, E>
+where F: Future<Output = Result<I,E>>
+{
+    type Output = Result<I, E>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        
     }
 }
 
