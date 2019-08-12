@@ -49,7 +49,7 @@ impl TrustDnsResolver {
 
 impl hyper_dns::Resolve for TrustDnsResolver {
     type Addrs = vec::IntoIter<IpAddr>;
-    type Future = Box<dyn Future<Item=Self::Addrs, Error=io::Error> + Send>;
+    type Future = Box<dyn Future<Output=Result<Self::Addrs, io::Error>> + Send>;
 
     fn resolve(&self, name: hyper_dns::Name) -> Self::Future {
         let inner = self.inner.clone();
