@@ -1,23 +1,35 @@
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
+use futures_timer::TryFutureExt as TryFutureTimerExt;
+use futures::future::TryFutureExt;
 
 use futures::{Future, Poll, Stream};
-use futures::executor::{self, Notify};
-use futures::spawn::Spawn;
-use tokio_executor::{enter, EnterError};
 use std::pin::Pin;
 use std::task::Context;
 
-pub(crate) fn timeout<F, I, E>(fut: F, timeout: Option<Duration>) -> Result<I, Waited<E>>
-where
-    F: Future<Output = Result<I,E>>,
-{
-    let mut spawn = executor::spawn(fut);
-    block_on(timeout, |notify| {
-        spawn.poll_future_notify(notify, 0)
-    })
+async fn timeout_fut<F, I, E>(fut: F, timeout: Option<Duration>) -> Result<I, Waited<E>>
+    where F: Future<Output = Result<I,E>> {
+
+    let result: Result<I, Waited<E>> = if let Some(duration) = timeout {
+        fut.map_err(|e| Waited::Inner(e)).timeout(duration).await
+    } else {
+        fut.map_err(|e| Waited::Inner(e)).await
+    };
+
+    result
 }
+
+pub(crate) fn timeout<F, I, E>(fut: F, timeout : Option<Duration>) -> Result<I, Waited<E>>
+    where F: Future<Output = Result<I,E>> {
+        let future03 = timeout_fut::<F, I, E>();
+
+        let future01 = future03.compat();
+
+        tokio::runtime::Runtime::new()
+        .map_err(|e| Waited::Executor(e))
+        .map(|runtime| runtime.block_on(future01))
+    }
 
 pub(crate) fn stream<S>(stream: S, timeout: Option<Duration>) -> WaitStream<S>
 where S: Stream {
@@ -30,24 +42,24 @@ where S: Stream {
 #[derive(Debug)]
 pub(crate) enum Waited<E> {
     TimedOut,
-    Executor(EnterError),
     Inner(E),
+    Executor(E),
 }
 
-impl<E> From<E> for Waited<E> {
-    fn from(err: E) -> Waited<E> {
-        Waited::Inner(err)
+impl<E> From<std::io::Error> for Waited<E> {
+    fn from(err: std::io::Error) -> Waited<E> {
+        Waited::Executor
     }
 }
 
-pub(crate) struct WaitFuture<F, I, E> 
-where F: Future<Output = Result<I, E>>
+pub(crate) struct WaitFuture<F> 
+where F: Future
 {
     future: F,
     timeout: Option<Duration>,
 }
 
-impl<F, I, E> Future for WaitFuture<F, I, E>
+impl<F, I, E> Future for WaitFuture<F>
 where F: Future<Output = Result<I,E>>
 {
     type Output = Result<I, E>;

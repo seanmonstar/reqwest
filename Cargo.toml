@@ -37,6 +37,7 @@ tokio-threadpool = "0.1.8" # a minimum version so tokio compiles
 tokio-timer = "0.2.6" # a minimum version so trust-dns-resolver compiles
 url = "1.2"
 uuid = { version = "0.7", features = ["v4"] }
+futures-timer = "0.3"
 
 # Optional deps...
 
