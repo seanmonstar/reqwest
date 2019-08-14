@@ -23,7 +23,7 @@ hyper = "0.12.22"
 flate2 = { version = "^1.0.7", default-features = false, features = ["rust_backend"] }
 log = "0.4"
 mime = "0.3.7"
-mime_guess = "2.0.0-alpha.6"
+mime_guess = "2.0"
 serde = "1.0"
 serde_json = "1.0"
 serde_urlencoded = "0.5"
