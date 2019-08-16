@@ -97,7 +97,7 @@ pub fn spawn(txns: Vec<Txn>) -> Server {
                 }
             }
 
-            match (::std::str::from_utf8(&expected), std::str::from_utf8(&buf[..n])) {
+            match (std::str::from_utf8(&expected), std::str::from_utf8(&buf[..n])) {
                 (Ok(expected), Ok(received)) => {
                     if expected.len() > 300 && std::env::var("REQWEST_TEST_BODY_FULL").is_err() {
                         assert_eq!(

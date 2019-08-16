@@ -377,13 +377,13 @@ mod tests {
     fn read_to_end() {
         let mut output = Vec::new();
         let mut form = Form::new()
-            .part("reader1", Part::reader(::std::io::empty()))
+            .part("reader1", Part::reader(std::io::empty()))
             .part("key1", Part::text("value1"))
             .part(
                 "key2",
-                Part::text("value2").mime(::mime::IMAGE_BMP),
+                Part::text("value2").mime(mime::IMAGE_BMP),
             )
-            .part("reader2", Part::reader(::std::io::empty()))
+            .part("reader2", Part::reader(std::io::empty()))
             .part(
                 "key3",
                 Part::text("value3").file_name("filename"),
@@ -413,7 +413,7 @@ mod tests {
             std::str::from_utf8(&output).unwrap()
         );
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
-        assert_eq!(::std::str::from_utf8(&output).unwrap(), expected);
+        assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
         assert!(length.is_none());
     }
 
@@ -424,7 +424,7 @@ mod tests {
             .text("key1", "value1")
             .part(
                 "key2",
-                Part::text("value2").mime(::mime::IMAGE_BMP),
+                Part::text("value2").mime(mime::IMAGE_BMP),
             )
             .part(
                 "key3",
@@ -449,14 +449,14 @@ mod tests {
             std::str::from_utf8(&output).unwrap()
         );
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
-        assert_eq!(::std::str::from_utf8(&output).unwrap(), expected);
+        assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
         assert_eq!(length.unwrap(), expected.len() as u64);
     }
 
     #[test]
     fn read_to_end_with_header() {
         let mut output = Vec::new();
-        let mut part = Part::text("value2").mime(::mime::IMAGE_BMP);
+        let mut part = Part::text("value2").mime(mime::IMAGE_BMP);
         part.meta.headers.insert("Hdr3", "/a/b/c".parse().unwrap());
         let mut form = Form::new().part("key2", part);
         form.inner.boundary = "boundary".to_string();
@@ -474,6 +474,6 @@ mod tests {
             std::str::from_utf8(&output).unwrap()
         );
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
-        assert_eq!(::std::str::from_utf8(&output).unwrap(), expected);
+        assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
     }
 }

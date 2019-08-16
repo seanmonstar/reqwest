@@ -387,7 +387,7 @@ pub(crate) type Conn = Box<dyn AsyncConn + Send + Sync + 'static>;
 pub(crate) type Connecting = Box<dyn Future<Item=(Conn, Connected), Error=io::Error> + Send>;
 
 #[cfg(feature = "tls")]
-fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<::http::header::HeaderValue>) -> Tunnel<T> {
+fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<http::header::HeaderValue>) -> Tunnel<T> {
     let mut buf = format!("\
         CONNECT {0}:{1} HTTP/1.1\r\n\
         Host: {0}:{1}\r\n\

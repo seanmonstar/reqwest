@@ -27,11 +27,11 @@ pub struct Identity {
 
 enum ClientCert {
     #[cfg(feature = "default-tls")]
-    Pkcs12(::native_tls::Identity),
+    Pkcs12(native_tls::Identity),
     #[cfg(feature = "rustls-tls")]
     Pem {
         key: rustls::PrivateKey,
-        certs: Vec<::rustls::Certificate>,
+        certs: Vec<rustls::Certificate>,
     }
 }
 
@@ -55,7 +55,7 @@ impl Certificate {
     pub fn from_der(der: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             #[cfg(feature = "default-tls")]
-            native: try_!(::native_tls::Certificate::from_der(der)),
+            native: try_!(native_tls::Certificate::from_der(der)),
             #[cfg(feature = "rustls-tls")]
             original: Cert::Der(der.to_owned()),
         })
@@ -81,7 +81,7 @@ impl Certificate {
     pub fn from_pem(pem: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             #[cfg(feature = "default-tls")]
-            native: try_!(::native_tls::Certificate::from_pem(pem)),
+            native: try_!(native_tls::Certificate::from_pem(pem)),
             #[cfg(feature = "rustls-tls")]
             original: Cert::Pem(pem.to_owned())
         })
@@ -152,7 +152,7 @@ impl Identity {
     pub fn from_pkcs12_der(der: &[u8], password: &str) -> crate::Result<Identity> {
         Ok(Identity {
             inner: ClientCert::Pkcs12(
-                try_!(::native_tls::Identity::from_pkcs12(der, password))
+                try_!(native_tls::Identity::from_pkcs12(der, password))
             ),
         })
     }

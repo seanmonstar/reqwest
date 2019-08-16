@@ -42,7 +42,7 @@ pub(crate) fn expect_uri(url: &Url) -> hyper::Uri {
     url.as_str().parse().expect("a parsed Url should always be a valid Uri")
 }
 
-pub(crate) fn try_uri(url: &Url) -> Option<::hyper::Uri> {
+pub(crate) fn try_uri(url: &Url) -> Option<hyper::Uri> {
     url.as_str().parse().ok()
 }
 
