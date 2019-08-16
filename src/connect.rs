@@ -454,8 +454,17 @@ where
                         // else read more
                     } else if read.starts_with(b"HTTP/1.1 407") {
                         return Err(io::Error::new(io::ErrorKind::Other, "proxy authentication required"));
+                    } else if read.starts_with(b"HTTP/1.1 403") {
+                        return Err(io::Error::new(
+                            io::ErrorKind::Other,
+                            "proxy blocked this request",
+                        ));
                     } else {
-                        return Err(io::Error::new(io::ErrorKind::Other, "unsuccessful tunnel"));
+                        let (fst, _) = read.split_at(12);
+                        return Err(io::Error::new(
+                            io::ErrorKind::Other,
+                            format!("unsuccessful tunnel: {:?}", fst).as_str(),
+                        ));
                     }
                 }
             }
