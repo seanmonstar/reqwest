@@ -481,7 +481,7 @@ mod tests {
             .part("key1", Part::text("value1"))
             .part(
                 "key2",
-                Part::text("value2").mime(::mime::IMAGE_BMP),
+                Part::text("value2").mime(mime::IMAGE_BMP),
             )
             .part("reader2", Part::stream(futures::stream::once::<_, hyper::Error>(Ok(hyper::Chunk::from("part2".to_owned())))))
             .part(
@@ -515,12 +515,12 @@ mod tests {
             std::str::from_utf8(&out).unwrap()
         );
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
-        assert_eq!(::std::str::from_utf8(&out).unwrap(), expected);
+        assert_eq!(std::str::from_utf8(&out).unwrap(), expected);
     }
 
     #[test]
     fn stream_to_end_with_header() {
-        let mut part = Part::text("value2").mime(::mime::IMAGE_BMP);
+        let mut part = Part::text("value2").mime(mime::IMAGE_BMP);
         part.meta.headers.insert("Hdr3", "/a/b/c".parse().unwrap());
         let mut form = Form::new().part("key2", part);
         form.inner.boundary = "boundary".to_string();

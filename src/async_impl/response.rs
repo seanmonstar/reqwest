@@ -37,7 +37,7 @@ pub struct Response {
 }
 
 impl Response {
-    pub(super) fn new(res: hyper::Response<::hyper::Body>, url: Url, gzip: bool, timeout: Option<Delay>) -> Response {
+    pub(super) fn new(res: hyper::Response<hyper::Body>, url: Url, gzip: bool, timeout: Option<Delay>) -> Response {
         let (parts, body) = res.into_parts();
         let status = parts.status;
         let version = parts.version;

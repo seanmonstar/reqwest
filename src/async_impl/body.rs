@@ -48,7 +48,7 @@ impl Body {
 
     #[inline]
     pub(crate) fn empty() -> Body {
-        Body::wrap(::hyper::Body::empty())
+        Body::wrap(hyper::Body::empty())
     }
 
     #[inline]
@@ -145,7 +145,7 @@ where
 {
     #[inline]
     fn from(s: Box<dyn Stream<Item = I, Error = E> + Send>) -> Body {
-        Body::wrap(::hyper::Body::wrap_stream(s))
+        Body::wrap(hyper::Body::wrap_stream(s))
     }
 }
 
@@ -204,7 +204,7 @@ impl Extend<u8> for Chunk {
 impl IntoIterator for Chunk {
     type Item = u8;
     //XXX: exposing type from hyper!
-    type IntoIter = <::hyper::Chunk as IntoIterator>::IntoIter;
+    type IntoIter = <hyper::Chunk as IntoIterator>::IntoIter;
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()
     }

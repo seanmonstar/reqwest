@@ -389,22 +389,22 @@ impl StdError for Error {
 
 #[derive(Debug)]
 pub(crate) enum Kind {
-    Http(::http::Error),
-    Hyper(::hyper::Error),
-    Mime(::mime::FromStrError),
-    Url(::url::ParseError),
+    Http(http::Error),
+    Hyper(hyper::Error),
+    Mime(mime::FromStrError),
+    Url(url::ParseError),
     UrlBadScheme,
     #[cfg(all(feature = "default-tls", feature = "rustls-tls"))]
     TlsIncompatible,
     #[cfg(feature = "default-tls")]
-    NativeTls(::native_tls::Error),
+    NativeTls(native_tls::Error),
     #[cfg(feature = "rustls-tls")]
-    Rustls(::rustls::TLSError),
+    Rustls(rustls::TLSError),
     #[cfg(feature = "trust-dns")]
     DnsSystemConf(io::Error),
     Io(io::Error),
-    UrlEncoded(::serde_urlencoded::ser::Error),
-    Json(::serde_json::Error),
+    UrlEncoded(serde_urlencoded::ser::Error),
+    Json(serde_json::Error),
     TooManyRedirects,
     RedirectLoop,
     Status(StatusCode),
@@ -414,21 +414,21 @@ pub(crate) enum Kind {
 }
 
 
-impl From<::http::Error> for Kind {
+impl From<http::Error> for Kind {
     #[inline]
     fn from(err: http::Error) -> Kind {
         Kind::Http(err)
     }
 }
 
-impl From<::hyper::Error> for Kind {
+impl From<hyper::Error> for Kind {
     #[inline]
     fn from(err: hyper::Error) -> Kind {
         Kind::Hyper(err)
     }
 }
 
-impl From<::mime::FromStrError> for Kind {
+impl From<mime::FromStrError> for Kind {
     #[inline]
     fn from(err: mime::FromStrError) -> Kind {
         Kind::Mime(err)
@@ -442,21 +442,21 @@ impl From<io::Error> for Kind {
     }
 }
 
-impl From<::url::ParseError> for Kind {
+impl From<url::ParseError> for Kind {
     #[inline]
     fn from(err: url::ParseError) -> Kind {
         Kind::Url(err)
     }
 }
 
-impl From<::serde_urlencoded::ser::Error> for Kind {
+impl From<serde_urlencoded::ser::Error> for Kind {
     #[inline]
     fn from(err: serde_urlencoded::ser::Error) -> Kind {
         Kind::UrlEncoded(err)
     }
 }
 
-impl From<::serde_json::Error> for Kind {
+impl From<serde_json::Error> for Kind {
     #[inline]
     fn from(err: serde_json::Error) -> Kind {
         Kind::Json(err)
@@ -464,14 +464,14 @@ impl From<::serde_json::Error> for Kind {
 }
 
 #[cfg(feature = "default-tls")]
-impl From<::native_tls::Error> for Kind {
+impl From<native_tls::Error> for Kind {
     fn from(err: native_tls::Error) -> Kind {
         Kind::NativeTls(err)
     }
 }
 
 #[cfg(feature = "rustls-tls")]
-impl From<::rustls::TLSError> for Kind {
+impl From<rustls::TLSError> for Kind {
     fn from(err: rustls::TLSError) -> Kind {
         Kind::Rustls(err)
     }
@@ -494,7 +494,7 @@ impl From<EnterError> for Kind {
     }
 }
 
-impl From<::tokio::timer::Error> for Kind {
+impl From<tokio::timer::Error> for Kind {
     fn from(_err: tokio::timer::Error) -> Kind {
         Kind::Timer
     }
@@ -577,7 +577,7 @@ macro_rules! try_io {
         match $e {
             Ok(v) => v,
             Err(ref err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                return Ok(::futures::Async::NotReady);
+                return Ok(futures::Async::NotReady);
             }
             Err(err) => {
                 return Err(crate::error::from_io(err));
@@ -653,15 +653,15 @@ mod tests {
         }
 
         let root = Chain(None::<Error>);
-        let io = std::io::Error::new(::std::io::ErrorKind::Other, root);
+        let io = std::io::Error::new(std::io::ErrorKind::Other, root);
         let err = Error::new(Kind::Io(io), None);
         assert!(err.cause().is_none());
         assert_eq!(err.to_string(), "root");
 
 
-        let root = std::io::Error::new(::std::io::ErrorKind::Other, Chain(None::<Error>));
+        let root = std::io::Error::new(std::io::ErrorKind::Other, Chain(None::<Error>));
         let link = Chain(Some(root));
-        let io = std::io::Error::new(::std::io::ErrorKind::Other, link);
+        let io = std::io::Error::new(std::io::ErrorKind::Other, link);
         let err = Error::new(Kind::Io(io), None);
         assert!(err.cause().is_some());
         assert_eq!(err.to_string(), "chain: root");
