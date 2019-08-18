@@ -10,6 +10,19 @@ fn test_badssl_modern() {
     assert!(text.contains("<title>mozilla-modern.badssl.com</title>"));
 }
 
+#[cfg(feature = "rustls-tls")]
+#[test]
+fn test_rustls_badssl_modern() {
+    let text = reqwest::Client::builder()
+        .use_rustls_tls()
+        .build().unwrap()
+        .get("https://mozilla-modern.badssl.com/")
+        .send().unwrap()
+        .text().unwrap();
+
+    assert!(text.contains("<title>mozilla-modern.badssl.com</title>"));
+}
+
 #[cfg(feature = "tls")]
 #[test]
 fn test_badssl_self_signed() {
