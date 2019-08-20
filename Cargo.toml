@@ -20,9 +20,9 @@ all-features = true
 base64 = "0.10"
 bytes = "0.4"
 encoding_rs = "0.8"
-futures-preview = { version = "=0.3.0-alpha.17", features = ["compat"] }
+futures-preview = { version = "0.3.0-alpha.17", features = ["async-await", "compat", "io-compat", "nightly"] }
 http = "0.1.15"
-hyper = "0.12.22"
+hyper = { git = "https://github.com/hyperium/hyper.git", branch = "master" }
 flate2 = { version = "^1.0.7", default-features = false, features = ["rust_backend"] }
 log = "0.4"
 mime = "0.3.7"
@@ -30,24 +30,20 @@ mime_guess = "2.0"
 serde = "1.0"
 serde_json = "1.0"
 serde_urlencoded = "0.5"
-tokio = { version = "0.1.7", default-features = false, features = ["rt-full", "tcp"] }
-tokio-executor = "0.1.4" # a minimum version so trust-dns-resolver compiles
-tokio-io = "0.1"
-tokio-threadpool = "0.1.8" # a minimum version so tokio compiles
-tokio-timer = "0.2.6" # a minimum version so trust-dns-resolver compiles
+tokio = { version = "0.2.0-alpha.1", default-features = false, features = ["rt-full", "tcp"] }
 url = "1.2"
 uuid = { version = "0.7", features = ["v4"] }
-futures-timer = "0.3"
 
 # Optional deps...
 
-hyper-old-types = { version = "0.11", optional = true, features = ["compat"] }
-hyper-rustls = { version = "^0.17.1", optional = true }
-hyper-tls = { version = "0.3.2", optional = true }
+#hyper-old-types = { git = "https://github.com/hyperium/hyper.git", branch = "master", optional = true, features = ["compat"] }
+hyper-rustls = { git = "https://github.com/dbcfd/hyper-rustls.git", branch = "master", optional = true }
+hyper-tls = { git = "https://github.com/hyperium/hyper-tls.git", branch = "master", optional = true }
 native-tls = { version = "0.2", optional = true }
 rustls = { version = "0.16", features = ["dangerous_configuration"], optional = true }
 socks = { version = "0.3.2", optional = true }
-tokio-rustls = { version = "0.10", optional = true }
+tokio-tls = { version = "0.3.0-alpha.1", optional = true }
+tokio-rustls = { version = "0.12.0-alpha.1", optional = true }
 trust-dns-resolver = { version = "0.11", optional = true }
 webpki-roots = { version = "0.17", optional = true }
 cookie_store = "0.7.0"
@@ -57,8 +53,6 @@ time = "0.1.42"
 [dev-dependencies]
 env_logger = "0.6"
 serde = { version = "1.0", features = ["derive"] }
-tokio = { version = "0.1.7", default-features = false, features = ["rt-full", "tcp", "fs"] }
-tokio-tcp = "0.1"
 libflate = "0.1"
 doc-comment = "0.3"
 bytes = "0.4"
@@ -68,14 +62,12 @@ default = ["default-tls"]
 
 tls = []
 
-default-tls = ["hyper-tls", "native-tls", "tls"]
+default-tls = ["hyper-tls", "native-tls", "tls", "tokio-tls"]
 default-tls-vendored = ["default-tls", "native-tls/vendored"]
 
 rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 
 trust-dns = ["trust-dns-resolver"]
-
-hyper-011 = ["hyper-old-types"]
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.6"

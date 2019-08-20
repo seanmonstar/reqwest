@@ -358,7 +358,7 @@ impl RequestBuilder {
     /// rt.block_on(response)
     /// # }
     /// ```
-    pub fn send(self) -> impl Future<Item = Response, Error = crate::Error> {
+    pub fn send(self) -> impl Future<Output = Result<Response, crate::Error>> {
         match self.request {
             Ok(req) => self.client.execute_request(req),
             Err(err) => Pending::new_err(err),

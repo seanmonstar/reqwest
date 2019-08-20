@@ -1,12 +1,13 @@
-use std::task::Context;
 use std::pin::Pin;
-use std::mem;
+// TODO: Read/Write for Async
+//use std::io::{self, Read};
+//use std::mem;
 use std::fmt;
-use std::io::{self, Read};
 use std::net::SocketAddr;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
-use futures::{Poll, Stream};
+use futures::Stream;
 use http;
 use serde::de::DeserializeOwned;
 
@@ -291,12 +292,13 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
-    #[inline]
-    pub fn copy_to<W: ?Sized>(&mut self, w: &mut W) -> crate::Result<u64>
-        where W: io::Write
-    {
-        io::copy(self, w).map_err(crate::error::from)
-    }
+// TODO: Read/Write for Async
+//    #[inline]
+//    pub fn copy_to<W: ?Sized>(&mut self, w: &mut W) -> crate::Result<u64>
+//        where W: io::Write
+//    {
+//        io::copy(self, w).map_err(crate::error::from)
+//    }
 
     /// Turn a response into an error if the server returned an error.
     ///
@@ -349,43 +351,55 @@ impl Response {
     }
 }
 
-impl Read for Response {
-    #[inline]
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if self.body.is_none() {
-            let body = mem::replace(self.inner.body_mut(), async_impl::Decoder::empty());
-            let body = async_impl::ReadableChunks::new(WaitBody {
-                inner: wait::stream(body, self.timeout)
-            });
-            self.body = Some(body);
+//TODO: read for async
+//impl Read for Response {
+//    #[inline]
+//    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+//        if self.body.is_none() {
+//            let body = mem::replace(self.inner.body_mut(), async_impl::Decoder::empty());
+//            let body = async_impl::ReadableChunks::new(WaitBody {
+//                inner: wait::stream(body.boxed(), self.timeout)
+//            });
+//            self.body = Some(body);
+//        }
+//        let mut body = self.body.take().unwrap();
+//        let bytes = body.read(buf);
+//        self.body = Some(body);
+//        bytes
+//    }
+//}
+
+type WaitBodyStream = Pin<Box<dyn Stream<Item=Result<<async_impl::Decoder as Stream>::Item, crate::Error>> + Send>>;
+
+struct WaitBody {
+    inner: wait::WaitStream<WaitBodyStream>
+}
+
+impl WaitBody {
+    fn inner(self: Pin<&mut Self>) -> Pin<&mut wait::WaitStream<WaitBodyStream>> {
+        unsafe {
+            Pin::map_unchecked_mut(self, |x| &mut x.inner)
         }
-        let mut body = self.body.take().unwrap();
-        let bytes = body.read(buf);
-        self.body = Some(body);
-        bytes
     }
 }
 
-struct WaitBody {
-    inner: wait::WaitStream<async_impl::Decoder>
-}
-
 impl Stream for WaitBody {
-    type Item = <async_impl::Decoder as Stream>::Item;
+    type Item = Result<<async_impl::Decoder as Stream>::Item, crate::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        match self.inner.next() {
-            Some(Ok(chunk)) => Ok(Poll::Ready(Some(chunk))),
-            Some(Err(e)) => {
-                let req_err = match e {
+        match self.inner().as_mut().poll_next(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Some(Ok(chunk))) => Poll::Ready(Some(Ok(chunk))),
+            Poll::Ready(Some(Err(wait_error))) => {
+                let req_err = match wait_error {
                     wait::Waited::TimedOut => crate::error::timedout(None),
                     wait::Waited::Executor(e) => crate::error::from(e),
                     wait::Waited::Inner(e) => e,
                 };
 
-                Err(req_err)
+                Poll::Ready(Some(Err(req_err)))
             },
-            None => Ok(Poll::Ready(None)),
+            Poll::Ready(None) => Poll::Ready(None),
         }
     }
 }

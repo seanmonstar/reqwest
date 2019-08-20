@@ -234,7 +234,7 @@ impl Part {
 
     /// Tries to set the mime of this part.
     pub fn mime_str(self, mime: &str) -> crate::Result<Part> {
-        Ok(self.mime(try_!(mime.parse())))
+        Ok(self.mime(mime.parse().map_err(crate::error::from)?))
     }
 
     // Re-export when mime 0.4 is available, with split MediaType/MediaRange.

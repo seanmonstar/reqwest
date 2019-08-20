@@ -27,7 +27,8 @@ impl PolyfillTryInto for Url {
 
 impl<'a> PolyfillTryInto for &'a str {
     fn into_url(self) -> crate::Result<Url> {
-        try_!(Url::parse(self))
+        Url::parse(self)
+            .map_err(crate::error::from)?
             .into_url()
     }
 }

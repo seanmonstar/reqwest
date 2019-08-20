@@ -3,13 +3,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::thread;
 use std::net::IpAddr;
-use std::task::Poll;
 
-use futures::{Future};
-use futures::future::{self, Either};
 use futures::channel::{mpsc, oneshot};
+use futures::{StreamExt, TryFutureExt};
 
-use log::{trace};
+use log::{error, trace};
 
 use crate::request::{Request, RequestBuilder};
 use crate::response::Response;
@@ -549,73 +547,64 @@ impl Drop for InnerClientHandle {
 
 impl ClientHandle {
     fn new(builder: ClientBuilder) -> crate::Result<ClientHandle> {
+        let mut rt = tokio::runtime::current_thread::Runtime::new().map_err(crate::error::from)?;
+
         let timeout = builder.timeout;
         let builder = builder.inner;
-        let (tx, rx) = mpsc::unbounded();
+        let (tx, rx) = mpsc::unbounded::<(async_impl::Request, oneshot::Sender<Result<async_impl::Response, crate::Error>>)>();
         let (spawn_tx, spawn_rx) = oneshot::channel::<crate::Result<()>>();
-        let handle = try_!(thread::Builder::new().name("reqwest-internal-sync-runtime".into()).spawn(move || {
-            use tokio::runtime::current_thread::Runtime;
+        let handle = thread::Builder::new()
+            .name("reqwest-internal-sync-runtime".into())
+            .spawn(move || {
+                use tokio::runtime::current_thread::Runtime;
 
-            let built = (|| {
-                let rt = try_!(Runtime::new());
-                let client = builder.build()?;
-                Ok((rt, client))
-            })();
-
-            let (mut rt, client) = match built {
-                Ok((rt, c)) => {
-                    if spawn_tx.send(Ok(())).is_err() {
+                let mut rt = match Runtime::new().map_err(crate::error::from) {
+                    Err(e) => {
+                        if let Err(e) = spawn_tx.send(Err(e)) {
+                            error!("Failed to communicate runtime creation failure: {:?}", e);
+                        }
                         return;
                     }
-                    (rt, c)
-                },
-                Err(e) => {
-                    let _ = spawn_tx.send(Err(e));
-                    return;
-                }
-            };
+                    Ok(v) => v,
+                };
 
-            let work = rx.for_each(move |(req, tx)| {
-                let mut tx_opt: Option<oneshot::Sender<crate::Result<async_impl::Response>>> = Some(tx);
-                let mut res_fut = client.execute(req);
-
-                let task = future::poll_fn(move || {
-                    let canceled = tx_opt
-                        .as_mut()
-                        .expect("polled after complete")
-                        .poll_cancel()
-                        .expect("poll_cancel cannot error")
-                        .is_ready();
-
-                    if canceled {
-                        trace!("response receiver is canceled");
-                        Ok(Poll::Ready(()))
-                    } else {
-                        let result = match res_fut.poll() {
-                            Ok(Poll::Pending) => return Ok(Poll::Pending),
-                            Ok(Poll::Ready(res)) => Ok(res),
-                            Err(err) => Err(err),
-                        };
-
-                        let _ = tx_opt
-                            .take()
-                            .expect("polled after complete")
-                            .send(result);
-                        Ok(Poll::Ready(()))
+                let f = async move {
+                    let client = match builder.build() {
+                        Err(e) => {
+                            if let Err(e) = spawn_tx.send(Err(e)) {
+                                error!("Failed to communicate client creation failure: {:?}", e);
+                            }
+                            return;
+                        }
+                        Ok(v) => v,
+                    };
+                    if let Err(e) = spawn_tx.send(Ok(())) {
+                        error!("Failed to communicate successful startup: {:?}", e);
+                        return;
                     }
-                });
-                tokio::spawn(task);
-                Ok(())
-            });
 
+                    let mut rx = rx;
 
-            // work is Future<(), ()>, and our closure will never return Err
-            rt.block_on(work)
-                .expect("runtime unexpected error");
-        }));
+                    while let Some((req, req_tx)) = rx.next().await {
+                        let req_fut = client.execute(req);
+                        let f = async move {
+                            let res = req_fut.await;
+
+                            if let Err(_e) = req_tx.send(res) {
+                                trace!("response receiver is cancelled");
+                            }
+                        };
+                        tokio::spawn(f);
+                    }
+
+                    trace!("Receiver is shutdown");
+                };
+
+                rt.block_on(f)
+            }).map_err(crate::error::from)?;
 
         // Wait for the runtime thread to start up...
-        match spawn_rx.wait() {
+        match rt.block_on(spawn_rx) {
             Ok(Ok(())) => (),
             Ok(Err(err)) => return Err(err),
             Err(_canceled) => event_loop_panicked(),
@@ -644,30 +633,27 @@ impl ClientHandle {
             .unbounded_send((req, tx))
             .expect("core thread panicked");
 
-        let write = if let Some(body) = body {
-            Either::A(body.send())
-            //try_!(body.send(self.timeout.0), &url);
+        let result: Result<crate::Result<async_impl::Response>, wait::Waited<crate::Error>> = if let Some(body) = body {
+            let f = async move {
+                body.send().await?;
+                rx.await.map_err(|_canceled| event_loop_panicked())
+            };
+            wait::timeout(f, self.timeout.0)
         } else {
-            Either::B(future::ok(()))
+            wait::timeout(rx.map_err(|_canceled| event_loop_panicked()), self.timeout.0)
         };
 
-        let rx = rx.map_err(|_canceled| event_loop_panicked());
-
-        let fut = write.join(rx).map(|((), res)| res);
-
-        let res = match wait::timeout(fut, self.timeout.0) {
-            Ok(res) => res,
-            Err(wait::Waited::TimedOut) => return Err(crate::error::timedout(Some(url))),
+        match result {
+            Ok(Err(err)) => Err(err.with_url(url)),
+            Ok(Ok(res)) => Ok(Response::new(res, self.timeout.0, KeepCoreThreadAlive(Some(self.inner.clone())))),
+            Err(wait::Waited::TimedOut) => Err(crate::error::timedout(Some(url))),
             Err(wait::Waited::Executor(err)) => {
-                return Err(crate::error::from(err).with_url(url))
+                Err(crate::error::from(err).with_url(url))
             },
             Err(wait::Waited::Inner(err)) => {
-                return Err(err.with_url(url));
+                Err(err.with_url(url))
             },
-        };
-        res.map(|res| {
-            Response::new(res, self.timeout.0, KeepCoreThreadAlive(Some(self.inner.clone())))
-        })
+        }
     }
 }
 

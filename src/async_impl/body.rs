@@ -70,6 +70,12 @@ impl Body {
             },
         }
     }
+
+    fn inner(self: Pin<&mut Self>) -> Pin<&mut Inner> {
+        unsafe {
+            Pin::map_unchecked_mut(self, |x| &mut x.inner)
+        }
+    }
 }
 
 impl Stream for Body {
@@ -77,29 +83,31 @@ impl Stream for Body {
 
     #[inline]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let opt = match self.inner {
+        let opt_try_chunk = match self.inner().get_mut() {
             Inner::Hyper { ref mut body, ref mut timeout } => {
                 if let Some(ref mut timeout) = timeout {
-                    if let Poll::Ready(()) = try_!(timeout.poll()) {
-                        return Err(crate::error::timedout(None));
+                    if let Poll::Ready(()) = Pin::new(timeout).poll(cx) {
+                        return Poll::Ready(Some(Err(crate::error::timedout(None))));
                     }
                 }
-                futures::ready!(body.poll_data().map_err(crate::error::from))
+                futures::ready!(Pin::new(body).poll_data(cx))
+                    .map(|opt_chunk| {
+                        opt_chunk.map(|c| Chunk { inner: c })
+                            .map_err(crate::error::from)
+                    })
             },
             Inner::Reusable(ref mut bytes) => {
-                return if bytes.is_empty() {
-                    Ok(Poll::Ready(None))
+                if bytes.is_empty() {
+                    None
                 } else {
                     let chunk = Chunk::from_chunk(bytes.clone());
                     *bytes = Bytes::new();
-                    Ok(Poll::Ready(Some(chunk)))
-                };
+                    Some(Ok(chunk))
+                }
             },
         };
 
-        Ok(Poll::Ready(opt.map(|chunk| Chunk {
-            inner: chunk,
-        })))
+        Poll::Ready(opt_try_chunk)
     }
 }
 
@@ -138,7 +146,7 @@ impl From<&'static str> for Body {
     }
 }
 
-impl<I, E> From<Box<dyn Stream<Item = Result<I, E>> + Send>> for Body
+impl<I, E> From<Pin<Box<dyn Stream<Item = Result<I, E>> + Send + Sync>>> for Body
 where
     hyper::Chunk: From<I>,
     I: 'static,

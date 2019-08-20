@@ -3,7 +3,9 @@ use std::fmt;
 use std::io::{self, Cursor, Read};
 
 use bytes::Bytes;
-use futures::Future;
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use crate::{async_impl};
 
@@ -214,80 +216,112 @@ pub(crate) struct Sender {
     tx: hyper::body::Sender,
 }
 
+struct SenderWrapper {
+    inner: hyper::body::Sender
+}
+
+impl SenderWrapper {
+    fn abort(self) {
+        self.inner.abort()
+    }
+
+    pub fn send_data(&mut self, chunk: hyper::Chunk) -> Result<(), hyper::Chunk> {
+        self.inner.send_data(chunk)
+    }
+
+    fn inner(self: Pin<&mut Self>) -> Pin<&mut hyper::body::Sender> {
+        unsafe {
+            Pin::map_unchecked_mut(self, |x| &mut x.inner)
+        }
+    }
+}
+
+impl Future for SenderWrapper {
+    type Output=Result<(), hyper::Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.inner().as_mut().poll_ready(cx)
+    }
+}
+
+async fn send_future(sender: Sender) -> Result<(), crate::Error> {
+    use std::cmp;
+    use bytes::{BufMut, BytesMut};
+
+    let sender_wrapper = SenderWrapper { inner: sender.tx };
+    let con_len = sender.body.1;
+    let cap = cmp::min(sender.body.1.unwrap_or(8192), 8192);
+    let mut written = 0;
+    let mut buf = BytesMut::with_capacity(cap as usize);
+    let mut body = sender.body.0;
+    // Put in an option so that it can be consumed on error to call abort()
+    let mut tx = Some(sender_wrapper);
+
+    loop {
+        if Some(written) == con_len {
+            // Written up to content-length, so stop.
+            return Ok(().into());
+        }
+
+        // The input stream is read only if the buffer is empty so
+        // that there is only one read in the buffer at any time.
+        //
+        // We need to know whether there is any data to send before
+        // we check the transmission channel (with poll_ready below)
+        // because somestimes the receiver disappears as soon as is
+        // considers the data is completely transmitted, which may
+        // be true.
+        //
+        // The use case is a web server that closes its
+        // input stream as soon as the data received is valid JSON.
+        // This behaviour is questionable, but it exists and the
+        // fact is that there is actually no remaining data to read.
+        if buf.is_empty() {
+            if buf.remaining_mut() == 0 {
+                buf.reserve(8192);
+            }
+
+            match body.read(unsafe { buf.bytes_mut() }) {
+                Ok(0) => {
+                    // The buffer was empty and nothing's left to
+                    // read. Return.
+                    return Ok(().into());
+                }
+                Ok(n) => {
+                    unsafe { buf.advance_mut(n); }
+                }
+                Err(e) => {
+                    let ret = io::Error::new(e.kind(), e.to_string());
+                    tx
+                        .take()
+                        .expect("tx only taken on error")
+                        .abort();
+                    return Err(crate::error::from(ret));
+                }
+            }
+        }
+
+        // The only way to get here is when the buffer is not empty.
+        // We can check the transmission channel
+        tx
+            .as_mut()
+            .expect("tx only taken on error")
+            .await
+            .map_err(crate::error::from)?;
+
+        written += buf.len() as u64;
+        let tx = tx.as_mut().expect("tx only taken on error");
+        if tx.send_data(buf.take().freeze().into()).is_err() {
+            return Err(crate::error::timedout(None));
+        }
+    }
+}
+
 impl Sender {
     // A `Future` that may do blocking read calls.
     // As a `Future`, this integrates easily with `wait::timeout`.
-    pub(crate) fn send(self) -> impl Future<Item=(), Error=crate::Error> {
-        use std::cmp;
-        use bytes::{BufMut, BytesMut};
-        use futures::future;
-
-        let con_len = self.body.1;
-        let cap = cmp::min(self.body.1.unwrap_or(8192), 8192);
-        let mut written = 0;
-        let mut buf = BytesMut::with_capacity(cap as usize);
-        let mut body = self.body.0;
-        // Put in an option so that it can be consumed on error to call abort()
-        let mut tx = Some(self.tx);
-
-        future::poll_fn(move || loop {
-            if Some(written) == con_len {
-                // Written up to content-length, so stop.
-                return Ok(().into());
-            }
-
-            // The input stream is read only if the buffer is empty so
-            // that there is only one read in the buffer at any time.
-            //
-            // We need to know whether there is any data to send before
-            // we check the transmission channel (with poll_ready below)
-            // because somestimes the receiver disappears as soon as is
-            // considers the data is completely transmitted, which may
-            // be true.
-            //
-            // The use case is a web server that closes its
-            // input stream as soon as the data received is valid JSON.
-            // This behaviour is questionable, but it exists and the
-            // fact is that there is actually no remaining data to read.
-            if buf.is_empty() {
-                if buf.remaining_mut() == 0 {
-                    buf.reserve(8192);
-                }
-
-                match body.read(unsafe { buf.bytes_mut() }) {
-                    Ok(0) => {
-                        // The buffer was empty and nothing's left to
-                        // read. Return.
-                        return Ok(().into());
-                    }
-                    Ok(n) => {
-                        unsafe { buf.advance_mut(n); }
-                    }
-                    Err(e) => {
-                        let ret = io::Error::new(e.kind(), e.to_string());
-                        tx
-                            .take()
-                            .expect("tx only taken on error")
-                            .abort();
-                        return Err(crate::error::from(ret));
-                    }
-                }
-            }
-
-            // The only way to get here is when the buffer is not empty.
-            // We can check the transmission channel
-            futures::ready!(tx
-                .as_mut()
-                .expect("tx only taken on error")
-                .poll_ready()
-                .map_err(crate::error::from));
-
-            written += buf.len() as u64;
-            let tx = tx.as_mut().expect("tx only taken on error");
-            if tx.send_data(buf.take().freeze().into()).is_err() {
-                return Err(crate::error::timedout(None));
-            }
-        })
+    pub(crate) fn send(self) -> impl Future<Output=Result<(), crate::Error>> {
+        send_future(self)
     }
 }
 

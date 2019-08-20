@@ -4,7 +4,6 @@ use std::time::Duration;
 use std::net::IpAddr;
 
 use bytes::Bytes;
-use futures::{Future, Poll};
 use crate::header::{
     Entry,
     HeaderMap,
@@ -26,6 +25,9 @@ use hyper::client::ResponseFuture;
 use mime;
 #[cfg(feature = "default-tls")]
 use native_tls::TlsConnector;
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use tokio::{clock, timer::Delay};
 
 use log::{debug};
@@ -547,7 +549,7 @@ impl Client {
     ///
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
-    pub fn execute(&self, request: Request) -> impl Future<Item = Response, Error = crate::Error> {
+    pub fn execute(&self, request: Request) -> impl Future<Output = Result<Response, crate::Error>> {
         self.execute_request(request)
     }
 
@@ -711,10 +713,42 @@ struct PendingRequest {
     timeout: Option<Delay>,
 }
 
+impl PendingRequest {
+    fn in_flight(self: Pin<&mut Self>) -> Pin<&mut ResponseFuture> {
+        unsafe {
+            Pin::map_unchecked_mut(self, |x| &mut x.in_flight)
+        }
+    }
+
+    fn timeout(self: Pin<&mut Self>) -> Pin<&mut Option<Delay>> {
+        unsafe {
+            Pin::map_unchecked_mut(self, |x| &mut x.timeout)
+        }
+    }
+
+    fn urls(self: Pin<&mut Self>) -> &mut Vec<Url> {
+        unsafe {
+            &mut Pin::get_unchecked_mut(self).urls
+        }
+    }
+
+    fn headers(self: Pin<&mut Self>) -> &mut HeaderMap {
+        unsafe {
+            &mut Pin::get_unchecked_mut(self).headers
+        }
+    }
+}
+
 impl Pending {
     pub(super) fn new_err(err: crate::Error) -> Pending {
         Pending {
             inner: PendingInner::Error(Some(err)),
+        }
+    }
+
+    fn inner(self: Pin<&mut Self>) -> Pin<&mut PendingInner> {
+        unsafe {
+            Pin::map_unchecked_mut(self, |x| &mut x.inner)
         }
     }
 }
@@ -723,10 +757,11 @@ impl Future for Pending {
 
     type Output = Result<Response, crate::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Output> {
-        match self.inner {
-            PendingInner::Request(ref mut req) => req.poll(),
-            PendingInner::Error(ref mut err) => Err(err.take().expect("Pending error polled more than once")),
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let inner = self.inner();
+        match inner.get_mut() {
+            PendingInner::Request(ref mut req) => Pin::new(req).poll(cx),
+            PendingInner::Error(ref mut err) => Poll::Ready(Err(err.take().expect("Pending error polled more than once"))),
         }
     }
 }
@@ -734,17 +769,18 @@ impl Future for Pending {
 impl Future for PendingRequest {
     type Output = Result<Response, crate::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Output> {
-        if let Some(ref mut delay) = self.timeout {
-            if let Poll::Ready(()) = try_!(delay.poll(), &self.url) {
-                return Err(crate::error::timedout(Some(self.url.clone())));
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if let Some(delay) = self.as_mut().timeout().as_mut().as_pin_mut() {
+            if let Poll::Ready(()) = delay.poll(cx) {
+                return Poll::Ready(Err(crate::error::timedout(Some(self.url.clone()))));
             }
         }
 
         loop {
-            let res = match try_!(self.in_flight.poll(), &self.url) {
-                Poll::Ready(res) => res,
-                Poll::Pending => return Ok(Poll::Pending),
+            let res = match self.as_mut().in_flight().as_mut().poll(cx) {
+                Poll::Ready(Err(e)) => return Poll::Ready(url_error!(e, &self.url)),
+                Poll::Ready(Ok(res)) => res,
+                Poll::Pending => return Poll::Pending,
             };
             if let Some(store_wrapper) = self.client.cookie_store.as_ref() {
                 let mut store = store_wrapper.write().unwrap();
@@ -810,7 +846,8 @@ impl Future for PendingRequest {
                             self.headers.insert(REFERER, referer);
                         }
                     }
-                    self.urls.push(self.url.clone());
+                    let url = self.url.clone();
+                    self.as_mut().urls().push(url);
                     let action = self.client.redirect_policy.check(
                         res.status(),
                         &loc,
@@ -821,7 +858,9 @@ impl Future for PendingRequest {
                         redirect::Action::Follow => {
                             self.url = loc;
 
-                            remove_sensitive_headers(&mut self.headers, &self.url, &self.urls);
+                            let mut headers = std::mem::replace(self.as_mut().headers(), HeaderMap::new());
+
+                            remove_sensitive_headers(&mut headers, &self.url, &self.urls);
                             debug!("redirecting to {:?} '{}'", self.method, self.url);
                             let uri = expect_uri(&self.url);
                             let body = match self.body {
@@ -837,27 +876,28 @@ impl Future for PendingRequest {
                             // Add cookies from the cookie store.
                             if let Some(cookie_store_wrapper) = self.client.cookie_store.as_ref() {
                                 let cookie_store = cookie_store_wrapper.read().unwrap();
-                                add_cookie_header(&mut self.headers, &cookie_store, &self.url);
+                                add_cookie_header(&mut headers, &cookie_store, &self.url);
                             }
 
-                            *req.headers_mut() = self.headers.clone();
-                            self.in_flight = self.client.hyper.request(req);
+                            *req.headers_mut() = headers.clone();
+                            std::mem::swap(self.as_mut().headers(), &mut headers);
+                            *self.as_mut().in_flight().get_mut() = self.client.hyper.request(req);
                             continue;
                         },
                         redirect::Action::Stop => {
                             debug!("redirect_policy disallowed redirection to '{}'", loc);
                         },
                         redirect::Action::LoopDetected => {
-                            return Err(crate::error::loop_detected(self.url.clone()));
+                            return Poll::Ready(Err(crate::error::loop_detected(self.url.clone())));
                         },
                         redirect::Action::TooManyRedirects => {
-                            return Err(crate::error::too_many_redirects(self.url.clone()));
+                            return Poll::Ready(Err(crate::error::too_many_redirects(self.url.clone())));
                         }
                     }
                 }
             }
             let res = Response::new(res, self.url.clone(), self.client.gzip, self.timeout.take());
-            return Ok(Poll::Ready(res));
+            return Poll::Ready(Ok(res));
         }
     }
 }

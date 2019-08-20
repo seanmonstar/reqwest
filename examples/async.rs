@@ -1,35 +1,26 @@
 #![deny(warnings)]
-
-extern crate futures;
-extern crate reqwest;
-extern crate tokio;
-
 use std::mem;
 use std::io::{self, Cursor};
-use futures::{Future, Stream};
+use futures::{Future, Stream, TryStreamExt};
 use reqwest::r#async::{Client, Decoder};
 
-
-fn fetch() -> impl Future<Item=(), Error=()> {
-    Client::new()
+#[tokio::main]
+fn main() -> Result<(), reqwest::Error> {
+    let mut res = Client::new()
         .get("https://hyper.rs")
         .send()
-        .and_then(|mut res| {
-            println!("{}", res.status());
+        .await?;
 
-            let body = mem::replace(res.body_mut(), Decoder::empty());
-            body.concat2()
-        })
-        .map_err(|err| println!("request error: {}", err))
-        .map(|body| {
-            let mut body = Cursor::new(body);
-            let _ = io::copy(&mut body, &mut io::stdout())
-                .map_err(|err| {
-                    println!("stdout error: {}", err);
-                });
-        })
-}
+    println!("{}", res.status());
 
-fn main() {
-    tokio::run(fetch());
+    let body = mem::replace(res.body_mut(), Decoder::empty());
+    let body: Result<_, _> = body.try_concat().await;
+
+    let mut body = Cursor::new(body?);
+    io::copy(&mut body, &mut io::stdout())
+        .map_err(|err| {
+            println!("stdout error: {}", err);
+        })?;
+
+    Ok(())
 }

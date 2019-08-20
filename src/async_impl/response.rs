@@ -1,12 +1,13 @@
-use futures::stream::Concat;
 use std::fmt;
 use std::mem;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::borrow::Cow;
+use std::task::{Context, Poll};
 
 use encoding_rs::{Encoding, UTF_8};
-use futures::{Future, Poll};
+use futures::{Future, FutureExt, TryStreamExt};
 use http;
 use hyper::{HeaderMap, StatusCode, Version};
 use hyper::client::connect::HttpInfo;
@@ -18,10 +19,13 @@ use serde_json;
 use url::Url;
 use log::{debug};
 
-
 use crate::cookie;
 use super::Decoder;
 use super::body::Body;
+use crate::async_impl::Chunk;
+
+/// https://github.com/rust-lang-nursery/futures-rs/issues/1812
+type ConcatDecoder = Pin<Box<dyn Future<Output=Result<Chunk, crate::Error>> + Send>>;
 
 
 /// A Response to a submitted `Request`.
@@ -140,12 +144,12 @@ impl Response {
     }
 
     /// Get the response text
-    pub fn text(&mut self) -> impl Future<Item = String, Error = crate::Error> {
+    pub fn text(&mut self) -> impl Future<Output = Result<String, crate::Error>> {
         self.text_with_charset("utf-8")
     }
 
     /// Get the response text given a specific encoding
-    pub fn text_with_charset(&mut self, default_encoding: &str) -> impl Future<Item = String, Error = crate::Error> {
+    pub fn text_with_charset(&mut self, default_encoding: &str) -> impl Future<Output = Result<String, crate::Error>> {
         let body = mem::replace(&mut self.body, Decoder::empty());
         let content_type = self.headers.get(crate::header::CONTENT_TYPE)
             .and_then(|value| {
@@ -164,18 +168,18 @@ impl Response {
             .unwrap_or(default_encoding);
         let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);
         Text {
-            concat: body.concat2(),
+            concat: body.try_concat().boxed(),
             encoding
         }
     }
 
     /// Try to deserialize the response body as JSON using `serde`.
     #[inline]
-    pub fn json<T: DeserializeOwned>(&mut self) -> impl Future<Item = T, Error = crate::Error> {
+    pub fn json<T: DeserializeOwned>(&mut self) -> impl Future<Output = Result<T, crate::Error>> {
         let body = mem::replace(&mut self.body, Decoder::empty());
 
         Json {
-            concat: body.concat2(),
+            concat: body.try_concat().boxed(),
             _marker: PhantomData,
         }
     }
@@ -273,17 +277,29 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
 
 /// A JSON object.
 struct Json<T> {
-    concat: Concat<Decoder>,
+    concat: ConcatDecoder,
     _marker: PhantomData<T>,
+}
+
+impl<T> Json<T> {
+    fn concat(self: Pin<&mut Self>) -> Pin<&mut ConcatDecoder> {
+        unsafe {
+            Pin::map_unchecked_mut(self, |x| &mut x.concat)
+        }
+    }
 }
 
 impl<T: DeserializeOwned> Future for Json<T> {
     type Output = Result<T, crate::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Output> {
-        let bytes = futures::ready!(self.concat.poll());
-        let t = try_!(serde_json::from_slice(&bytes));
-        Poll::Ready(t)
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match futures::ready!(self.concat().as_mut().poll(cx)) {
+            Err(e) => Poll::Ready(Err(e)),
+            Ok(chunk) => {
+                let t = serde_json::from_slice(&chunk).map_err(crate::error::from);
+                Poll::Ready(t)
+            }
+        }
     }
 }
 
@@ -294,26 +310,35 @@ impl<T> fmt::Debug for Json<T> {
     }
 }
 
-#[derive(Debug)]
+//#[derive(Debug)]
 struct Text {
-    concat: Concat<Decoder>,
+    concat: ConcatDecoder,
     encoding: &'static Encoding,
+}
+
+impl Text {
+    fn concat(self: Pin<&mut Self>) -> Pin<&mut ConcatDecoder> {
+        unsafe {
+            Pin::map_unchecked_mut(self, |x| &mut x.concat)
+        }
+    }
 }
 
 impl Future for Text {
     type Output = Result<String, crate::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Output> {
-        let bytes = futures::ready!(self.concat.poll());
-        // a block because of borrow checker
-        {
-            let (text, _, _) = self.encoding.decode(&bytes);
-            if let Cow::Owned(s) = text { return Ok(Poll::Ready(s)) }
-        }
-        unsafe {
-            // decoding returned Cow::Borrowed, meaning these bytes
-            // are already valid utf8
-            Ok(Poll::Ready(String::from_utf8_unchecked(bytes.to_vec())))
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match futures::ready!(self.as_mut().concat().as_mut().poll(cx)) {
+            Err(e) => Poll::Ready(Err(e)),
+            Ok(chunk) => {
+                let (text, _, _) = self.as_mut().encoding.decode(&chunk);
+                if let Cow::Owned(s) = text { return Poll::Ready(Ok(s)) }
+                unsafe {
+                    // decoding returned Cow::Borrowed, meaning these bytes
+                    // are already valid utf8
+                    Poll::Ready(Ok(String::from_utf8_unchecked(chunk.to_vec())))
+                }
+            }
         }
     }
 }

@@ -2,8 +2,6 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 
-use tokio_executor::EnterError;
-
 use crate::{StatusCode, Url};
 
 /// The Errors that may occur when processing a `Request`.
@@ -153,8 +151,8 @@ impl Error {
             Kind::RedirectLoop |
             Kind::Status(_) |
             Kind::UnknownProxyScheme |
-            Kind::Timer |
-            Kind::BlockingClientInFutureContext => None,
+            Kind::Timer => None,
+//            Kind::BlockingClientInFutureContext => None,
         }
     }
 
@@ -248,7 +246,7 @@ impl fmt::Debug for Error {
     }
 }
 
-static BLOCK_IN_FUTURE: &str = "blocking Client used inside a Future context";
+//static BLOCK_IN_FUTURE: &str = "blocking Client used inside a Future context";
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -289,7 +287,7 @@ impl fmt::Display for Error {
             }
             Kind::UnknownProxyScheme => f.write_str("Unknown proxy scheme"),
             Kind::Timer => f.write_str("timer unavailable"),
-            Kind::BlockingClientInFutureContext => f.write_str(BLOCK_IN_FUTURE),
+//            Kind::BlockingClientInFutureContext => f.write_str(BLOCK_IN_FUTURE),
         }
     }
 }
@@ -326,7 +324,7 @@ impl StdError for Error {
             }
             Kind::UnknownProxyScheme => "Unknown proxy scheme",
             Kind::Timer => "timer unavailable",
-            Kind::BlockingClientInFutureContext => BLOCK_IN_FUTURE,
+//            Kind::BlockingClientInFutureContext => BLOCK_IN_FUTURE,
         }
     }
 
@@ -354,8 +352,8 @@ impl StdError for Error {
             Kind::RedirectLoop |
             Kind::Status(_) |
             Kind::UnknownProxyScheme |
-            Kind::Timer |
-            Kind::BlockingClientInFutureContext => None,
+            Kind::Timer => None,
+//            Kind::BlockingClientInFutureContext => None,
         }
     }
 
@@ -381,8 +379,8 @@ impl StdError for Error {
             Kind::RedirectLoop |
             Kind::Status(_) |
             Kind::UnknownProxyScheme |
-            Kind::Timer |
-            Kind::BlockingClientInFutureContext => None,
+            Kind::Timer => None,
+//            Kind::BlockingClientInFutureContext => None,
         }
     }
 }
@@ -410,7 +408,8 @@ pub(crate) enum Kind {
     Status(StatusCode),
     UnknownProxyScheme,
     Timer,
-    BlockingClientInFutureContext,
+// TODO: Needed?
+//    BlockingClientInFutureContext,
 }
 
 
@@ -488,11 +487,11 @@ where T: Into<Kind> {
     }
 }
 
-impl From<EnterError> for Kind {
-    fn from(_err: EnterError) -> Kind {
-        Kind::BlockingClientInFutureContext
-    }
-}
+//impl From<EnterError> for Kind {
+//    fn from(_err: EnterError) -> Kind {
+//        Kind::BlockingClientInFutureContext
+//    }
+//}
 
 impl From<tokio::timer::Error> for Kind {
     fn from(_err: tokio::timer::Error) -> Kind {
@@ -533,58 +532,46 @@ where
     InternalFrom(err, None).into()
 }
 
-pub(crate) fn into_io(e: Error) -> io::Error {
-    match e.inner.kind {
-        Kind::Io(io) => io,
-        _ => io::Error::new(io::ErrorKind::Other, e),
-    }
-}
+//TODO: needed?
+//pub(crate) fn into_io(e: Error) -> io::Error {
+//    match e.inner.kind {
+//        Kind::Io(io) => io,
+//        _ => io::Error::new(io::ErrorKind::Other, e),
+//    }
+//}
+//
+//pub(crate) fn from_io(e: io::Error) -> Error {
+//    if e.get_ref().map(|r| r.is::<Error>()).unwrap_or(false) {
+//        *e
+//            .into_inner()
+//            .expect("io::Error::get_ref was Some(_)")
+//            .downcast::<Error>()
+//            .expect("StdError::is() was true")
+//    } else {
+//        from(e)
+//    }
+//}
 
-pub(crate) fn from_io(e: io::Error) -> Error {
-    if e.get_ref().map(|r| r.is::<Error>()).unwrap_or(false) {
-        *e
-            .into_inner()
-            .expect("io::Error::get_ref was Some(_)")
-            .downcast::<Error>()
-            .expect("StdError::is() was true")
-    } else {
-        from(e)
-    }
-}
-
-
-macro_rules! try_ {
-    ($e:expr) => (
-        match $e {
-            Ok(v) => v,
-            Err(err) => {
-                return Err(crate::error::from(err));
-            }
-        }
-    );
+macro_rules! url_error {
     ($e:expr, $url:expr) => (
-        match $e {
-            Ok(v) => v,
-            Err(err) => {
-                return Err(crate::Error::from(crate::error::InternalFrom(err, Some($url.clone()))));
-            }
-        }
+        Err(crate::Error::from(crate::error::InternalFrom($e, Some($url.clone()))))
     )
 }
 
-macro_rules! try_io {
-    ($e:expr) => (
-        match $e {
-            Ok(v) => v,
-            Err(ref err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                return Ok(futures::Async::NotReady);
-            }
-            Err(err) => {
-                return Err(crate::error::from_io(err));
-            }
-        }
-    )
-}
+//TODO: Read for ReadableChunks
+//macro_rules! try_io {
+//    ($e:expr) => (
+//        match $e {
+//            Ok(v) => v,
+//            Err(ref err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+//                return Poll::Pending;
+//            }
+//            Err(err) => {
+//                return Poll::Ready(Some(Err(crate::error::from_io(err))));
+//            }
+//        }
+//    )
+//}
 
 pub(crate) fn loop_detected(url: Url) -> Error {
     Error::new(Kind::RedirectLoop, Some(url))
@@ -673,17 +660,17 @@ mod tests {
         assert_eq!(size_of::<Error>(), size_of::<usize>());
     }
 
-    #[test]
-    fn roundtrip_io_error() {
-        let orig = unknown_proxy_scheme();
-        // Convert reqwest::Error into an io::Error...
-        let io = into_io(orig);
-        // Convert that io::Error back into a reqwest::Error...
-        let err = from_io(io);
-        // It should have pulled out the original, not nested it...
-        match err.inner.kind {
-            Kind::UnknownProxyScheme => (),
-            _ => panic!("{:?}", err),
-        }
-    }
+//    #[test]
+//    fn roundtrip_io_error() {
+//        let orig = unknown_proxy_scheme();
+//        // Convert reqwest::Error into an io::Error...
+//        let io = into_io(orig);
+//        // Convert that io::Error back into a reqwest::Error...
+//        let err = from_io(io);
+//        // It should have pulled out the original, not nested it...
+//        match err.inner.kind {
+//            Kind::UnknownProxyScheme => (),
+//            _ => panic!("{:?}", err),
+//        }
+//    }
 }

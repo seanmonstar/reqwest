@@ -7,7 +7,7 @@ use url::percent_encoding::{self, EncodeSet, PATH_SEGMENT_ENCODE_SET};
 use uuid::Uuid;
 use http::HeaderMap;
 
-use futures::Stream;
+use futures::{Stream, StreamExt};
 
 use super::Body;
 
@@ -184,8 +184,8 @@ impl Part {
     /// Makes a new parameter from an arbitrary stream.
     pub fn stream<T, I, E>(value: T) -> Part
     where
-        T: Stream<Item = Result<I, E>> + Send + 'static,
-        E: std::error::Error + Send + Sync,
+        T: Stream<Item = Result<I, E>> + Send + Sync + 'static,
+        E: std::error::Error + Send + Sync + 'static,
         hyper::Chunk: std::convert::From<I>,
     {
         Part::new(Body::wrap(hyper::Body::wrap_stream(value)))
@@ -200,7 +200,7 @@ impl Part {
 
     /// Tries to set the mime of this part.
     pub fn mime_str(self, mime: &str) -> crate::Result<Part> {
-        Ok(self.mime(try_!(mime.parse())))
+        Ok(self.mime(mime.parse().map_err(crate::error::from)?))
     }
 
     // Re-export when mime 0.4 is available, with split MediaType/MediaRange.
@@ -462,28 +462,32 @@ impl PercentEncoding {
 mod tests {
     use super::*;
     use tokio;
+    use futures::TryStreamExt;
 
     #[test]
     fn form_empty() {
         let form = Form::new();
 
         let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-        let body_ft = form.stream();
+        let body = form.stream();
+        let s = body.map(|try_c| {
+            try_c.map(|c| c.into_bytes())
+        }).try_concat();
 
-        let out = rt.block_on(body_ft.map(|c| c.into_bytes()).concat2());
+        let out = rt.block_on(s);
         assert_eq!(out.unwrap(), Vec::new());
     }
 
     #[test]
     fn stream_to_end() {
         let mut form = Form::new()
-            .part("reader1", Part::stream(futures::stream::once::<_, hyper::Error>(Ok(hyper::Chunk::from("part1".to_owned())))))
+            .part("reader1", Part::stream(futures::stream::once(futures::future::ready::<Result<hyper::Chunk, hyper::Error>>(Ok(hyper::Chunk::from("part1".to_owned()))))))
             .part("key1", Part::text("value1"))
             .part(
                 "key2",
                 Part::text("value2").mime(mime::IMAGE_BMP),
             )
-            .part("reader2", Part::stream(futures::stream::once::<_, hyper::Error>(Ok(hyper::Chunk::from("part2".to_owned())))))
+            .part("reader2", Part::stream(futures::stream::once(futures::future::ready::<Result<hyper::Chunk, hyper::Error>>(Ok(hyper::Chunk::from("part2".to_owned()))))))
             .part(
                 "key3",
                 Part::text("value3").file_name("filename"),
@@ -506,9 +510,12 @@ mod tests {
                         Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
                         value3\r\n--boundary--\r\n";
         let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-        let body_ft = form.stream();
+        let body = form.stream();
+        let s = body.map(|try_c| {
+            try_c.map(|c| c.into_bytes())
+        }).try_concat();
 
-        let out = rt.block_on(body_ft.map(|c| c.into_bytes()).concat2()).unwrap();
+        let out = rt.block_on(s).unwrap();
         // These prints are for debug purposes in case the test fails
         println!(
             "START REAL\n{}\nEND REAL",
@@ -532,9 +539,12 @@ mod tests {
                         value2\r\n\
                         --boundary--\r\n";
         let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-        let body_ft = form.stream();
+        let body = form.stream();
+        let s = body.map(|try_c| {
+            try_c.map(|c| c.into_bytes())
+        }).try_concat();
 
-        let out = rt.block_on(body_ft.map(|c| c.into_bytes()).concat2()).unwrap();
+        let out = rt.block_on(s).unwrap();
         // These prints are for debug purposes in case the test fails
         println!(
             "START REAL\n{}\nEND REAL",

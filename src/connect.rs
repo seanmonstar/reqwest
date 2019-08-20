@@ -1,24 +1,23 @@
-use futures::Future;
+use futures::FutureExt;
 use http::uri::Scheme;
 use hyper::client::connect::{Connect, Connected, Destination};
-use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Timeout;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 #[cfg(feature = "default-tls")]
 use native_tls::{TlsConnector, TlsConnectorBuilder};
-#[cfg(feature = "tls")]
-use futures::Poll;
-#[cfg(feature = "tls")]
-use bytes::BufMut;
 
 use std::io;
+use std::future::Future;
 use std::sync::Arc;
 use std::net::IpAddr;
+use std::pin::Pin;
 use std::time::Duration;
+use std::task::{Context, Poll};
 
 #[cfg(feature = "trust-dns")]
 use crate::dns::TrustDnsResolver;
 use crate::proxy::{Proxy, ProxyScheme};
+use tokio::future::FutureExt as _;
 
 #[cfg(feature = "trust-dns")]
 type HttpConnector = hyper::client::HttpConnector<TrustDnsResolver>;
@@ -34,6 +33,7 @@ pub(crate) struct Connector {
     nodelay: bool
 }
 
+#[derive(Clone)]
 enum Inner {
     #[cfg(not(feature = "tls"))]
     Http(HttpConnector),
@@ -73,7 +73,7 @@ impl Connector {
         where
             T: Into<Option<IpAddr>>,
     {
-        let tls = try_!(tls.build());
+        let tls = tls.build().map_err(crate::error::from)?;
 
         let mut http = http_connector()?;
         http.set_local_address(local_addr.into());
@@ -122,25 +122,7 @@ impl Connector {
     }
 
     #[cfg(feature = "socks")]
-    fn connect_socks(&self, dst: Destination, proxy: ProxyScheme) -> Connecting {
-        macro_rules! timeout {
-            ($future:expr) => {
-                if let Some(dur) = self.timeout {
-                    Box::new(Timeout::new($future, dur).map_err(|err| {
-                        if err.is_inner() {
-                            err.into_inner().expect("is_inner")
-                        } else if err.is_elapsed() {
-                            io::Error::new(io::ErrorKind::TimedOut, "connect timed out")
-                        } else {
-                            io::Error::new(io::ErrorKind::Other, err)
-                        }
-                    }))
-                } else {
-                    Box::new($future)
-                }
-            }
-        }
-
+    async fn connect_socks(&self, dst: Destination, proxy: ProxyScheme) -> Result<(Conn, Connected), io::Error> {
         let dns = match proxy {
             ProxyScheme::Socks5 { remote_dns: false, .. } => socks::DnsResolve::Local,
             ProxyScheme::Socks5 { remote_dns: true, .. } => socks::DnsResolve::Proxy,
@@ -149,20 +131,19 @@ impl Connector {
             },
         };
 
-
         match &self.inner {
             #[cfg(feature = "default-tls")]
             Inner::DefaultTls(_http, tls) => if dst.scheme() == "https" {
                 use self::native_tls_async::TlsConnectorExt;
 
-                let tls = tls.clone();
                 let host = dst.host().to_owned();
                 let socks_connecting = socks::connect(proxy, dst, dns);
-                return timeout!(socks_connecting.and_then(move |(conn, connected)| {
-                    tls.connect_async(&host, conn)
-                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-                        .map(move |io| (Box::new(io) as Conn, connected))
-                }));
+                let (conn, connected) = socks::connect(proxy, dst, dns).await?;
+                let tls_connector = tokio_tls::TlsConnector::from(tls.clone());
+                let io = tls_connector.connect(&host, conn)
+                    .await
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                Ok( (Box::new(io) as Conn, connected) )
             },
             #[cfg(feature = "rustls-tls")]
             Inner::RustlsTls { tls_proxy, .. } => if dst.scheme() == "https" {
@@ -171,27 +152,18 @@ impl Connector {
 
                 let tls = tls_proxy.clone();
                 let host = dst.host().to_owned();
-                let socks_connecting = socks::connect(proxy, dst, dns);
-                return timeout!(socks_connecting.and_then(move |(conn, connected)| {
-                    let maybe_dnsname = DNSNameRef::try_from_ascii_str(&host)
-                        .map(|dnsname| dnsname.to_owned())
-                        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Invalid DNS Name"));
-                    futures::future::result(maybe_dnsname)
-                        .and_then(move |dnsname| {
-                            RustlsConnector::from(tls).connect(dnsname.as_ref(), conn)
-                                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-                        })
-                        .map(move |io| {
-                            (Box::new(io) as Conn, connected)
-                        })
-                }));
+                let (conn, connected) = socks::connect(proxy, dst, dns);
+                let dnsname = DNSNameRef::try_from_ascii_str(&host)
+                    .map(|dnsname| dnsname.to_owned())
+                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "Invalid DNS Name"))?;
+                let io = RustlsConnector::from(tls).connect(dnsname.as_ref(), conn)
+                    .await
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                Ok( (Box::new(io) as Conn, connected) )
             },
             #[cfg(not(feature = "tls"))]
-            Inner::Http(_) => ()
+            Inner::Http(_) => socks::connect(proxy, dst, dns),
         }
-
-        // else no TLS
-        socks::connect(proxy, dst, dns)
     }
 }
 
@@ -207,6 +179,151 @@ fn http_connector() -> crate::Result<HttpConnector> {
     Ok(HttpConnector::new(4))
 }
 
+async fn connect_with_maybe_proxy(inner: Inner, dst: Destination, is_proxy: bool, no_delay: bool) -> Result<(Conn, Connected), io::Error> {
+    match inner {
+        #[cfg(not(feature = "tls"))]
+        Inner::Http(http) => {
+            //TODO: timeout?
+            let (io, connected) = http.connect(dst).await;
+            (Box::new(io) as Conn, connected.proxy(is_proxy))
+        },
+        #[cfg(feature = "default-tls")]
+        Inner::DefaultTls(http, tls) => {
+            let mut http = http.clone();
+
+            http.set_nodelay(no_delay || (dst.scheme() == "https"));
+
+            let tls_connector = tokio_tls::TlsConnector::from(tls.clone());
+            let http = hyper_tls::HttpsConnector::from((http, tls_connector));
+            //TODO: timeout
+            let (io, connected) = http.connect(dst).await?;
+            if let hyper_tls::MaybeHttpsStream::Https(_stream) = &io {
+                if !no_delay {
+                    //TODO: where's this at now?
+//                    stream.set_nodelay(false)?;
+                }
+            }
+
+            Ok((Box::new(io) as Conn, connected.proxy(is_proxy)))
+        },
+        #[cfg(feature = "rustls-tls")]
+        Inner::RustlsTls { http, tls, .. } => {
+            let mut http = http.clone();
+
+            // Disable Nagle's algorithm for TLS handshake
+            //
+            // https://www.openssl.org/docs/man1.1.1/man3/SSL_connect.html#NOTES
+            http.set_nodelay(nodelay || (dst.scheme() == "https"));
+
+            let http = hyper_rustls::HttpsConnector::from((http, tls.clone()));
+            //TODO: timeout
+            let (io, connected) = http.connect(dst).await;
+            if let hyper_rustls::MaybeHttpsStream::Https(stream) = &io {
+                if !nodelay {
+                    let (io, _) = stream.get_ref();
+                    io.set_nodelay(false)?;
+                }
+            }
+
+            Ok((Box::new(io) as Conn, connected.proxy(is_proxy)))
+        }
+    }
+}
+
+async fn connect_via_proxy(inner: Inner, dst: Destination, proxy_scheme: ProxyScheme, no_delay: bool) -> Result<(Conn, Connected), io::Error> {
+    log::trace!("proxy({:?}) intercepts {:?}", proxy_scheme, dst);
+
+    let (puri, _auth) = match proxy_scheme {
+        ProxyScheme::Http { uri, auth, .. } => (uri, auth),
+        #[cfg(feature = "socks")]
+        ProxyScheme::Socks5 { .. } => {
+            //TODO: timeout?
+            return this.connect_socks(dst, proxy_scheme)
+        },
+    };
+
+    let mut ndst = dst.clone();
+
+    let new_scheme = puri
+        .scheme_part()
+        .map(Scheme::as_str)
+        .unwrap_or("http");
+    ndst.set_scheme(new_scheme)
+        .expect("proxy target scheme should be valid");
+
+    ndst.set_host(puri.host().expect("proxy target should have host"))
+        .expect("proxy target host should be valid");
+
+    ndst.set_port(puri.port_part().map(|port| port.as_u16()));
+
+    #[cfg(feature = "tls")]
+    let auth = _auth;
+
+    match &inner {
+        #[cfg(feature = "default-tls")]
+        Inner::DefaultTls(http, tls) => if dst.scheme() == "https" {
+            let host = dst.host().to_owned();
+            let port = dst.port().unwrap_or(443);
+            let mut http = http.clone();
+            http.set_nodelay(no_delay);
+            let tls_connector = tokio_tls::TlsConnector::from(tls.clone());
+            let http = hyper_tls::HttpsConnector::from((http, tls_connector));
+            let (conn, connected) = http.connect(ndst).await?;
+            log::trace!("tunneling HTTPS over proxy");
+            let tunneled = tunnel(conn, host.clone(), port, auth).await?;
+            let tls_connector = tokio_tls::TlsConnector::from(tls.clone());
+            let io = tls_connector.connect(&host, tunneled).await
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            return Ok((Box::new(io) as Conn, connected.proxy(true)));
+        },
+        #[cfg(feature = "rustls-tls")]
+        Inner::RustlsTls { http, tls, tls_proxy } => if dst.scheme() == "https" {
+            use rustls::Session;
+            use tokio_rustls::TlsConnector as RustlsConnector;
+            use tokio_rustls::webpki::DNSNameRef;
+
+            let host = dst.host().to_owned();
+            let port = dst.port().unwrap_or(443);
+            let mut http = http.clone();
+            http.set_nodelay(nodelay);
+            let http = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
+            let tls = tls.clone();
+            let (conn, connected) = http.connect(ndst).await;
+            log::trace!("tunneling HTTPS over proxy");
+            let maybe_dnsname = DNSNameRef::try_from_ascii_str(&host)
+                .map(|dnsname| dnsname.to_owned())
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "Invalid DNS Name"));
+            let tunneled = tunnel(conn, host, port, auth).await;
+            let dnsname = maybe_dnsname?;
+            let io = RustlsConnector::from(tls)
+                .connect(dnsname.as_ref(), tunneled)
+                .await
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            let connected = if io.get_ref().1.get_alpn_protocol() == Some(b"h2") {
+                connected.negotiated_h2()
+            } else {
+                connected
+            };
+            return Ok((Box::new(io) as Conn, connected.proxy(true)));
+        },
+        #[cfg(not(feature = "tls"))]
+        Inner::Http(_) => ()
+    }
+
+    return connect_with_maybe_proxy(inner, ndst, true, no_delay).await;
+}
+
+async fn with_timeout<T, F>(f: F, timeout: Option<Duration>) -> Result<T, io::Error> where F: Future<Output=Result<T, io::Error>> {
+    if let Some(to) = timeout {
+        match f.timeout(to).await {
+            Err(_elapsed) => Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out")),
+            Ok(try_res) => try_res,
+        }
+    } else {
+        f.await
+    }
+}
+
 impl Connect for Connector {
     type Transport = Conn;
     type Error = io::Error;
@@ -214,177 +331,25 @@ impl Connect for Connector {
 
     fn connect(&self, dst: Destination) -> Self::Future {
         #[cfg(feature = "tls")]
-        let nodelay = self.nodelay;
-
-        macro_rules! timeout {
-            ($future:expr) => {
-                if let Some(dur) = self.timeout {
-                    Box::new(Timeout::new($future, dur).map_err(|err| {
-                        if err.is_inner() {
-                            err.into_inner().expect("is_inner")
-                        } else if err.is_elapsed() {
-                            io::Error::new(io::ErrorKind::TimedOut, "connect timed out")
-                        } else {
-                            io::Error::new(io::ErrorKind::Other, err)
-                        }
-                    }))
-                } else {
-                    Box::new($future)
-                }
-            }
-        }
-
-        macro_rules! connect {
-            ( $http:expr, $dst:expr, $proxy:expr ) => {
-                timeout!($http.connect($dst)
-                    .map(|(io, connected)| (Box::new(io) as Conn, connected.proxy($proxy))))
-            };
-            ( $dst:expr, $proxy:expr ) => {
-                match &self.inner {
-                    #[cfg(not(feature = "tls"))]
-                    Inner::Http(http) => connect!(http, $dst, $proxy),
-                    #[cfg(feature = "default-tls")]
-                    Inner::DefaultTls(http, tls) => {
-                        let mut http = http.clone();
-
-                        http.set_nodelay(nodelay || ($dst.scheme() == "https"));
-
-                        let http = hyper_tls::HttpsConnector::from((http, tls.clone()));
-                        timeout!(http.connect($dst)
-                            .and_then(move |(io, connected)| {
-                                if let hyper_tls::MaybeHttpsStream::Https(stream) = &io {
-                                    if !nodelay {
-                                        stream.get_ref().get_ref().set_nodelay(false)?;
-                                    }
-                                }
-
-                                Ok((Box::new(io) as Conn, connected.proxy($proxy)))
-                            }))
-                    },
-                    #[cfg(feature = "rustls-tls")]
-                    Inner::RustlsTls { http, tls, .. } => {
-                        let mut http = http.clone();
-
-                        // Disable Nagle's algorithm for TLS handshake
-                        //
-                        // https://www.openssl.org/docs/man1.1.1/man3/SSL_connect.html#NOTES
-                        http.set_nodelay(nodelay || ($dst.scheme() == "https"));
-
-                        let http = hyper_rustls::HttpsConnector::from((http, tls.clone()));
-                        timeout!(http.connect($dst)
-                            .and_then(move |(io, connected)| {
-                                if let hyper_rustls::MaybeHttpsStream::Https(stream) = &io {
-                                    if !nodelay {
-                                        let (io, _) = stream.get_ref();
-                                        io.set_nodelay(false)?;
-                                    }
-                                }
-
-                                Ok((Box::new(io) as Conn, connected.proxy($proxy)))
-                            }))
-                    }
-                }
-            };
-        }
-
+        let no_delay = self.nodelay;
+        #[cfg(not(feature = "tls"))]
+        let no_delay = false;
+        let timeout = self.timeout.clone();
         for prox in self.proxies.iter() {
             if let Some(proxy_scheme) = prox.intercept(&dst) {
-                log::trace!("proxy({:?}) intercepts {:?}", proxy_scheme, dst);
-
-                let (puri, _auth) = match proxy_scheme {
-                    ProxyScheme::Http { uri, auth, .. } => (uri, auth),
-                    #[cfg(feature = "socks")]
-                    ProxyScheme::Socks5 { .. } => return self.connect_socks(dst, proxy_scheme),
-                };
-
-                let mut ndst = dst.clone();
-
-                let new_scheme = puri
-                    .scheme_part()
-                    .map(Scheme::as_str)
-                    .unwrap_or("http");
-                ndst.set_scheme(new_scheme)
-                    .expect("proxy target scheme should be valid");
-
-                ndst.set_host(puri.host().expect("proxy target should have host"))
-                    .expect("proxy target host should be valid");
-
-                ndst.set_port(puri.port_part().map(|port| port.as_u16()));
-
-                #[cfg(feature = "tls")]
-                let auth = _auth;
-
-                match &self.inner {
-                    #[cfg(feature = "default-tls")]
-                    Inner::DefaultTls(http, tls) => if dst.scheme() == "https" {
-                        use self::native_tls_async::TlsConnectorExt;
-
-                        let host = dst.host().to_owned();
-                        let port = dst.port().unwrap_or(443);
-                        let mut http = http.clone();
-                        http.set_nodelay(nodelay);
-                        let http = hyper_tls::HttpsConnector::from((http, tls.clone()));
-                        let tls = tls.clone();
-                        return timeout!(http.connect(ndst).and_then(move |(conn, connected)| {
-                            log::trace!("tunneling HTTPS over proxy");
-                            tunnel(conn, host.clone(), port, auth)
-                                .and_then(move |tunneled| {
-                                    tls.connect_async(&host, tunneled)
-                                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-                                })
-                                .map(|io| (Box::new(io) as Conn, connected.proxy(true)))
-                        }));
-                    },
-                    #[cfg(feature = "rustls-tls")]
-                    Inner::RustlsTls { http, tls, tls_proxy } => if dst.scheme() == "https" {
-                        use rustls::Session;
-                        use tokio_rustls::TlsConnector as RustlsConnector;
-                        use tokio_rustls::webpki::DNSNameRef;
-
-                        let host = dst.host().to_owned();
-                        let port = dst.port().unwrap_or(443);
-                        let mut http = http.clone();
-                        http.set_nodelay(nodelay);
-                        let http = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
-                        let tls = tls.clone();
-                        return timeout!(http.connect(ndst).and_then(move |(conn, connected)| {
-                            log::trace!("tunneling HTTPS over proxy");
-                            let maybe_dnsname = DNSNameRef::try_from_ascii_str(&host)
-                                .map(|dnsname| dnsname.to_owned())
-                                .map_err(|_| io::Error::new(io::ErrorKind::Other, "Invalid DNS Name"));
-                            tunnel(conn, host, port, auth)
-                                .and_then(move |tunneled| Ok((maybe_dnsname?, tunneled)))
-                                .and_then(move |(dnsname, tunneled)| {
-                                    RustlsConnector::from(tls).connect(dnsname.as_ref(), tunneled)
-                                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-                                })
-                                .map(|io| {
-                                    let connected = if io.get_ref().1.get_alpn_protocol() == Some(b"h2") {
-                                        connected.negotiated_h2()
-                                    } else {
-                                        connected
-                                    };
-                                    (Box::new(io) as Conn, connected.proxy(true))
-                                })
-                        }));
-                    },
-                    #[cfg(not(feature = "tls"))]
-                    Inner::Http(_) => ()
-                }
-
-                return connect!(ndst, true);
+                return with_timeout(connect_via_proxy(self.inner.clone(), dst, proxy_scheme, no_delay), timeout).boxed();
             }
         }
 
-        connect!(dst, false)
+        with_timeout(connect_with_maybe_proxy(self.inner.clone(), dst, false, no_delay), timeout).boxed()
     }
 }
 
 pub(crate) trait AsyncConn: AsyncRead + AsyncWrite {}
 impl<T: AsyncRead + AsyncWrite> AsyncConn for T {}
-pub(crate) type Conn = Box<dyn AsyncConn + Send + Sync + 'static>;
+pub(crate) type Conn = Box<dyn AsyncConn + Send + Sync + Unpin + 'static>;
 
-pub(crate) type Connecting = Box<dyn Future<Output=Result<(Conn, Connected), io::Error>> + Send>;
+pub(crate) type Connecting = Pin<Box<dyn Future<Output=Result<(Conn, Connected), io::Error>> + Send>>;
 
 #[cfg(feature = "tls")]
 fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<http::header::HeaderValue>) -> Tunnel<T> {
@@ -393,18 +358,18 @@ fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<http::header::Header
         Host: {0}:{1}\r\n\
     ", host, port).into_bytes();
 
-        if let Some(value) = auth {
-            log::debug!("tunnel to {}:{} using basic auth", host, port);
-            buf.extend_from_slice(b"Proxy-Authorization: ");
-            buf.extend_from_slice(value.as_bytes());
-            buf.extend_from_slice(b"\r\n");
-        }
+    if let Some(value) = auth {
+        log::debug!("tunnel to {}:{} using basic auth", host, port);
+        buf.extend_from_slice(b"Proxy-Authorization: ");
+        buf.extend_from_slice(value.as_bytes());
+        buf.extend_from_slice(b"\r\n");
+    }
 
     // headers end
     buf.extend_from_slice(b"\r\n");
 
     Tunnel {
-        buf: io::Cursor::new(buf),
+        buf: buf,
         conn: Some(conn),
         state: TunnelState::Writing,
     }
@@ -412,7 +377,7 @@ fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<http::header::Header
 
 #[cfg(feature = "tls")]
 struct Tunnel<T> {
-    buf: io::Cursor<Vec<u8>>,
+    buf: Vec<u8>,
     conn: Option<T>,
     state: TunnelState,
 }
@@ -423,47 +388,71 @@ enum TunnelState {
     Reading
 }
 
+impl<T> Tunnel<T> {
+    fn conn(self: Pin<&mut Self>) -> Pin<&mut Option<T>> {
+        unsafe {
+            Pin::map_unchecked_mut(self, |x| &mut x.conn)
+        }
+    }
+
+    fn buf(self: Pin<&mut Self>) -> &mut Vec<u8> {
+        unsafe {
+            &mut Pin::get_unchecked_mut(self).buf
+        }
+    }
+}
+
 #[cfg(feature = "tls")]
-impl<T> Future for Tunnel<T>
+impl<T: AsyncRead + AsyncWrite> Future for Tunnel<T>
 where
-    T: AsyncRead + AsyncWrite,
+    T: AsyncRead + AsyncWrite + Unpin,
 {
     type Output = Result<T, io::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut buf = std::mem::replace(self.as_mut().buf(), vec![]);
         loop {
             if let TunnelState::Writing = self.state {
-                let n = futures::ready!(self.conn.as_mut().unwrap().write_buf(&mut self.buf));
-                if !self.buf.has_remaining_mut() {
-                    self.state = TunnelState::Reading;
-                    self.buf.get_mut().truncate(0);
-                } else if n == 0 {
-                    return Err(tunnel_eof());
+                let inner = self.as_mut().conn().as_pin_mut().unwrap();
+                match inner.poll_write(cx, &buf) {
+                    Poll::Pending => {
+                        std::mem::replace(self.as_mut().buf(), vec![]);
+                        return Poll::Pending;
+                    }
+                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                    Poll::Ready(Ok(n)) => {
+                        if n == 0 {
+                            return Poll::Ready(Err(tunnel_eof()));
+                        }
+                        buf = buf.split_off(n);
+                        if buf.is_empty() {
+                            self.state = TunnelState::Reading;
+                        }
+                    }
                 }
             } else {
-                let n = futures::ready!(self.conn.as_mut().unwrap().read_buf(&mut self.buf.get_mut()));
-                let read = &self.buf.get_ref()[..];
-                if n == 0 {
-                    return Err(tunnel_eof());
-                } else if read.len() > 12 {
-                    if read.starts_with(b"HTTP/1.1 200") || read.starts_with(b"HTTP/1.0 200") {
-                        if read.ends_with(b"\r\n\r\n") {
-                            return Ok(self.conn.take().unwrap().into());
+                let inner = self.as_mut().conn().as_pin_mut().unwrap();
+                match inner.poll_read(cx, &mut buf) {
+                    Poll::Pending => {
+                        std::mem::replace(self.as_mut().buf(), vec![]);
+                        return Poll::Pending;
+                    }
+                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                    Poll::Ready(Ok(n)) => {
+                        if n == 0 {
+                            return Poll::Ready(Err(tunnel_eof()));
+                        } else if buf.len() > 12 {
+                            if buf.starts_with(b"HTTP/1.1 200") || buf.starts_with(b"HTTP/1.0 200") {
+                                if buf.ends_with(b"\r\n\r\n") {
+                                    return Poll::Ready(Ok(self.as_mut().conn().get_mut().take().unwrap()));
+                                }
+                                // else read more
+                            } else if buf.starts_with(b"HTTP/1.1 407") {
+                                return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "proxy authentication required")));
+                            } else {
+                                return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "unsuccessful tunnel")));
+                            }
                         }
-                        // else read more
-                    } else if read.starts_with(b"HTTP/1.1 407") {
-                        return Err(io::Error::new(io::ErrorKind::Other, "proxy authentication required"));
-                    } else if read.starts_with(b"HTTP/1.1 403") {
-                        return Err(io::Error::new(
-                            io::ErrorKind::Other,
-                            "proxy blocked this request",
-                        ));
-                    } else {
-                        let (fst, _) = read.split_at(12);
-                        return Err(io::Error::new(
-                            io::ErrorKind::Other,
-                            format!("unsuccessful tunnel: {:?}", fst).as_str(),
-                        ));
                     }
                 }
             }
@@ -479,142 +468,6 @@ fn tunnel_eof() -> io::Error {
         "unexpected eof while tunneling"
     )
 }
-
-#[cfg(feature = "default-tls")]
-mod native_tls_async {
-    use std::io::{self, Read, Write};
-
-    use futures::Future;
-    use std::task::{Poll, Context};
-    use std::pin::Pin;
-    use native_tls::{self, HandshakeError, Error, TlsConnector};
-    use tokio_io::{AsyncRead, AsyncWrite};
-
-    /// A wrapper around an underlying raw stream which implements the TLS or SSL
-    /// protocol.
-    ///
-    /// A `TlsStream<S>` represents a handshake that has been completed successfully
-    /// and both the server and the client are ready for receiving and sending
-    /// data. Bytes read from a `TlsStream` are decrypted from `S` and bytes written
-    /// to a `TlsStream` are encrypted when passing through to `S`.
-    #[derive(log::debug)]
-    pub struct TlsStream<S> {
-        inner: native_tls::TlsStream<S>,
-    }
-
-    /// Future returned from `TlsConnectorExt::connect_async` which will resolve
-    /// once the connection handshake has finished.
-    pub struct ConnectAsync<S> {
-        inner: MidHandshake<S>,
-    }
-
-    struct MidHandshake<S> {
-        inner: Option<Result<native_tls::TlsStream<S>, HandshakeError<S>>>,
-    }
-
-    /// Extension trait for the `TlsConnector` type in the `native_tls` crate.
-    pub trait TlsConnectorExt: sealed::Sealed {
-        /// Connects the provided stream with this connector, assuming the provided
-        /// domain.
-        ///
-        /// This function will internally call `TlsConnector::connect` to connect
-        /// the stream and returns a future representing the resolution of the
-        /// connection operation. The returned future will resolve to either
-        /// `TlsStream<S>` or `Error` depending if it's successful or not.
-        ///
-        /// This is typically used for clients who have already established, for
-        /// example, a TCP connection to a remote server. That stream is then
-        /// provided here to perform the client half of a connection to a
-        /// TLS-powered server.
-        ///
-        /// # Compatibility notes
-        ///
-        /// Note that this method currently requires `S: Read + Write` but it's
-        /// highly recommended to ensure that the object implements the `AsyncRead`
-        /// and `AsyncWrite` traits as well, otherwise this function will not work
-        /// properly.
-        fn connect_async<S>(&self, domain: &str, stream: S) -> ConnectAsync<S>
-            where S: Read + Write; // TODO: change to AsyncRead + AsyncWrite
-    }
-
-    mod sealed {
-        pub trait Sealed {}
-    }
-
-    impl<S: Read + Write> Read for TlsStream<S> {
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            self.inner.read(buf)
-        }
-    }
-
-    impl<S: Read + Write> Write for TlsStream<S> {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            self.inner.write(buf)
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            self.inner.flush()
-        }
-    }
-
-
-    impl<S: AsyncRead + AsyncWrite> AsyncRead for TlsStream<S> {
-    }
-
-    impl<S: AsyncRead + AsyncWrite> AsyncWrite for TlsStream<S> {
-        fn shutdown(&mut self) -> Poll<Result<(), io::Error>> {
-            //try_nb!(self.inner.shutdown());
-
-            self.inner.get_mut().shutdown()
-        }
-    }
-
-    impl TlsConnectorExt for TlsConnector {
-        fn connect_async<S>(&self, domain: &str, stream: S) -> ConnectAsync<S>
-            where S: Read + Write,
-        {
-            ConnectAsync {
-                inner: MidHandshake {
-                    inner: Some(self.connect(domain, stream)),
-                },
-            }
-        }
-    }
-
-    impl sealed::Sealed for TlsConnector {}
-
-    // TODO: change this to AsyncRead/AsyncWrite on next major version
-    impl<S: Read + Write> Future for ConnectAsync<S> {
-        type Output = Result<TlsStream<S>, Error>;
-
-        fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-            self.inner.poll()
-        }
-    }
-
-    // TODO: change this to AsyncRead/AsyncWrite on next major version
-    impl<S: Read + Write> Future for MidHandshake<S> {
-        type Output = crate::Result<TlsStream<S>>;
-
-        fn poll(&mut self) -> Poll<Self::Output> {
-            match self.inner.take().expect("cannot poll MidHandshake twice") {
-                Ok(stream) => Ok(TlsStream { inner: stream }.into()),
-                Err(HandshakeError::Failure(e)) => Err(e),
-                Err(HandshakeError::WouldBlock(s)) => {
-                    match s.handshake() {
-                        Ok(stream) => Ok(TlsStream { inner: stream }.into()),
-                        Err(HandshakeError::Failure(e)) => Err(e),
-                        Err(HandshakeError::WouldBlock(s)) => {
-                            self.inner = Some(Err(HandshakeError::WouldBlock(s)));
-                            Ok(Poll::Pending)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 
 #[cfg(feature = "socks")]
 mod socks {
@@ -634,11 +487,11 @@ mod socks {
         Proxy,
     }
 
-    pub(super) fn connect(
+    pub(super) async fn connect(
         proxy: ProxyScheme,
         dst: Destination,
         dns: DnsResolve,
-    ) -> Connecting {
+    ) -> Result<(super::Conn, Connected), io::Error> {
         let https = dst.scheme() == "https";
         let original_host = dst.host().to_owned();
         let mut host = original_host.clone();
@@ -647,12 +500,7 @@ mod socks {
         });
 
         if let DnsResolve::Local = dns {
-            let maybe_new_target = match (host.as_str(), port).to_socket_addrs() {
-                Ok(mut iter) => iter.next(),
-                Err(err) => {
-                    return Box::new(future::err(err));
-                }
-            };
+            let maybe_new_target = (host.as_str(), port).to_socket_addrs()?.next();
             if let Some(new_target) = maybe_new_target {
                 host = new_target.ip().to_string();
             }
@@ -664,33 +512,28 @@ mod socks {
         };
 
         // Get a Tokio TcpStream
-        let stream = future::result(if let Some((username, password)) = auth {
+        let stream = if let Some((username, password)) = auth {
             Socks5Stream::connect_with_password(
                 socket_addr, (host.as_str(), port), &username, &password
-            )
+            ).await
         } else {
-            Socks5Stream::connect(socket_addr, (host.as_str(), port))
-        }.and_then(|s| {
+            let s = Socks5Stream::connect(socket_addr, (host.as_str(), port)).await;
             TcpStream::from_std(s.into_inner(), &reactor::Handle::default())
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-        }));
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?
+        };
 
-        Box::new(
-            stream.map(|s| (Box::new(s) as super::Conn, Connected::new()))
-        )
+        Ok( (Box::new(s) as super::Conn, Connected::new()) )
     }
 }
 
 #[cfg(feature = "tls")]
 #[cfg(test)]
 mod tests {
-    extern crate tokio_tcp;
-
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::thread;
     use tokio::runtime::current_thread::Runtime;
-    use self::tokio_tcp::TcpStream;
+    use tokio::net::tcp::TcpStream;
     use super::tunnel;
     use crate::proxy;
 
@@ -733,14 +576,14 @@ mod tests {
         let addr = mock_tunnel!();
 
         let mut rt = Runtime::new().unwrap();
-        let work = TcpStream::connect(&addr);
-        let host = addr.ip().to_string();
-        let port = addr.port();
-        let work = work.and_then(|tcp| {
-            tunnel(tcp, host, port, None)
-        });
+        let f = async move {
+            let tcp = TcpStream::connect(&addr).await?;
+            let host = addr.ip().to_string();
+            let port = addr.port();
+            tunnel(tcp, host, port, None).await
+        };
 
-        rt.block_on(work).unwrap();
+        rt.block_on(f).unwrap();
     }
 
     #[test]
@@ -748,14 +591,14 @@ mod tests {
         let addr = mock_tunnel!(b"HTTP/1.1 200 OK");
 
         let mut rt = Runtime::new().unwrap();
-        let work = TcpStream::connect(&addr);
-        let host = addr.ip().to_string();
-        let port = addr.port();
-        let work = work.and_then(|tcp| {
-            tunnel(tcp, host, port, None)
-        });
+        let f = async move {
+            let tcp = TcpStream::connect(&addr).await?;
+            let host = addr.ip().to_string();
+            let port = addr.port();
+            tunnel(tcp, host, port, None).await
+        };
 
-        rt.block_on(work).unwrap_err();
+        rt.block_on(f).unwrap();
     }
 
     #[test]
@@ -763,14 +606,14 @@ mod tests {
         let addr = mock_tunnel!(b"foo bar baz hallo");
 
         let mut rt = Runtime::new().unwrap();
-        let work = TcpStream::connect(&addr);
-        let host = addr.ip().to_string();
-        let port = addr.port();
-        let work = work.and_then(|tcp| {
-            tunnel(tcp, host, port, None)
-        });
+        let f = async move {
+            let tcp = TcpStream::connect(&addr).await?;
+            let host = addr.ip().to_string();
+            let port = addr.port();
+            tunnel(tcp, host, port, None).await
+        };
 
-        rt.block_on(work).unwrap_err();
+        rt.block_on(f).unwrap_err();
     }
 
     #[test]
@@ -782,14 +625,14 @@ mod tests {
         ");
 
         let mut rt = Runtime::new().unwrap();
-        let work = TcpStream::connect(&addr);
-        let host = addr.ip().to_string();
-        let port = addr.port();
-        let work = work.and_then(|tcp| {
-            tunnel(tcp, host, port, None)
-        });
+        let f = async move {
+            let tcp = TcpStream::connect(&addr).await?;
+            let host = addr.ip().to_string();
+            let port = addr.port();
+            tunnel(tcp, host, port, None).await
+        };
 
-        let error = rt.block_on(work).unwrap_err();
+        let error = rt.block_on(f).unwrap_err();
         assert_eq!(error.to_string(), "proxy authentication required");
     }
 
@@ -801,13 +644,13 @@ mod tests {
         );
 
         let mut rt = Runtime::new().unwrap();
-        let work = TcpStream::connect(&addr);
-        let host = addr.ip().to_string();
-        let port = addr.port();
-        let work = work.and_then(|tcp| {
-            tunnel(tcp, host, port, Some(proxy::encode_basic_auth("Aladdin", "open sesame")))
-        });
+        let f = async move {
+            let tcp = TcpStream::connect(&addr).await?;
+            let host = addr.ip().to_string();
+            let port = addr.port();
+            tunnel(tcp, host, port, Some(proxy::encode_basic_auth("Aladdin", "open sesame"))).await
+        };
 
-        rt.block_on(work).unwrap();
+        rt.block_on(f).unwrap();
     }
 }
