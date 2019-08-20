@@ -253,8 +253,8 @@ static BLOCK_IN_FUTURE: &'static str = "blocking Client used inside a Future con
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(ref url) = self.inner.url {
-            try!(fmt::Display::fmt(url, f));
-            try!(f.write_str(": "));
+            fmt::Display::fmt(url, f)?;
+            f.write_str(": ")?;
         }
         match self.inner.kind {
             Kind::Http(ref e) => fmt::Display::fmt(e, f),
