@@ -1,3 +1,8 @@
+## v0.9.20
+
+- Improve error message when proxy connections fail to tunnel.
+- Update `mime_guess` and `rustls` dependencies.
+
 ## v0.9.19
 
 - Add `ClientBuilder::use_sys_proxy()` to enable automatic detect of HTTP proxies configured on the system.
