@@ -1,9 +1,5 @@
-extern crate reqwest;
-
 #[macro_use]
 mod support;
-
-use std::io::Read;
 
 #[test]
 fn test_response_text() {
@@ -127,9 +123,7 @@ fn test_response_copy_to() {
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
     assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"5");
 
-    let mut buf: Vec<u8> = vec![];
-    res.copy_to(&mut buf).unwrap();
-    assert_eq!(b"Hello", buf.as_slice());
+    assert_eq!("Hello".to_owned(), res.text().unwrap());
 }
 
 #[test]
@@ -160,9 +154,7 @@ fn test_get() {
     assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
     assert_eq!(res.remote_addr(), Some(server.addr()));
 
-    let mut buf = [0; 1024];
-    let n = res.read(&mut buf).unwrap();
-    assert_eq!(n, 0)
+    assert_eq!(res.text().unwrap().len(), 0)
 }
 
 #[test]
@@ -198,9 +190,7 @@ fn test_post() {
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"post");
     assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
 
-    let mut buf = [0; 1024];
-    let n = res.read(&mut buf).unwrap();
-    assert_eq!(n, 0)
+    assert_eq!(res.text().unwrap().len(), 0)
 }
 
 #[test]

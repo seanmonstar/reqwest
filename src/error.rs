@@ -606,6 +606,9 @@ pub(crate) fn unknown_proxy_scheme() -> Error {
 mod tests {
     use super::*;
 
+    fn assert_send<T: Send>() {}
+    fn assert_sync<T: Sync>() {}
+
     #[allow(deprecated)]
     #[test]
     fn test_cause_chain() {
@@ -652,6 +655,8 @@ mod tests {
         let err = Error::new(Kind::Io(io), None);
         assert!(err.cause().is_some());
         assert_eq!(err.to_string(), "chain: root");
+        assert_send::<Error>();
+        assert_sync::<Error>();
     }
 
     #[test]

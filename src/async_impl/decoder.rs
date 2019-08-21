@@ -278,13 +278,13 @@ pub enum StreamState {
 }
 
 impl<S> ReadableChunks<S> {
-    #[inline]
-    pub(crate) fn new(stream: S) -> Self {
-        ReadableChunks {
-            state: ReadState::NotReady,
-            stream,
-        }
-    }
+//    #[inline]
+//    pub(crate) fn new(stream: S) -> Self {
+//        ReadableChunks {
+//            state: ReadState::NotReady,
+//            stream,
+//        }
+//    }
 
     fn state(self: Pin<&mut Self>) -> &mut ReadState {
         unsafe {

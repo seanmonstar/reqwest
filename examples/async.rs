@@ -1,11 +1,12 @@
+#![feature(async_await)]
 #![deny(warnings)]
 use std::mem;
 use std::io::{self, Cursor};
-use futures::{Future, Stream, TryStreamExt};
+use futures::TryStreamExt;
 use reqwest::r#async::{Client, Decoder};
 
 #[tokio::main]
-fn main() -> Result<(), reqwest::Error> {
+async fn main() -> Result<(), reqwest::Error> {
     let mut res = Client::new()
         .get("https://hyper.rs")
         .send()
@@ -17,10 +18,9 @@ fn main() -> Result<(), reqwest::Error> {
     let body: Result<_, _> = body.try_concat().await;
 
     let mut body = Cursor::new(body?);
-    io::copy(&mut body, &mut io::stdout())
-        .map_err(|err| {
-            println!("stdout error: {}", err);
-        })?;
+    if let Err(err) = io::copy(&mut body, &mut io::stdout()) {
+        println!("stdout error: {}", err);
+    };
 
     Ok(())
 }

@@ -1,6 +1,3 @@
-extern crate reqwest;
-extern crate libflate;
-
 #[macro_use]
 mod support;
 

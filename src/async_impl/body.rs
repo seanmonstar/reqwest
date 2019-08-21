@@ -28,6 +28,34 @@ impl Body {
         }
     }
 
+    /// Wrap a futures `Stream` in a box inside `Body`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use reqwest::Body;
+    /// # use futures_util;
+    /// # fn main() {
+    /// let chunks: Vec<Result<_, ::std::io::Error>> = vec![
+    ///     Ok("hello"),
+    ///     Ok(" "),
+    ///     Ok("world"),
+    /// ];
+    ///
+    /// let stream = futures_util::stream::iter(chunks);
+    ///
+    /// let body = Body::wrap_stream(stream);
+    /// # }
+    /// ```
+    pub fn wrap_stream<S>(stream: S) -> Body
+        where
+            S: futures::TryStream + Send + Sync + 'static,
+            S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+            hyper::Chunk: From<S::Ok>,
+    {
+        Body::wrap(hyper::body::Body::wrap_stream(stream))
+    }
+
     #[inline]
     pub(crate) fn response(body: hyper::Body, timeout: Option<Delay>) -> Body {
         Body {
@@ -143,18 +171,6 @@ impl From<&'static str> for Body {
     #[inline]
     fn from(s: &'static str) -> Body {
         s.as_bytes().into()
-    }
-}
-
-impl<I, E> From<Pin<Box<dyn Stream<Item = Result<I, E>> + Send + Sync>>> for Body
-where
-    hyper::Chunk: From<I>,
-    I: 'static,
-    E: std::error::Error + Send + Sync + 'static,
-{
-    #[inline]
-    fn from(s: Box<dyn Stream<Item = I, Error = E> + Send>) -> Body {
-        Body::wrap(hyper::Body::wrap_stream(s))
     }
 }
 

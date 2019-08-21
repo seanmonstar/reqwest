@@ -1,14 +1,9 @@
+#![feature(async_await)]
 #![deny(warnings)]
 
-extern crate futures;
-extern crate reqwest;
-extern crate tokio;
-extern crate serde;
-extern crate serde_json;
-
-use futures::Future;
 use reqwest::r#async::{Client, Response};
 use serde::Deserialize;
+use std::future::Future;
 
 #[derive(Deserialize, Debug)]
 struct Slideshow {
@@ -21,35 +16,32 @@ struct SlideshowContainer {
     slideshow: Slideshow,
 }
 
-fn fetch() -> impl Future<Item=(), Error=()> {
-    let client = Client::new();
-
-    let json = |mut res : Response | {
-        res.json::<SlideshowContainer>()
-    };
-
-    let request1 =
-        client
-            .get("https://httpbin.org/json")
-            .send()
-            .and_then(json);
-
-    let request2 =
-        client
-            .get("https://httpbin.org/json")
-            .send()
-            .and_then(json);
-
-    request1.join(request2)
-        .map(|(res1, res2)|{
-            println!("{:?}", res1);
-            println!("{:?}", res2);
-        })
-        .map_err(|err| {
-            println!("stdout error: {}", err);
-        })
+async fn into_json<F>(f: F) -> Result<SlideshowContainer, reqwest::Error>
+    where F: Future<Output=Result<Response, reqwest::Error>>
+{
+    let mut resp = f.await?;
+    resp.json::<SlideshowContainer>().await
 }
 
-fn main() {
-    tokio::run(fetch());
+#[tokio::main]
+async fn main() -> Result<(), reqwest::Error> {
+    let client = Client::new();
+
+    let request1 = client
+            .get("https://httpbin.org/json")
+            .send();
+
+    let request2 = client
+        .get("https://httpbin.org/json")
+        .send();
+
+    let (try_json1, try_json2) = futures::future::join(
+        into_json(request1),
+        into_json(request2)
+    ).await;
+
+    println!("{:?}", try_json1?);
+    println!("{:?}", try_json2?);
+
+    Ok(())
 }

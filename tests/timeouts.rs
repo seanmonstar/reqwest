@@ -1,10 +1,6 @@
-extern crate env_logger;
-extern crate reqwest;
-
 #[macro_use]
 mod support;
 
-use std::io::Read;
 use std::time::Duration;
 
 #[test]
@@ -160,7 +156,6 @@ fn test_read_timeout() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"5");
 
-    let mut buf = [0; 1024];
-    let err = res.read(&mut buf).unwrap_err();
+    let err = res.text().unwrap_err();
     assert_eq!(err.to_string(), "timed out");
 }

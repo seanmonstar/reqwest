@@ -1,81 +1,102 @@
+#![feature(async_await)]
 #![deny(warnings)]
-
-#[macro_use]
-extern crate futures;
-extern crate bytes;
-extern crate reqwest;
-extern crate tokio;
-extern crate tokio_threadpool;
-
 use std::io::{self, Cursor};
 use std::mem;
 use std::path::Path;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
-use bytes::Bytes;
-use futures::{Async, Future, Poll, Stream};
-use reqwest::r#async::{Client, Decoder};
-use tokio::fs::File;
+use futures::{Stream, TryStreamExt};
+use reqwest::r#async::{Body, Client, Decoder};
+use tokio_fs::File;
 use tokio::io::AsyncRead;
 
-const CHUNK_SIZE: usize = 1024;
+use failure::Fail;
 
-struct FileSource {
-    inner: File,
+#[derive(Debug, Fail)]
+pub enum Error {
+    #[fail(display = "Io Error")]
+    Io(#[fail(cause)] std::io::Error),
+    #[fail(display = "Reqwest error")]
+    Reqwest(#[fail(cause)] reqwest::Error),
 }
 
-impl FileSource {
-    fn new(file: File) -> FileSource {
-        FileSource { inner: file }
-    }
+unsafe impl Send for Error {}
+unsafe impl Sync for Error {}
+
+struct AsyncReadWrapper<T> {
+    inner: T,
 }
 
-impl Stream for FileSource {
-    type Item = Bytes;
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let mut buf = [0; CHUNK_SIZE];
-        let size = try_ready!(self.inner.poll_read(&mut buf));
-        if size > 0 {
-            Ok(Async::Ready(Some(buf[0..size].into())))
-        } else {
-            Ok(Async::Ready(None))
+impl<T> AsyncReadWrapper<T> {
+    fn inner(self: Pin<&mut Self>) -> Pin<&mut T> {
+        unsafe {
+            Pin::map_unchecked_mut(self, |x| &mut x.inner)
         }
     }
 }
 
-fn post<P>(path: P) -> impl Future<Item = (), Error = ()>
-where
-    P: AsRef<Path>,
+impl<T> Stream for AsyncReadWrapper<T>
+    where T: AsyncRead
 {
-    File::open(path.as_ref().to_owned())
-        .map_err(|err| println!("request error: {}", err))
-        .and_then(|file| {
-            let source: Box<dyn Stream<Item = Bytes, Error = io::Error> + Send> =
-                Box::new(FileSource::new(file));
-
-            Client::new()
-                .post("https://httpbin.org/post")
-                .body(source)
-                .send()
-                .and_then(|mut res| {
-                    println!("{}", res.status());
-
-                    let body = mem::replace(res.body_mut(), Decoder::empty());
-                    body.concat2()
-                })
-                .map_err(|err| println!("request error: {}", err))
-                .map(|body| {
-                    let mut body = Cursor::new(body);
-                    let _ = io::copy(&mut body, &mut io::stdout()).map_err(|err| {
-                        println!("stdout error: {}", err);
-                    });
-                })
-        })
+    type Item = Result<hyper::Chunk, failure::Compat<Error>>;
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        let mut buf = vec![];
+        loop {
+            let mut read_buf = vec![];
+            match self.as_mut().inner().as_mut().poll_read(cx, &mut read_buf) {
+                Poll::Pending => {
+                    if buf.is_empty() {
+                        return Poll::Pending;
+                    } else {
+                        return Poll::Ready(Some(Ok(buf.into())));
+                    }
+                }
+                Poll::Ready(Err(e)) => {
+                    return Poll::Ready(Some(Err(Error::Io(e).compat())))
+                },
+                Poll::Ready(Ok(n)) => {
+                    buf.extend_from_slice(&read_buf[..n]);
+                    if buf.is_empty() && n == 0 {
+                        return Poll::Ready(None);
+                    } else {
+                        return Poll::Ready(Some(Ok(buf.into())));
+                    }
+                }
+            }
+        }
+    }
 }
 
-fn main() {
-    let pool = tokio_threadpool::ThreadPool::new();
+async fn post<P>(path: P) -> Result<(), Error>
+where
+    P: AsRef<Path> + Send + Unpin + 'static,
+{
+    let source = File::open(path)
+        .await.map_err(Error::Io)?;
+    let wrapper = AsyncReadWrapper { inner: source };
+    let mut res = Client::new()
+        .post("https://httpbin.org/post")
+        .body(Body::wrap_stream(wrapper))
+        .send()
+        .await.map_err(Error::Reqwest)?;
+
+    println!("{}", res.status());
+
+    let body = mem::replace(res.body_mut(), Decoder::empty());
+    let body: Result<_, _> = body.try_concat().await;
+
+    let mut body = Cursor::new(body.map_err(Error::Reqwest)?);
+    io::copy(&mut body, &mut io::stdout()).map_err(Error::Io)?;
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/LICENSE-APACHE");
-    tokio::run(pool.spawn_handle(post(path)));
+    post(path).await
 }
