@@ -1,4 +1,3 @@
-#![feature(async_await)]
 #![deny(warnings)]
 
 use reqwest::r#async::{Client, Response};

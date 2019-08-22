@@ -1,5 +1,4 @@
 //! `cargo run --example simple`
-#![feature(async_await)]
 #![deny(warnings)]
 use failure::Fail;
 

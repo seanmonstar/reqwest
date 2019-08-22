@@ -24,7 +24,11 @@ impl Body {
     pub(crate) fn content_length(&self) -> Option<u64> {
         match self.inner {
             Inner::Reusable(ref bytes) => Some(bytes.len() as u64),
-            Inner::Hyper { ref body, .. } => body.content_length(),
+            Inner::Hyper { ref body, .. } => {
+                body.size_hint().exact()
+                //removed from hyper
+//                body.content_length()
+            },
         }
     }
 
