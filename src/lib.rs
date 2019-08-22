@@ -231,6 +231,7 @@ pub mod r#async {
         Decoder,
         Client,
         ClientBuilder,
+        ReadableChunks,
         Request,
         RequestBuilder,
         Response,
