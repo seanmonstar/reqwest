@@ -189,6 +189,7 @@ pub use hyper::Method;
 pub use hyper::{StatusCode, Version};
 pub use url::Url;
 pub use url::ParseError as UrlError;
+pub use url::Position as UrlPosition;
 
 pub use self::client::{Client, ClientBuilder};
 pub use self::error::{Error, Result};
