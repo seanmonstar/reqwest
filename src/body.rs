@@ -260,7 +260,7 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
     loop {
         if Some(written) == con_len {
             // Written up to content-length, so stop.
-            return Ok(().into());
+            return Ok(());
         }
 
         // The input stream is read only if the buffer is empty so
@@ -285,7 +285,7 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
                 Ok(0) => {
                     // The buffer was empty and nothing's left to
                     // read. Return.
-                    return Ok(().into());
+                    return Ok(());
                 }
                 Ok(n) => {
                     unsafe { buf.advance_mut(n); }

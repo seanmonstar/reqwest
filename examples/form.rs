@@ -1,4 +1,3 @@
-#![feature(async_await)]
 
 #[tokio::main]
 async fn main() {

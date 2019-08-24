@@ -310,7 +310,7 @@ async fn connect_via_proxy(inner: Inner, dst: Destination, proxy_scheme: ProxySc
         Inner::Http(_) => ()
     }
 
-    return connect_with_maybe_proxy(inner, ndst, true, no_delay).await;
+    connect_with_maybe_proxy(inner, ndst, true, no_delay).await
 }
 
 async fn with_timeout<T, F>(f: F, timeout: Option<Duration>) -> Result<T, io::Error> where F: Future<Output=Result<T, io::Error>> {
@@ -334,7 +334,7 @@ impl Connect for Connector {
         let no_delay = self.nodelay;
         #[cfg(not(feature = "tls"))]
         let no_delay = false;
-        let timeout = self.timeout.clone();
+        let timeout = self.timeout;
         for prox in self.proxies.iter() {
             if let Some(proxy_scheme) = prox.intercept(&dst) {
                 return with_timeout(connect_via_proxy(self.inner.clone(), dst, proxy_scheme, no_delay), timeout).boxed();
@@ -369,7 +369,7 @@ fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<http::header::Header
     buf.extend_from_slice(b"\r\n");
 
     Tunnel {
-        buf: buf,
+        buf,
         conn: Some(conn),
         state: TunnelState::Writing,
     }

@@ -3,7 +3,6 @@
 //! In contrast to the arbitrary JSON example, this brings up the full power of
 //! Rust compile-time type system guaranties though it requires a little bit
 //! more code.
-#![feature(async_await)]
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]

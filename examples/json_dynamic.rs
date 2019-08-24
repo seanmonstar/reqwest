@@ -3,7 +3,6 @@
 //! This is useful for some ad-hoc experiments and situations when you don't
 //! really care about the structure of the JSON and just need to display it or
 //! process it at runtime.
-#![feature(async_await)]
 
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {

@@ -207,9 +207,7 @@ impl Part {
     /// Errors when the file cannot be opened.
     pub fn file<T: AsRef<Path>>(path: T) -> io::Result<Part> {
         let path = path.as_ref();
-        let file_name = path.file_name().and_then(|filename| {
-            Some(filename.to_string_lossy().into_owned())
-        });
+        let file_name = path.file_name().map(|filename| filename.to_string_lossy().into_owned());
         let ext = path.extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("");

@@ -11,12 +11,12 @@ async fn timeout_fut<F, I, E>(fut: F, timeout: Option<Duration>) -> Result<I, Wa
     where F: Future<Output = Result<I,E>> {
 
     let result: Result<I, Waited<E>> = if let Some(duration) = timeout {
-        match fut.map_err(|e| Waited::Inner(e)).timeout(duration).await {
+        match fut.map_err(Waited::Inner).timeout(duration).await {
             Err(_e) => Err(Waited::TimedOut),
             Ok(r) => r,
         }
     } else {
-        fut.map_err(|e| Waited::Inner(e)).await
+        fut.map_err(Waited::Inner).await
     };
 
     result
@@ -73,26 +73,24 @@ impl<S, T, E> Stream for WaitStream<S> where S: Stream<Item=Result<T, E>> {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         if let Poll::Ready(v) = self.as_mut().inner().as_mut().poll_next(cx) {
-            let r = match v {
+            return match v {
                 None => Poll::Ready(None),
                 Some(Err(e)) => Poll::Ready(Some(Err(Waited::Inner(e)))),
                 Some(Ok(v)) => Poll::Ready(Some(Ok(v))),
-            };
-            return r;
+            }
         }
 
-        if let Some(to) = self.timeout.clone() {
+        if let Some(to) = self.timeout {
             match self.as_mut().pending().as_pin_mut() {
                 None => {
                     self.as_mut().pending().get_mut().replace(tokio::timer::Delay::new(Instant::now() + to));
                     Poll::Pending
                 }
                 Some(pending) => {
-                    let r = match pending.poll(cx) {
+                    match pending.poll(cx) {
                         Poll::Pending => Poll::Pending,
                         Poll::Ready(_) => Poll::Ready(Some(Err(Waited::TimedOut))),
-                    };
-                    r
+                    }
                 }
             }
         } else {
