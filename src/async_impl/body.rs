@@ -194,6 +194,7 @@ impl Chunk {
         }
     }
 }
+
 impl Buf for Chunk {
     fn bytes(&self) -> &[u8] {
         self.inner.bytes()
@@ -239,10 +240,40 @@ impl IntoIterator for Chunk {
     }
 }
 
+impl From<Vec<u8>> for Chunk {
+    fn from(v: Vec<u8>) -> Chunk {
+        Chunk { inner: v.into() }
+    }
+}
+
+impl From<&'static [u8]> for Chunk {
+    fn from(slice: &'static [u8]) -> Chunk {
+        Chunk { inner: slice.into() }
+    }
+}
+
+impl From<String> for Chunk {
+    fn from(s: String) -> Chunk {
+        Chunk { inner: s.into() }
+    }
+}
+
+impl From<&'static str> for Chunk {
+    fn from(slice: &'static str) -> Chunk {
+        Chunk { inner: slice.into() }
+    }
+}
+
+impl From<Bytes> for Chunk {
+    fn from(bytes: Bytes) -> Chunk {
+        Chunk { inner: bytes.into() }
+    }
+}
+
 impl From<Chunk> for hyper::Chunk {
-  fn from(val: Chunk) -> hyper::Chunk {
-    val.inner
-  }
+    fn from(val: Chunk) -> hyper::Chunk {
+        val.inner
+    }
 }
 
 impl fmt::Debug for Body {

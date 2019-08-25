@@ -9,7 +9,7 @@ use http::HeaderMap;
 
 use futures::{Stream, StreamExt};
 
-use super::Body;
+use super::{Body, Chunk};
 
 /// An async multipart/form-data request.
 pub struct Form {
@@ -188,7 +188,7 @@ impl Part {
         E: std::error::Error + Send + Sync + 'static,
         hyper::Chunk: std::convert::From<I>,
     {
-        Part::new(Body::wrap(hyper::Body::wrap_stream(value)))
+        Part::new(Body::wrap(hyper::Body::wrap_stream(value.map(|chunk| chunk.into()))))
     }
 
     fn new(value: Body) -> Part {
