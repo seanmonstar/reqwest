@@ -5,6 +5,7 @@ use std::net::IpAddr;
 
 use bytes::Bytes;
 use futures::{Async, Future, Poll};
+use futures::future::Executor;
 use header::{
     Entry,
     HeaderMap,
@@ -71,7 +72,6 @@ struct Config {
     #[cfg(feature = "tls")]
     certs_verification: bool,
     connect_timeout: Option<Duration>,
-    max_idle_per_host: usize,
     #[cfg(feature = "tls")]
     identity: Option<Identity>,
     proxies: Vec<Proxy>,
@@ -83,10 +83,10 @@ struct Config {
     #[cfg(feature = "tls")]
     tls: TlsBackend,
     http2_only: bool,
-    http1_title_case_headers: bool,
     local_address: Option<IpAddr>,
     nodelay: bool,
     cookie_store: Option<cookie::CookieStore>,
+    http_builder: hyper::client::Builder,
 }
 
 impl ClientBuilder {
@@ -107,7 +107,6 @@ impl ClientBuilder {
                 #[cfg(feature = "tls")]
                 certs_verification: true,
                 connect_timeout: None,
-                max_idle_per_host: ::std::usize::MAX,
                 proxies: Vec::new(),
                 redirect_policy: RedirectPolicy::default(),
                 referer: true,
@@ -119,10 +118,10 @@ impl ClientBuilder {
                 #[cfg(feature = "tls")]
                 tls: TlsBackend::default(),
                 http2_only: false,
-                http1_title_case_headers: false,
                 local_address: None,
                 nodelay: false,
                 cookie_store: None,
+                http_builder: hyper::Client::builder(),
             },
         }
     }
@@ -193,18 +192,7 @@ impl ClientBuilder {
 
         connector.set_timeout(config.connect_timeout);
 
-        let mut builder = ::hyper::Client::builder();
-        if config.http2_only {
-            builder.http2_only(true);
-        }
-
-        builder.max_idle_per_host(config.max_idle_per_host);
-
-        if config.http1_title_case_headers {
-            builder.http1_title_case_headers(true);
-        }
-
-        let hyper_client = builder.build(connector);
+        let hyper_client = config.http_builder.build(connector);
 
         let proxies_maybe_http_auth = proxies
             .iter()
@@ -379,19 +367,29 @@ impl ClientBuilder {
     ///
     /// Default is usize::MAX (no limit).
     pub fn max_idle_per_host(mut self, max: usize) -> ClientBuilder {
-        self.config.max_idle_per_host = max;
+        self.config.http_builder.max_idle_per_host(max);
         self
     }
 
     /// Only use HTTP/2.
     pub fn h2_prior_knowledge(mut self) -> ClientBuilder {
         self.config.http2_only = true;
+        self.config.http_builder.http2_only(true);
         self
     }
 
     /// Enable case sensitive headers.
     pub fn http1_title_case_headers(mut self) -> ClientBuilder {
-        self.config.http1_title_case_headers = true;
+        self.config.http_builder.http1_title_case_headers(true);
+        self
+    }
+
+    /// Allow changing the Hyper runtime executor
+    pub fn executor<E>(mut self, executor: E) -> ClientBuilder
+    where
+        E: Executor<Box<dyn Future<Item=(), Error=()> + Send>> + Send + Sync + 'static
+    {
+        self.config.http_builder.executor(executor);
         self
     }
 
