@@ -1,9 +1,5 @@
 #![deny(warnings)]
 
-extern crate futures;
-extern crate reqwest;
-extern crate tokio;
-
 use futures::{Future, Stream};
 use reqwest::r#async::{Client, Decoder};
 use std::io::{self, Cursor};

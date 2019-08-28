@@ -1,9 +1,3 @@
-extern crate bytes;
-extern crate futures;
-extern crate hyper;
-extern crate libflate;
-extern crate reqwest;
-extern crate tokio;
 
 #[macro_use]
 mod support;

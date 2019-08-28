@@ -3,9 +3,6 @@
 //! In contrast to the arbitrary JSON example, this brings up the full power of
 //! Rust compile-time type system guaranties though it requires a little bit
 //! more code.
-extern crate reqwest;
-extern crate serde;
-extern crate serde_json;
 
 use serde::{Deserialize, Serialize};
 

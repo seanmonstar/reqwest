@@ -1,4 +1,3 @@
-extern crate reqwest;
 
 fn main() {
     reqwest::Client::new()

@@ -1,4 +1,3 @@
-extern crate reqwest;
 
 #[cfg(feature = "tls")]
 #[test]

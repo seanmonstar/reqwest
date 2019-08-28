@@ -1,11 +1,5 @@
 #![deny(warnings)]
 
-extern crate futures;
-extern crate reqwest;
-extern crate serde;
-extern crate serde_json;
-extern crate tokio;
-
 use futures::Future;
 use reqwest::r#async::{Client, Response};
 use serde::Deserialize;

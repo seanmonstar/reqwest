@@ -19,7 +19,7 @@ impl Server {
 
 impl Drop for Server {
     fn drop(&mut self) {
-        if !::std::thread::panicking() {
+        if !thread::panicking() {
             self.panic_rx
                 .recv_timeout(Duration::from_secs(3))
                 .expect("test server should not panic");

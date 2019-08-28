@@ -2,9 +2,6 @@
 
 //! `cargo run --example simple`
 
-extern crate env_logger;
-extern crate reqwest;
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 

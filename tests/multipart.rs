@@ -1,5 +1,3 @@
-extern crate env_logger;
-extern crate reqwest;
 
 #[macro_use]
 mod support;

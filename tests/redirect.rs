@@ -1,4 +1,3 @@
-extern crate reqwest;
 
 #[macro_use]
 mod support;
