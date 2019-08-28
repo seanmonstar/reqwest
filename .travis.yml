@@ -57,5 +57,6 @@ env:
     - REQWEST_TEST_BODY_FULL=1
 
 script:
+  - cargo fmt -- --check
   - cargo build $FEATURES
   - cargo test -v $FEATURES -- --test-threads=1
