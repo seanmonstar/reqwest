@@ -55,7 +55,8 @@ dist: trusty
 env:
   global:
     - REQWEST_TEST_BODY_FULL=1
-
+before_script:
+  - rustup component add rustfmt
 script:
   - cargo fmt -- --check
   - cargo build $FEATURES
