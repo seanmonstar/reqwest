@@ -1,4 +1,3 @@
-
 fn main() {
     reqwest::Client::new()
         .post("http://www.baidu.com")

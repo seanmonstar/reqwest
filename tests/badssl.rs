@@ -1,4 +1,3 @@
-
 #[cfg(feature = "tls")]
 #[test]
 fn test_badssl_modern() {
