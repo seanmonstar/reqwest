@@ -1,12 +1,12 @@
-use std::fs::File;
 use std::fmt;
+use std::fs::File;
 use std::io::{self, Cursor, Read};
 
 use bytes::Bytes;
-use futures::{Future, try_ready};
+use futures::{try_ready, Future};
 use hyper::{self};
 
-use crate::{async_impl};
+use crate::async_impl;
 
 /// The body of a `Request`.
 ///
@@ -102,7 +102,7 @@ impl Body {
                     tx,
                 };
                 (Some(tx), async_impl::Body::wrap(rx), len)
-            },
+            }
             Kind::Bytes(chunk) => {
                 let len = chunk.len() as u64;
                 (None, async_impl::Body::reusable(chunk), Some(len))
@@ -111,11 +111,9 @@ impl Body {
     }
 
     pub(crate) fn try_clone(&self) -> Option<Body> {
-        self.kind.try_clone()
-            .map(|kind| Body { kind })
+        self.kind.try_clone().map(|kind| Body { kind })
     }
 }
-
 
 enum Kind {
     Reader(Box<dyn Read + Send>, Option<u64>),
@@ -147,7 +145,6 @@ impl From<String> for Body {
     }
 }
 
-
 impl From<&'static [u8]> for Body {
     #[inline]
     fn from(s: &'static [u8]) -> Body {
@@ -177,7 +174,8 @@ impl From<File> for Body {
 impl fmt::Debug for Kind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Kind::Reader(_, ref v) => f.debug_struct("Reader")
+            Kind::Reader(_, ref v) => f
+                .debug_struct("Reader")
                 .field("length", &DebugLength(v))
                 .finish(),
             Kind::Bytes(ref v) => fmt::Debug::fmt(v, f),
@@ -218,10 +216,10 @@ pub(crate) struct Sender {
 impl Sender {
     // A `Future` that may do blocking read calls.
     // As a `Future`, this integrates easily with `wait::timeout`.
-    pub(crate) fn send(self) -> impl Future<Item=(), Error=crate::Error> {
-        use std::cmp;
+    pub(crate) fn send(self) -> impl Future<Item = (), Error = crate::Error> {
         use bytes::{BufMut, BytesMut};
         use futures::future;
+        use std::cmp;
 
         let con_len = self.body.1;
         let cap = cmp::min(self.body.1.unwrap_or(8192), 8192);
@@ -261,15 +259,12 @@ impl Sender {
                         // read. Return.
                         return Ok(().into());
                     }
-                    Ok(n) => {
-                        unsafe { buf.advance_mut(n); }
-                    }
+                    Ok(n) => unsafe {
+                        buf.advance_mut(n);
+                    },
                     Err(e) => {
                         let ret = io::Error::new(e.kind(), e.to_string());
-                        tx
-                            .take()
-                            .expect("tx only taken on error")
-                            .abort();
+                        tx.take().expect("tx only taken on error").abort();
                         return Err(crate::error::from(ret));
                     }
                 }
@@ -297,8 +292,8 @@ impl Sender {
 pub(crate) fn read_to_string(mut body: Body) -> io::Result<String> {
     let mut s = String::new();
     match body.kind {
-            Kind::Reader(ref mut reader, _) => reader.read_to_string(&mut s),
-            Kind::Bytes(ref mut bytes) => (&**bytes).read_to_string(&mut s),
-        }
-        .map(|_| s)
+        Kind::Reader(ref mut reader, _) => reader.read_to_string(&mut s),
+        Kind::Bytes(ref mut bytes) => (&**bytes).read_to_string(&mut s),
+    }
+    .map(|_| s)
 }

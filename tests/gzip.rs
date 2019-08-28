@@ -1,11 +1,11 @@
-extern crate reqwest;
 extern crate libflate;
+extern crate reqwest;
 
 #[macro_use]
 mod support;
 
-use std::time::Duration;
 use std::io::{Read, Write};
+use std::time::Duration;
 
 #[test]
 fn test_gzip_response() {
@@ -19,13 +19,16 @@ fn test_gzip_response() {
 
     let gzipped_content = encoder.finish().into_result().unwrap();
 
-    let mut response = format!("\
-            HTTP/1.1 200 OK\r\n\
-            Server: test-accept\r\n\
-            Content-Encoding: gzip\r\n\
-            Content-Length: {}\r\n\
-            \r\n", &gzipped_content.len())
-        .into_bytes();
+    let mut response = format!(
+        "\
+         HTTP/1.1 200 OK\r\n\
+         Server: test-accept\r\n\
+         Content-Encoding: gzip\r\n\
+         Content-Length: {}\r\n\
+         \r\n",
+        &gzipped_content.len()
+    )
+    .into_bytes();
     response.extend(&gzipped_content);
 
     let server = server! {
@@ -130,7 +133,10 @@ fn test_accept_header_is_not_changed_if_set() {
 
     let res = client
         .get(&format!("http://{}/accept", server.addr()))
-        .header(reqwest::header::ACCEPT, reqwest::header::HeaderValue::from_static("application/json"))
+        .header(
+            reqwest::header::ACCEPT,
+            reqwest::header::HeaderValue::from_static("application/json"),
+        )
         .send()
         .unwrap();
 
@@ -157,8 +163,12 @@ fn test_accept_encoding_header_is_not_changed_if_set() {
     };
     let client = reqwest::Client::new();
 
-    let res = client.get(&format!("http://{}/accept-encoding", server.addr()))
-        .header(reqwest::header::ACCEPT_ENCODING, reqwest::header::HeaderValue::from_static("identity"))
+    let res = client
+        .get(&format!("http://{}/accept-encoding", server.addr()))
+        .header(
+            reqwest::header::ACCEPT_ENCODING,
+            reqwest::header::HeaderValue::from_static("identity"),
+        )
         .send()
         .unwrap();
 

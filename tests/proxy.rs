@@ -37,7 +37,10 @@ fn http_proxy() {
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"proxied");
+    assert_eq!(
+        res.headers().get(reqwest::header::SERVER).unwrap(),
+        &"proxied"
+    );
 }
 
 #[test]
@@ -66,8 +69,8 @@ fn http_proxy_basic_auth() {
     let res = reqwest::Client::builder()
         .proxy(
             reqwest::Proxy::http(&proxy)
-            .unwrap()
-            .basic_auth("Aladdin", "open sesame")
+                .unwrap()
+                .basic_auth("Aladdin", "open sesame"),
         )
         .build()
         .unwrap()
@@ -77,7 +80,10 @@ fn http_proxy_basic_auth() {
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"proxied");
+    assert_eq!(
+        res.headers().get(reqwest::header::SERVER).unwrap(),
+        &"proxied"
+    );
 }
 
 #[test]
@@ -104,9 +110,7 @@ fn http_proxy_basic_auth_parsed() {
 
     let url = "http://hyper.rs/prox";
     let res = reqwest::Client::builder()
-        .proxy(
-            reqwest::Proxy::http(&proxy).unwrap()
-        )
+        .proxy(reqwest::Proxy::http(&proxy).unwrap())
         .build()
         .unwrap()
         .get(url)
@@ -115,7 +119,10 @@ fn http_proxy_basic_auth_parsed() {
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"proxied");
+    assert_eq!(
+        res.headers().get(reqwest::header::SERVER).unwrap(),
+        &"proxied"
+    );
 }
 
 #[test]
@@ -141,9 +148,7 @@ fn test_no_proxy() {
 
     // set up proxy and use no_proxy to clear up client builder proxies.
     let res = reqwest::Client::builder()
-        .proxy(
-            reqwest::Proxy::http(&proxy).unwrap()
-        )
+        .proxy(reqwest::Proxy::http(&proxy).unwrap())
         .no_proxy()
         .build()
         .unwrap()
@@ -189,11 +194,14 @@ fn test_using_system_proxy() {
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"proxied");
+    assert_eq!(
+        res.headers().get(reqwest::header::SERVER).unwrap(),
+        &"proxied"
+    );
 
     // reset user setting.
     match system_proxy {
         Err(_) => env::remove_var("http_proxy"),
-        Ok(proxy) => env::set_var("http_proxy", proxy)
+        Ok(proxy) => env::set_var("http_proxy", proxy),
     }
 }

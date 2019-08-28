@@ -1,6 +1,6 @@
-use std::{io, vec};
 use std::net::IpAddr;
 use std::sync::{Arc, Mutex, Once};
+use std::{io, vec};
 
 use futures::{future, Future};
 use hyper::client::connect::dns as hyper_dns;
@@ -13,7 +13,7 @@ use trust_dns_resolver::{system_conf, AsyncResolver, BackgroundLookupIp};
 //
 // "Erasing" the internal resolver type saves us from this limit.
 type ErasedResolver = Box<dyn Fn(hyper_dns::Name) -> BackgroundLookupIp + Send + Sync>;
-type Background = Box<dyn Future<Item=(), Error=()> + Send>;
+type Background = Box<dyn Future<Item = (), Error = ()> + Send>;
 
 #[derive(Clone)]
 pub(crate) struct TrustDnsResolver {
@@ -31,9 +31,7 @@ impl TrustDnsResolver {
         let (conf, opts) = system_conf::read_system_conf()?;
         let (resolver, bg) = AsyncResolver::new(conf, opts);
 
-        let resolver: ErasedResolver = Box::new(move |name| {
-            resolver.lookup_ip(name.as_str())
-        });
+        let resolver: ErasedResolver = Box::new(move |name| resolver.lookup_ip(name.as_str()));
         let background = Mutex::new(Some(Box::new(bg) as Background));
         let once = Once::new();
 
@@ -49,7 +47,7 @@ impl TrustDnsResolver {
 
 impl hyper_dns::Resolve for TrustDnsResolver {
     type Addrs = vec::IntoIter<IpAddr>;
-    type Future = Box<dyn Future<Item=Self::Addrs, Error=io::Error> + Send>;
+    type Future = Box<dyn Future<Item = Self::Addrs, Error = io::Error> + Send>;
 
     fn resolve(&self, name: hyper_dns::Name) -> Self::Future {
         let inner = self.inner.clone();
@@ -70,16 +68,8 @@ impl hyper_dns::Resolve for TrustDnsResolver {
             });
 
             (inner.resolver)(name)
-                .map(|lookup| {
-                    lookup
-                        .iter()
-                        .collect::<Vec<_>>()
-                        .into_iter()
-                })
-                .map_err(|err| {
-                    io::Error::new(io::ErrorKind::Other, err.to_string())
-                })
+                .map(|lookup| lookup.iter().collect::<Vec<_>>().into_iter())
+                .map_err(|err| io::Error::new(io::ErrorKind::Other, err.to_string()))
         }))
     }
 }
-

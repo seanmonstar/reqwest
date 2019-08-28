@@ -1,28 +1,26 @@
-use std::fmt;
-use std::mem;
-use std::marker::PhantomData;
-use std::net::SocketAddr;
 use std::borrow::Cow;
+use std::fmt;
+use std::marker::PhantomData;
+use std::mem;
+use std::net::SocketAddr;
 
 use encoding_rs::{Encoding, UTF_8};
-use futures::{Async, Future, Poll, Stream, try_ready};
 use futures::stream::Concat2;
+use futures::{try_ready, Async, Future, Poll, Stream};
 use http;
-use hyper::{HeaderMap, StatusCode, Version};
 use hyper::client::connect::HttpInfo;
-use hyper::header::{CONTENT_LENGTH};
+use hyper::header::CONTENT_LENGTH;
+use hyper::{HeaderMap, StatusCode, Version};
+use log::debug;
 use mime::Mime;
-use tokio::timer::Delay;
 use serde::de::DeserializeOwned;
 use serde_json;
+use tokio::timer::Delay;
 use url::Url;
-use log::{debug};
 
-
-use crate::cookie;
-use super::Decoder;
 use super::body::Body;
-
+use super::Decoder;
+use crate::cookie;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -37,7 +35,12 @@ pub struct Response {
 }
 
 impl Response {
-    pub(super) fn new(res: hyper::Response<hyper::Body>, url: Url, gzip: bool, timeout: Option<Delay>) -> Response {
+    pub(super) fn new(
+        res: hyper::Response<hyper::Body>,
+        url: Url,
+        gzip: bool,
+        timeout: Option<Delay>,
+    ) -> Response {
         let (parts, body) = res.into_parts();
         let status = parts.status;
         let version = parts.version;
@@ -56,7 +59,6 @@ impl Response {
             extensions,
         }
     }
-
 
     /// Get the `StatusCode` of this `Response`.
     #[inline]
@@ -77,11 +79,10 @@ impl Response {
     }
 
     /// Retrieve the cookies contained in the response.
-    /// 
+    ///
     /// Note that invalid 'Set-Cookie' headers will be ignored.
     pub fn cookies<'a>(&'a self) -> impl Iterator<Item = cookie::Cookie<'a>> + 'a {
-        cookie::extract_response_cookies(&self.headers)
-            .filter_map(Result::ok)
+        cookie::extract_response_cookies(&self.headers).filter_map(Result::ok)
     }
 
     /// Get the final `Url` of this `Response`.
@@ -92,8 +93,7 @@ impl Response {
 
     /// Get the remote address used to get this `Response`.
     pub fn remote_addr(&self) -> Option<SocketAddr> {
-        self
-            .extensions
+        self.extensions
             .get::<HttpInfo>()
             .map(|info| info.remote_addr())
     }
@@ -106,8 +106,7 @@ impl Response {
     /// - The response is gzipped and automatically decoded (thus changing
     ///   the actual decoded length).
     pub fn content_length(&self) -> Option<u64> {
-        self
-            .headers()
+        self.headers()
             .get(CONTENT_LENGTH)
             .and_then(|ct_len| ct_len.to_str().ok())
             .and_then(|ct_len| ct_len.parse().ok())
@@ -145,27 +144,24 @@ impl Response {
     }
 
     /// Get the response text given a specific encoding
-    pub fn text_with_charset(&mut self, default_encoding: &str) -> impl Future<Item = String, Error = crate::Error> {
+    pub fn text_with_charset(
+        &mut self,
+        default_encoding: &str,
+    ) -> impl Future<Item = String, Error = crate::Error> {
         let body = mem::replace(&mut self.body, Decoder::empty());
-        let content_type = self.headers.get(crate::header::CONTENT_TYPE)
-            .and_then(|value| {
-                value.to_str().ok()
-            })
-            .and_then(|value| {
-                value.parse::<Mime>().ok()
-            });
+        let content_type = self
+            .headers
+            .get(crate::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<Mime>().ok());
         let encoding_name = content_type
             .as_ref()
-            .and_then(|mime| {
-                mime
-                    .get_param("charset")
-                    .map(|charset| charset.as_str())
-            })
+            .and_then(|mime| mime.get_param("charset").map(|charset| charset.as_str()))
             .unwrap_or(default_encoding);
         let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);
         Text {
             concat: body.concat2(),
-            encoding
+            encoding,
         }
     }
 
@@ -256,7 +252,8 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
         let (mut parts, body) = r.into_parts();
         let body = body.into();
         let body = Decoder::detect(&mut parts.headers, body, false);
-        let url = parts.extensions
+        let url = parts
+            .extensions
             .remove::<ResponseUrl>()
             .unwrap_or_else(|| ResponseUrl(Url::parse("http://no.url.provided.local").unwrap()));
         let url = url.0;
@@ -289,8 +286,7 @@ impl<T: DeserializeOwned> Future for Json<T> {
 
 impl<T> fmt::Debug for Json<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Json")
-            .finish()
+        f.debug_struct("Json").finish()
     }
 }
 
@@ -308,7 +304,9 @@ impl Future for Text {
         // a block because of borrow checker
         {
             let (text, _, _) = self.encoding.decode(&bytes);
-            if let Cow::Owned(s) = text { return Ok(Async::Ready(s)) }
+            if let Cow::Owned(s) = text {
+                return Ok(Async::Ready(s));
+            }
         }
         unsafe {
             // decoding returned Cow::Borrowed, meaning these bytes
@@ -357,9 +355,9 @@ impl ResponseBuilderExt for http::response::Builder {
 
 #[cfg(test)]
 mod tests {
-    use url::Url;
+    use super::{Response, ResponseBuilderExt, ResponseUrl};
     use http::response::Builder;
-    use super::{Response, ResponseUrl, ResponseBuilderExt};
+    use url::Url;
 
     #[test]
     fn test_response_builder_ext() {
@@ -370,7 +368,10 @@ mod tests {
             .body(())
             .unwrap();
 
-        assert_eq!(response.extensions().get::<ResponseUrl>(), Some(&ResponseUrl(url)));
+        assert_eq!(
+            response.extensions().get::<ResponseUrl>(),
+            Some(&ResponseUrl(url))
+        );
     }
 
     #[test]

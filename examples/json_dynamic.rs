@@ -4,18 +4,17 @@
 //! really care about the structure of the JSON and just need to display it or
 //! process it at runtime.
 extern crate reqwest;
-#[macro_use] extern crate serde_json;
+#[macro_use]
+extern crate serde_json;
 
 fn main() -> Result<(), reqwest::Error> {
     let echo_json: serde_json::Value = reqwest::Client::new()
         .post("https://jsonplaceholder.typicode.com/posts")
-        .json(
-            &json!({
-                "title": "Reqwest.rs",
-                "body": "https://docs.rs/reqwest",
-                "userId": 1
-            })
-        )
+        .json(&json!({
+            "title": "Reqwest.rs",
+            "body": "https://docs.rs/reqwest",
+            "userId": 1
+        }))
         .send()?
         .json()?;
 

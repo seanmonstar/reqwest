@@ -23,7 +23,7 @@ fn main() -> Result<(), reqwest::Error> {
         id: None,
         title: "Reqwest.rs".into(),
         body: "https://docs.rs/reqwest".into(),
-        user_id: 1
+        user_id: 1,
     };
     let new_post: Post = reqwest::Client::new()
         .post("https://jsonplaceholder.typicode.com/posts")

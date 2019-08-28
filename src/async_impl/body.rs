@@ -1,7 +1,7 @@
 use std::fmt;
 
-use futures::{Future, Stream, Poll, Async, try_ready};
 use bytes::{Buf, Bytes};
+use futures::{try_ready, Async, Future, Poll, Stream};
 use hyper::body::Payload;
 use tokio::timer::Delay;
 
@@ -15,7 +15,7 @@ enum Inner {
     Hyper {
         body: hyper::Body,
         timeout: Option<Delay>,
-    }
+    },
 }
 
 impl Body {
@@ -29,10 +29,7 @@ impl Body {
     #[inline]
     pub(crate) fn response(body: hyper::Body, timeout: Option<Delay>) -> Body {
         Body {
-            inner: Inner::Hyper {
-                body,
-                timeout,
-            },
+            inner: Inner::Hyper { body, timeout },
         }
     }
 
@@ -65,7 +62,7 @@ impl Body {
             Inner::Hyper { body, timeout } => {
                 debug_assert!(timeout.is_none());
                 (None, body)
-            },
+            }
         }
     }
 }
@@ -77,14 +74,17 @@ impl Stream for Body {
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let opt = match self.inner {
-            Inner::Hyper { ref mut body, ref mut timeout } => {
+            Inner::Hyper {
+                ref mut body,
+                ref mut timeout,
+            } => {
                 if let Some(ref mut timeout) = timeout {
                     if let Async::Ready(()) = try_!(timeout.poll()) {
                         return Err(crate::error::timedout(None));
                     }
                 }
                 try_ready!(body.poll_data().map_err(crate::error::from))
-            },
+            }
             Inner::Reusable(ref mut bytes) => {
                 return if bytes.is_empty() {
                     Ok(Async::Ready(None))
@@ -93,12 +93,10 @@ impl Stream for Body {
                     *bytes = Bytes::new();
                     Ok(Async::Ready(Some(chunk)))
                 };
-            },
+            }
         };
 
-        Ok(Async::Ready(opt.map(|chunk| Chunk {
-            inner: chunk,
-        })))
+        Ok(Async::Ready(opt.map(|chunk| Chunk { inner: chunk })))
     }
 }
 
@@ -161,7 +159,7 @@ impl Chunk {
     #[inline]
     pub(crate) fn from_chunk(chunk: Bytes) -> Chunk {
         Chunk {
-            inner: hyper::Chunk::from(chunk)
+            inner: hyper::Chunk::from(chunk),
         }
     }
 }
@@ -197,7 +195,9 @@ impl std::ops::Deref for Chunk {
 
 impl Extend<u8> for Chunk {
     fn extend<T>(&mut self, iter: T)
-    where T: IntoIterator<Item=u8> {
+    where
+        T: IntoIterator<Item = u8>,
+    {
         self.inner.extend(iter)
     }
 }
@@ -219,7 +219,9 @@ impl From<Vec<u8>> for Chunk {
 
 impl From<&'static [u8]> for Chunk {
     fn from(slice: &'static [u8]) -> Chunk {
-        Chunk { inner: slice.into() }
+        Chunk {
+            inner: slice.into(),
+        }
     }
 }
 
@@ -231,13 +233,17 @@ impl From<String> for Chunk {
 
 impl From<&'static str> for Chunk {
     fn from(slice: &'static str) -> Chunk {
-        Chunk { inner: slice.into() }
+        Chunk {
+            inner: slice.into(),
+        }
     }
 }
 
 impl From<Bytes> for Chunk {
     fn from(bytes: Bytes) -> Chunk {
-        Chunk { inner: bytes.into() }
+        Chunk {
+            inner: bytes.into(),
+        }
     }
 }
 
@@ -249,8 +255,7 @@ impl From<Chunk> for hyper::Chunk {
 
 impl fmt::Debug for Body {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Body")
-            .finish()
+        f.debug_struct("Body").finish()
     }
 }
 

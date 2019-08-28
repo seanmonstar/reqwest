@@ -1,9 +1,9 @@
+extern crate bytes;
 extern crate futures;
+extern crate hyper;
 extern crate libflate;
 extern crate reqwest;
-extern crate hyper;
 extern crate tokio;
-extern crate bytes;
 
 #[macro_use]
 mod support;
@@ -14,8 +14,8 @@ use std::time::Duration;
 use futures::{Future, Stream};
 use tokio::runtime::current_thread::Runtime;
 
-use reqwest::r#async::{Chunk, Client};
 use reqwest::r#async::multipart::{Form, Part};
+use reqwest::r#async::{Chunk, Client};
 
 use bytes::Bytes;
 
@@ -54,7 +54,8 @@ fn response_text() {
 
     let client = Client::new();
 
-    let res_future = client.get(&format!("http://{}/text", server.addr()))
+    let res_future = client
+        .get(&format!("http://{}/text", server.addr()))
         .send()
         .and_then(|mut res| res.text())
         .and_then(|text| {
@@ -90,7 +91,8 @@ fn response_json() {
 
     let client = Client::new();
 
-    let res_future = client.get(&format!("http://{}/json", server.addr()))
+    let res_future = client
+        .get(&format!("http://{}/json", server.addr()))
         .send()
         .and_then(|mut res| res.json::<String>())
         .and_then(|text| {
@@ -105,34 +107,36 @@ fn response_json() {
 fn multipart() {
     let _ = env_logger::try_init();
 
-    let stream = futures::stream::once::<_, hyper::Error>(Ok(Chunk::from("part1 part2".to_owned())));
+    let stream =
+        futures::stream::once::<_, hyper::Error>(Ok(Chunk::from("part1 part2".to_owned())));
     let part = Part::stream(stream);
 
-    let form = Form::new()
-        .text("foo", "bar")
-        .part("part_stream", part);
+    let form = Form::new().text("foo", "bar").part("part_stream", part);
 
-    let expected_body = format!("\
-        24\r\n\
-        --{0}\r\n\r\n\
-        2E\r\n\
-        Content-Disposition: form-data; name=\"foo\"\r\n\r\n\r\n\
-        3\r\n\
-        bar\r\n\
-        2\r\n\
-        \r\n\r\n\
-        24\r\n\
-        --{0}\r\n\r\n\
-        36\r\n\
-        Content-Disposition: form-data; name=\"part_stream\"\r\n\r\n\r\n\
-        B\r\n\
-        part1 part2\r\n\
-        2\r\n\
-        \r\n\r\n\
-        26\r\n\
-        --{0}--\r\n\r\n\
-        0\r\n\r\n\
-    ", form.boundary());
+    let expected_body = format!(
+        "\
+         24\r\n\
+         --{0}\r\n\r\n\
+         2E\r\n\
+         Content-Disposition: form-data; name=\"foo\"\r\n\r\n\r\n\
+         3\r\n\
+         bar\r\n\
+         2\r\n\
+         \r\n\r\n\
+         24\r\n\
+         --{0}\r\n\r\n\
+         36\r\n\
+         Content-Disposition: form-data; name=\"part_stream\"\r\n\r\n\r\n\
+         B\r\n\
+         part1 part2\r\n\
+         2\r\n\
+         \r\n\r\n\
+         26\r\n\
+         --{0}--\r\n\r\n\
+         0\r\n\r\n\
+         ",
+        form.boundary()
+    );
 
     let server = server! {
         request: format!("\
@@ -160,15 +164,12 @@ fn multipart() {
 
     let client = Client::new();
 
-    let res_future = client.post(&url)
-        .multipart(form)
-        .send()
-        .and_then(|res| {
-            assert_eq!(res.url().as_str(), &url);
-            assert_eq!(res.status(), reqwest::StatusCode::OK);
+    let res_future = client.post(&url).multipart(form).send().and_then(|res| {
+        assert_eq!(res.url().as_str(), &url);
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
 
-            Ok(())
-        });
+        Ok(())
+    });
 
     rt.block_on(res_future).unwrap();
 }
@@ -203,9 +204,7 @@ fn request_timeout() {
         .unwrap();
 
     let url = format!("http://{}/slow", server.addr());
-    let fut = client
-        .get(&url)
-        .send();
+    let fut = client.get(&url).send();
 
     let err = rt.block_on(fut).unwrap_err();
 
@@ -254,7 +253,10 @@ fn response_timeout() {
 }
 
 fn gzip_case(response_size: usize, chunk_size: usize) {
-    let content: String = (0..response_size).into_iter().map(|i| format!("test {}", i)).collect();
+    let content: String = (0..response_size)
+        .into_iter()
+        .map(|i| format!("test {}", i))
+        .collect();
     let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
     match encoder.write(content.as_bytes()) {
         Ok(n) => assert!(n > 0, "Failed to write to encoder."),
@@ -263,13 +265,16 @@ fn gzip_case(response_size: usize, chunk_size: usize) {
 
     let gzipped_content = encoder.finish().into_result().unwrap();
 
-    let mut response = format!("\
-            HTTP/1.1 200 OK\r\n\
-            Server: test-accept\r\n\
-            Content-Encoding: gzip\r\n\
-            Content-Length: {}\r\n\
-            \r\n", &gzipped_content.len())
-        .into_bytes();
+    let mut response = format!(
+        "\
+         HTTP/1.1 200 OK\r\n\
+         Server: test-accept\r\n\
+         Content-Encoding: gzip\r\n\
+         Content-Length: {}\r\n\
+         \r\n",
+        &gzipped_content.len()
+    )
+    .into_bytes();
     response.extend(&gzipped_content);
 
     let server = server! {
@@ -290,7 +295,8 @@ fn gzip_case(response_size: usize, chunk_size: usize) {
 
     let client = Client::new();
 
-    let res_future = client.get(&format!("http://{}/gzip", server.addr()))
+    let res_future = client
+        .get(&format!("http://{}/gzip", server.addr()))
         .send()
         .and_then(|res| {
             let body = res.into_body();
@@ -311,9 +317,11 @@ fn gzip_case(response_size: usize, chunk_size: usize) {
 fn body_stream() {
     let _ = env_logger::try_init();
 
-    let source: Box<dyn Stream<Item = Bytes, Error = io::Error> + Send>
-        = Box::new(futures::stream::iter_ok::<_, io::Error>(
-            vec![Bytes::from_static(b"123"), Bytes::from_static(b"4567")]));
+    let source: Box<dyn Stream<Item = Bytes, Error = io::Error> + Send> =
+        Box::new(futures::stream::iter_ok::<_, io::Error>(vec![
+            Bytes::from_static(b"123"),
+            Bytes::from_static(b"4567"),
+        ]));
 
     let expected_body = "3\r\n123\r\n4\r\n4567\r\n0\r\n\r\n";
 
@@ -342,15 +350,12 @@ fn body_stream() {
 
     let client = Client::new();
 
-    let res_future = client.post(&url)
-        .body(source)
-        .send()
-        .and_then(|res| {
-            assert_eq!(res.url().as_str(), &url);
-            assert_eq!(res.status(), reqwest::StatusCode::OK);
+    let res_future = client.post(&url).body(source).send().and_then(|res| {
+        assert_eq!(res.url().as_str(), &url);
+        assert_eq!(res.status(), reqwest::StatusCode::OK);
 
-            Ok(())
-        });
+        Ok(())
+    });
 
     rt.block_on(res_future).unwrap();
 }
