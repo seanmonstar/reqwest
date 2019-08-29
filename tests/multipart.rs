@@ -1,6 +1,3 @@
-extern crate env_logger;
-extern crate reqwest;
-
 #[macro_use]
 mod support;
 
@@ -8,15 +5,17 @@ mod support;
 fn text_part() {
     let _ = env_logger::try_init();
 
-    let form = reqwest::multipart::Form::new()
-        .text("foo", "bar");
+    let form = reqwest::multipart::Form::new().text("foo", "bar");
 
-    let expected_body = format!("\
-        --{0}\r\n\
-        Content-Disposition: form-data; name=\"foo\"\r\n\r\n\
-        bar\r\n\
-        --{0}--\r\n\
-    ", form.boundary());
+    let expected_body = format!(
+        "\
+         --{0}\r\n\
+         Content-Disposition: form-data; name=\"foo\"\r\n\r\n\
+         bar\r\n\
+         --{0}--\r\n\
+         ",
+        form.boundary()
+    );
 
     let server = server! {
         request: format!("\
@@ -55,17 +54,22 @@ fn file() {
     let _ = env_logger::try_init();
 
     let form = reqwest::multipart::Form::new()
-        .file("foo", "Cargo.lock").unwrap();
+        .file("foo", "Cargo.lock")
+        .unwrap();
 
     let fcontents = std::fs::read_to_string("Cargo.lock").unwrap();
 
-    let expected_body = format!("\
-        --{0}\r\n\
-        Content-Disposition: form-data; name=\"foo\"; filename=\"Cargo.lock\"\r\n\
-        Content-Type: application/octet-stream\r\n\r\n\
-        {1}\r\n\
-        --{0}--\r\n\
-    ", form.boundary(), fcontents);
+    let expected_body = format!(
+        "\
+         --{0}\r\n\
+         Content-Disposition: form-data; name=\"foo\"; filename=\"Cargo.lock\"\r\n\
+         Content-Type: application/octet-stream\r\n\r\n\
+         {1}\r\n\
+         --{0}--\r\n\
+         ",
+        form.boundary(),
+        fcontents
+    );
 
     let server = server! {
         request: format!("\

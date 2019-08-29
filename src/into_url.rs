@@ -27,8 +27,7 @@ impl PolyfillTryInto for Url {
 
 impl<'a> PolyfillTryInto for &'a str {
     fn into_url(self) -> crate::Result<Url> {
-        try_!(Url::parse(self))
-            .into_url()
+        try_!(Url::parse(self)).into_url()
     }
 }
 
@@ -39,7 +38,9 @@ impl<'a> PolyfillTryInto for &'a String {
 }
 
 pub(crate) fn expect_uri(url: &Url) -> hyper::Uri {
-    url.as_str().parse().expect("a parsed Url should always be a valid Uri")
+    url.as_str()
+        .parse()
+        .expect("a parsed Url should always be a valid Uri")
 }
 
 pub(crate) fn try_uri(url: &Url) -> Option<hyper::Uri> {
@@ -52,9 +53,10 @@ mod tests {
 
     #[test]
     fn into_url_file_scheme() {
-        let err = "file:///etc/hosts"
-            .into_url()
-            .unwrap_err();
-        assert_eq!(err.to_string(), "file:///etc/hosts: URL scheme is not allowed");
+        let err = "file:///etc/hosts".into_url().unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "file:///etc/hosts: URL scheme is not allowed"
+        );
     }
 }

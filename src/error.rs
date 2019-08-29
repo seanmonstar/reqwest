@@ -62,17 +62,13 @@ struct Inner {
     url: Option<Url>,
 }
 
-
 /// A `Result` alias where the `Err` case is `reqwest::Error`.
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl Error {
     fn new(kind: Kind, url: Option<Url>) -> Error {
         Error {
-            inner: Box::new(Inner {
-                kind,
-                url,
-            }),
+            inner: Box::new(Inner { kind, url }),
         }
     }
 
@@ -148,13 +144,13 @@ impl Error {
             Kind::Io(ref e) => Some(e),
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
-            Kind::UrlBadScheme |
-            Kind::TooManyRedirects |
-            Kind::RedirectLoop |
-            Kind::Status(_) |
-            Kind::UnknownProxyScheme |
-            Kind::Timer |
-            Kind::BlockingClientInFutureContext => None,
+            Kind::UrlBadScheme
+            | Kind::TooManyRedirects
+            | Kind::RedirectLoop
+            | Kind::Status(_)
+            | Kind::UnknownProxyScheme
+            | Kind::Timer
+            | Kind::BlockingClientInFutureContext => None,
         }
     }
 
@@ -172,15 +168,11 @@ impl Error {
     pub fn is_timeout(&self) -> bool {
         match self.inner.kind {
             Kind::Io(ref io) => io.kind() == io::ErrorKind::TimedOut,
-            Kind::Hyper(ref error) => {
-                error
-                    .source()
-                    .and_then(|cause| {
-                        cause.downcast_ref::<io::Error>()
-                    })
-                    .map(|io| io.kind() == io::ErrorKind::TimedOut)
-                    .unwrap_or(false)
-            },
+            Kind::Hyper(ref error) => error
+                .source()
+                .and_then(|cause| cause.downcast_ref::<io::Error>())
+                .map(|io| io.kind() == io::ErrorKind::TimedOut)
+                .unwrap_or(false),
             _ => false,
         }
     }
@@ -189,8 +181,7 @@ impl Error {
     #[inline]
     pub fn is_serialization(&self) -> bool {
         match self.inner.kind {
-            Kind::Json(_) |
-            Kind::UrlEncoded(_) => true,
+            Kind::Json(_) | Kind::UrlEncoded(_) => true,
             _ => false,
         }
     }
@@ -199,8 +190,7 @@ impl Error {
     #[inline]
     pub fn is_redirect(&self) -> bool {
         match self.inner.kind {
-            Kind::TooManyRedirects |
-            Kind::RedirectLoop => true,
+            Kind::TooManyRedirects | Kind::RedirectLoop => true,
             _ => false,
         }
     }
@@ -241,9 +231,7 @@ impl fmt::Debug for Error {
                 .field(url)
                 .finish()
         } else {
-            f.debug_tuple("Error")
-                .field(&self.inner.kind)
-                .finish()
+            f.debug_tuple("Error").field(&self.inner.kind).finish()
         }
     }
 }
@@ -269,9 +257,7 @@ impl fmt::Display for Error {
             #[cfg(feature = "rustls-tls")]
             Kind::Rustls(ref e) => fmt::Display::fmt(e, f),
             #[cfg(feature = "trust-dns")]
-            Kind::DnsSystemConf(ref e) => {
-                write!(f, "failed to load DNS system conf: {}", e)
-            },
+            Kind::DnsSystemConf(ref e) => write!(f, "failed to load DNS system conf: {}", e),
             Kind::Io(ref e) => fmt::Display::fmt(e, f),
             Kind::UrlEncoded(ref e) => fmt::Display::fmt(e, f),
             Kind::Json(ref e) => fmt::Display::fmt(e, f),
@@ -349,13 +335,13 @@ impl StdError for Error {
             Kind::Io(ref e) => e.cause(),
             Kind::UrlEncoded(ref e) => e.cause(),
             Kind::Json(ref e) => e.cause(),
-            Kind::UrlBadScheme |
-            Kind::TooManyRedirects |
-            Kind::RedirectLoop |
-            Kind::Status(_) |
-            Kind::UnknownProxyScheme |
-            Kind::Timer |
-            Kind::BlockingClientInFutureContext => None,
+            Kind::UrlBadScheme
+            | Kind::TooManyRedirects
+            | Kind::RedirectLoop
+            | Kind::Status(_)
+            | Kind::UnknownProxyScheme
+            | Kind::Timer
+            | Kind::BlockingClientInFutureContext => None,
         }
     }
 
@@ -376,13 +362,13 @@ impl StdError for Error {
             Kind::Io(ref e) => e.source(),
             Kind::UrlEncoded(ref e) => e.source(),
             Kind::Json(ref e) => e.source(),
-            Kind::UrlBadScheme |
-            Kind::TooManyRedirects |
-            Kind::RedirectLoop |
-            Kind::Status(_) |
-            Kind::UnknownProxyScheme |
-            Kind::Timer |
-            Kind::BlockingClientInFutureContext => None,
+            Kind::UrlBadScheme
+            | Kind::TooManyRedirects
+            | Kind::RedirectLoop
+            | Kind::Status(_)
+            | Kind::UnknownProxyScheme
+            | Kind::Timer
+            | Kind::BlockingClientInFutureContext => None,
         }
     }
 }
@@ -412,7 +398,6 @@ pub(crate) enum Kind {
     Timer,
     BlockingClientInFutureContext,
 }
-
 
 impl From<http::Error> for Kind {
     #[inline]
@@ -478,10 +463,12 @@ impl From<rustls::TLSError> for Kind {
 }
 
 impl<T> From<crate::wait::Waited<T>> for Kind
-where T: Into<Kind> {
+where
+    T: Into<Kind>,
+{
     fn from(err: crate::wait::Waited<T>) -> Kind {
         match err {
-            crate::wait::Waited::TimedOut =>  io_timeout().into(),
+            crate::wait::Waited::TimedOut => io_timeout().into(),
             crate::wait::Waited::Executor(e) => e.into(),
             crate::wait::Waited::Inner(e) => e.into(),
         }
@@ -542,8 +529,7 @@ pub(crate) fn into_io(e: Error) -> io::Error {
 
 pub(crate) fn from_io(e: io::Error) -> Error {
     if e.get_ref().map(|r| r.is::<Error>()).unwrap_or(false) {
-        *e
-            .into_inner()
+        *e.into_inner()
             .expect("io::Error::get_ref was Some(_)")
             .downcast::<Error>()
             .expect("StdError::is() was true")
@@ -552,28 +538,30 @@ pub(crate) fn from_io(e: io::Error) -> Error {
     }
 }
 
-
 macro_rules! try_ {
-    ($e:expr) => (
+    ($e:expr) => {
         match $e {
             Ok(v) => v,
             Err(err) => {
                 return Err(crate::error::from(err));
             }
         }
-    );
-    ($e:expr, $url:expr) => (
+    };
+    ($e:expr, $url:expr) => {
         match $e {
             Ok(v) => v,
             Err(err) => {
-                return Err(crate::Error::from(crate::error::InternalFrom(err, Some($url.clone()))));
+                return Err(crate::Error::from(crate::error::InternalFrom(
+                    err,
+                    Some($url.clone()),
+                )));
             }
         }
-    )
+    };
 }
 
 macro_rules! try_io {
-    ($e:expr) => (
+    ($e:expr) => {
         match $e {
             Ok(v) => v,
             Err(ref err) if err.kind() == std::io::ErrorKind::WouldBlock => {
@@ -583,7 +571,7 @@ macro_rules! try_io {
                 return Err(crate::error::from_io(err));
             }
         }
-    )
+    };
 }
 
 pub(crate) fn loop_detected(url: Url) -> Error {
@@ -625,7 +613,7 @@ mod tests {
         #[derive(Debug)]
         struct Chain<T>(Option<T>);
 
-        impl<T: fmt::Display> fmt::Display  for Chain<T> {
+        impl<T: fmt::Display> fmt::Display for Chain<T> {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 if let Some(ref link) = self.0 {
                     write!(f, "chain: {}", link)
@@ -657,7 +645,6 @@ mod tests {
         let err = Error::new(Kind::Io(io), None);
         assert!(err.cause().is_none());
         assert_eq!(err.to_string(), "root");
-
 
         let root = std::io::Error::new(std::io::ErrorKind::Other, Chain(None::<Error>));
         let link = Chain(Some(root));
