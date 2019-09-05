@@ -213,6 +213,27 @@ impl Error {
         }
     }
 
+    /// Returns true, if a network error occured.
+    #[inline]
+    pub fn is_network_error(&self) -> bool {
+        match self.inner.kind {
+            Kind::Hyper(ref e) => {
+                if e.is_canceled() {
+                    true
+                } else if e.is_closed() {
+                    true
+                } else if e.is_connect() {
+                    true
+                } else if e.is_incomplete_message() {
+                    true
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
+
     /// Returns the status code, if the error was generated from a response.
     #[inline]
     pub fn status(&self) -> Option<StatusCode> {
