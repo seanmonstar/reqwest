@@ -40,6 +40,14 @@ use winreg::RegKey;
 /// check each `Proxy` in the order it was added. This could mean that a
 /// `Proxy` added first with eager intercept rules, such as `Proxy::all`,
 /// would prevent a `Proxy` later in the list from ever working, so take care.
+///
+/// By enabling the `"socks"` feature it is possible to use a socks proxy:
+/// ```rust
+/// # fn run() -> Result<(), Box<std::error::Error>> {
+/// let proxy = reqwest::Proxy::http("socks5://192.168.1.1:9000")?;
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone, Debug)]
 pub struct Proxy {
     intercept: Intercept,
