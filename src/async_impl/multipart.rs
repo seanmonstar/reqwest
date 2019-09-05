@@ -4,7 +4,7 @@ use std::fmt;
 
 use http::HeaderMap;
 use mime_guess::Mime;
-use url::percent_encoding::{self, EncodeSet, PATH_SEGMENT_ENCODE_SET};
+use percent_encoding::{self, AsciiSet, NON_ALPHANUMERIC};
 use uuid::Uuid;
 
 use futures::Stream;
@@ -386,33 +386,33 @@ impl PartMetadata {
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct AttrCharEncodeSet;
+/// https://url.spec.whatwg.org/#fragment-percent-encode-set
+const FRAGMENT_ENCODE_SET: &AsciiSet = &percent_encoding::CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'<')
+    .add(b'>')
+    .add(b'`');
 
-impl EncodeSet for AttrCharEncodeSet {
-    fn contains(&self, ch: u8) -> bool {
-        match ch as char {
-            '!' => false,
-            '#' => false,
-            '$' => false,
-            '&' => false,
-            '+' => false,
-            '-' => false,
-            '.' => false,
-            '^' => false,
-            '_' => false,
-            '`' => false,
-            '|' => false,
-            '~' => false,
-            _ => {
-                let is_alpha_numeric = ch >= 0x41 && ch <= 0x5a
-                    || ch >= 0x61 && ch <= 0x7a
-                    || ch >= 0x30 && ch <= 0x39;
-                !is_alpha_numeric
-            }
-        }
-    }
-}
+/// https://url.spec.whatwg.org/#path-percent-encode-set
+const PATH_ENCODE_SET: &AsciiSet = &FRAGMENT_ENCODE_SET.add(b'#').add(b'?').add(b'{').add(b'}');
+
+const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &PATH_ENCODE_SET.add(b'/').add(b'%');
+
+/// https://tools.ietf.org/html/rfc8187#section-3.2.1
+const ATTR_CHAR_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'!')
+    .remove(b'#')
+    .remove(b'$')
+    .remove(b'&')
+    .remove(b'+')
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'^')
+    .remove(b'_')
+    .remove(b'`')
+    .remove(b'|')
+    .remove(b'~');
 
 pub(crate) enum PercentEncoding {
     PathSegment,
@@ -463,7 +463,7 @@ impl PercentEncoding {
                 percent_encoding::utf8_percent_encode(value, PATH_SEGMENT_ENCODE_SET).to_string()
             }
             PercentEncoding::AttrChar => {
-                percent_encoding::utf8_percent_encode(value, AttrCharEncodeSet).to_string()
+                percent_encoding::utf8_percent_encode(value, ATTR_CHAR_ENCODE_SET).to_string()
             }
             PercentEncoding::NoOp => value.to_string(),
         };

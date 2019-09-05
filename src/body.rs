@@ -4,7 +4,7 @@ use std::io::{self, Cursor, Read};
 
 use bytes::Bytes;
 use futures::{try_ready, Future};
-use hyper::{self};
+use hyper;
 
 use crate::async_impl;
 

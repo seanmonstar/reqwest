@@ -1,16 +1,16 @@
 use std::fmt;
 #[cfg(feature = "socks")]
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crate::{IntoUrl, Url};
 use http::{header::HeaderValue, Uri};
 use hyper::client::connect::Destination;
+use percent_encoding::percent_decode;
 use std::collections::HashMap;
 use std::env;
 #[cfg(target_os = "windows")]
 use std::error::Error;
-use url::percent_encoding::percent_decode;
 #[cfg(target_os = "windows")]
 use winreg::enums::HKEY_CURRENT_USER;
 #[cfg(target_os = "windows")]
@@ -326,12 +326,14 @@ impl ProxyScheme {
         // Resolve URL to a host and port
         #[cfg(feature = "socks")]
         let to_addr = || {
-            let host_and_port = try_!(url.with_default_port(|url| match url.scheme() {
-                "socks5" | "socks5h" => Ok(1080),
-                _ => Err(()),
+            let addrs = try_!(url.socket_addrs(|| match url.scheme() {
+                "socks5" | "socks5h" => Some(1080),
+                _ => None,
             }));
-            let mut addr = try_!(host_and_port.to_socket_addrs());
-            addr.next().ok_or_else(crate::error::unknown_proxy_scheme)
+            addrs
+                .into_iter()
+                .next()
+                .ok_or_else(crate::error::unknown_proxy_scheme)
         };
 
         let mut scheme = match url.scheme() {
