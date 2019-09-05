@@ -218,13 +218,7 @@ impl Error {
     pub fn is_network_error(&self) -> bool {
         match self.inner.kind {
             Kind::Hyper(ref e) => {
-                if e.is_canceled() {
-                    true
-                } else if e.is_closed() {
-                    true
-                } else if e.is_connect() {
-                    true
-                } else if e.is_incomplete_message() {
+                if e.is_canceled() || e.is_closed() || e.is_connect() || e.is_incomplete_message() {
                     true
                 } else {
                     false
