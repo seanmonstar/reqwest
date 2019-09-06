@@ -109,9 +109,7 @@ impl<'a> Cookie<'a> {
 
     /// Get the Max-Age information.
     pub fn max_age(&self) -> Option<std::time::Duration> {
-        self.0
-            .max_age()
-            .map(|d| std::time::Duration::new(d.num_seconds() as u64, 0))
+        self.0.max_age().map(|d| std::time::Duration::new(d.num_seconds() as u64, 0))
     }
 
     /// The cookie expiration time.

@@ -3,6 +3,9 @@
 //! In contrast to the arbitrary JSON example, this brings up the full power of
 //! Rust compile-time type system guaranties though it requires a little bit
 //! more code.
+extern crate reqwest;
+extern crate serde;
+extern crate serde_json;
 
 use serde::{Deserialize, Serialize};
 
@@ -20,7 +23,7 @@ fn main() -> Result<(), reqwest::Error> {
         id: None,
         title: "Reqwest.rs".into(),
         body: "https://docs.rs/reqwest".into(),
-        user_id: 1,
+        user_id: 1
     };
     let new_post: Post = reqwest::Client::new()
         .post("https://jsonplaceholder.typicode.com/posts")

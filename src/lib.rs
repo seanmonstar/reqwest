@@ -187,12 +187,12 @@ doctest!("../README.md");
 pub use hyper::header;
 pub use hyper::Method;
 pub use hyper::{StatusCode, Version};
-pub use url::ParseError as UrlError;
 pub use url::Url;
+pub use url::ParseError as UrlError;
 
-pub use self::body::Body;
 pub use self::client::{Client, ClientBuilder};
 pub use self::error::{Error, Result};
+pub use self::body::Body;
 pub use self::into_url::IntoUrl;
 pub use self::proxy::Proxy;
 pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
@@ -206,9 +206,9 @@ pub use self::tls::{Certificate, Identity};
 mod error;
 
 mod async_impl;
+mod connect;
 mod body;
 mod client;
-mod connect;
 pub mod cookie;
 #[cfg(feature = "trust-dns")]
 mod dns;
@@ -226,8 +226,16 @@ pub mod multipart;
 /// An 'async' implementation of the reqwest `Client`.
 pub mod r#async {
     pub use crate::async_impl::{
-        multipart, Body, Chunk, Client, ClientBuilder, Decoder, Request, RequestBuilder, Response,
+        Body,
+        Chunk,
+        Decoder,
+        Client,
+        ClientBuilder,
+        Request,
+        RequestBuilder,
+        Response,
         ResponseBuilderExt,
+        multipart
     };
 }
 
@@ -261,7 +269,10 @@ pub mod r#async {
 /// - redirect loop was detected
 /// - redirect limit was exhausted
 pub fn get<T: IntoUrl>(url: T) -> crate::Result<Response> {
-    Client::builder().build()?.get(url).send()
+    Client::builder()
+        .build()?
+        .get(url)
+        .send()
 }
 
 fn _assert_impls() {

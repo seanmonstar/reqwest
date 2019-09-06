@@ -1,18 +1,18 @@
 use std::fmt;
 
-use base64::encode;
+use base64::{encode};
 use futures::Future;
 use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
 
-use super::body::Body;
+use super::body::{Body};
 use super::client::{Client, Pending};
 use super::multipart;
 use super::response::Response;
-use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
-use crate::{Method, Url};
+use crate::header::{CONTENT_LENGTH, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
 use http::HttpTryFrom;
+use crate::{Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -95,7 +95,10 @@ impl Request {
 
 impl RequestBuilder {
     pub(super) fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
-        RequestBuilder { client, request }
+        RequestBuilder {
+            client,
+            request,
+        }
     }
 
     /// Add a `Header` to this Request.
@@ -107,11 +110,11 @@ impl RequestBuilder {
         let mut error = None;
         if let Ok(ref mut req) = self.request {
             match <HeaderName as HttpTryFrom<K>>::try_from(key) {
-                Ok(key) => match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
-                    Ok(value) => {
-                        req.headers_mut().append(key, value);
+                Ok(key) => {
+                    match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
+                        Ok(value) => { req.headers_mut().append(key, value); }
+                        Err(e) => error = Some(crate::error::from(e.into())),
                     }
-                    Err(e) => error = Some(crate::error::from(e.into())),
                 },
                 Err(e) => error = Some(crate::error::from(e.into())),
             };
@@ -165,7 +168,7 @@ impl RequestBuilder {
     {
         let auth = match password {
             Some(password) => format!("{}:{}", username, password),
-            None => format!("{}:", username),
+            None => format!("{}:", username)
         };
         let header_value = format!("Basic {}", encode(&auth));
         self.header(crate::header::AUTHORIZATION, &*header_value)
@@ -218,7 +221,10 @@ impl RequestBuilder {
     pub fn multipart(self, mut multipart: multipart::Form) -> RequestBuilder {
         let mut builder = self.header(
             CONTENT_TYPE,
-            format!("multipart/form-data; boundary={}", multipart.boundary()).as_str(),
+            format!(
+                "multipart/form-data; boundary={}",
+                multipart.boundary()
+            ).as_str()
         );
 
         builder = match multipart.compute_length() {
@@ -280,10 +286,10 @@ impl RequestBuilder {
                 Ok(body) => {
                     req.headers_mut().insert(
                         CONTENT_TYPE,
-                        HeaderValue::from_static("application/x-www-form-urlencoded"),
+                        HeaderValue::from_static("application/x-www-form-urlencoded")
                     );
                     *req.body_mut() = Some(body.into());
-                }
+                },
                 Err(err) => error = Some(crate::error::from(err)),
             }
         }
@@ -304,10 +310,12 @@ impl RequestBuilder {
         if let Ok(ref mut req) = self.request {
             match serde_json::to_vec(json) {
                 Ok(body) => {
-                    req.headers_mut()
-                        .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+                    req.headers_mut().insert(
+                        CONTENT_TYPE,
+                        HeaderValue::from_static("application/json")
+                    );
                     *req.body_mut() = Some(body.into());
-                }
+                },
                 Err(err) => error = Some(crate::error::from(err)),
             }
         }
@@ -360,7 +368,8 @@ impl RequestBuilder {
 
 impl fmt::Debug for Request {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt_request_fields(&mut f.debug_struct("Request"), self).finish()
+        fmt_request_fields(&mut f.debug_struct("Request"), self)
+            .finish()
     }
 }
 
@@ -368,22 +377,27 @@ impl fmt::Debug for RequestBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut builder = f.debug_struct("RequestBuilder");
         match self.request {
-            Ok(ref req) => fmt_request_fields(&mut builder, req).finish(),
-            Err(ref err) => builder.field("error", err).finish(),
+            Ok(ref req) => {
+                fmt_request_fields(&mut builder, req)
+                    .finish()
+            },
+            Err(ref err) => {
+                builder
+                    .field("error", err)
+                    .finish()
+            }
         }
     }
 }
 
-fn fmt_request_fields<'a, 'b>(
-    f: &'a mut fmt::DebugStruct<'a, 'b>,
-    req: &Request,
-) -> &'a mut fmt::DebugStruct<'a, 'b> {
+fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>, req: &Request) -> &'a mut fmt::DebugStruct<'a, 'b> {
     f.field("method", &req.method)
         .field("url", &req.url)
         .field("headers", &req.headers)
 }
 
 pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
+
     // IntoIter of HeaderMap yields (Option<HeaderName>, HeaderValue).
     // The first time a name is yielded, it will be Some(name), and if
     // there are more values with the same name, the next yield will be
@@ -399,11 +413,11 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
             Some(key) => {
                 dst.insert(key.clone(), value);
                 prev_name = Some(key);
-            }
+            },
             None => match prev_name {
                 Some(ref key) => {
                     dst.append(key.clone(), value);
-                }
+                },
                 None => unreachable!("HeaderMap::into_iter yielded None first"),
             },
         }
@@ -413,8 +427,8 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
 #[cfg(test)]
 mod tests {
     use super::Client;
-    use serde::Serialize;
     use std::collections::BTreeMap;
+    use serde::Serialize;
 
     #[test]
     fn add_query_append() {
@@ -453,10 +467,7 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.get(some_url);
 
-        let params = Params {
-            foo: "bar".into(),
-            qux: 3,
-        };
+        let params = Params { foo: "bar".into(), qux: 3 };
 
         let r = r.query(&params);
 
@@ -499,7 +510,11 @@ mod tests {
 
         assert_eq!(req.headers()["im-a"], "keeper");
 
-        let foo = req.headers().get_all("foo").iter().collect::<Vec<_>>();
+        let foo = req
+            .headers()
+            .get_all("foo")
+            .iter()
+            .collect::<Vec<_>>();
         assert_eq!(foo.len(), 2);
         assert_eq!(foo[0], "bar");
         assert_eq!(foo[1], "baz");

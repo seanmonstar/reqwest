@@ -1,14 +1,26 @@
-use std::net::IpAddr;
+use std::{fmt, str};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use std::{fmt, str};
+use std::net::IpAddr;
 
-use crate::header::{
-    Entry, HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_LENGTH,
-    CONTENT_TYPE, LOCATION, PROXY_AUTHORIZATION, RANGE, REFERER, TRANSFER_ENCODING, USER_AGENT,
-};
 use bytes::Bytes;
 use futures::{Async, Future, Poll};
+use crate::header::{
+    Entry,
+    HeaderMap,
+    HeaderValue,
+    ACCEPT,
+    ACCEPT_ENCODING,
+    CONTENT_LENGTH,
+    CONTENT_ENCODING,
+    CONTENT_TYPE,
+    LOCATION,
+    PROXY_AUTHORIZATION,
+    RANGE,
+    REFERER,
+    TRANSFER_ENCODING,
+    USER_AGENT,
+};
 use http::Uri;
 use hyper::client::ResponseFuture;
 use mime;
@@ -16,22 +28,24 @@ use mime;
 use native_tls::TlsConnector;
 use tokio::{clock, timer::Delay};
 
-use log::debug;
+use log::{debug};
+
 
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use crate::connect::Connector;
-use crate::cookie;
 use crate::into_url::{expect_uri, try_uri};
+use crate::cookie;
+use crate::redirect::{self, RedirectPolicy, remove_sensitive_headers};
+use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
 use crate::proxy::get_proxies;
-use crate::redirect::{self, remove_sensitive_headers, RedirectPolicy};
-#[cfg(feature = "tls")]
-use crate::tls::TlsBackend;
 #[cfg(feature = "tls")]
 use crate::{Certificate, Identity};
-use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
+#[cfg(feature = "tls")]
+use crate::tls::TlsBackend;
 
-static DEFAULT_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+static DEFAULT_USER_AGENT: &str =
+    concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 /// An asynchronous `Client` to make Requests with.
 ///
@@ -84,10 +98,7 @@ impl ClientBuilder {
     pub fn new() -> ClientBuilder {
         let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(2);
         headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
-        headers.insert(
-            ACCEPT,
-            HeaderValue::from_str(mime::STAR_STAR.as_ref()).expect("unable to parse mime"),
-        );
+        headers.insert(ACCEPT, HeaderValue::from_str(mime::STAR_STAR.as_ref()).expect("unable to parse mime"));
 
         ClientBuilder {
             config: Config {
@@ -145,13 +156,8 @@ impl ClientBuilder {
                         id.add_to_native_tls(&mut tls)?;
                     }
 
-                    Connector::new_default_tls(
-                        tls,
-                        proxies.clone(),
-                        config.local_address,
-                        config.nodelay,
-                    )?
-                }
+                    Connector::new_default_tls(tls, proxies.clone(), config.local_address, config.nodelay)?
+                },
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::Rustls => {
                     use crate::tls::NoVerifier;
@@ -160,14 +166,15 @@ impl ClientBuilder {
                     if config.http2_only {
                         tls.set_protocols(&["h2".into()]);
                     } else {
-                        tls.set_protocols(&["h2".into(), "http/1.1".into()]);
+                        tls.set_protocols(&[
+                            "h2".into(),
+                            "http/1.1".into(),
+                        ]);
                     }
-                    tls.root_store
-                        .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+                    tls.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
 
                     if !config.certs_verification {
-                        tls.dangerous()
-                            .set_certificate_verifier(Arc::new(NoVerifier));
+                        tls.dangerous().set_certificate_verifier(Arc::new(NoVerifier));
                     }
 
                     for cert in config.root_certs {
@@ -178,12 +185,7 @@ impl ClientBuilder {
                         id.add_to_rustls(&mut tls)?;
                     }
 
-                    Connector::new_rustls_tls(
-                        tls,
-                        proxies.clone(),
-                        config.local_address,
-                        config.nodelay,
-                    )?
+                    Connector::new_rustls_tls(tls, proxies.clone(), config.local_address, config.nodelay)?
                 }
             }
 
@@ -206,7 +208,9 @@ impl ClientBuilder {
 
         let hyper_client = builder.build(connector);
 
-        let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
+        let proxies_maybe_http_auth = proxies
+            .iter()
+            .any(|p| p.maybe_has_http_auth());
 
         let cookie_store = config.cookie_store.map(RwLock::new);
 
@@ -273,10 +277,7 @@ impl ClientBuilder {
     /// site will be trusted for use from any other. This introduces a
     /// significant vulnerability to man-in-the-middle attacks.
     #[cfg(feature = "default-tls")]
-    pub fn danger_accept_invalid_hostnames(
-        mut self,
-        accept_invalid_hostname: bool,
-    ) -> ClientBuilder {
+    pub fn danger_accept_invalid_hostnames(mut self, accept_invalid_hostname: bool) -> ClientBuilder {
         self.config.hostname_verification = !accept_invalid_hostname;
         self
     }
@@ -297,6 +298,7 @@ impl ClientBuilder {
         self.config.certs_verification = !accept_invalid_certs;
         self
     }
+
 
     /// Sets the default headers for every request.
     pub fn default_headers(mut self, headers: HeaderMap) -> ClientBuilder {
@@ -346,6 +348,7 @@ impl ClientBuilder {
         }));
         self
     }
+
 
     /// Set a `RedirectPolicy` for this client.
     ///
@@ -451,7 +454,9 @@ impl Client {
     /// Use `Client::builder()` if you wish to handle the failure as an `Error`
     /// instead of panicking.
     pub fn new() -> Client {
-        ClientBuilder::new().build().expect("Client::new()")
+        ClientBuilder::new()
+            .build()
+            .expect("Client::new()")
     }
 
     /// Creates a `ClientBuilder` to configure a `Client`.
@@ -524,7 +529,9 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
-        let req = url.into_url().map(move |url| Request::new(method, url));
+        let req = url
+            .into_url()
+            .map(move |url| Request::new(method, url));
         RequestBuilder::new(self.clone(), req)
     }
 
@@ -544,8 +551,14 @@ impl Client {
         self.execute_request(request)
     }
 
+
     pub(super) fn execute_request(&self, req: Request) -> Pending {
-        let (method, url, mut headers, body) = req.pieces();
+        let (
+            method,
+            url,
+            mut headers,
+            body
+        ) = req.pieces();
 
         // insert default headers in the request headers
         // without overwriting already appended headers.
@@ -563,8 +576,9 @@ impl Client {
             }
         }
 
-        if self.inner.gzip && !headers.contains_key(ACCEPT_ENCODING) && !headers.contains_key(RANGE)
-        {
+        if self.inner.gzip &&
+            !headers.contains_key(ACCEPT_ENCODING) &&
+            !headers.contains_key(RANGE) {
             headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip"));
         }
 
@@ -574,8 +588,10 @@ impl Client {
             Some(body) => {
                 let (reusable, body) = body.into_hyper();
                 (Some(reusable), body)
+            },
+            None => {
+                (None, hyper::Body::empty())
             }
-            None => (None, hyper::Body::empty()),
         };
 
         self.proxy_auth(&uri, &mut headers);
@@ -590,10 +606,9 @@ impl Client {
 
         let in_flight = self.inner.hyper.request(req);
 
-        let timeout = self
-            .inner
-            .request_timeout
-            .map(|dur| Delay::new(clock::now() + dur));
+        let timeout = self.inner.request_timeout.map(|dur| {
+            Delay::new(clock::now() + dur)
+        });
 
         Pending {
             inner: PendingInner::Request(PendingRequest {
@@ -628,10 +643,14 @@ impl Client {
             return;
         }
 
+
         for proxy in self.inner.proxies.iter() {
             if proxy.is_match(dst) {
                 if let Some(header) = proxy.http_basic_auth(dst) {
-                    headers.insert(PROXY_AUTHORIZATION, header);
+                    headers.insert(
+                        PROXY_AUTHORIZATION,
+                        header,
+                    );
                 }
 
                 break;
@@ -652,7 +671,8 @@ impl fmt::Debug for Client {
 
 impl fmt::Debug for ClientBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("ClientBuilder").finish()
+        f.debug_struct("ClientBuilder")
+            .finish()
     }
 }
 
@@ -706,9 +726,7 @@ impl Future for Pending {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.inner {
             PendingInner::Request(ref mut req) => req.poll(),
-            PendingInner::Error(ref mut err) => {
-                Err(err.take().expect("Pending error polled more than once"))
-            }
+            PendingInner::Error(ref mut err) => Err(err.take().expect("Pending error polled more than once")),
         }
     }
 }
@@ -737,58 +755,56 @@ impl Future for PendingRequest {
                 store.0.store_response_cookies(cookies, &self.url);
             }
             let should_redirect = match res.status() {
-                StatusCode::MOVED_PERMANENTLY | StatusCode::FOUND | StatusCode::SEE_OTHER => {
+                StatusCode::MOVED_PERMANENTLY |
+                StatusCode::FOUND |
+                StatusCode::SEE_OTHER => {
                     self.body = None;
-                    for header in &[
-                        TRANSFER_ENCODING,
-                        CONTENT_ENCODING,
-                        CONTENT_TYPE,
-                        CONTENT_LENGTH,
-                    ] {
+                    for header in &[TRANSFER_ENCODING, CONTENT_ENCODING, CONTENT_TYPE, CONTENT_LENGTH] {
                         self.headers.remove(header);
                     }
 
                     match self.method {
-                        Method::GET | Method::HEAD => {}
+                        Method::GET | Method::HEAD => {},
                         _ => {
                             self.method = Method::GET;
                         }
                     }
                     true
-                }
-                StatusCode::TEMPORARY_REDIRECT | StatusCode::PERMANENT_REDIRECT => {
-                    match self.body {
-                        Some(Some(_)) | None => true,
-                        Some(None) => false,
-                    }
-                }
+                },
+                StatusCode::TEMPORARY_REDIRECT |
+                StatusCode::PERMANENT_REDIRECT => match self.body {
+                    Some(Some(_)) | None => true,
+                    Some(None) => false,
+                },
                 _ => false,
             };
             if should_redirect {
-                let loc = res.headers().get(LOCATION).and_then(|val| {
-                    let loc = (|| -> Option<Url> {
-                        // Some sites may send a utf-8 Location header,
-                        // even though we're supposed to treat those bytes
-                        // as opaque, we'll check specifically for utf8.
-                        self.url.join(str::from_utf8(val.as_bytes()).ok()?).ok()
-                    })();
+                let loc = res.headers()
+                    .get(LOCATION)
+                    .and_then(|val| {
+                        let loc = (|| -> Option<Url> {
+                            // Some sites may send a utf-8 Location header,
+                            // even though we're supposed to treat those bytes
+                            // as opaque, we'll check specifically for utf8.
+                            self.url.join(str::from_utf8(val.as_bytes()).ok()?).ok()
+                        })();
 
-                    // Check that the `url` is also a valid `http::Uri`.
-                    //
-                    // If not, just log it and skip the redirect.
-                    let loc = loc.and_then(|url| {
-                        if try_uri(&url).is_some() {
-                            Some(url)
-                        } else {
-                            None
+                        // Check that the `url` is also a valid `http::Uri`.
+                        //
+                        // If not, just log it and skip the redirect.
+                        let loc = loc.and_then(|url| {
+                            if try_uri(&url).is_some() {
+                                Some(url)
+                            } else {
+                                None
+                            }
+                        });
+
+                        if loc.is_none() {
+                            debug!("Location header had invalid URI: {:?}", val);
                         }
+                        loc
                     });
-
-                    if loc.is_none() {
-                        debug!("Location header had invalid URI: {:?}", val);
-                    }
-                    loc
-                });
                 if let Some(loc) = loc {
                     if self.client.referer {
                         if let Some(referer) = make_referer(&loc, &self.url) {
@@ -796,10 +812,11 @@ impl Future for PendingRequest {
                         }
                     }
                     self.urls.push(self.url.clone());
-                    let action = self
-                        .client
-                        .redirect_policy
-                        .check(res.status(), &loc, &self.urls);
+                    let action = self.client.redirect_policy.check(
+                        res.status(),
+                        &loc,
+                        &self.urls,
+                    );
 
                     match action {
                         redirect::Action::Follow => {
@@ -827,13 +844,13 @@ impl Future for PendingRequest {
                             *req.headers_mut() = self.headers.clone();
                             self.in_flight = self.client.hyper.request(req);
                             continue;
-                        }
+                        },
                         redirect::Action::Stop => {
                             debug!("redirect_policy disallowed redirection to '{}'", loc);
-                        }
+                        },
                         redirect::Action::LoopDetected => {
                             return Err(crate::error::loop_detected(self.url.clone()));
-                        }
+                        },
                         redirect::Action::TooManyRedirects => {
                             return Err(crate::error::too_many_redirects(self.url.clone()));
                         }
@@ -849,12 +866,17 @@ impl Future for PendingRequest {
 impl fmt::Debug for Pending {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.inner {
-            PendingInner::Request(ref req) => f
-                .debug_struct("Pending")
-                .field("method", &req.method)
-                .field("url", &req.url)
-                .finish(),
-            PendingInner::Error(ref err) => f.debug_struct("Pending").field("error", err).finish(),
+            PendingInner::Request(ref req) => {
+                f.debug_struct("Pending")
+                    .field("method", &req.method)
+                    .field("url", &req.url)
+                    .finish()
+            },
+            PendingInner::Error(ref err) => {
+                f.debug_struct("Pending")
+                    .field("error", err)
+                    .finish()
+            }
         }
     }
 }
@@ -881,7 +903,7 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &cookie::CookieStore
     if !header.is_empty() {
         headers.insert(
             crate::header::COOKIE,
-            HeaderValue::from_bytes(header.as_bytes()).unwrap(),
+            HeaderValue::from_bytes(header.as_bytes()).unwrap()
         );
     }
 }

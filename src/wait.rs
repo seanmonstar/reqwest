@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use futures::executor::{self, Notify};
 use futures::{Async, Future, Poll, Stream};
+use futures::executor::{self, Notify};
 use tokio_executor::{enter, EnterError};
 
 pub(crate) fn timeout<F>(fut: F, timeout: Option<Duration>) -> Result<F::Item, Waited<F::Error>>
@@ -11,13 +11,13 @@ where
     F: Future,
 {
     let mut spawn = executor::spawn(fut);
-    block_on(timeout, |notify| spawn.poll_future_notify(notify, 0))
+    block_on(timeout, |notify| {
+        spawn.poll_future_notify(notify, 0)
+    })
 }
 
 pub(crate) fn stream<S>(stream: S, timeout: Option<Duration>) -> WaitStream<S>
-where
-    S: Stream,
-{
+where S: Stream {
     WaitStream {
         stream: executor::spawn(stream),
         timeout,
@@ -43,9 +43,7 @@ pub(crate) struct WaitStream<S> {
 }
 
 impl<S> Iterator for WaitStream<S>
-where
-    S: Stream,
-{
+where S: Stream {
     type Item = Result<S::Item, Waited<S::Error>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -76,7 +74,9 @@ where
     F: FnMut(&Arc<ThreadNotify>) -> Poll<U, E>,
 {
     let _entered = enter().map_err(Waited::Executor)?;
-    let deadline = timeout.map(|d| Instant::now() + d);
+    let deadline = timeout.map(|d| {
+        Instant::now() + d
+    });
     let notify = Arc::new(ThreadNotify {
         thread: thread::current(),
     });
@@ -99,3 +99,5 @@ where
         }
     }
 }
+
+

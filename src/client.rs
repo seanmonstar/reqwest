@@ -1,18 +1,18 @@
 use std::fmt;
-use std::net::IpAddr;
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
+use std::thread;
+use std::net::IpAddr;
 
+use futures::{Async, Future, Stream};
 use futures::future::{self, Either};
 use futures::sync::{mpsc, oneshot};
-use futures::{Async, Future, Stream};
 
-use log::trace;
+use log::{trace};
 
 use crate::request::{Request, RequestBuilder};
 use crate::response::Response;
-use crate::{async_impl, header, wait, IntoUrl, Method, Proxy, RedirectPolicy};
+use crate::{async_impl, header, Method, IntoUrl, Proxy, RedirectPolicy, wait};
 #[cfg(feature = "tls")]
 use crate::{Certificate, Identity};
 
@@ -81,7 +81,9 @@ impl ClientBuilder {
     /// This method fails if TLS backend cannot be initialized, or the resolver
     /// cannot load the system configuration.
     pub fn build(self) -> crate::Result<Client> {
-        ClientHandle::new(self).map(|handle| Client { inner: handle })
+        ClientHandle::new(self).map(|handle| Client {
+            inner: handle,
+        })
     }
 
     /// Disable proxy setting.
@@ -181,6 +183,7 @@ impl ClientBuilder {
     pub fn identity(self, identity: Identity) -> ClientBuilder {
         self.with_inner(move |inner| inner.identity(identity))
     }
+
 
     /// Controls the use of hostname verification.
     ///
@@ -396,6 +399,7 @@ impl ClientBuilder {
     }
 }
 
+
 impl Client {
     /// Constructs a new `Client`.
     ///
@@ -407,7 +411,9 @@ impl Client {
     /// Use `Client::builder()` if you wish to handle the failure as an `Error`
     /// instead of panicking.
     pub fn new() -> Client {
-        ClientBuilder::new().build().expect("Client::new()")
+        ClientBuilder::new()
+            .build()
+            .expect("Client::new()")
     }
 
     /// Creates a `ClientBuilder` to configure a `Client`.
@@ -480,7 +486,9 @@ impl Client {
     ///
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
-        let req = url.into_url().map(move |url| Request::new(method, url));
+        let req = url
+            .into_url()
+            .map(move |url| Request::new(method, url));
         RequestBuilder::new(self.clone(), req)
     }
 
@@ -513,24 +521,22 @@ impl fmt::Debug for Client {
 
 impl fmt::Debug for ClientBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("ClientBuilder").finish()
+        f.debug_struct("ClientBuilder")
+            .finish()
     }
 }
 
 #[derive(Clone)]
 struct ClientHandle {
     timeout: Timeout,
-    inner: Arc<InnerClientHandle>,
+    inner: Arc<InnerClientHandle>
 }
 
-type ThreadSender = mpsc::UnboundedSender<(
-    async_impl::Request,
-    oneshot::Sender<crate::Result<async_impl::Response>>,
-)>;
+type ThreadSender = mpsc::UnboundedSender<(async_impl::Request, oneshot::Sender<crate::Result<async_impl::Response>>)>;
 
 struct InnerClientHandle {
     tx: Option<ThreadSender>,
-    thread: Option<thread::JoinHandle<()>>,
+    thread: Option<thread::JoinHandle<()>>
 }
 
 impl Drop for InnerClientHandle {
@@ -546,64 +552,66 @@ impl ClientHandle {
         let builder = builder.inner;
         let (tx, rx) = mpsc::unbounded();
         let (spawn_tx, spawn_rx) = oneshot::channel::<crate::Result<()>>();
-        let handle = try_!(thread::Builder::new()
-            .name("reqwest-internal-sync-runtime".into())
-            .spawn(move || {
-                use tokio::runtime::current_thread::Runtime;
+        let handle = try_!(thread::Builder::new().name("reqwest-internal-sync-runtime".into()).spawn(move || {
+            use tokio::runtime::current_thread::Runtime;
 
-                let built = (|| {
-                    let rt = try_!(Runtime::new());
-                    let client = builder.build()?;
-                    Ok((rt, client))
-                })();
+            let built = (|| {
+                let rt = try_!(Runtime::new());
+                let client = builder.build()?;
+                Ok((rt, client))
+            })();
 
-                let (mut rt, client) = match built {
-                    Ok((rt, c)) => {
-                        if spawn_tx.send(Ok(())).is_err() {
-                            return;
-                        }
-                        (rt, c)
-                    }
-                    Err(e) => {
-                        let _ = spawn_tx.send(Err(e));
+            let (mut rt, client) = match built {
+                Ok((rt, c)) => {
+                    if spawn_tx.send(Ok(())).is_err() {
                         return;
                     }
-                };
+                    (rt, c)
+                },
+                Err(e) => {
+                    let _ = spawn_tx.send(Err(e));
+                    return;
+                }
+            };
 
-                let work = rx.for_each(move |(req, tx)| {
-                    let mut tx_opt: Option<oneshot::Sender<crate::Result<async_impl::Response>>> =
-                        Some(tx);
-                    let mut res_fut = client.execute(req);
+            let work = rx.for_each(move |(req, tx)| {
+                let mut tx_opt: Option<oneshot::Sender<crate::Result<async_impl::Response>>> = Some(tx);
+                let mut res_fut = client.execute(req);
 
-                    let task = future::poll_fn(move || {
-                        let canceled = tx_opt
-                            .as_mut()
+                let task = future::poll_fn(move || {
+                    let canceled = tx_opt
+                        .as_mut()
+                        .expect("polled after complete")
+                        .poll_cancel()
+                        .expect("poll_cancel cannot error")
+                        .is_ready();
+
+                    if canceled {
+                        trace!("response receiver is canceled");
+                        Ok(Async::Ready(()))
+                    } else {
+                        let result = match res_fut.poll() {
+                            Ok(Async::NotReady) => return Ok(Async::NotReady),
+                            Ok(Async::Ready(res)) => Ok(res),
+                            Err(err) => Err(err),
+                        };
+
+                        let _ = tx_opt
+                            .take()
                             .expect("polled after complete")
-                            .poll_cancel()
-                            .expect("poll_cancel cannot error")
-                            .is_ready();
-
-                        if canceled {
-                            trace!("response receiver is canceled");
-                            Ok(Async::Ready(()))
-                        } else {
-                            let result = match res_fut.poll() {
-                                Ok(Async::NotReady) => return Ok(Async::NotReady),
-                                Ok(Async::Ready(res)) => Ok(res),
-                                Err(err) => Err(err),
-                            };
-
-                            let _ = tx_opt.take().expect("polled after complete").send(result);
-                            Ok(Async::Ready(()))
-                        }
-                    });
-                    tokio::spawn(task);
-                    Ok(())
+                            .send(result);
+                        Ok(Async::Ready(()))
+                    }
                 });
+                tokio::spawn(task);
+                Ok(())
+            });
 
-                // work is Future<(), ()>, and our closure will never return Err
-                rt.block_on(work).expect("runtime unexpected error");
-            }));
+
+            // work is Future<(), ()>, and our closure will never return Err
+            rt.block_on(work)
+                .expect("runtime unexpected error");
+        }));
 
         // Wait for the runtime thread to start up...
         match spawn_rx.wait() {
@@ -612,10 +620,12 @@ impl ClientHandle {
             Err(_canceled) => event_loop_panicked(),
         }
 
+
         let inner_handle = Arc::new(InnerClientHandle {
             tx: Some(tx),
-            thread: Some(handle),
+            thread: Some(handle)
         });
+
 
         Ok(ClientHandle {
             timeout,
@@ -627,8 +637,7 @@ impl ClientHandle {
         let (tx, rx) = oneshot::channel();
         let (req, body) = req.into_async();
         let url = req.url().clone();
-        self.inner
-            .tx
+        self.inner.tx
             .as_ref()
             .expect("core thread exited early")
             .unbounded_send((req, tx))
@@ -636,7 +645,7 @@ impl ClientHandle {
 
         let write = if let Some(body) = body {
             Either::A(body.send())
-        //try_!(body.send(self.timeout.0), &url);
+            //try_!(body.send(self.timeout.0), &url);
         } else {
             Either::B(future::ok(()))
         };
@@ -648,17 +657,15 @@ impl ClientHandle {
         let res = match wait::timeout(fut, self.timeout.0) {
             Ok(res) => res,
             Err(wait::Waited::TimedOut) => return Err(crate::error::timedout(Some(url))),
-            Err(wait::Waited::Executor(err)) => return Err(crate::error::from(err).with_url(url)),
+            Err(wait::Waited::Executor(err)) => {
+                return Err(crate::error::from(err).with_url(url))
+            },
             Err(wait::Waited::Inner(err)) => {
                 return Err(err.with_url(url));
-            }
+            },
         };
         res.map(|res| {
-            Response::new(
-                res,
-                self.timeout.0,
-                KeepCoreThreadAlive(Some(self.inner.clone())),
-            )
+            Response::new(res, self.timeout.0, KeepCoreThreadAlive(Some(self.inner.clone())))
         })
     }
 }

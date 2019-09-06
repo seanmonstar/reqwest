@@ -1,3 +1,5 @@
+extern crate reqwest;
+
 #[macro_use]
 mod support;
 
@@ -28,10 +30,7 @@ fn test_response_text() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"5"
-    );
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"5");
 
     let body = res.text().unwrap();
     assert_eq!(b"Hello", body.as_bytes());
@@ -63,14 +62,11 @@ fn test_response_non_utf_8_text() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"4"
-    );
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"4");
 
     let body = res.text().unwrap();
     assert_eq!("你好", &body);
-    assert_eq!(b"\xe4\xbd\xa0\xe5\xa5\xbd", body.as_bytes()); // Now it's utf-8
+    assert_eq!(b"\xe4\xbd\xa0\xe5\xa5\xbd", body.as_bytes());  // Now it's utf-8
 }
 
 #[test]
@@ -98,10 +94,7 @@ fn test_response_json() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"7"
-    );
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"7");
 
     let body = res.json::<String>().unwrap();
     assert_eq!("Hello", body);
@@ -132,10 +125,7 @@ fn test_response_copy_to() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"5"
-    );
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"5");
 
     let mut buf: Vec<u8> = vec![];
     res.copy_to(&mut buf).unwrap();
@@ -167,10 +157,7 @@ fn test_get() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"0"
-    );
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
     assert_eq!(res.remote_addr(), Some(server.addr()));
 
     let mut buf = [0; 1024];
@@ -209,10 +196,7 @@ fn test_post() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"post");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"0"
-    );
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
 
     let mut buf = [0; 1024];
     let n = res.read(&mut buf).unwrap();
@@ -309,10 +293,7 @@ fn test_error_for_status_5xx() {
 
     let err = res.error_for_status().err().unwrap();
     assert!(err.is_server_error());
-    assert_eq!(
-        err.status(),
-        Some(reqwest::StatusCode::INTERNAL_SERVER_ERROR)
-    );
+    assert_eq!(err.status(), Some(reqwest::StatusCode::INTERNAL_SERVER_ERROR));
 }
 
 #[test]
@@ -322,8 +303,7 @@ fn test_default_headers() {
     headers.insert(header::COOKIE, header::HeaderValue::from_static("a=b;c=d"));
     let client = reqwest::Client::builder()
         .default_headers(headers)
-        .build()
-        .unwrap();
+        .build().unwrap();
 
     let server = server! {
         request: b"\
@@ -349,10 +329,7 @@ fn test_default_headers() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"0"
-    );
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
 
     let server = server! {
         request: b"\
@@ -378,24 +355,17 @@ fn test_default_headers() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"0"
-    );
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
 }
 
 #[test]
 fn test_override_default_headers() {
     use reqwest::header;
     let mut headers = header::HeaderMap::with_capacity(1);
-    headers.insert(
-        header::AUTHORIZATION,
-        header::HeaderValue::from_static("iamatoken"),
-    );
+    headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("iamatoken"));
     let client = reqwest::Client::builder()
         .default_headers(headers)
-        .build()
-        .unwrap();
+        .build().unwrap();
 
     let server = server! {
         request: b"\
@@ -416,22 +386,13 @@ fn test_override_default_headers() {
     };
 
     let url = format!("http://{}/3", server.addr());
-    let res = client
-        .get(&url)
-        .header(
-            header::AUTHORIZATION,
-            header::HeaderValue::from_static("secret"),
-        )
-        .send()
-        .unwrap();
+    let res = client.get(&url).header(header::AUTHORIZATION, header::HeaderValue::from_static("secret")).send().unwrap();
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"0"
-    );
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
+
 }
 
 #[test]
@@ -457,32 +418,20 @@ fn test_appended_headers_not_overwritten() {
     };
 
     let url = format!("http://{}/4", server.addr());
-    let res = client
-        .get(&url)
-        .header(header::ACCEPT, "application/json")
-        .header(header::ACCEPT, "application/json+hal")
-        .send()
-        .unwrap();
+    let res = client.get(&url).header(header::ACCEPT, "application/json").header(header::ACCEPT, "application/json+hal").send().unwrap();
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"0"
-    );
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
 
     // make sure this also works with default headers
     use reqwest::header;
     let mut headers = header::HeaderMap::with_capacity(1);
-    headers.insert(
-        header::ACCEPT,
-        header::HeaderValue::from_static("text/html"),
-    );
+    headers.insert(header::ACCEPT, header::HeaderValue::from_static("text/html"));
     let client = reqwest::Client::builder()
         .default_headers(headers)
-        .build()
-        .unwrap();
+        .build().unwrap();
 
     let server = server! {
         request: b"\
@@ -503,18 +452,10 @@ fn test_appended_headers_not_overwritten() {
     };
 
     let url = format!("http://{}/4", server.addr());
-    let res = client
-        .get(&url)
-        .header(header::ACCEPT, "application/json")
-        .header(header::ACCEPT, "application/json+hal")
-        .send()
-        .unwrap();
+    let res = client.get(&url).header(header::ACCEPT, "application/json").header(header::ACCEPT, "application/json+hal").send().unwrap();
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"0"
-    );
+    assert_eq!(res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(), &"0");
 }

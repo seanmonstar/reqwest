@@ -1,5 +1,11 @@
 #![deny(warnings)]
 
+extern crate futures;
+extern crate reqwest;
+extern crate tokio;
+extern crate serde;
+extern crate serde_json;
+
 use futures::Future;
 use reqwest::r#async::{Client, Response};
 use serde::Deserialize;
@@ -15,18 +21,27 @@ struct SlideshowContainer {
     slideshow: Slideshow,
 }
 
-fn fetch() -> impl Future<Item = (), Error = ()> {
+fn fetch() -> impl Future<Item=(), Error=()> {
     let client = Client::new();
 
-    let json = |mut res: Response| res.json::<SlideshowContainer>();
+    let json = |mut res : Response | {
+        res.json::<SlideshowContainer>()
+    };
 
-    let request1 = client.get("https://httpbin.org/json").send().and_then(json);
+    let request1 =
+        client
+            .get("https://httpbin.org/json")
+            .send()
+            .and_then(json);
 
-    let request2 = client.get("https://httpbin.org/json").send().and_then(json);
+    let request2 =
+        client
+            .get("https://httpbin.org/json")
+            .send()
+            .and_then(json);
 
-    request1
-        .join(request2)
-        .map(|(res1, res2)| {
+    request1.join(request2)
+        .map(|(res1, res2)|{
             println!("{:?}", res1);
             println!("{:?}", res2);
         })

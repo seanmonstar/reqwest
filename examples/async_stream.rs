@@ -1,11 +1,18 @@
 #![deny(warnings)]
 
+#[macro_use]
+extern crate futures;
+extern crate bytes;
+extern crate reqwest;
+extern crate tokio;
+extern crate tokio_threadpool;
+
 use std::io::{self, Cursor};
 use std::mem;
 use std::path::Path;
 
 use bytes::Bytes;
-use futures::{try_ready, Async, Future, Poll, Stream};
+use futures::{Async, Future, Poll, Stream};
 use reqwest::r#async::{Client, Decoder};
 use tokio::fs::File;
 use tokio::io::AsyncRead;

@@ -1,6 +1,13 @@
 use std::fmt;
 
-use crate::header::{HeaderMap, AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, WWW_AUTHENTICATE};
+use crate::header::{
+    HeaderMap,
+    AUTHORIZATION,
+    COOKIE,
+    PROXY_AUTHORIZATION,
+    WWW_AUTHENTICATE,
+
+};
 use hyper::StatusCode;
 
 use crate::Url;
@@ -134,13 +141,19 @@ impl RedirectPolicy {
         }
     }
 
-    pub(crate) fn check(&self, status: StatusCode, next: &Url, previous: &[Url]) -> Action {
-        self.redirect(RedirectAttempt {
-            status,
-            next,
-            previous,
-        })
-        .inner
+    pub(crate) fn check(
+        &self,
+        status: StatusCode,
+        next: &Url,
+        previous: &[Url],
+    ) -> Action {
+        self
+            .redirect(RedirectAttempt {
+                status,
+                next,
+                previous,
+            })
+            .inner
     }
 }
 
@@ -226,10 +239,11 @@ pub(crate) enum Action {
     TooManyRedirects,
 }
 
+
 pub(crate) fn remove_sensitive_headers(headers: &mut HeaderMap, next: &Url, previous: &[Url]) {
     if let Some(previous) = previous.last() {
-        let cross_host = next.host_str() != previous.host_str()
-            || next.port_or_known_default() != previous.port_or_known_default();
+        let cross_host = next.host_str() != previous.host_str() ||
+                         next.port_or_known_default() != previous.port_or_known_default();
         if cross_host {
             headers.remove(AUTHORIZATION);
             headers.remove(COOKIE);
@@ -290,15 +304,21 @@ fn test_redirect_policy_custom() {
     });
 
     let next = Url::parse("http://bar/baz").unwrap();
-    assert_eq!(policy.check(StatusCode::FOUND, &next, &[]), Action::Follow);
+    assert_eq!(
+        policy.check(StatusCode::FOUND, &next, &[]),
+        Action::Follow
+    );
 
     let next = Url::parse("http://foo/baz").unwrap();
-    assert_eq!(policy.check(StatusCode::FOUND, &next, &[]), Action::Stop);
+    assert_eq!(
+        policy.check(StatusCode::FOUND, &next, &[]),
+        Action::Stop
+    );
 }
 
 #[test]
 fn test_remove_sensitive_headers() {
-    use hyper::header::{HeaderValue, ACCEPT, AUTHORIZATION, COOKIE};
+    use hyper::header::{ACCEPT, AUTHORIZATION, COOKIE, HeaderValue};
 
     let mut headers = HeaderMap::new();
     headers.insert(ACCEPT, HeaderValue::from_static("*/*"));

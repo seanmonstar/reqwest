@@ -1,6 +1,6 @@
+use std::mem;
 use std::fmt;
 use std::io::{self, Read};
-use std::mem;
 use std::net::SocketAddr;
 use std::time::Duration;
 
@@ -8,10 +8,10 @@ use futures::{Async, Poll, Stream};
 use http;
 use serde::de::DeserializeOwned;
 
-use crate::client::KeepCoreThreadAlive;
 use crate::cookie;
-use crate::{async_impl, wait, StatusCode, Url, Version};
+use crate::client::KeepCoreThreadAlive;
 use hyper::header::HeaderMap;
+use crate::{async_impl, StatusCode, Url, Version, wait};
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -28,11 +28,7 @@ impl fmt::Debug for Response {
 }
 
 impl Response {
-    pub(crate) fn new(
-        res: async_impl::Response,
-        timeout: Option<Duration>,
-        thread: KeepCoreThreadAlive,
-    ) -> Response {
+    pub(crate) fn new(res: async_impl::Response, timeout: Option<Duration>, thread: KeepCoreThreadAlive) -> Response {
         Response {
             inner: res,
             body: None,
@@ -120,9 +116,11 @@ impl Response {
     /// Retrieve the cookies contained in the response.
     ///
     /// Note that invalid 'Set-Cookie' headers will be ignored.
-    pub fn cookies<'a>(&'a self) -> impl Iterator<Item = cookie::Cookie<'a>> + 'a {
-        cookie::extract_response_cookies(self.headers()).filter_map(Result::ok)
+    pub fn cookies<'a>(&'a self) -> impl Iterator< Item = cookie::Cookie<'a> > + 'a {
+        cookie::extract_response_cookies(self.headers())
+            .filter_map(Result::ok)
     }
+
 
     /// Get the HTTP `Version` of this `Response`.
     #[inline]
@@ -204,10 +202,12 @@ impl Response {
     /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
     #[inline]
     pub fn json<T: DeserializeOwned>(&mut self) -> crate::Result<T> {
-        wait::timeout(self.inner.json(), self.timeout).map_err(|e| match e {
-            wait::Waited::TimedOut => crate::error::timedout(None),
-            wait::Waited::Executor(e) => crate::error::from(e),
-            wait::Waited::Inner(e) => e,
+        wait::timeout(self.inner.json(), self.timeout).map_err(|e| {
+            match e {
+                wait::Waited::TimedOut => crate::error::timedout(None),
+                wait::Waited::Executor(e) => crate::error::from(e),
+                wait::Waited::Inner(e) => e,
+            }
         })
     }
 
@@ -291,8 +291,7 @@ impl Response {
     /// ```
     #[inline]
     pub fn copy_to<W: ?Sized>(&mut self, w: &mut W) -> crate::Result<u64>
-    where
-        W: io::Write,
+        where W: io::Write
     {
         io::copy(self, w).map_err(crate::error::from)
     }
@@ -315,17 +314,14 @@ impl Response {
     /// ```
     #[inline]
     pub fn error_for_status(self) -> crate::Result<Self> {
-        let Response {
-            body,
-            inner,
-            timeout,
-            _thread_handle,
-        } = self;
-        inner.error_for_status().map(move |inner| Response {
-            inner,
-            body,
-            timeout,
-            _thread_handle,
+        let Response { body, inner, timeout, _thread_handle } = self;
+        inner.error_for_status().map(move |inner| {
+            Response {
+                inner,
+                body,
+                timeout,
+                _thread_handle,
+            }
         })
     }
 
@@ -357,7 +353,7 @@ impl Read for Response {
         if self.body.is_none() {
             let body = mem::replace(self.inner.body_mut(), async_impl::Decoder::empty());
             let body = async_impl::ReadableChunks::new(WaitBody {
-                inner: wait::stream(body, self.timeout),
+                inner: wait::stream(body, self.timeout)
             });
             self.body = Some(body);
         }
@@ -369,7 +365,7 @@ impl Read for Response {
 }
 
 struct WaitBody {
-    inner: wait::WaitStream<async_impl::Decoder>,
+    inner: wait::WaitStream<async_impl::Decoder>
 }
 
 impl Stream for WaitBody {
@@ -387,7 +383,7 @@ impl Stream for WaitBody {
                 };
 
                 Err(req_err)
-            }
+            },
             None => Ok(Async::Ready(None)),
         }
     }

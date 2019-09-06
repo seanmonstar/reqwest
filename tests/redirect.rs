@@ -1,3 +1,5 @@
+extern crate reqwest;
+
 #[macro_use]
 mod support;
 
@@ -45,13 +47,12 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
 
         let url = format!("http://{}/{}", redirect.addr(), code);
         let dst = format!("http://{}/{}", redirect.addr(), "dst");
-        let res = client.post(&url).send().unwrap();
+        let res = client.post(&url)
+            .send()
+            .unwrap();
         assert_eq!(res.url().as_str(), dst);
         assert_eq!(res.status(), reqwest::StatusCode::OK);
-        assert_eq!(
-            res.headers().get(reqwest::header::SERVER).unwrap(),
-            &"test-dst"
-        );
+        assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test-dst");
     }
 }
 
@@ -98,13 +99,12 @@ fn test_redirect_307_and_308_tries_to_get_again() {
 
         let url = format!("http://{}/{}", redirect.addr(), code);
         let dst = format!("http://{}/{}", redirect.addr(), "dst");
-        let res = client.get(&url).send().unwrap();
+        let res = client.get(&url)
+            .send()
+            .unwrap();
         assert_eq!(res.url().as_str(), dst);
         assert_eq!(res.status(), reqwest::StatusCode::OK);
-        assert_eq!(
-            res.headers().get(reqwest::header::SERVER).unwrap(),
-            &"test-dst"
-        );
+        assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test-dst");
     }
 }
 
@@ -155,13 +155,13 @@ fn test_redirect_307_and_308_tries_to_post_again() {
 
         let url = format!("http://{}/{}", redirect.addr(), code);
         let dst = format!("http://{}/{}", redirect.addr(), "dst");
-        let res = client.post(&url).body("Hello").send().unwrap();
+        let res = client.post(&url)
+            .body("Hello")
+            .send()
+            .unwrap();
         assert_eq!(res.url().as_str(), dst);
         assert_eq!(res.status(), reqwest::StatusCode::OK);
-        assert_eq!(
-            res.headers().get(reqwest::header::SERVER).unwrap(),
-            &"test-dst"
-        );
+        assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test-dst");
     }
 }
 
@@ -203,6 +203,8 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
         assert_eq!(res.status(), reqwest::StatusCode::from_u16(code).unwrap());
     }
 }
+
+
 
 #[test]
 fn test_redirect_removes_sensitive_headers() {
@@ -247,10 +249,7 @@ fn test_redirect_removes_sensitive_headers() {
         .build()
         .unwrap()
         .get(&format!("http://{}/sensitive", mid_server.addr()))
-        .header(
-            reqwest::header::COOKIE,
-            reqwest::header::HeaderValue::from_static("foo=bar"),
-        )
+        .header(reqwest::header::COOKIE, reqwest::header::HeaderValue::from_static("foo=bar"))
         .send()
         .unwrap();
 }
@@ -311,10 +310,7 @@ fn test_redirect_policy_can_stop_redirects_without_an_error() {
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::FOUND);
-    assert_eq!(
-        res.headers().get(reqwest::header::SERVER).unwrap(),
-        &"test-dont"
-    );
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test-dont");
 }
 
 #[test]
@@ -389,65 +385,58 @@ fn test_invalid_location_stops_redirect_gh484() {
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::FOUND);
-    assert_eq!(
-        res.headers().get(reqwest::header::SERVER).unwrap(),
-        &"test-yikes"
-    );
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test-yikes");
 }
 
 #[test]
 fn test_redirect_302_with_set_cookies() {
     let code = 302;
-    let client = reqwest::ClientBuilder::new()
-        .cookie_store(true)
-        .build()
-        .unwrap();
+    let client = reqwest::ClientBuilder::new().cookie_store(true).build().unwrap();
     let server = server! {
-        request: format!("\
-            GET /{} HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ", code),
-        response: format!("\
-            HTTP/1.1 {} reason\r\n\
-            Server: test-redirect\r\n\
-            Content-Length: 0\r\n\
-            Location: /dst\r\n\
-            Connection: close\r\n\
-            Set-Cookie: key=value\r\n\
-            \r\n\
-            ", code)
-            ;
+            request: format!("\
+                GET /{} HTTP/1.1\r\n\
+                user-agent: $USERAGENT\r\n\
+                accept: */*\r\n\
+                accept-encoding: gzip\r\n\
+                host: $HOST\r\n\
+                \r\n\
+                ", code),
+            response: format!("\
+                HTTP/1.1 {} reason\r\n\
+                Server: test-redirect\r\n\
+                Content-Length: 0\r\n\
+                Location: /dst\r\n\
+                Connection: close\r\n\
+                Set-Cookie: key=value\r\n\
+                \r\n\
+                ", code)
+                ;
 
-        request: format!("\
-            GET /dst HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            referer: http://$HOST/{}\r\n\
-            cookie: key=value\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ", code),
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: test-dst\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+            request: format!("\
+                GET /dst HTTP/1.1\r\n\
+                user-agent: $USERAGENT\r\n\
+                accept: */*\r\n\
+                accept-encoding: gzip\r\n\
+                referer: http://$HOST/{}\r\n\
+                cookie: key=value\r\n\
+                host: $HOST\r\n\
+                \r\n\
+                ", code),
+            response: b"\
+                HTTP/1.1 200 OK\r\n\
+                Server: test-dst\r\n\
+                Content-Length: 0\r\n\
+                \r\n\
+                "
+        };
 
     let url = format!("http://{}/{}", server.addr(), code);
     let dst = format!("http://{}/{}", server.addr(), "dst");
-    let res = client.get(&url).send().unwrap();
+    let res = client.get(&url)
+        .send()
+        .unwrap();
 
     assert_eq!(res.url().as_str(), dst);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(
-        res.headers().get(reqwest::header::SERVER).unwrap(),
-        &"test-dst"
-    );
+    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test-dst");
 }

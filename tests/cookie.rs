@@ -1,3 +1,5 @@
+extern crate reqwest;
+
 #[macro_use]
 mod support;
 
@@ -43,7 +45,7 @@ fn cookie_response_accessor() {
     // expires
     assert_eq!(cookies[1].name(), "expires");
     assert_eq!(
-        cookies[1].expires().unwrap(),
+        cookies[1].expires().unwrap(), 
         std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1445412480)
     );
 
@@ -53,10 +55,7 @@ fn cookie_response_accessor() {
 
     // max-age
     assert_eq!(cookies[3].name(), "maxage");
-    assert_eq!(
-        cookies[3].max_age().unwrap(),
-        std::time::Duration::from_secs(100)
-    );
+    assert_eq!(cookies[3].max_age().unwrap(), std::time::Duration::from_secs(100));
 
     // domain
     assert_eq!(cookies[4].name(), "domain");
@@ -82,10 +81,7 @@ fn cookie_response_accessor() {
 #[test]
 fn cookie_store_simple() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::r#async::Client::builder()
-        .cookie_store(true)
-        .build()
-        .unwrap();
+    let client = reqwest::r#async::Client::builder().cookie_store(true).build().unwrap();
 
     let server = server! {
         request: b"\
@@ -129,10 +125,7 @@ fn cookie_store_simple() {
 #[test]
 fn cookie_store_overwrite_existing() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::r#async::Client::builder()
-        .cookie_store(true)
-        .build()
-        .unwrap();
+    let client = reqwest::r#async::Client::builder().cookie_store(true).build().unwrap();
 
     let server = server! {
         request: b"\
@@ -196,10 +189,7 @@ fn cookie_store_overwrite_existing() {
 #[test]
 fn cookie_store_max_age() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::r#async::Client::builder()
-        .cookie_store(true)
-        .build()
-        .unwrap();
+    let client = reqwest::r#async::Client::builder().cookie_store(true).build().unwrap();
 
     let server = server! {
         request: b"\
@@ -242,10 +232,7 @@ fn cookie_store_max_age() {
 #[test]
 fn cookie_store_expires() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::r#async::Client::builder()
-        .cookie_store(true)
-        .build()
-        .unwrap();
+    let client = reqwest::r#async::Client::builder().cookie_store(true).build().unwrap();
 
     let server = server! {
         request: b"\
@@ -288,10 +275,7 @@ fn cookie_store_expires() {
 #[test]
 fn cookie_store_path() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::r#async::Client::builder()
-        .cookie_store(true)
-        .build()
-        .unwrap();
+    let client = reqwest::r#async::Client::builder().cookie_store(true).build().unwrap();
 
     let server = server! {
         request: b"\
