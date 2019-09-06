@@ -213,7 +213,6 @@ impl Part {
         let file_name = path
             .file_name()
             .map(|filename| filename.to_string_lossy().into_owned());
-
         let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
         let mime = mime_guess::from_ext(ext).first_or_octet_stream();
         let file = File::open(path)?;
@@ -235,7 +234,7 @@ impl Part {
 
     /// Tries to set the mime of this part.
     pub fn mime_str(self, mime: &str) -> crate::Result<Part> {
-        Ok(self.mime(try_!(mime.parse())))
+        Ok(self.mime(mime.parse().map_err(crate::error::from)?))
     }
 
     // Re-export when mime 0.4 is available, with split MediaType/MediaRange.

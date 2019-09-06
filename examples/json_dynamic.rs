@@ -3,12 +3,11 @@
 //! This is useful for some ad-hoc experiments and situations when you don't
 //! really care about the structure of the JSON and just need to display it or
 //! process it at runtime.
-use serde_json::json;
 
 fn main() -> Result<(), reqwest::Error> {
     let echo_json: serde_json::Value = reqwest::Client::new()
         .post("https://jsonplaceholder.typicode.com/posts")
-        .json(&json!({
+        .json(&serde_json::json!({
             "title": "Reqwest.rs",
             "body": "https://docs.rs/reqwest",
             "userId": 1

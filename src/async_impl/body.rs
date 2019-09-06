@@ -1,8 +1,10 @@
-use std::fmt;
-
 use bytes::{Buf, Bytes};
-use futures::{try_ready, Async, Future, Poll, Stream};
+use futures::Stream;
 use hyper::body::Payload;
+use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use tokio::timer::Delay;
 
 /// An asynchronous `Stream`.
@@ -22,8 +24,36 @@ impl Body {
     pub(crate) fn content_length(&self) -> Option<u64> {
         match self.inner {
             Inner::Reusable(ref bytes) => Some(bytes.len() as u64),
-            Inner::Hyper { ref body, .. } => body.content_length(),
+            Inner::Hyper { ref body, .. } => body.size_hint().exact(),
         }
+    }
+
+    /// Wrap a futures `Stream` in a box inside `Body`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use reqwest::r#async::Body;
+    /// # use futures;
+    /// # fn main() {
+    /// let chunks: Vec<Result<_, ::std::io::Error>> = vec![
+    ///     Ok("hello"),
+    ///     Ok(" "),
+    ///     Ok("world"),
+    /// ];
+    ///
+    /// let stream = futures::stream::iter(chunks);
+    ///
+    /// let body = Body::wrap_stream(stream);
+    /// # }
+    /// ```
+    pub fn wrap_stream<S>(stream: S) -> Body
+    where
+        S: futures::TryStream + Send + Sync + 'static,
+        S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+        hyper::Chunk: From<S::Ok>,
+    {
+        Body::wrap(hyper::body::Body::wrap_stream(stream))
     }
 
     #[inline]
@@ -65,38 +95,45 @@ impl Body {
             }
         }
     }
+
+    fn inner(self: Pin<&mut Self>) -> Pin<&mut Inner> {
+        unsafe { Pin::map_unchecked_mut(self, |x| &mut x.inner) }
+    }
 }
 
 impl Stream for Body {
-    type Item = Chunk;
-    type Error = crate::Error;
+    type Item = Result<Chunk, crate::Error>;
 
     #[inline]
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let opt = match self.inner {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let opt_try_chunk = match self.inner().get_mut() {
             Inner::Hyper {
                 ref mut body,
                 ref mut timeout,
             } => {
                 if let Some(ref mut timeout) = timeout {
-                    if let Async::Ready(()) = try_!(timeout.poll()) {
-                        return Err(crate::error::timedout(None));
+                    if let Poll::Ready(()) = Pin::new(timeout).poll(cx) {
+                        return Poll::Ready(Some(Err(crate::error::timedout(None))));
                     }
                 }
-                try_ready!(body.poll_data().map_err(crate::error::from))
+                futures::ready!(Pin::new(body).poll_data(cx)).map(|opt_chunk| {
+                    opt_chunk
+                        .map(|c| Chunk { inner: c })
+                        .map_err(crate::error::from)
+                })
             }
             Inner::Reusable(ref mut bytes) => {
-                return if bytes.is_empty() {
-                    Ok(Async::Ready(None))
+                if bytes.is_empty() {
+                    None
                 } else {
                     let chunk = Chunk::from_chunk(bytes.clone());
                     *bytes = Bytes::new();
-                    Ok(Async::Ready(Some(chunk)))
-                };
+                    Some(Ok(chunk))
+                }
             }
         };
 
-        Ok(Async::Ready(opt.map(|chunk| Chunk { inner: chunk })))
+        Poll::Ready(opt_try_chunk)
     }
 }
 
@@ -132,18 +169,6 @@ impl From<&'static str> for Body {
     #[inline]
     fn from(s: &'static str) -> Body {
         s.as_bytes().into()
-    }
-}
-
-impl<I, E> From<Box<dyn Stream<Item = I, Error = E> + Send>> for Body
-where
-    hyper::Chunk: From<I>,
-    I: 'static,
-    E: std::error::Error + Send + Sync + 'static,
-{
-    #[inline]
-    fn from(s: Box<dyn Stream<Item = I, Error = E> + Send>) -> Body {
-        Body::wrap(hyper::Body::wrap_stream(s))
     }
 }
 
@@ -244,6 +269,12 @@ impl From<Bytes> for Chunk {
         Chunk {
             inner: bytes.into(),
         }
+    }
+}
+
+impl From<Chunk> for Bytes {
+    fn from(chunk: Chunk) -> Bytes {
+        chunk.inner.into()
     }
 }
 

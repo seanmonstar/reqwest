@@ -191,28 +191,20 @@ impl RequestBuilder {
     /// Sends a multipart/form-data body.
     ///
     /// ```
-    /// # extern crate futures;
-    /// # extern crate reqwest;
-    ///
     /// # use reqwest::Error;
-    /// # use futures::future::Future;
     ///
-    /// # fn run() -> Result<(), Error> {
+    /// # async fn run() -> Result<(), Error> {
     /// let client = reqwest::r#async::Client::new();
     /// let form = reqwest::r#async::multipart::Form::new()
     ///     .text("key3", "value3")
     ///     .text("key4", "value4");
     ///
-    /// let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
     ///
     /// let response = client.post("your url")
     ///     .multipart(form)
     ///     .send()
-    ///     .and_then(|_| {
-    ///       Ok(())
-    ///     });
-    ///
-    /// rt.block_on(response)
+    ///     .await?;
+    /// # Ok(())
     /// # }
     /// ```
     pub fn multipart(self, mut multipart: multipart::Form) -> RequestBuilder {
@@ -334,23 +326,17 @@ impl RequestBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # extern crate futures;
-    /// # extern crate reqwest;
-    /// #
     /// # use reqwest::Error;
-    /// # use futures::future::Future;
     /// #
-    /// # fn run() -> Result<(), Error> {
+    /// # async fn run() -> Result<(), Error> {
     /// let response = reqwest::r#async::Client::new()
     ///     .get("https://hyper.rs")
     ///     .send()
-    ///     .map(|resp| println!("status: {}", resp.status()));
-    ///
-    /// let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    /// rt.block_on(response)
+    ///     .await?;
+    /// # Ok(())
     /// # }
     /// ```
-    pub fn send(self) -> impl Future<Item = Response, Error = crate::Error> {
+    pub fn send(self) -> impl Future<Output = Result<Response, crate::Error>> {
         match self.request {
             Ok(req) => self.client.execute_request(req),
             Err(err) => Pending::new_err(err),

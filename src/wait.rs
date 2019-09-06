@@ -1,26 +1,53 @@
+use std::future::Future;
 use std::sync::Arc;
-use std::thread;
-use std::time::{Duration, Instant};
+use std::task::{Context, Poll};
+use std::time::Duration;
 
-use futures::executor::{self, Notify};
-use futures::{Async, Future, Poll, Stream};
-use tokio_executor::{enter, EnterError};
+use tokio::clock;
+use tokio_executor::{
+    enter,
+    park::{Park, ParkThread, Unpark, UnparkThread},
+    EnterError,
+};
 
-pub(crate) fn timeout<F>(fut: F, timeout: Option<Duration>) -> Result<F::Item, Waited<F::Error>>
+pub(crate) fn timeout<F, I, E>(fut: F, timeout: Option<Duration>) -> Result<I, Waited<E>>
 where
-    F: Future,
+    F: Future<Output = Result<I, E>>,
 {
-    let mut spawn = executor::spawn(fut);
-    block_on(timeout, |notify| spawn.poll_future_notify(notify, 0))
-}
+    let _entered = enter().map_err(Waited::Executor)?;
+    let deadline = timeout.map(|d| {
+        log::trace!("wait at most {:?}", d);
+        clock::now() + d
+    });
 
-pub(crate) fn stream<S>(stream: S, timeout: Option<Duration>) -> WaitStream<S>
-where
-    S: Stream,
-{
-    WaitStream {
-        stream: executor::spawn(stream),
-        timeout,
+    let mut park = ParkThread::new();
+    // Arc shouldn't be necessary, since UnparkThread is reference counted internally,
+    // but let's just stay safe for now.
+    let waker = futures::task::waker(Arc::new(UnparkWaker(park.unpark())));
+    let mut cx = Context::from_waker(&waker);
+
+    futures::pin_mut!(fut);
+
+    loop {
+        match fut.as_mut().poll(&mut cx) {
+            Poll::Ready(Ok(val)) => return Ok(val),
+            Poll::Ready(Err(err)) => return Err(Waited::Inner(err)),
+            Poll::Pending => (), // fallthrough
+        }
+
+        if let Some(deadline) = deadline {
+            let now = clock::now();
+            if now >= deadline {
+                log::trace!("wait timeout exceeded");
+                return Err(Waited::TimedOut);
+            }
+
+            log::trace!("park timeout {:?}", deadline - now);
+            park.park_timeout(deadline - now)
+                .expect("ParkThread doesn't error");
+        } else {
+            park.park().expect("ParkThread doesn't error");
+        }
     }
 }
 
@@ -31,71 +58,10 @@ pub(crate) enum Waited<E> {
     Inner(E),
 }
 
-impl<E> From<E> for Waited<E> {
-    fn from(err: E) -> Waited<E> {
-        Waited::Inner(err)
-    }
-}
+struct UnparkWaker(UnparkThread);
 
-pub(crate) struct WaitStream<S> {
-    stream: executor::Spawn<S>,
-    timeout: Option<Duration>,
-}
-
-impl<S> Iterator for WaitStream<S>
-where
-    S: Stream,
-{
-    type Item = Result<S::Item, Waited<S::Error>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let res = block_on(self.timeout, |notify| {
-            self.stream.poll_stream_notify(notify, 0)
-        });
-
-        match res {
-            Ok(Some(val)) => Some(Ok(val)),
-            Ok(None) => None,
-            Err(err) => Some(Err(err)),
-        }
-    }
-}
-
-struct ThreadNotify {
-    thread: thread::Thread,
-}
-
-impl Notify for ThreadNotify {
-    fn notify(&self, _id: usize) {
-        self.thread.unpark();
-    }
-}
-
-fn block_on<F, U, E>(timeout: Option<Duration>, mut poll: F) -> Result<U, Waited<E>>
-where
-    F: FnMut(&Arc<ThreadNotify>) -> Poll<U, E>,
-{
-    let _entered = enter().map_err(Waited::Executor)?;
-    let deadline = timeout.map(|d| Instant::now() + d);
-    let notify = Arc::new(ThreadNotify {
-        thread: thread::current(),
-    });
-
-    loop {
-        match poll(&notify)? {
-            Async::Ready(val) => return Ok(val),
-            Async::NotReady => {}
-        }
-
-        if let Some(deadline) = deadline {
-            let now = Instant::now();
-            if now >= deadline {
-                return Err(Waited::TimedOut);
-            }
-
-            thread::park_timeout(deadline - now);
-        } else {
-            thread::park();
-        }
+impl futures::task::ArcWake for UnparkWaker {
+    fn wake_by_ref(arc_self: &Arc<Self>) {
+        arc_self.0.unpark();
     }
 }
