@@ -55,7 +55,7 @@ impl Certificate {
     pub fn from_der(der: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             #[cfg(feature = "default-tls")]
-            native: try_!(native_tls::Certificate::from_der(der)),
+            native: native_tls::Certificate::from_der(der).map_err(crate::error::from)?,
             #[cfg(feature = "rustls-tls")]
             original: Cert::Der(der.to_owned()),
         })
@@ -80,7 +80,7 @@ impl Certificate {
     pub fn from_pem(pem: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             #[cfg(feature = "default-tls")]
-            native: try_!(native_tls::Certificate::from_pem(pem)),
+            native: native_tls::Certificate::from_pem(pem).map_err(crate::error::from)?,
             #[cfg(feature = "rustls-tls")]
             original: Cert::Pem(pem.to_owned()),
         })
@@ -146,7 +146,9 @@ impl Identity {
     #[cfg(feature = "default-tls")]
     pub fn from_pkcs12_der(der: &[u8], password: &str) -> crate::Result<Identity> {
         Ok(Identity {
-            inner: ClientCert::Pkcs12(try_!(native_tls::Identity::from_pkcs12(der, password))),
+            inner: ClientCert::Pkcs12(
+                native_tls::Identity::from_pkcs12(der, password).map_err(crate::error::from)?,
+            ),
         })
     }
 
@@ -176,10 +178,11 @@ impl Identity {
 
         let (key, certs) = {
             let mut pem = Cursor::new(buf);
-            let certs = try_!(pemfile::certs(&mut pem)
-                .map_err(|_| TLSError::General(String::from("No valid certificate was found"))));
+            let certs = pemfile::certs(&mut pem)
+                .map_err(|_| TLSError::General(String::from("No valid certificate was found")))
+                .map_err(crate::error::from)?;
             pem.set_position(0);
-            let mut sk = try_!(pemfile::pkcs8_private_keys(&mut pem)
+            let mut sk = pemfile::pkcs8_private_keys(&mut pem)
                 .and_then(|pkcs8_keys| {
                     if pkcs8_keys.is_empty() {
                         Err(())
@@ -191,7 +194,8 @@ impl Identity {
                     pem.set_position(0);
                     pemfile::rsa_private_keys(&mut pem)
                 })
-                .map_err(|_| TLSError::General(String::from("No valid private key was found"))));
+                .map_err(|_| TLSError::General(String::from("No valid private key was found")))
+                .map_err(crate::error::from)?;
             if let (Some(sk), false) = (sk.pop(), certs.is_empty()) {
                 (sk, certs)
             } else {

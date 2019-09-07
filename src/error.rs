@@ -2,8 +2,6 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 
-use tokio_executor::EnterError;
-
 use crate::{StatusCode, Url};
 
 /// The Errors that may occur when processing a `Request`.
@@ -95,7 +93,6 @@ impl Error {
     }
 
     pub(crate) fn with_url(mut self, url: Url) -> Error {
-        debug_assert_eq!(self.inner.url, None, "with_url overriding existing url");
         self.inner.url = Some(url);
         self
     }
@@ -219,6 +216,13 @@ impl Error {
         match self.inner.kind {
             Kind::Status(code) => Some(code),
             _ => None,
+        }
+    }
+
+    pub(crate) fn into_io(self) -> io::Error {
+        match self.inner.kind {
+            Kind::Io(io) => io,
+            _ => io::Error::new(io::ErrorKind::Other, self),
         }
     }
 }
@@ -475,8 +479,8 @@ where
     }
 }
 
-impl From<EnterError> for Kind {
-    fn from(_err: EnterError) -> Kind {
+impl From<tokio_executor::EnterError> for Kind {
+    fn from(_err: tokio_executor::EnterError) -> Kind {
         Kind::BlockingClientInFutureContext
     }
 }
@@ -521,10 +525,7 @@ where
 }
 
 pub(crate) fn into_io(e: Error) -> io::Error {
-    match e.inner.kind {
-        Kind::Io(io) => io,
-        _ => io::Error::new(io::ErrorKind::Other, e),
-    }
+    e.into_io()
 }
 
 pub(crate) fn from_io(e: io::Error) -> Error {
@@ -538,39 +539,12 @@ pub(crate) fn from_io(e: io::Error) -> Error {
     }
 }
 
-macro_rules! try_ {
-    ($e:expr) => {
-        match $e {
-            Ok(v) => v,
-            Err(err) => {
-                return Err(crate::error::from(err));
-            }
-        }
-    };
+macro_rules! url_error {
     ($e:expr, $url:expr) => {
-        match $e {
-            Ok(v) => v,
-            Err(err) => {
-                return Err(crate::Error::from(crate::error::InternalFrom(
-                    err,
-                    Some($url.clone()),
-                )));
-            }
-        }
-    };
-}
-
-macro_rules! try_io {
-    ($e:expr) => {
-        match $e {
-            Ok(v) => v,
-            Err(ref err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                return Ok(futures::Async::NotReady);
-            }
-            Err(err) => {
-                return Err(crate::error::from_io(err));
-            }
-        }
+        Err(crate::Error::from(crate::error::InternalFrom(
+            $e,
+            Some($url.clone()),
+        )))
     };
 }
 
@@ -606,6 +580,9 @@ pub(crate) fn unknown_proxy_scheme() -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_send<T: Send>() {}
+    fn assert_sync<T: Sync>() {}
 
     #[allow(deprecated)]
     #[test]
@@ -652,6 +629,8 @@ mod tests {
         let err = Error::new(Kind::Io(io), None);
         assert!(err.cause().is_some());
         assert_eq!(err.to_string(), "chain: root");
+        assert_send::<Error>();
+        assert_sync::<Error>();
     }
 
     #[test]

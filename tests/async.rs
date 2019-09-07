@@ -1,29 +1,28 @@
 #[macro_use]
 mod support;
 
-use std::io::{self, Write};
+use std::io::Write;
 use std::time::Duration;
 
-use futures::{Future, Stream};
-use tokio::runtime::current_thread::Runtime;
+use futures::TryStreamExt;
 
 use reqwest::r#async::multipart::{Form, Part};
-use reqwest::r#async::{Chunk, Client};
+use reqwest::r#async::{Body, Client};
 
 use bytes::Bytes;
 
-#[test]
-fn gzip_response() {
-    gzip_case(10_000, 4096);
+#[tokio::test]
+async fn gzip_response() {
+    gzip_case(10_000, 4096).await;
 }
 
-#[test]
-fn gzip_single_byte_chunks() {
-    gzip_case(10, 1);
+#[tokio::test]
+async fn gzip_single_byte_chunks() {
+    gzip_case(10, 1).await;
 }
 
-#[test]
-fn response_text() {
+#[tokio::test]
+async fn response_text() {
     let _ = env_logger::try_init();
 
     let server = server! {
@@ -43,24 +42,19 @@ fn response_text() {
             "
     };
 
-    let mut rt = Runtime::new().expect("new rt");
-
     let client = Client::new();
 
-    let res_future = client
+    let mut res = client
         .get(&format!("http://{}/text", server.addr()))
         .send()
-        .and_then(|mut res| res.text())
-        .and_then(|text| {
-            assert_eq!("Hello", text);
-            Ok(())
-        });
-
-    rt.block_on(res_future).unwrap();
+        .await
+        .expect("Failed to get");
+    let text = res.text().await.expect("Failed to get text");
+    assert_eq!("Hello", text);
 }
 
-#[test]
-fn response_json() {
+#[tokio::test]
+async fn response_json() {
     let _ = env_logger::try_init();
 
     let server = server! {
@@ -80,28 +74,24 @@ fn response_json() {
             "
     };
 
-    let mut rt = Runtime::new().expect("new rt");
-
     let client = Client::new();
 
-    let res_future = client
+    let mut res = client
         .get(&format!("http://{}/json", server.addr()))
         .send()
-        .and_then(|mut res| res.json::<String>())
-        .and_then(|text| {
-            assert_eq!("Hello", text);
-            Ok(())
-        });
-
-    rt.block_on(res_future).unwrap();
+        .await
+        .expect("Failed to get");
+    let text = res.json::<String>().await.expect("Failed to get json");
+    assert_eq!("Hello", text);
 }
 
-#[test]
-fn multipart() {
+#[tokio::test]
+async fn multipart() {
     let _ = env_logger::try_init();
 
-    let stream =
-        futures::stream::once::<_, hyper::Error>(Ok(Chunk::from("part1 part2".to_owned())));
+    let stream = futures::stream::once(futures::future::ready::<Result<_, hyper::Error>>(Ok(
+        hyper::Chunk::from("part1 part2".to_owned()),
+    )));
     let part = Part::stream(stream);
 
     let form = Form::new().text("foo", "bar").part("part_stream", part);
@@ -153,22 +143,20 @@ fn multipart() {
 
     let url = format!("http://{}/multipart/1", server.addr());
 
-    let mut rt = Runtime::new().expect("new rt");
-
     let client = Client::new();
 
-    let res_future = client.post(&url).multipart(form).send().and_then(|res| {
-        assert_eq!(res.url().as_str(), &url);
-        assert_eq!(res.status(), reqwest::StatusCode::OK);
-
-        Ok(())
-    });
-
-    rt.block_on(res_future).unwrap();
+    let res = client
+        .post(&url)
+        .multipart(form)
+        .send()
+        .await
+        .expect("Failed to post multipart");
+    assert_eq!(res.url().as_str(), &url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
-#[test]
-fn request_timeout() {
+#[tokio::test]
+async fn request_timeout() {
     let _ = env_logger::try_init();
 
     let server = server! {
@@ -189,24 +177,23 @@ fn request_timeout() {
         read_timeout: Duration::from_secs(2)
     };
 
-    let mut rt = Runtime::new().expect("new rt");
-
     let client = Client::builder()
         .timeout(Duration::from_millis(500))
         .build()
         .unwrap();
 
     let url = format!("http://{}/slow", server.addr());
-    let fut = client.get(&url).send();
 
-    let err = rt.block_on(fut).unwrap_err();
+    let res = client.get(&url).send().await;
+
+    let err = res.unwrap_err();
 
     assert!(err.is_timeout());
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
 }
 
-#[test]
-fn response_timeout() {
+#[tokio::test]
+async fn response_timeout() {
     let _ = env_logger::try_init();
 
     let server = server! {
@@ -227,25 +214,21 @@ fn response_timeout() {
         write_timeout: Duration::from_secs(2)
     };
 
-    let mut rt = Runtime::new().expect("new rt");
-
     let client = Client::builder()
         .timeout(Duration::from_millis(500))
         .build()
         .unwrap();
 
     let url = format!("http://{}/slow", server.addr());
-    let fut = client
-        .get(&url)
-        .send()
-        .and_then(|res| res.into_body().concat2());
+    let res = client.get(&url).send().await.expect("Failed to get");
+    let body: Result<_, _> = res.into_body().try_concat().await;
 
-    let err = rt.block_on(fut).unwrap_err();
+    let err = body.unwrap_err();
 
     assert!(err.is_timeout());
 }
 
-fn gzip_case(response_size: usize, chunk_size: usize) {
+async fn gzip_case(response_size: usize, chunk_size: usize) {
     let content: String = (0..response_size)
         .into_iter()
         .map(|i| format!("test {}", i))
@@ -284,37 +267,26 @@ fn gzip_case(response_size: usize, chunk_size: usize) {
         response: response
     };
 
-    let mut rt = Runtime::new().expect("new rt");
-
     let client = Client::new();
 
-    let res_future = client
+    let mut res = client
         .get(&format!("http://{}/gzip", server.addr()))
         .send()
-        .and_then(|res| {
-            let body = res.into_body();
-            body.concat2()
-        })
-        .and_then(|buf| {
-            let body = std::str::from_utf8(&buf).unwrap();
+        .await
+        .expect("response");
 
-            assert_eq!(body, &content);
-
-            Ok(())
-        });
-
-    rt.block_on(res_future).unwrap();
+    let body = res.text().await.expect("text");
+    assert_eq!(body, content);
 }
 
-#[test]
-fn body_stream() {
+#[tokio::test]
+async fn body_stream() {
     let _ = env_logger::try_init();
 
-    let source: Box<dyn Stream<Item = Bytes, Error = io::Error> + Send> =
-        Box::new(futures::stream::iter_ok::<_, io::Error>(vec![
-            Bytes::from_static(b"123"),
-            Bytes::from_static(b"4567"),
-        ]));
+    let source = futures::stream::iter::<Vec<Result<Bytes, std::io::Error>>>(vec![
+        Ok(Bytes::from_static(b"123")),
+        Ok(Bytes::from_static(b"4567")),
+    ]);
 
     let expected_body = "3\r\n123\r\n4\r\n4567\r\n0\r\n\r\n";
 
@@ -339,16 +311,15 @@ fn body_stream() {
 
     let url = format!("http://{}/post", server.addr());
 
-    let mut rt = Runtime::new().expect("new rt");
-
     let client = Client::new();
 
-    let res_future = client.post(&url).body(source).send().and_then(|res| {
-        assert_eq!(res.url().as_str(), &url);
-        assert_eq!(res.status(), reqwest::StatusCode::OK);
+    let res = client
+        .post(&url)
+        .body(Body::wrap_stream(source))
+        .send()
+        .await
+        .expect("Failed to post");
 
-        Ok(())
-    });
-
-    rt.block_on(res_future).unwrap();
+    assert_eq!(res.url().as_str(), &url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
 }

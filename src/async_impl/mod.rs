@@ -1,6 +1,6 @@
 pub use self::body::{Body, Chunk};
 pub use self::client::{Client, ClientBuilder};
-pub use self::decoder::{Decoder, ReadableChunks};
+pub use self::decoder::Decoder;
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::{Response, ResponseBuilderExt};
 

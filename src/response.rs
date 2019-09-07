@@ -2,9 +2,9 @@ use std::fmt;
 use std::io::{self, Read};
 use std::mem;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::time::Duration;
 
-use futures::{Async, Poll, Stream};
 use http;
 use serde::de::DeserializeOwned;
 
@@ -16,7 +16,7 @@ use hyper::header::HeaderMap;
 /// A Response to a submitted `Request`.
 pub struct Response {
     inner: async_impl::Response,
-    body: Option<async_impl::ReadableChunks<WaitBody>>,
+    body: Option<Pin<Box<dyn futures::io::AsyncRead + Send + Sync>>>,
     timeout: Option<Duration>,
     _thread_handle: KeepCoreThreadAlive,
 }
@@ -289,7 +289,6 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
-    #[inline]
     pub fn copy_to<W: ?Sized>(&mut self, w: &mut W) -> crate::Result<u64>
     where
         W: io::Write,
@@ -349,47 +348,32 @@ impl Response {
     pub fn error_for_status_ref(&self) -> crate::Result<&Self> {
         self.inner.error_for_status_ref().and_then(|_| Ok(self))
     }
-}
 
-impl Read for Response {
-    #[inline]
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    // private
+
+    fn body_mut(&mut self) -> Pin<&mut dyn futures::io::AsyncRead> {
+        use futures::stream::TryStreamExt;
         if self.body.is_none() {
             let body = mem::replace(self.inner.body_mut(), async_impl::Decoder::empty());
-            let body = async_impl::ReadableChunks::new(WaitBody {
-                inner: wait::stream(body, self.timeout),
-            });
-            self.body = Some(body);
+
+            let body = body.map_err(crate::error::into_io).into_async_read();
+
+            self.body = Some(Box::pin(body));
         }
-        let mut body = self.body.take().unwrap();
-        let bytes = body.read(buf);
-        self.body = Some(body);
-        bytes
+        self.body.as_mut().expect("body was init").as_mut()
     }
 }
 
-struct WaitBody {
-    inner: wait::WaitStream<async_impl::Decoder>,
-}
+impl Read for Response {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        use futures::io::AsyncReadExt;
 
-impl Stream for WaitBody {
-    type Item = <async_impl::Decoder as Stream>::Item;
-    type Error = <async_impl::Decoder as Stream>::Error;
-
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match self.inner.next() {
-            Some(Ok(chunk)) => Ok(Async::Ready(Some(chunk))),
-            Some(Err(e)) => {
-                let req_err = match e {
-                    wait::Waited::TimedOut => crate::error::timedout(None),
-                    wait::Waited::Executor(e) => crate::error::from(e),
-                    wait::Waited::Inner(e) => e,
-                };
-
-                Err(req_err)
-            }
-            None => Ok(Async::Ready(None)),
-        }
+        let timeout = self.timeout;
+        wait::timeout(self.body_mut().read(buf), timeout).map_err(|e| match e {
+            wait::Waited::TimedOut => crate::error::timedout(None).into_io(),
+            wait::Waited::Executor(e) => crate::error::from(e).into_io(),
+            wait::Waited::Inner(e) => e,
+        })
     }
 }
 

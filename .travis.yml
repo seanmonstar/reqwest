@@ -1,40 +1,44 @@
 language: rust
 matrix:
     fast_finish: true
-    allow_failures:
-        - rust: nightly
+    #allow_failures:
+    #    - rust: nightly
     include:
         - os: osx
-          rust: stable
+          rust: nightly
+          #rust: stable
 
-        - rust: stable
-        - rust: beta
+        #- rust: stable
+        #- rust: beta
         - rust: nightly
 
         # Disable default-tls
-        - rust: stable
+        #- rust: stable
+        - rust: nightly
           env: FEATURES="--no-default-features"
 
         # rustls-tls
-        - rust: stable
-          env: FEATURES="--no-default-features --features rustls-tls"
+        #- rust: stable
+        #- rust: nightly
+        #  env: FEATURES="--no-default-features --features rustls-tls"
 
         # default-tls and rustls-tls
-        - rust: stable
-          env: FEATURES="--features rustls-tls"
+        #- rust: stable
+        #- rust: nightly
+        #  env: FEATURES="--features rustls-tls"
 
-        # default-tls, rustls, and socks!
-        - rust: stable
-          env: FEATURES="--features rustls-tls,socks"
+        # socks
+        #- rust: stable
+        #- rust: nightly
+        #  env: FEATURES="--features socks"
 
-        - rust: stable
-          env: FEATURES="--features hyper-011"
-
-        - rust: stable
-          env: FEATURES="--features trust-dns"
+        #- rust: stable
+        #- rust: nightly
+        #  env: FEATURES="--features trust-dns"
 
         # android
-        - rust: stable
+        #- rust: stable
+        - rust: nightly
           env: TARGET=aarch64-linux-android
           before_install:
             - wget https://dl.google.com/android/repository/android-ndk-r19c-linux-x86_64.zip;
@@ -45,9 +49,16 @@ matrix:
           # disable default-tls feature since cross-compiling openssl is dragons
           script: cargo build --target "$TARGET" --no-default-features
 
+        # Check rustfmt
+        - name: "rustfmt check"
+          rust: stable
+          install: rustup component add rustfmt
+          script: cargo fmt -- --check
+
+
         # minimum version
-        - rust: 1.34.0
-          script: cargo build
+        #- rust: 1.39.0
+        #  script: cargo build
 
 sudo: false
 dist: trusty
@@ -55,9 +66,6 @@ dist: trusty
 env:
   global:
     - REQWEST_TEST_BODY_FULL=1
-before_script:
-  - rustup component add rustfmt
 script:
-  - cargo fmt -- --check
   - cargo build $FEATURES
   - cargo test -v $FEATURES -- --test-threads=1

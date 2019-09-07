@@ -20,62 +20,66 @@ all-features = true
 base64 = "0.10"
 bytes = "0.4"
 encoding_rs = "0.8"
-futures = "0.1.23"
+futures-preview = { version = "=0.3.0-alpha.18" }
 http = "0.1.15"
-hyper = "0.12.22"
-flate2 = { version = "^1.0.7", default-features = false, features = ["rust_backend"] }
+hyper = "=0.13.0-alpha.1"
 log = "0.4"
 mime = "0.3.7"
 mime_guess = "2.0"
 percent-encoding = "2.1"
+tokio = { version = "=0.2.0-alpha.4", default-features = false, features = ["rt-full", "tcp"] }
+tokio-executor = "=0.2.0-alpha.4"
+url = "2.1"
+uuid = { version = "0.7", features = ["v4"] }
+time = "0.1.42"
+
+# TODO: candidates for optional features
+
+async-compression = { version = "0.1.0-alpha.4", default-features = false, features = ["gzip", "stream"] }
+cookie_store = "0.9.0"
+cookie = "0.12.0"
 serde = "1.0"
 serde_json = "1.0"
 serde_urlencoded = "0.6.1"
-tokio = { version = "0.1.7", default-features = false, features = ["rt-full", "tcp"] }
-tokio-executor = "0.1.4" # a minimum version so trust-dns-resolver compiles
-tokio-io = "0.1"
-tokio-threadpool = "0.1.8" # a minimum version so tokio compiles
-tokio-timer = "0.2.6" # a minimum version so trust-dns-resolver compiles
-url = "2.1"
-uuid = { version = "0.7", features = ["v4"] }
 
 # Optional deps...
 
-hyper-old-types = { version = "0.11", optional = true, features = ["compat"] }
-hyper-rustls = { version = "^0.17.1", optional = true }
-hyper-tls = { version = "0.3.2", optional = true }
+## default-tls
+hyper-tls = { version = "=0.4.0-alpha.1", optional = true }
 native-tls = { version = "0.2", optional = true }
-rustls = { version = "0.16", features = ["dangerous_configuration"], optional = true }
-socks = { version = "0.3.2", optional = true }
-tokio-rustls = { version = "0.10", optional = true }
-trust-dns-resolver = { version = "0.11", optional = true }
-webpki-roots = { version = "0.17", optional = true }
-cookie_store = "0.9.0"
-cookie = "0.12.0"
-time = "0.1.42"
+tokio-tls = { version = "=0.3.0-alpha.4", optional = true }
+
+## rustls-tls
+#hyper-rustls = { git = "https://github.com/dbcfd/hyper-rustls.git", branch = "master", optional = true }
+#rustls = { version = "0.16", features = ["dangerous_configuration"], optional = true }
+#tokio-rustls = { version = "=0.12.0-alpha.2", optional = true }
+#webpki-roots = { version = "0.17", optional = true }
+
+## socks
+#socks = { version = "0.3.2", optional = true }
+
+## trust-dns
+#trust-dns-resolver = { version = "0.11", optional = true }
 
 [dev-dependencies]
 env_logger = "0.6"
 serde = { version = "1.0", features = ["derive"] }
-tokio = { version = "0.1.7", default-features = false, features = ["rt-full", "tcp", "fs"] }
-tokio-tcp = "0.1"
 libflate = "0.1"
 doc-comment = "0.3"
 bytes = "0.4"
+tokio-fs = { version = "=0.2.0-alpha.4" }
 
 [features]
 default = ["default-tls"]
 
 tls = []
 
-default-tls = ["hyper-tls", "native-tls", "tls"]
+default-tls = ["hyper-tls", "native-tls", "tls", "tokio-tls"]
 default-tls-vendored = ["default-tls", "native-tls/vendored"]
 
-rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
+#rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 
-trust-dns = ["trust-dns-resolver"]
-
-hyper-011 = ["hyper-old-types"]
+#trust-dns = ["trust-dns-resolver"]
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.6"

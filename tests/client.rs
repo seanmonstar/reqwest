@@ -1,8 +1,6 @@
 #[macro_use]
 mod support;
 
-use std::io::Read;
-
 #[test]
 fn test_response_text() {
     let server = server! {
@@ -137,9 +135,7 @@ fn test_response_copy_to() {
         &"5"
     );
 
-    let mut buf: Vec<u8> = vec![];
-    res.copy_to(&mut buf).unwrap();
-    assert_eq!(b"Hello", buf.as_slice());
+    assert_eq!("Hello".to_owned(), res.text().unwrap());
 }
 
 #[test]
@@ -173,9 +169,7 @@ fn test_get() {
     );
     assert_eq!(res.remote_addr(), Some(server.addr()));
 
-    let mut buf = [0; 1024];
-    let n = res.read(&mut buf).unwrap();
-    assert_eq!(n, 0)
+    assert_eq!(res.text().unwrap().len(), 0)
 }
 
 #[test]
@@ -214,9 +208,7 @@ fn test_post() {
         &"0"
     );
 
-    let mut buf = [0; 1024];
-    let n = res.read(&mut buf).unwrap();
-    assert_eq!(n, 0)
+    assert_eq!(res.text().unwrap().len(), 0)
 }
 
 #[test]

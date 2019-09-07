@@ -158,8 +158,6 @@
 //! - **default-tls-vendored**: Enables the `vendored` feature of `native-tls`.
 //! - **rustls-tls**: Provides TLS support via the `rustls` library.
 //! - **socks**: Provides SOCKS5 proxy support.
-//! - **trust-dns**: Enables a trust-dns async resolver instead of default
-//!   threadpool using `getaddrinfo`.
 //! - **hyper-011**: Provides support for hyper's old typed headers.
 //!
 //!
@@ -172,6 +170,9 @@
 //! [redirect]: ./struct.RedirectPolicy.html
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
+
+////! - **trust-dns**: Enables a trust-dns async resolver instead of default
+////!   threadpool using `getaddrinfo`.
 
 extern crate cookie as cookie_crate;
 #[cfg(feature = "hyper-011")]
@@ -210,8 +211,8 @@ mod body;
 mod client;
 mod connect;
 pub mod cookie;
-#[cfg(feature = "trust-dns")]
-mod dns;
+//#[cfg(feature = "trust-dns")]
+//mod dns;
 mod into_url;
 mod proxy;
 mod redirect;
