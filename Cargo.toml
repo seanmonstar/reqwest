@@ -20,7 +20,7 @@ encoding_rs = "0.8"
 futures = "0.1.23"
 http = "0.1.15"
 hyper = "0.12.22"
-flate2 = { version = "^1.0.7", default-features = false, features = ["rust_backend"] }
+flate2 = { version = "^1.0.11", default-features = false, features = ["rust_backend"] }
 log = "0.4"
 mime = "0.3.7"
 mime_guess = "2.0"
