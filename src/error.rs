@@ -20,15 +20,15 @@ use crate::{StatusCode, Url};
 /// }
 /// # fn main() { }
 ///
-/// fn run() {
-///    match make_request() {
+/// async fn run() {
+///    match make_request().await {
 ///        Err(e) => handler(e),
 ///        Ok(_)  => return,
 ///    }
 /// }
 /// // Response is not a json object conforming to the Simple struct
-/// fn make_request() -> Result<Simple, reqwest::Error> {
-///   reqwest::get("http://httpbin.org/ip")?.json()
+/// async fn make_request() -> Result<Simple, reqwest::Error> {
+///   reqwest::get("http://httpbin.org/ip").await?.json().await
 /// }
 ///
 /// fn handler(e: reqwest::Error) {
@@ -75,9 +75,9 @@ impl Error {
     /// # Examples
     ///
     /// ```
-    /// # fn run() {
+    /// # async fn run() {
     /// // displays last stop of a redirect loop
-    /// let response = reqwest::get("http://site.with.redirect.loop");
+    /// let response = reqwest::get("http://site.with.redirect.loop").await;
     /// if let Err(e) = response {
     ///     if e.is_redirect() {
     ///         if let Some(final_stop) = e.url() {
@@ -108,14 +108,14 @@ impl Error {
     /// extern crate url;
     /// # extern crate reqwest;
     /// // retries requests with no host on localhost
-    /// # fn run() {
+    /// # async fn run() {
     /// let invalid_request = "http://";
-    /// let mut response = reqwest::get(invalid_request);
+    /// let mut response = reqwest::get(invalid_request).await;
     /// if let Err(e) = response {
     ///     match e.get_ref().and_then(|e| e.downcast_ref::<url::ParseError>()) {
     ///         Some(&url::ParseError::EmptyHost) => {
     ///             let valid_request = format!("{}{}",invalid_request, "localhost");
-    ///             response = reqwest::get(&valid_request);
+    ///             response = reqwest::get(&valid_request).await;
     ///         },
     ///         _ => (),
     ///     }
@@ -123,7 +123,6 @@ impl Error {
     /// # }
     /// # fn main() {}
     /// ```
-    #[inline]
     pub fn get_ref(&self) -> Option<&(dyn StdError + Send + Sync + 'static)> {
         match self.inner.kind {
             Kind::Http(ref e) => Some(e),
@@ -152,7 +151,6 @@ impl Error {
     }
 
     /// Returns true if the error is related to HTTP.
-    #[inline]
     pub fn is_http(&self) -> bool {
         match self.inner.kind {
             Kind::Http(_) => true,
@@ -175,7 +173,6 @@ impl Error {
     }
 
     /// Returns true if the error is serialization related.
-    #[inline]
     pub fn is_serialization(&self) -> bool {
         match self.inner.kind {
             Kind::Json(_) | Kind::UrlEncoded(_) => true,
@@ -184,7 +181,6 @@ impl Error {
     }
 
     /// Returns true if the error is from a `RedirectPolicy`.
-    #[inline]
     pub fn is_redirect(&self) -> bool {
         match self.inner.kind {
             Kind::TooManyRedirects | Kind::RedirectLoop => true,
@@ -193,7 +189,6 @@ impl Error {
     }
 
     /// Returns true if the error is from a request returning a 4xx error.
-    #[inline]
     pub fn is_client_error(&self) -> bool {
         match self.inner.kind {
             Kind::Status(code) => code.is_client_error(),
@@ -202,7 +197,6 @@ impl Error {
     }
 
     /// Returns true if the error is from a request returning a 5xx error.
-    #[inline]
     pub fn is_server_error(&self) -> bool {
         match self.inner.kind {
             Kind::Status(code) => code.is_server_error(),
@@ -211,7 +205,6 @@ impl Error {
     }
 
     /// Returns the status code, if the error was generated from a response.
-    #[inline]
     pub fn status(&self) -> Option<StatusCode> {
         match self.inner.kind {
             Kind::Status(code) => Some(code),
@@ -466,15 +459,15 @@ impl From<rustls::TLSError> for Kind {
     }
 }
 
-impl<T> From<crate::wait::Waited<T>> for Kind
+impl<T> From<crate::blocking::Waited<T>> for Kind
 where
     T: Into<Kind>,
 {
-    fn from(err: crate::wait::Waited<T>) -> Kind {
+    fn from(err: crate::blocking::Waited<T>) -> Kind {
         match err {
-            crate::wait::Waited::TimedOut => io_timeout().into(),
-            crate::wait::Waited::Executor(e) => e.into(),
-            crate::wait::Waited::Inner(e) => e.into(),
+            crate::blocking::Waited::TimedOut => io_timeout().into(),
+            crate::blocking::Waited::Executor(e) => e.into(),
+            crate::blocking::Waited::Inner(e) => e.into(),
         }
     }
 }

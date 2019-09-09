@@ -11,15 +11,16 @@
 //! It handles many of the things that most people just expect an HTTP client
 //! to do for them.
 //!
+//! - Async and [blocking](blocking) Clients
 //! - Plain bodies, [JSON](#json), [urlencoded](#forms), [multipart](multipart)
 //! - Customizable [redirect policy](#redirect-policy)
 //! - HTTP [Proxies](#proxies)
 //! - Uses system-native [TLS](#tls)
 //! - Cookies
 //!
-//! The [`reqwest::Client`][client] is synchronous, making it a great fit for
-//! applications that only require a few HTTP requests, and wish to handle
-//! them synchronously.
+//! The [`reqwest::Client`][client] is asynchronous. For applications wishing
+//! to only make a few HTTP requests, the [`reqwest::blocking`](blocking) API
+//! may be more convenient.
 //!
 //! Additional learning resources include:
 //!
@@ -31,21 +32,16 @@
 //! For a single request, you can use the [`get`][get] shortcut method.
 //!
 //! ```rust
-//! # use reqwest::{Error, Response};
-//!
-//! # fn run() -> Result<(), Error> {
-//! let body = reqwest::get("https://www.rust-lang.org")?
-//!     .text()?;
+//! # async fn run() -> Result<(), reqwest::Error> {
+//! let body = reqwest::get("https://www.rust-lang.org")
+//!     .await?
+//!     .text()
+//!     .await?;
 //!
 //! println!("body = {:?}", body);
 //! # Ok(())
 //! # }
 //! ```
-//!
-//! Additionally, reqwest's [`Response`][response] struct implements Rust's
-//! `Read` trait, so many useful standard library and third party crates will
-//! have convenience methods that take a `Response` anywhere `T: Read` is
-//! acceptable.
 //!
 //! **NOTE**: If you plan to perform multiple requests, it is best to create a
 //! [`Client`][client] and reuse it, taking advantage of keep-alive connection
@@ -57,16 +53,17 @@
 //! by using the `body()` method of a [`RequestBuilder`][builder]. This lets you set the
 //! exact raw bytes of what the body should be. It accepts various types,
 //! including `String`, `Vec<u8>`, and `File`. If you wish to pass a custom
-//! Reader, you can use the `reqwest::Body::new()` constructor.
+//! type, you can use the `reqwest::Body` constructors.
 //!
 //! ```rust
 //! # use reqwest::Error;
 //! #
-//! # fn run() -> Result<(), Error> {
+//! # async fn run() -> Result<(), Error> {
 //! let client = reqwest::Client::new();
 //! let res = client.post("http://httpbin.org/post")
 //!     .body("the exact body that is sent")
-//!     .send()?;
+//!     .send()
+//!     .await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -82,13 +79,14 @@
 //! ```rust
 //! # use reqwest::Error;
 //! #
-//! # fn run() -> Result<(), Error> {
+//! # async fn run() -> Result<(), Error> {
 //! // This will POST a body of `foo=bar&baz=quux`
 //! let params = [("foo", "bar"), ("baz", "quux")];
 //! let client = reqwest::Client::new();
 //! let res = client.post("http://httpbin.org/post")
 //!     .form(&params)
-//!     .send()?;
+//!     .send()
+//!     .await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -103,7 +101,7 @@
 //! # use reqwest::Error;
 //! # use std::collections::HashMap;
 //! #
-//! # fn run() -> Result<(), Error> {
+//! # async fn run() -> Result<(), Error> {
 //! // This will POST a body of `{"lang":"rust","body":"json"}`
 //! let mut map = HashMap::new();
 //! map.insert("lang", "rust");
@@ -112,7 +110,8 @@
 //! let client = reqwest::Client::new();
 //! let res = client.post("http://httpbin.org/post")
 //!     .json(&map)
-//!     .send()?;
+//!     .send()
+//!     .await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -157,8 +156,6 @@
 //!   `native-tls` library to connect over HTTPS.
 //! - **default-tls-vendored**: Enables the `vendored` feature of `native-tls`.
 //! - **rustls-tls**: Provides TLS support via the `rustls` library.
-//! - **socks**: Provides SOCKS5 proxy support.
-//! - **hyper-011**: Provides support for hyper's old typed headers.
 //!
 //!
 //! [hyper]: http://hyper.rs
@@ -171,12 +168,11 @@
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
 
+////! - **socks**: Provides SOCKS5 proxy support.
 ////! - **trust-dns**: Enables a trust-dns async resolver instead of default
 ////!   threadpool using `getaddrinfo`.
 
 extern crate cookie as cookie_crate;
-#[cfg(feature = "hyper-011")]
-pub use hyper_old_types as hyper_011;
 
 #[cfg(test)]
 #[macro_use]
@@ -191,14 +187,17 @@ pub use hyper::{StatusCode, Version};
 pub use url::ParseError as UrlError;
 pub use url::Url;
 
-pub use self::body::Body;
-pub use self::client::{Client, ClientBuilder};
+pub use self::r#async::{
+    multipart, Body, Client, ClientBuilder, Decoder, Request, RequestBuilder, Response,
+};
+//pub use self::body::Body;
+//pub use self::client::{Client, ClientBuilder};
 pub use self::error::{Error, Result};
 pub use self::into_url::IntoUrl;
 pub use self::proxy::Proxy;
 pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
-pub use self::request::{Request, RequestBuilder};
-pub use self::response::Response;
+//pub use self::request::{Request, RequestBuilder};
+//pub use self::response::Response;
 #[cfg(feature = "tls")]
 pub use self::tls::{Certificate, Identity};
 
@@ -207,8 +206,7 @@ pub use self::tls::{Certificate, Identity};
 mod error;
 
 mod async_impl;
-mod body;
-mod client;
+pub mod blocking;
 mod connect;
 pub mod cookie;
 //#[cfg(feature = "trust-dns")]
@@ -216,19 +214,16 @@ pub mod cookie;
 mod into_url;
 mod proxy;
 mod redirect;
-mod request;
-mod response;
 #[cfg(feature = "tls")]
 mod tls;
-mod wait;
 
-pub mod multipart;
+//pub mod multipart;
 
-/// An 'async' implementation of the reqwest `Client`.
+#[doc(hidden)]
+#[deprecated(note = "types moved to top of crate")]
 pub mod r#async {
     pub use crate::async_impl::{
         multipart, Body, Chunk, Client, ClientBuilder, Decoder, Request, RequestBuilder, Response,
-        ResponseBuilderExt,
     };
 }
 
@@ -244,12 +239,11 @@ pub mod r#async {
 /// # Examples
 ///
 /// ```rust
-/// # fn run() -> Result<(), reqwest::Error> {
-/// let body = reqwest::get("https://www.rust-lang.org")?
-///     .text()?;
+/// # async fn run() -> Result<(), reqwest::Error> {
+/// let body = reqwest::get("https://www.rust-lang.org").await?
+///     .text().await?;
 /// # Ok(())
 /// # }
-/// # fn main() { }
 /// ```
 ///
 /// # Errors
@@ -261,8 +255,8 @@ pub mod r#async {
 /// - there was an error while sending request
 /// - redirect loop was detected
 /// - redirect limit was exhausted
-pub fn get<T: IntoUrl>(url: T) -> crate::Result<Response> {
-    Client::builder().build()?.get(url).send()
+pub async fn get<T: IntoUrl>(url: T) -> crate::Result<Response> {
+    Client::builder().build()?.get(url).send().await
 }
 
 fn _assert_impls() {

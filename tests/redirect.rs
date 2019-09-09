@@ -1,8 +1,8 @@
 #[macro_use]
 mod support;
 
-#[test]
-fn test_redirect_301_and_302_and_303_changes_post_to_get() {
+#[tokio::test]
+async fn test_redirect_301_and_302_and_303_changes_post_to_get() {
     let client = reqwest::Client::new();
     let codes = [301, 302, 303];
 
@@ -45,7 +45,7 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
 
         let url = format!("http://{}/{}", redirect.addr(), code);
         let dst = format!("http://{}/{}", redirect.addr(), "dst");
-        let res = client.post(&url).send().unwrap();
+        let res = client.post(&url).send().await.unwrap();
         assert_eq!(res.url().as_str(), dst);
         assert_eq!(res.status(), reqwest::StatusCode::OK);
         assert_eq!(
@@ -55,8 +55,8 @@ fn test_redirect_301_and_302_and_303_changes_post_to_get() {
     }
 }
 
-#[test]
-fn test_redirect_307_and_308_tries_to_get_again() {
+#[tokio::test]
+async fn test_redirect_307_and_308_tries_to_get_again() {
     let client = reqwest::Client::new();
     let codes = [307, 308];
     for code in codes.iter() {
@@ -98,7 +98,7 @@ fn test_redirect_307_and_308_tries_to_get_again() {
 
         let url = format!("http://{}/{}", redirect.addr(), code);
         let dst = format!("http://{}/{}", redirect.addr(), "dst");
-        let res = client.get(&url).send().unwrap();
+        let res = client.get(&url).send().await.unwrap();
         assert_eq!(res.url().as_str(), dst);
         assert_eq!(res.status(), reqwest::StatusCode::OK);
         assert_eq!(
@@ -108,19 +108,19 @@ fn test_redirect_307_and_308_tries_to_get_again() {
     }
 }
 
-#[test]
-fn test_redirect_307_and_308_tries_to_post_again() {
+#[tokio::test]
+async fn test_redirect_307_and_308_tries_to_post_again() {
     let client = reqwest::Client::new();
     let codes = [307, 308];
     for code in codes.iter() {
         let redirect = server! {
             request: format!("\
                 POST /{} HTTP/1.1\r\n\
-                content-length: 5\r\n\
                 user-agent: $USERAGENT\r\n\
                 accept: */*\r\n\
                 accept-encoding: gzip\r\n\
                 host: $HOST\r\n\
+                content-length: 5\r\n\
                 \r\n\
                 Hello\
                 ", code),
@@ -136,12 +136,12 @@ fn test_redirect_307_and_308_tries_to_post_again() {
 
             request: format!("\
                 POST /dst HTTP/1.1\r\n\
-                content-length: 5\r\n\
                 user-agent: $USERAGENT\r\n\
                 accept: */*\r\n\
                 accept-encoding: gzip\r\n\
                 referer: http://$HOST/{}\r\n\
                 host: $HOST\r\n\
+                content-length: 5\r\n\
                 \r\n\
                 Hello\
                 ", code),
@@ -155,7 +155,7 @@ fn test_redirect_307_and_308_tries_to_post_again() {
 
         let url = format!("http://{}/{}", redirect.addr(), code);
         let dst = format!("http://{}/{}", redirect.addr(), "dst");
-        let res = client.post(&url).body("Hello").send().unwrap();
+        let res = client.post(&url).body("Hello").send().await.unwrap();
         assert_eq!(res.url().as_str(), dst);
         assert_eq!(res.status(), reqwest::StatusCode::OK);
         assert_eq!(
@@ -167,7 +167,7 @@ fn test_redirect_307_and_308_tries_to_post_again() {
 
 #[test]
 fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
     let codes = [307, 308];
     for &code in codes.iter() {
         let redirect = server! {
@@ -196,7 +196,7 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
         let url = format!("http://{}/{}", redirect.addr(), code);
         let res = client
             .post(&url)
-            .body(reqwest::Body::new(&b"Hello"[..]))
+            .body(reqwest::blocking::Body::new(&b"Hello"[..]))
             .send()
             .unwrap();
         assert_eq!(res.url().as_str(), url);
@@ -204,8 +204,8 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
     }
 }
 
-#[test]
-fn test_redirect_removes_sensitive_headers() {
+#[tokio::test]
+async fn test_redirect_removes_sensitive_headers() {
     let end_server = server! {
         request: b"\
             GET /otherhost HTTP/1.1\r\n\
@@ -252,11 +252,12 @@ fn test_redirect_removes_sensitive_headers() {
             reqwest::header::HeaderValue::from_static("foo=bar"),
         )
         .send()
+        .await
         .unwrap();
 }
 
-#[test]
-fn test_redirect_policy_can_return_errors() {
+#[tokio::test]
+async fn test_redirect_policy_can_return_errors() {
     let server = server! {
         request: b"\
             GET /loop HTTP/1.1\r\n\
@@ -274,13 +275,13 @@ fn test_redirect_policy_can_return_errors() {
             \r\n\
             "
     };
-
-    let err = reqwest::get(&format!("http://{}/loop", server.addr())).unwrap_err();
+    let url = format!("http://{}/loop", server.addr());
+    let err = reqwest::get(&url).await.unwrap_err();
     assert!(err.is_redirect());
 }
 
-#[test]
-fn test_redirect_policy_can_stop_redirects_without_an_error() {
+#[tokio::test]
+async fn test_redirect_policy_can_stop_redirects_without_an_error() {
     let server = server! {
         request: b"\
             GET /no-redirect HTTP/1.1\r\n\
@@ -307,6 +308,7 @@ fn test_redirect_policy_can_stop_redirects_without_an_error() {
         .unwrap()
         .get(&url)
         .send()
+        .await
         .unwrap();
 
     assert_eq!(res.url().as_str(), url);
@@ -317,8 +319,8 @@ fn test_redirect_policy_can_stop_redirects_without_an_error() {
     );
 }
 
-#[test]
-fn test_referer_is_not_set_if_disabled() {
+#[tokio::test]
+async fn test_referer_is_not_set_if_disabled() {
     let server = server! {
         request: b"\
             GET /no-refer HTTP/1.1\r\n\
@@ -357,14 +359,14 @@ fn test_referer_is_not_set_if_disabled() {
         .referer(false)
         .build()
         .unwrap()
-        //client
         .get(&format!("http://{}/no-refer", server.addr()))
         .send()
+        .await
         .unwrap();
 }
 
-#[test]
-fn test_invalid_location_stops_redirect_gh484() {
+#[tokio::test]
+async fn test_invalid_location_stops_redirect_gh484() {
     let server = server! {
         request: b"\
             GET /yikes HTTP/1.1\r\n\
@@ -385,7 +387,7 @@ fn test_invalid_location_stops_redirect_gh484() {
 
     let url = format!("http://{}/yikes", server.addr());
 
-    let res = reqwest::get(&url).unwrap();
+    let res = reqwest::get(&url).await.unwrap();
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::FOUND);
@@ -395,8 +397,8 @@ fn test_invalid_location_stops_redirect_gh484() {
     );
 }
 
-#[test]
-fn test_redirect_302_with_set_cookies() {
+#[tokio::test]
+async fn test_redirect_302_with_set_cookies() {
     let code = 302;
     let client = reqwest::ClientBuilder::new()
         .cookie_store(true)
@@ -442,7 +444,7 @@ fn test_redirect_302_with_set_cookies() {
 
     let url = format!("http://{}/{}", server.addr(), code);
     let dst = format!("http://{}/{}", server.addr(), "dst");
-    let res = client.get(&url).send().unwrap();
+    let res = client.get(&url).send().await.unwrap();
 
     assert_eq!(res.url().as_str(), dst);
     assert_eq!(res.status(), reqwest::StatusCode::OK);

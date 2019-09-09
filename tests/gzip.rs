@@ -41,7 +41,7 @@ fn test_gzip_response() {
         write_timeout: Duration::from_millis(10),
         response: response
     };
-    let mut res = reqwest::get(&format!("http://{}/gzip", server.addr())).unwrap();
+    let mut res = reqwest::blocking::get(&format!("http://{}/gzip", server.addr())).unwrap();
 
     let mut body = String::new();
     res.read_to_string(&mut body).unwrap();
@@ -68,7 +68,7 @@ fn test_gzip_empty_body() {
             \r\n"
     };
 
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
     let mut res = client
         .head(&format!("http://{}/gzip", server.addr()))
         .send()
@@ -100,7 +100,7 @@ fn test_gzip_invalid_body() {
             0"
     };
 
-    let mut res = reqwest::get(&format!("http://{}/gzip", server.addr())).unwrap();
+    let mut res = reqwest::blocking::get(&format!("http://{}/gzip", server.addr())).unwrap();
     // this tests that the request.send() didn't error, but that the error
     // is in reading the body
 
@@ -126,7 +126,7 @@ fn test_accept_header_is_not_changed_if_set() {
             \r\n\
             "
     };
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
 
     let res = client
         .get(&format!("http://{}/accept", server.addr()))
@@ -158,7 +158,7 @@ fn test_accept_encoding_header_is_not_changed_if_set() {
             \r\n\
             "
     };
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
 
     let res = client
         .get(&format!("http://{}/accept-encoding", server.addr()))

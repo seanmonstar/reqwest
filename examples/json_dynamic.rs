@@ -4,7 +4,8 @@
 //! really care about the structure of the JSON and just need to display it or
 //! process it at runtime.
 
-fn main() -> Result<(), reqwest::Error> {
+#[tokio::main]
+async fn main() -> Result<(), reqwest::Error> {
     let echo_json: serde_json::Value = reqwest::Client::new()
         .post("https://jsonplaceholder.typicode.com/posts")
         .json(&serde_json::json!({
@@ -12,8 +13,10 @@ fn main() -> Result<(), reqwest::Error> {
             "body": "https://docs.rs/reqwest",
             "userId": 1
         }))
-        .send()?
-        .json()?;
+        .send()
+        .await?
+        .json()
+        .await?;
 
     println!("{:#?}", echo_json);
     // Object(

@@ -32,7 +32,7 @@ impl Body {
     ///
     /// ```rust
     /// # use std::fs::File;
-    /// # use reqwest::Body;
+    /// # use reqwest::blocking::Body;
     /// # fn run() -> Result<(), Box<std::error::Error>> {
     /// let file = File::open("national_secrets.txt")?;
     /// let body = Body::new(file);
@@ -45,7 +45,7 @@ impl Body {
     /// it can be reused.
     ///
     /// ```rust
-    /// # use reqwest::Body;
+    /// # use reqwest::blocking::Body;
     /// # fn run() -> Result<(), Box<std::error::Error>> {
     /// let s = "A stringy body";
     /// let body = Body::from(s);
@@ -64,7 +64,7 @@ impl Body {
     ///
     /// ```rust
     /// # use std::fs::File;
-    /// # use reqwest::Body;
+    /// # use reqwest::blocking::Body;
     /// # fn run() -> Result<(), Box<std::error::Error>> {
     /// let file = File::open("a_large_file.txt")?;
     /// let file_size = file.metadata()?.len();

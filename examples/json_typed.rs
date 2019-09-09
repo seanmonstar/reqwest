@@ -15,7 +15,8 @@ struct Post {
     user_id: i32,
 }
 
-fn main() -> Result<(), reqwest::Error> {
+#[tokio::main]
+async fn main() -> Result<(), reqwest::Error> {
     let new_post = Post {
         id: None,
         title: "Reqwest.rs".into(),
@@ -25,8 +26,10 @@ fn main() -> Result<(), reqwest::Error> {
     let new_post: Post = reqwest::Client::new()
         .post("https://jsonplaceholder.typicode.com/posts")
         .json(&new_post)
-        .send()?
-        .json()?;
+        .send()
+        .await?
+        .json()
+        .await?;
 
     println!("{:#?}", new_post);
     // Post {
