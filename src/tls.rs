@@ -97,17 +97,21 @@ impl Certificate {
         use std::io::Cursor;
 
         match self.original {
-            Cert::Der(buf) => try_!(tls
+            Cert::Der(buf) => tls
                 .root_store
                 .add(&::rustls::Certificate(buf))
-                .map_err(TLSError::WebPKIError)),
+                .map_err(|e| crate::error::from(TLSError::WebPKIError(e)))?,
             Cert::Pem(buf) => {
                 let mut pem = Cursor::new(buf);
-                let certs = try_!(pemfile::certs(&mut pem).map_err(|_| TLSError::General(
-                    String::from("No valid certificate was found")
-                )));
+                let certs = pemfile::certs(&mut pem).map_err(|_| {
+                    crate::error::from(TLSError::General(String::from(
+                        "No valid certificate was found",
+                    )))
+                })?;
                 for c in certs {
-                    try_!(tls.root_store.add(&c).map_err(TLSError::WebPKIError));
+                    tls.root_store
+                        .add(&c)
+                        .map_err(|e| crate::error::from(TLSError::WebPKIError(e)))?;
                 }
             }
         }
