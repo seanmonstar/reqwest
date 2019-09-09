@@ -50,10 +50,10 @@ native-tls = { version = "0.2", optional = true }
 tokio-tls = { version = "=0.3.0-alpha.4", optional = true }
 
 ## rustls-tls
-#hyper-rustls = { git = "https://github.com/dbcfd/hyper-rustls.git", branch = "master", optional = true }
-#rustls = { version = "0.16", features = ["dangerous_configuration"], optional = true }
-#tokio-rustls = { version = "=0.12.0-alpha.2", optional = true }
-#webpki-roots = { version = "0.17", optional = true }
+hyper-rustls = { version = "=0.18.0-alpha.1", optional = true }
+rustls = { version = "0.16", features = ["dangerous_configuration"], optional = true }
+tokio-rustls = { version = "=0.12.0-alpha.2", optional = true }
+webpki-roots = { version = "0.17", optional = true }
 
 ## socks
 #socks = { version = "0.3.2", optional = true }
@@ -77,7 +77,7 @@ tls = []
 default-tls = ["hyper-tls", "native-tls", "tls", "tokio-tls"]
 default-tls-vendored = ["default-tls", "native-tls/vendored"]
 
-#rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
+rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 
 #trust-dns = ["trust-dns-resolver"]
 
