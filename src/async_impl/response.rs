@@ -186,7 +186,7 @@ impl Response {
     /// # Example
     ///
     /// ```
-    /// # use reqwest::r#async::Response;
+    /// # use reqwest::Response;
     /// fn on_response(res: Response) {
     ///     match res.error_for_status() {
     ///         Ok(_res) => (),
@@ -216,7 +216,7 @@ impl Response {
     /// # Example
     ///
     /// ```
-    /// # use reqwest::r#async::Response;
+    /// # use reqwest::Response;
     /// fn on_response(res: &Response) {
     ///     match res.error_for_status_ref() {
     ///         Ok(_res) => (),
@@ -347,25 +347,6 @@ struct ResponseUrl(Url);
 pub trait ResponseBuilderExt {
     /// A builder method for the `http::response::Builder` type that allows the user to add a `Url`
     /// to the `http::Response`
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # extern crate url;
-    /// # extern crate http;
-    /// # extern crate reqwest;
-    /// # use std::error::Error;
-    /// use url::Url;
-    /// use http::response::Builder;
-    /// use reqwest::r#async::ResponseBuilderExt;
-    /// # fn main() -> Result<(), Box<dyn Error>> {
-    /// let response = Builder::new()
-    ///     .status(200)
-    ///     .url(Url::parse("http://example.com")?)
-    ///     .body(())?;
-    ///
-    /// #   Ok(())
-    /// # }
     fn url(&mut self, url: Url) -> &mut Self;
 }
 

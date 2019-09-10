@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! ```
-//! use reqwest::multipart;
+//! use reqwest::blocking::multipart;
 //!
 //! # fn run() -> Result<(), Box<dyn std::error::Error>> {
 //! let form = multipart::Form::new()
@@ -25,7 +25,7 @@
 //! let form = form.part("biography", bio);
 //!
 //! // And finally, send the form
-//! let client = reqwest::Client::new();
+//! let client = reqwest::blocking::Client::new();
 //! let resp = client
 //!     .post("http://localhost:8080/user")
 //!     .multipart(form)
@@ -44,8 +44,8 @@ use std::path::Path;
 
 use mime_guess::{self, Mime};
 
+use super::Body;
 use crate::async_impl::multipart::{FormParts, PartMetadata, PartProps};
-use crate::Body;
 
 /// A multipart/form-data request.
 pub struct Form {
@@ -77,7 +77,7 @@ impl Form {
     /// # Examples
     ///
     /// ```
-    /// let form = reqwest::multipart::Form::new()
+    /// let form = reqwest::blocking::multipart::Form::new()
     ///     .text("username", "seanmonstar")
     ///     .text("password", "secret");
     /// ```
@@ -97,7 +97,7 @@ impl Form {
     ///
     /// ```no_run
     /// # fn run() -> std::io::Result<()> {
-    /// let files = reqwest::multipart::Form::new()
+    /// let files = reqwest::blocking::multipart::Form::new()
     ///     .file("key", "/path/to/file")?;
     /// # Ok(())
     /// # }

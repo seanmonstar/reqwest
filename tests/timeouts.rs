@@ -11,7 +11,7 @@ fn timeout_closes_connection() {
 
     // Make Client drop *after* the Server, so the background doesn't
     // close too early.
-    let client = reqwest::Client::builder()
+    let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(500))
         .build()
         .unwrap();
@@ -50,7 +50,7 @@ fn write_timeout_large_body() {
 
     // Make Client drop *after* the Server, so the background doesn't
     // close too early.
-    let client = reqwest::Client::builder()
+    let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(500))
         .build()
         .unwrap();
@@ -80,7 +80,7 @@ fn write_timeout_large_body() {
     let url = format!("http://{}/write-timeout", server.addr());
     let err = client
         .post(&url)
-        .body(reqwest::Body::sized(cursor, len as u64))
+        .body(reqwest::blocking::Body::sized(cursor, len as u64))
         .send()
         .unwrap_err();
 
@@ -108,7 +108,7 @@ fn test_response_timeout() {
     };
 
     let url = format!("http://{}/response-timeout", server.addr());
-    let err = reqwest::Client::builder()
+    let err = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(500))
         .build()
         .unwrap()
@@ -142,7 +142,7 @@ fn test_read_timeout() {
     };
 
     let url = format!("http://{}/read-timeout", server.addr());
-    let mut res = reqwest::Client::builder()
+    let mut res = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(500))
         .build()
         .unwrap()

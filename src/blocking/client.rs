@@ -10,9 +10,10 @@ use futures::{StreamExt, TryFutureExt};
 
 use log::{error, trace};
 
-use crate::request::{Request, RequestBuilder};
-use crate::response::Response;
-use crate::{async_impl, header, wait, IntoUrl, Method, Proxy, RedirectPolicy};
+use super::request::{Request, RequestBuilder};
+use super::response::Response;
+use super::wait;
+use crate::{async_impl, header, IntoUrl, Method, Proxy, RedirectPolicy};
 #[cfg(feature = "tls")]
 use crate::{Certificate, Identity};
 
@@ -28,9 +29,9 @@ use crate::{Certificate, Identity};
 /// # Examples
 ///
 /// ```rust
-/// # use reqwest::{Error, Client};
+/// use reqwest::blocking::Client;
 /// #
-/// # fn run() -> Result<(), Error> {
+/// # fn run() -> Result<(), reqwest::Error> {
 /// let client = Client::new();
 /// let resp = client.get("http://httpbin.org/").send()?;
 /// #   drop(resp);
@@ -51,7 +52,7 @@ pub struct Client {
 /// # fn run() -> Result<(), reqwest::Error> {
 /// use std::time::Duration;
 ///
-/// let client = reqwest::Client::builder()
+/// let client = reqwest::blocking::Client::builder()
 ///     .gzip(true)
 ///     .timeout(Duration::from_secs(10))
 ///     .build()?;
@@ -130,7 +131,7 @@ impl ClientBuilder {
     /// let cert = reqwest::Certificate::from_der(&buf)?;
     ///
     /// // get a client builder
-    /// let client = reqwest::Client::builder()
+    /// let client = reqwest::blocking::Client::builder()
     ///     .add_root_certificate(cert)
     ///     .build()?;
     /// # drop(client);
@@ -170,7 +171,7 @@ impl ClientBuilder {
     /// let pkcs12 = reqwest::Identity::from_pem(&buf)?;
     ///
     /// // get a client builder
-    /// let client = reqwest::Client::builder()
+    /// let client = reqwest::blocking::Client::builder()
     ///     .identity(pkcs12)
     ///     .build()?;
     /// # drop(client);
@@ -224,7 +225,7 @@ impl ClientBuilder {
     /// headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("secret"));
     ///
     /// // get a client builder
-    /// let client = reqwest::Client::builder()
+    /// let client = reqwest::blocking::Client::builder()
     ///     .default_headers(headers)
     ///     .build()?;
     /// let res = client.get("https://www.rust-lang.org").send()?;
@@ -241,7 +242,7 @@ impl ClientBuilder {
     /// headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("secret"));
     ///
     /// // get a client builder
-    /// let client = reqwest::Client::builder()
+    /// let client = reqwest::blocking::Client::builder()
     ///     .default_headers(headers)
     ///     .build()?;
     /// let res = client
@@ -337,7 +338,7 @@ impl ClientBuilder {
     /// # Example
     ///
     /// ```
-    /// let client = reqwest::Client::builder()
+    /// let client = reqwest::blocking::Client::builder()
     ///     .h2_prior_knowledge()
     ///     .build().unwrap();
     /// ```
@@ -350,7 +351,7 @@ impl ClientBuilder {
     /// # Example
     ///
     /// ```
-    /// let client = reqwest::Client::builder()
+    /// let client = reqwest::blocking::Client::builder()
     ///     .http1_title_case_headers()
     ///     .build().unwrap();
     /// ```
@@ -365,7 +366,7 @@ impl ClientBuilder {
     /// ```
     /// use std::net::IpAddr;
     /// let local_addr = IpAddr::from([12, 4, 1, 8]);
-    /// let client = reqwest::Client::builder()
+    /// let client = reqwest::blocking::Client::builder()
     ///     .local_address(local_addr)
     ///     .build().unwrap();
     /// ```
@@ -386,7 +387,7 @@ impl ClientBuilder {
     /// # Example
     ///
     /// ```
-    /// let client = reqwest::Client::builder()
+    /// let client = reqwest::blocking::Client::builder()
     ///     .cookie_store(true)
     ///     .build()
     ///     .unwrap();

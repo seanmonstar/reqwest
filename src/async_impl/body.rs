@@ -33,7 +33,7 @@ impl Body {
     /// # Example
     ///
     /// ```
-    /// # use reqwest::r#async::Body;
+    /// # use reqwest::Body;
     /// # use futures;
     /// # fn main() {
     /// let chunks: Vec<Result<_, ::std::io::Error>> = vec![

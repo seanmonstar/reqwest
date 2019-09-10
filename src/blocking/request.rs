@@ -1,14 +1,16 @@
 use std::fmt;
 
 use base64::encode;
+use http::HttpTryFrom;
 use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
 
-use crate::body::{self, Body};
+use super::body::{self, Body};
+use super::multipart;
+use super::Client;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
-use crate::{async_impl, Client, Method, Url};
-use http::HttpTryFrom;
+use crate::{async_impl, Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -128,7 +130,7 @@ impl RequestBuilder {
     /// use reqwest::header::USER_AGENT;
     ///
     /// # fn run() -> Result<(), Box<std::error::Error>> {
-    /// let client = reqwest::Client::new();
+    /// let client = reqwest::blocking::Client::new();
     /// let res = client.get("https://www.rust-lang.org")
     ///     .header(USER_AGENT, "foo")
     ///     .send()?;
@@ -175,7 +177,7 @@ impl RequestBuilder {
     ///
     /// # fn run() -> Result<(), Box<std::error::Error>> {
     /// let file = fs::File::open("much_beauty.png")?;
-    /// let client = reqwest::Client::new();
+    /// let client = reqwest::blocking::Client::new();
     /// let res = client.post("http://httpbin.org/post")
     ///     .headers(construct_headers())
     ///     .body(file)
@@ -190,36 +192,11 @@ impl RequestBuilder {
         self
     }
 
-    /// Set a header with a type implementing hyper v0.11's `Header` trait.
-    ///
-    /// This method is provided to ease migration, and requires the `hyper-011`
-    /// Cargo feature enabled on `reqwest`.
-    #[cfg(feature = "hyper-011")]
-    pub fn header_011<H>(self, header: H) -> RequestBuilder
-    where
-        H: crate::hyper_011::header::Header,
-    {
-        let mut headers = crate::hyper_011::Headers::new();
-        headers.set(header);
-        let map = crate::header::HeaderMap::from(headers);
-        self.headers(map)
-    }
-
-    /// Set multiple headers using hyper v0.11's `Headers` map.
-    ///
-    /// This method is provided to ease migration, and requires the `hyper-011`
-    /// Cargo feature enabled on `reqwest`.
-    #[cfg(feature = "hyper-011")]
-    pub fn headers_011(self, headers: crate::hyper_011::Headers) -> RequestBuilder {
-        let map = crate::header::HeaderMap::from(headers);
-        self.headers(map)
-    }
-
     /// Enable HTTP basic authentication.
     ///
     /// ```rust
     /// # fn run() -> Result<(), Box<std::error::Error>> {
-    /// let client = reqwest::Client::new();
+    /// let client = reqwest::blocking::Client::new();
     /// let resp = client.delete("http://httpbin.org/delete")
     ///     .basic_auth("admin", Some("good password"))
     ///     .send()?;
@@ -243,7 +220,7 @@ impl RequestBuilder {
     ///
     /// ```rust
     /// # fn run() -> Result<(), Box<std::error::Error>> {
-    /// let client = reqwest::Client::new();
+    /// let client = reqwest::blocking::Client::new();
     /// let resp = client.delete("http://httpbin.org/delete")
     ///     .bearer_auth("token")
     ///     .send()?;
@@ -266,7 +243,7 @@ impl RequestBuilder {
     ///
     /// ```rust
     /// # fn run() -> Result<(), Box<std::error::Error>> {
-    /// let client = reqwest::Client::new();
+    /// let client = reqwest::blocking::Client::new();
     /// let res = client.post("http://httpbin.org/post")
     ///     .body("from a &str!")
     ///     .send()?;
@@ -277,10 +254,9 @@ impl RequestBuilder {
     /// Using a `File`:
     ///
     /// ```rust
-    /// # use std::fs;
     /// # fn run() -> Result<(), Box<std::error::Error>> {
-    /// let file = fs::File::open("from_a_file.txt")?;
-    /// let client = reqwest::Client::new();
+    /// let file = std::fs::File::open("from_a_file.txt")?;
+    /// let client = reqwest::blocking::Client::new();
     /// let res = client.post("http://httpbin.org/post")
     ///     .body(file)
     ///     .send()?;
@@ -295,7 +271,7 @@ impl RequestBuilder {
     /// # fn run() -> Result<(), Box<std::error::Error>> {
     /// // from bytes!
     /// let bytes: Vec<u8> = vec![1, 10, 100];
-    /// let client = reqwest::Client::new();
+    /// let client = reqwest::blocking::Client::new();
     /// let res = client.post("http://httpbin.org/post")
     ///     .body(bytes)
     ///     .send()?;
@@ -322,7 +298,7 @@ impl RequestBuilder {
     /// # use reqwest::Error;
     /// #
     /// # fn run() -> Result<(), Error> {
-    /// let client = reqwest::Client::new();
+    /// let client = reqwest::blocking::Client::new();
     /// let res = client.get("http://httpbin.org")
     ///     .query(&[("lang", "rust")])
     ///     .send()?;
@@ -375,7 +351,7 @@ impl RequestBuilder {
     /// let mut params = HashMap::new();
     /// params.insert("lang", "rust");
     ///
-    /// let client = reqwest::Client::new();
+    /// let client = reqwest::blocking::Client::new();
     /// let res = client.post("http://httpbin.org")
     ///     .form(&params)
     ///     .send()?;
@@ -420,7 +396,7 @@ impl RequestBuilder {
     /// let mut map = HashMap::new();
     /// map.insert("lang", "rust");
     ///
-    /// let client = reqwest::Client::new();
+    /// let client = reqwest::blocking::Client::new();
     /// let res = client.post("http://httpbin.org")
     ///     .json(&map)
     ///     .send()?;
@@ -456,8 +432,8 @@ impl RequestBuilder {
     /// # use reqwest::Error;
     ///
     /// # fn run() -> Result<(), Box<std::error::Error>> {
-    /// let client = reqwest::Client::new();
-    /// let form = reqwest::multipart::Form::new()
+    /// let client = reqwest::blocking::Client::new();
+    /// let form = reqwest::blocking::multipart::Form::new()
     ///     .text("key3", "value3")
     ///     .file("file", "/path/to/field")?;
     ///
@@ -469,7 +445,7 @@ impl RequestBuilder {
     /// ```
     ///
     /// See [`multipart`](multipart/) for more examples.
-    pub fn multipart(self, mut multipart: crate::multipart::Form) -> RequestBuilder {
+    pub fn multipart(self, mut multipart: multipart::Form) -> RequestBuilder {
         let mut builder = self.header(
             CONTENT_TYPE,
             format!("multipart/form-data; boundary={}", multipart.boundary()).as_str(),
@@ -495,7 +471,7 @@ impl RequestBuilder {
     ///
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
-    pub fn send(self) -> crate::Result<crate::Response> {
+    pub fn send(self) -> crate::Result<super::Response> {
         self.client.execute(self.request?)
     }
 
@@ -510,7 +486,7 @@ impl RequestBuilder {
     ///
     /// ```rust
     /// # fn run() -> Result<(), Box<std::error::Error>> {
-    /// let client = reqwest::Client::new();
+    /// let client = reqwest::blocking::Client::new();
     /// let builder = client.post("http://httpbin.org/post")
     ///     .body("from a &str!");
     /// let clone = builder.try_clone();
@@ -523,7 +499,7 @@ impl RequestBuilder {
     ///
     /// ```rust
     /// # fn run() -> Result<(), Box<std::error::Error>> {
-    /// let client = reqwest::Client::new();
+    /// let client = reqwest::blocking::Client::new();
     /// let builder = client.get("http://httpbin.org/get");
     /// let clone = builder.try_clone();
     /// assert!(clone.is_some());
@@ -535,9 +511,9 @@ impl RequestBuilder {
     ///
     /// ```rust
     /// # fn run() -> Result<(), Box<std::error::Error>> {
-    /// let client = reqwest::Client::new();
+    /// let client = reqwest::blocking::Client::new();
     /// let builder = client.get("http://httpbin.org/get")
-    ///     .body(reqwest::Body::new(std::io::empty()));
+    ///     .body(reqwest::blocking::Body::new(std::io::empty()));
     /// let clone = builder.try_clone();
     /// assert!(clone.is_none());
     /// # Ok(())
@@ -572,8 +548,9 @@ fn fmt_request_fields<'a, 'b>(
 
 #[cfg(test)]
 mod tests {
+    use super::super::{body, Client};
     use crate::header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE, HOST};
-    use crate::{body, Client, Method};
+    use crate::Method;
     use serde::Serialize;
     use serde_json;
     use serde_urlencoded;

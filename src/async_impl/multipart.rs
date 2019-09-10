@@ -61,7 +61,7 @@ impl Form {
     /// # Examples
     ///
     /// ```
-    /// let form = reqwest::r#async::multipart::Form::new()
+    /// let form = reqwest::multipart::Form::new()
     ///     .text("username", "seanmonstar")
     ///     .text("password", "secret");
     /// ```

@@ -5,7 +5,7 @@ mod support;
 fn text_part() {
     let _ = env_logger::try_init();
 
-    let form = reqwest::multipart::Form::new().text("foo", "bar");
+    let form = reqwest::blocking::multipart::Form::new().text("foo", "bar");
 
     let expected_body = format!(
         "\
@@ -39,7 +39,7 @@ fn text_part() {
 
     let url = format!("http://{}/multipart/1", server.addr());
 
-    let res = reqwest::Client::new()
+    let res = reqwest::blocking::Client::new()
         .post(&url)
         .multipart(form)
         .send()
@@ -53,7 +53,7 @@ fn text_part() {
 fn file() {
     let _ = env_logger::try_init();
 
-    let form = reqwest::multipart::Form::new()
+    let form = reqwest::blocking::multipart::Form::new()
         .file("foo", "Cargo.lock")
         .unwrap();
 
@@ -93,7 +93,7 @@ fn file() {
 
     let url = format!("http://{}/multipart/2", server.addr());
 
-    let res = reqwest::Client::new()
+    let res = reqwest::blocking::Client::new()
         .post(&url)
         .multipart(form)
         .send()

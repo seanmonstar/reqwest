@@ -20,13 +20,29 @@ preparing breaking changes, for most recently released code, look to the
 
 ## Example
 
-```rust,no_run
-extern crate reqwest;
+Async:
 
+```rust,no_run
+use std::collections::HashMap;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<std::error::Error>> {
+    let resp: HashMap<String, String> = reqwest::get("https://httpbin.org/ip")
+        .await?
+        .json()
+        .await?;
+    println!("{:#?}", resp);
+    Ok(())
+}
+```
+
+Blocking:
+
+```rust,no_run
 use std::collections::HashMap;
 
 fn main() -> Result<(), Box<std::error::Error>> {
-    let resp: HashMap<String, String> = reqwest::get("https://httpbin.org/ip")?
+    let resp: HashMap<String, String> = reqwest::blocking::get("https://httpbin.org/ip")?
         .json()?;
     println!("{:#?}", resp);
     Ok(())

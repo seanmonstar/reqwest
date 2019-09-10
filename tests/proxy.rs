@@ -3,8 +3,8 @@ mod support;
 
 use std::env;
 
-#[test]
-fn http_proxy() {
+#[tokio::test]
+async fn http_proxy() {
     let server = server! {
         request: b"\
             GET http://hyper.rs/prox HTTP/1.1\r\n\
@@ -31,6 +31,7 @@ fn http_proxy() {
         .unwrap()
         .get(url)
         .send()
+        .await
         .unwrap();
 
     assert_eq!(res.url().as_str(), url);
@@ -41,8 +42,8 @@ fn http_proxy() {
     );
 }
 
-#[test]
-fn http_proxy_basic_auth() {
+#[tokio::test]
+async fn http_proxy_basic_auth() {
     let server = server! {
         request: b"\
             GET http://hyper.rs/prox HTTP/1.1\r\n\
@@ -74,6 +75,7 @@ fn http_proxy_basic_auth() {
         .unwrap()
         .get(url)
         .send()
+        .await
         .unwrap();
 
     assert_eq!(res.url().as_str(), url);
@@ -84,8 +86,8 @@ fn http_proxy_basic_auth() {
     );
 }
 
-#[test]
-fn http_proxy_basic_auth_parsed() {
+#[tokio::test]
+async fn http_proxy_basic_auth_parsed() {
     let server = server! {
         request: b"\
             GET http://hyper.rs/prox HTTP/1.1\r\n\
@@ -113,6 +115,7 @@ fn http_proxy_basic_auth_parsed() {
         .unwrap()
         .get(url)
         .send()
+        .await
         .unwrap();
 
     assert_eq!(res.url().as_str(), url);
@@ -123,8 +126,8 @@ fn http_proxy_basic_auth_parsed() {
     );
 }
 
-#[test]
-fn test_no_proxy() {
+#[tokio::test]
+async fn test_no_proxy() {
     let server = server! {
         request: b"\
             GET /4 HTTP/1.1\r\n\
@@ -152,14 +155,15 @@ fn test_no_proxy() {
         .unwrap()
         .get(&url)
         .send()
+        .await
         .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
-#[test]
-fn test_using_system_proxy() {
+#[tokio::test]
+async fn test_using_system_proxy() {
     let server = server! {
         request: b"\
             GET http://hyper.rs/prox HTTP/1.1\r\n\
@@ -188,6 +192,7 @@ fn test_using_system_proxy() {
         .unwrap()
         .get(url)
         .send()
+        .await
         .unwrap();
 
     assert_eq!(res.url().as_str(), url);

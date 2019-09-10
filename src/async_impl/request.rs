@@ -194,8 +194,8 @@ impl RequestBuilder {
     /// # use reqwest::Error;
     ///
     /// # async fn run() -> Result<(), Error> {
-    /// let client = reqwest::r#async::Client::new();
-    /// let form = reqwest::r#async::multipart::Form::new()
+    /// let client = reqwest::Client::new();
+    /// let form = reqwest::multipart::Form::new()
     ///     .text("key3", "value3")
     ///     .text("key4", "value4");
     ///
@@ -329,7 +329,7 @@ impl RequestBuilder {
     /// # use reqwest::Error;
     /// #
     /// # async fn run() -> Result<(), Error> {
-    /// let response = reqwest::r#async::Client::new()
+    /// let response = reqwest::Client::new()
     ///     .get("https://hyper.rs")
     ///     .send()
     ///     .await?;

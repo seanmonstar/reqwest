@@ -1,19 +1,17 @@
-//! `cargo run --example simple`
 #![deny(warnings)]
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::init();
-
-    println!("GET https://www.rust-lang.org");
-
-    let mut res = reqwest::get("https://www.rust-lang.org/")?;
+#[tokio::main]
+async fn main() -> Result<(), reqwest::Error> {
+    let mut res = reqwest::Client::new()
+        .get("https://hyper.rs")
+        .send()
+        .await?;
 
     println!("Status: {}", res.status());
-    println!("Headers:\n{:?}", res.headers());
 
-    // copy the response body directly to stdout
-    res.copy_to(&mut std::io::stdout())?;
+    let body = res.text().await?;
 
-    println!("\n\nDone.");
+    println!("Body:\n\n{}", body);
+
     Ok(())
 }
