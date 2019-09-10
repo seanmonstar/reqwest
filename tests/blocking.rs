@@ -22,7 +22,7 @@ fn test_response_text() {
     };
 
     let url = format!("http://{}/text", server.addr());
-    let mut res = reqwest::blocking::get(&url).unwrap();
+    let res = reqwest::blocking::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
@@ -57,7 +57,7 @@ fn test_response_non_utf_8_text() {
     };
 
     let url = format!("http://{}/text", server.addr());
-    let mut res = reqwest::blocking::get(&url).unwrap();
+    let res = reqwest::blocking::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
@@ -92,7 +92,7 @@ fn test_response_json() {
     };
 
     let url = format!("http://{}/json", server.addr());
-    let mut res = reqwest::blocking::get(&url).unwrap();
+    let res = reqwest::blocking::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
@@ -126,7 +126,7 @@ fn test_response_copy_to() {
     };
 
     let url = format!("http://{}/1", server.addr());
-    let mut res = reqwest::blocking::get(&url).unwrap();
+    let res = reqwest::blocking::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
@@ -158,7 +158,7 @@ fn test_get() {
     };
 
     let url = format!("http://{}/1", server.addr());
-    let mut res = reqwest::blocking::get(&url).unwrap();
+    let res = reqwest::blocking::get(&url).unwrap();
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
@@ -194,7 +194,7 @@ fn test_post() {
     };
 
     let url = format!("http://{}/2", server.addr());
-    let mut res = reqwest::blocking::Client::new()
+    let res = reqwest::blocking::Client::new()
         .post(&url)
         .body("Hello")
         .send()

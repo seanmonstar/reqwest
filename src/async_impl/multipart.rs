@@ -7,7 +7,7 @@ use mime_guess::Mime;
 use percent_encoding::{self, AsciiSet, NON_ALPHANUMERIC};
 use uuid::Uuid;
 
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 
 use super::Body;
 
@@ -137,7 +137,7 @@ impl Form {
         hyper::Body::wrap_stream(
             boundary
                 .chain(header)
-                .chain(hyper::Body::wrap_stream(part.value))
+                .chain(hyper::Body::wrap_stream(part.value.into_stream()))
                 .chain(hyper::Body::from("\r\n".to_owned())),
         )
     }
@@ -190,15 +190,8 @@ impl Part {
     }
 
     /// Makes a new parameter from an arbitrary stream.
-    pub fn stream<T, I, E>(value: T) -> Part
-    where
-        T: Stream<Item = Result<I, E>> + Send + Sync + 'static,
-        E: std::error::Error + Send + Sync + 'static,
-        hyper::Chunk: std::convert::From<I>,
-    {
-        Part::new(Body::wrap(hyper::Body::wrap_stream(
-            value.map(|chunk| chunk.into()),
-        )))
+    pub fn stream<T: Into<Body>>(value: T) -> Part {
+        Part::new(value.into())
     }
 
     fn new(value: Body) -> Part {
@@ -500,21 +493,17 @@ mod tests {
         let mut form = Form::new()
             .part(
                 "reader1",
-                Part::stream(futures::stream::once(futures::future::ready::<
-                    Result<hyper::Chunk, hyper::Error>,
-                >(Ok(
-                    hyper::Chunk::from("part1".to_owned()),
-                )))),
+                Part::stream(Body::wrap_stream(futures::stream::once(
+                    futures::future::ready::<Result<String, crate::Error>>(Ok("part1".to_owned())),
+                ))),
             )
             .part("key1", Part::text("value1"))
             .part("key2", Part::text("value2").mime(mime::IMAGE_BMP))
             .part(
                 "reader2",
-                Part::stream(futures::stream::once(futures::future::ready::<
-                    Result<hyper::Chunk, hyper::Error>,
-                >(Ok(
-                    hyper::Chunk::from("part2".to_owned()),
-                )))),
+                Part::stream(Body::wrap_stream(futures::stream::once(
+                    futures::future::ready::<Result<String, crate::Error>>(Ok("part2".to_owned())),
+                ))),
             )
             .part("key3", Part::text("value3").file_name("filename"));
         form.inner.boundary = "boundary".to_string();

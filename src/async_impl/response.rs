@@ -1,13 +1,10 @@
 use std::borrow::Cow;
 use std::fmt;
-use std::marker::PhantomData;
-use std::mem;
 use std::net::SocketAddr;
-use std::pin::Pin;
-use std::task::{Context, Poll};
 
+use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
-use futures::{Future, FutureExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt};
 use http;
 use hyper::client::connect::HttpInfo;
 use hyper::header::CONTENT_LENGTH;
@@ -21,11 +18,7 @@ use url::Url;
 
 use super::body::Body;
 use super::Decoder;
-use crate::async_impl::Chunk;
 use crate::cookie;
-
-/// https://github.com/rust-lang-nursery/futures-rs/issues/1812
-type ConcatDecoder = Pin<Box<dyn Future<Output = Result<Chunk, crate::Error>> + Send>>;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -71,6 +64,12 @@ impl Response {
         self.status
     }
 
+    /// Get the HTTP `Version` of this `Response`.
+    #[inline]
+    pub fn version(&self) -> Version {
+        self.version
+    }
+
     /// Get the `Headers` of this `Response`.
     #[inline]
     pub fn headers(&self) -> &HeaderMap {
@@ -81,6 +80,20 @@ impl Response {
     #[inline]
     pub fn headers_mut(&mut self) -> &mut HeaderMap {
         &mut self.headers
+    }
+
+    /// Get the content-length of this response, if known.
+    ///
+    /// Reasons it may not be known:
+    ///
+    /// - The server didn't send a `content-length` header.
+    /// - The response is gzipped and automatically decoded (thus changing
+    ///   the actual decoded length).
+    pub fn content_length(&self) -> Option<u64> {
+        self.headers()
+            .get(CONTENT_LENGTH)
+            .and_then(|ct_len| ct_len.to_str().ok())
+            .and_then(|ct_len| ct_len.parse().ok())
     }
 
     /// Retrieve the cookies contained in the response.
@@ -103,57 +116,55 @@ impl Response {
             .map(|info| info.remote_addr())
     }
 
-    /// Get the content-length of this response, if known.
+    // body methods
+
+    /// Get the full response text.
     ///
-    /// Reasons it may not be known:
+    /// This method decodes the response body with BOM sniffing
+    /// and with malformed sequences replaced with the REPLACEMENT CHARACTER.
+    /// Encoding is determinated from the `charset` parameter of `Content-Type` header,
+    /// and defaults to `utf-8` if not presented.
     ///
-    /// - The server didn't send a `content-length` header.
-    /// - The response is gzipped and automatically decoded (thus changing
-    ///   the actual decoded length).
-    pub fn content_length(&self) -> Option<u64> {
-        self.headers()
-            .get(CONTENT_LENGTH)
-            .and_then(|ct_len| ct_len.to_str().ok())
-            .and_then(|ct_len| ct_len.parse().ok())
-    }
-
-    /// Consumes the response, returning the body
-    pub fn into_body(self) -> Decoder {
-        self.body
-    }
-
-    /// Get a reference to the response body.
-    #[inline]
-    pub fn body(&self) -> &Decoder {
-        &self.body
-    }
-
-    /// Get a mutable reference to the response body.
+    /// # Example
     ///
-    /// The chunks from the body may be decoded, depending on the `gzip`
-    /// option on the `ClientBuilder`.
-    #[inline]
-    pub fn body_mut(&mut self) -> &mut Decoder {
-        &mut self.body
+    /// ```
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// let content = reqwest::get("http://httpbin.org/range/26")
+    ///     .await?
+    ///     .text()
+    ///     .await?;
+    ///
+    /// println!("text: {:?}", content);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn text(self) -> crate::Result<String> {
+        self.text_with_charset("utf-8").await
     }
 
-    /// Get the HTTP `Version` of this `Response`.
-    #[inline]
-    pub fn version(&self) -> Version {
-        self.version
-    }
-
-    /// Get the response text
-    pub fn text(&mut self) -> impl Future<Output = Result<String, crate::Error>> {
-        self.text_with_charset("utf-8")
-    }
-
-    /// Get the response text given a specific encoding
-    pub fn text_with_charset(
-        &mut self,
-        default_encoding: &str,
-    ) -> impl Future<Output = Result<String, crate::Error>> {
-        let body = mem::replace(&mut self.body, Decoder::empty());
+    /// Get the full response text given a specific encoding.
+    ///
+    /// This method decodes the response body with BOM sniffing
+    /// and with malformed sequences replaced with the REPLACEMENT CHARACTER.
+    /// You can provide a default encoding for decoding the raw message, while the
+    /// `charset` parameter of `Content-Type` header is still prioritized. For more information
+    /// about the possible encoding name, please go to
+    /// https://docs.rs/encoding_rs/0.8.17/encoding_rs/#relationship-with-windows-code-pages
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// let content = reqwest::get("http://httpbin.org/range/26")
+    ///     .await?
+    ///     .text_with_charset("utf-8")
+    ///     .await?;
+    ///
+    /// println!("text: {:?}", content);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn text_with_charset(self, default_encoding: &str) -> crate::Result<String> {
         let content_type = self
             .headers
             .get(crate::header::CONTENT_TYPE)
@@ -164,22 +175,105 @@ impl Response {
             .and_then(|mime| mime.get_param("charset").map(|charset| charset.as_str()))
             .unwrap_or(default_encoding);
         let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);
-        Text {
-            concat: body.try_concat().boxed(),
-            encoding,
+
+        let full = self.bytes().await?;
+
+        let (text, _, _) = encoding.decode(&full);
+        if let Cow::Owned(s) = text {
+            return Ok(s);
+        }
+        unsafe {
+            // decoding returned Cow::Borrowed, meaning these bytes
+            // are already valid utf8
+            Ok(String::from_utf8_unchecked(full.to_vec()))
         }
     }
 
-    /// Try to deserialize the response body as JSON using `serde`.
-    #[inline]
-    pub fn json<T: DeserializeOwned>(&mut self) -> impl Future<Output = Result<T, crate::Error>> {
-        let body = mem::replace(&mut self.body, Decoder::empty());
+    /// Try to deserialize the response body as JSON.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate reqwest;
+    /// # extern crate serde;
+    /// #
+    /// # use reqwest::Error;
+    /// # use serde::Deserialize;
+    /// #
+    /// #[derive(Deserialize)]
+    /// struct Ip {
+    ///     origin: String,
+    /// }
+    ///
+    /// # async fn run() -> Result<(), Error> {
+    /// let ip = reqwest::get("http://httpbin.org/ip")
+    ///     .await?
+    ///     .json::<Ip>()
+    ///     .await?;
+    ///
+    /// println!("ip: {}", ip.origin);
+    /// # Ok(())
+    /// # }
+    /// #
+    /// # fn main() { }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever the response body is not in JSON format
+    /// or it cannot be properly deserialized to target type `T`. For more
+    /// details please see [`serde_json::from_reader`].
+    /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
+    pub async fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
+        let full = self.bytes().await?;
 
-        Json {
-            concat: body.try_concat().boxed(),
-            _marker: PhantomData,
+        serde_json::from_slice(&full).map_err(crate::error::from)
+    }
+
+    /// Get the full response body as `Bytes`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// let bytes = reqwest::get("http://httpbin.org/ip")
+    ///     .await?
+    ///     .bytes()
+    ///     .await?;
+    ///
+    /// println!("bytes: {:?}", bytes);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn bytes(self) -> crate::Result<Bytes> {
+        self.body.try_concat().await
+    }
+
+    /// Stream a chunk of the response body.
+    ///
+    /// When the response body has been exhausted, this will return `None`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut res = reqwest::get("https://hyper.rs").await?;
+    ///
+    /// while let Some(chunk) = res.chunk().await? {
+    ///     println!("Chunk: {:?}", chunk);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn chunk(&mut self) -> crate::Result<Option<Bytes>> {
+        if let Some(item) = self.body.next().await {
+            Ok(Some(item?))
+        } else {
+            Ok(None)
         }
     }
+
+    // util methods
 
     /// Turn a response into an error if the server returned an error.
     ///
@@ -202,7 +296,6 @@ impl Response {
     /// }
     /// # fn main() {}
     /// ```
-    #[inline]
     pub fn error_for_status(self) -> crate::Result<Self> {
         if self.status.is_client_error() || self.status.is_server_error() {
             Err(crate::error::status_code(*self.url, self.status))
@@ -232,13 +325,23 @@ impl Response {
     /// }
     /// # fn main() {}
     /// ```
-    #[inline]
     pub fn error_for_status_ref(&self) -> crate::Result<&Self> {
         if self.status.is_client_error() || self.status.is_server_error() {
             Err(crate::error::status_code(*self.url.clone(), self.status))
         } else {
             Ok(self)
         }
+    }
+
+    // private
+
+    // The Response's body is an implementation detail.
+    // You no longer need to get a reference to it, there are async methods
+    // on the `Response` itself.
+    //
+    // This method is just used by the blocking API.
+    pub(crate) fn body_mut(&mut self) -> &mut Decoder {
+        &mut self.body
     }
 }
 
@@ -273,68 +376,10 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
     }
 }
 
-/// A JSON object.
-struct Json<T> {
-    concat: ConcatDecoder,
-    _marker: PhantomData<T>,
-}
-
-impl<T> Json<T> {
-    fn concat(self: Pin<&mut Self>) -> Pin<&mut ConcatDecoder> {
-        unsafe { Pin::map_unchecked_mut(self, |x| &mut x.concat) }
-    }
-}
-
-impl<T: DeserializeOwned> Future for Json<T> {
-    type Output = Result<T, crate::Error>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match futures::ready!(self.concat().as_mut().poll(cx)) {
-            Err(e) => Poll::Ready(Err(e)),
-            Ok(chunk) => {
-                let t = serde_json::from_slice(&chunk).map_err(crate::error::from);
-                Poll::Ready(t)
-            }
-        }
-    }
-}
-
-impl<T> fmt::Debug for Json<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Json").finish()
-    }
-}
-
-//#[derive(Debug)]
-struct Text {
-    concat: ConcatDecoder,
-    encoding: &'static Encoding,
-}
-
-impl Text {
-    fn concat(self: Pin<&mut Self>) -> Pin<&mut ConcatDecoder> {
-        unsafe { Pin::map_unchecked_mut(self, |x| &mut x.concat) }
-    }
-}
-
-impl Future for Text {
-    type Output = Result<String, crate::Error>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match futures::ready!(self.as_mut().concat().as_mut().poll(cx)) {
-            Err(e) => Poll::Ready(Err(e)),
-            Ok(chunk) => {
-                let (text, _, _) = self.as_mut().encoding.decode(&chunk);
-                if let Cow::Owned(s) = text {
-                    return Poll::Ready(Ok(s));
-                }
-                unsafe {
-                    // decoding returned Cow::Borrowed, meaning these bytes
-                    // are already valid utf8
-                    Poll::Ready(Ok(String::from_utf8_unchecked(chunk.to_vec())))
-                }
-            }
-        }
+/// A `Response` can be piped as the `Body` of another request.
+impl From<Response> for Body {
+    fn from(r: Response) -> Body {
+        Body::wrap_stream(r.body)
     }
 }
 

@@ -187,8 +187,8 @@ pub use hyper::{StatusCode, Version};
 pub use url::ParseError as UrlError;
 pub use url::Url;
 
-pub use self::r#async::{
-    multipart, Body, Client, ClientBuilder, Decoder, Request, RequestBuilder, Response,
+pub use self::async_impl::{
+    multipart, Body, Client, ClientBuilder, Request, RequestBuilder, Response,
 };
 //pub use self::body::Body;
 //pub use self::client::{Client, ClientBuilder};
@@ -223,7 +223,7 @@ mod tls;
 #[deprecated(note = "types moved to top of crate")]
 pub mod r#async {
     pub use crate::async_impl::{
-        multipart, Body, Chunk, Client, ClientBuilder, Decoder, Request, RequestBuilder, Response,
+        multipart, Body, Client, ClientBuilder, Request, RequestBuilder, Response,
     };
 }
 
