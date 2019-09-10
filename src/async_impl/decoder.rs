@@ -17,36 +17,38 @@ use std::mem;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use async_compression::stream::GzipDecoder;
 use bytes::Bytes;
+use futures::stream::Peekable;
 use futures::Stream;
 use hyper::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
 use hyper::HeaderMap;
 
 use log::warn;
 
-use super::{Body, Chunk};
+use super::Body;
 use crate::error;
 
 /// A response decompressor over a non-blocking stream of chunks.
 ///
 /// The inner decoder may be constructed asynchronously.
-pub struct Decoder {
+pub(crate) struct Decoder {
     inner: Inner,
 }
 
 enum Inner {
     /// A `PlainText` decoder just returns the response content as is.
-    PlainText(Body),
+    PlainText(super::body::ImplStream),
     /// A `Gzip` decoder will uncompress the gzipped response content before returning it.
-    Gzip(async_compression::stream::GzipDecoder<futures::stream::Peekable<BodyBytes>>),
+    Gzip(GzipDecoder<Peekable<IoStream>>),
     /// A decoder that doesn't have a value yet.
     Pending(Pending),
 }
 
 /// A future attempt to poll the response body for EOF so we know whether to use gzip or not.
-struct Pending(futures::stream::Peekable<BodyBytes>);
+struct Pending(Peekable<IoStream>);
 
-struct BodyBytes(Body);
+struct IoStream(super::body::ImplStream);
 
 impl fmt::Debug for Decoder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -59,9 +61,9 @@ impl Decoder {
     ///
     /// This decoder will produce a single 0 byte chunk.
     #[inline]
-    pub fn empty() -> Decoder {
+    pub(crate) fn empty() -> Decoder {
         Decoder {
-            inner: Inner::PlainText(Body::empty()),
+            inner: Inner::PlainText(Body::empty().into_stream()),
         }
     }
 
@@ -70,7 +72,7 @@ impl Decoder {
     /// This decoder will emit the underlying chunks as-is.
     fn plain_text(body: Body) -> Decoder {
         Decoder {
-            inner: Inner::PlainText(body),
+            inner: Inner::PlainText(body.into_stream()),
         }
     }
 
@@ -81,7 +83,7 @@ impl Decoder {
         use futures::stream::StreamExt;
 
         Decoder {
-            inner: Inner::Pending(Pending(BodyBytes(body).peekable())),
+            inner: Inner::Pending(Pending(IoStream(body.into_stream()).peekable())),
         }
     }
 
@@ -128,7 +130,7 @@ impl Decoder {
 }
 
 impl Stream for Decoder {
-    type Item = Result<Chunk, error::Error>;
+    type Item = Result<Bytes, error::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         // Do a read or poll for a pending decoder value.
@@ -141,7 +143,7 @@ impl Stream for Decoder {
             Inner::PlainText(ref mut body) => return Pin::new(body).poll_next(cx),
             Inner::Gzip(ref mut decoder) => {
                 return match futures::ready!(Pin::new(decoder).poll_next(cx)) {
-                    Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.into()))),
+                    Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::from_io(err)))),
                     None => Poll::Ready(None),
                 }
@@ -169,22 +171,23 @@ impl Future for Pending {
                     .expect("just peeked Some")
                     .unwrap_err()));
             }
-            None => return Poll::Ready(Ok(Inner::PlainText(Body::empty()))),
+            None => return Poll::Ready(Ok(Inner::PlainText(Body::empty().into_stream()))),
         };
 
-        let body = mem::replace(&mut self.0, BodyBytes(Body::empty()).peekable());
-        Poll::Ready(Ok(Inner::Gzip(
-            async_compression::stream::GzipDecoder::new(body),
-        )))
+        let body = mem::replace(
+            &mut self.0,
+            IoStream(Body::empty().into_stream()).peekable(),
+        );
+        Poll::Ready(Ok(Inner::Gzip(GzipDecoder::new(body))))
     }
 }
 
-impl Stream for BodyBytes {
+impl Stream for IoStream {
     type Item = Result<Bytes, std::io::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         match futures::ready!(Pin::new(&mut self.0).poll_next(cx)) {
-            Some(Ok(chunk)) => Poll::Ready(Some(Ok(chunk.into()))),
+            Some(Ok(chunk)) => Poll::Ready(Some(Ok(chunk))),
             Some(Err(err)) => Poll::Ready(Some(Err(err.into_io()))),
             None => Poll::Ready(None),
         }

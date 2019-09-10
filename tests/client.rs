@@ -4,8 +4,6 @@ mod support;
 use std::io::Write;
 use std::time::Duration;
 
-use futures::TryStreamExt;
-
 use reqwest::multipart::{Form, Part};
 use reqwest::{Body, Client};
 
@@ -44,7 +42,7 @@ async fn response_text() {
 
     let client = Client::new();
 
-    let mut res = client
+    let res = client
         .get(&format!("http://{}/text", server.addr()))
         .send()
         .await
@@ -76,7 +74,7 @@ async fn response_json() {
 
     let client = Client::new();
 
-    let mut res = client
+    let res = client
         .get(&format!("http://{}/json", server.addr()))
         .send()
         .await
@@ -89,9 +87,12 @@ async fn response_json() {
 async fn multipart() {
     let _ = env_logger::try_init();
 
-    let stream = futures::stream::once(futures::future::ready::<Result<_, hyper::Error>>(Ok(
-        hyper::Chunk::from("part1 part2".to_owned()),
-    )));
+    let stream = reqwest::Body::wrap_stream(futures::stream::once(futures::future::ready(Ok::<
+        _,
+        reqwest::Error,
+    >(
+        "part1 part2".to_owned(),
+    ))));
     let part = Part::stream(stream);
 
     let form = Form::new().text("foo", "bar").part("part_stream", part);
@@ -221,7 +222,7 @@ async fn response_timeout() {
 
     let url = format!("http://{}/slow", server.addr());
     let res = client.get(&url).send().await.expect("Failed to get");
-    let body: Result<_, _> = res.into_body().try_concat().await;
+    let body = res.text().await;
 
     let err = body.unwrap_err();
 
@@ -269,7 +270,7 @@ async fn gzip_case(response_size: usize, chunk_size: usize) {
 
     let client = Client::new();
 
-    let mut res = client
+    let res = client
         .get(&format!("http://{}/gzip", server.addr()))
         .send()
         .await
@@ -322,4 +323,67 @@ async fn body_stream() {
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
+#[tokio::test]
+async fn body_pipe_response() {
+    let _ = env_logger::try_init();
+
+    let server = server! {
+        request: b"\
+            GET /get HTTP/1.1\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Server: pipe\r\n\
+            Content-Length: 7\r\n\
+            \r\n\
+            pipe me\
+            ";
+
+        request: b"\
+            POST /pipe HTTP/1.1\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
+            transfer-encoding: chunked\r\n\
+            \r\n\
+            7\r\n\
+            pipe me\r\n\
+            0\r\n\r\n\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Server: pipe\r\n\
+            Content-Length: 0\r\n\
+            \r\n\
+            "
+    };
+
+    let client = Client::new();
+
+    let res1 = client
+        .get(&format!("http://{}/get", server.addr()))
+        .send()
+        .await
+        .expect("get1");
+
+    assert_eq!(res1.status(), reqwest::StatusCode::OK);
+    assert_eq!(res1.content_length(), Some(7));
+
+    // and now ensure we can "pipe" the response to another request
+    let res2 = client
+        .post(&format!("http://{}/pipe", server.addr()))
+        .body(res1)
+        .send()
+        .await
+        .expect("res2");
+
+    assert_eq!(res2.status(), reqwest::StatusCode::OK);
 }

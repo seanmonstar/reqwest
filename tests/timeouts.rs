@@ -142,7 +142,7 @@ fn test_read_timeout() {
     };
 
     let url = format!("http://{}/read-timeout", server.addr());
-    let mut res = reqwest::blocking::Client::builder()
+    let res = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(500))
         .build()
         .unwrap()

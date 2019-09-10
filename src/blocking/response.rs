@@ -203,8 +203,7 @@ impl Response {
     /// or it cannot be properly deserialized to target type `T`. For more
     /// details please see [`serde_json::from_reader`].
     /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
-    #[inline]
-    pub fn json<T: DeserializeOwned>(&mut self) -> crate::Result<T> {
+    pub fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
         wait::timeout(self.inner.json(), self.timeout).map_err(|e| match e {
             wait::Waited::TimedOut => crate::error::timedout(None),
             wait::Waited::Executor(e) => crate::error::from(e),
@@ -228,12 +227,7 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
-    ///
-    /// # Note
-    ///
-    /// This consumes the body. Trying to read more, or use of `response.json()`
-    /// will return empty values.
-    pub fn text(&mut self) -> crate::Result<String> {
+    pub fn text(self) -> crate::Result<String> {
         self.text_with_charset("utf-8")
     }
 
@@ -256,12 +250,7 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
-    ///
-    /// # Note
-    ///
-    /// This consumes the body. Trying to read more, or use of `response.json()`
-    /// will return empty values.
-    pub fn text_with_charset(&mut self, default_encoding: &str) -> crate::Result<String> {
+    pub fn text_with_charset(self, default_encoding: &str) -> crate::Result<String> {
         wait::timeout(self.inner.text_with_charset(default_encoding), self.timeout).map_err(|e| {
             match e {
                 wait::Waited::TimedOut => crate::error::timedout(None),
