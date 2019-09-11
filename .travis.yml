@@ -52,6 +52,7 @@ matrix:
         # Check rustfmt
         - name: "rustfmt check"
           rust: stable
+          env: RUSTUP_TOOLCHAIN="stable"
           install: rustup component add rustfmt
           script: cargo fmt -- --check
 
