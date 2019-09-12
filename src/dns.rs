@@ -1,8 +1,9 @@
+use std::future::Future;
 use std::net::IpAddr;
 use std::sync::{Arc, Mutex, Once};
 use std::{io, vec};
 
-use futures::{future, Future};
+use futures_util::future;
 use hyper::client::connect::dns as hyper_dns;
 use tokio;
 use trust_dns_resolver::{system_conf, AsyncResolver, BackgroundLookupIp};

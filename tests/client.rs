@@ -85,12 +85,11 @@ async fn response_json() {
 
 #[tokio::test]
 async fn multipart() {
+    use futures_util::{future, stream};
+
     let _ = env_logger::try_init();
 
-    let stream = reqwest::Body::wrap_stream(futures::stream::once(futures::future::ready(Ok::<
-        _,
-        reqwest::Error,
-    >(
+    let stream = reqwest::Body::wrap_stream(stream::once(future::ready(Ok::<_, reqwest::Error>(
         "part1 part2".to_owned(),
     ))));
     let part = Part::stream(stream);
@@ -284,7 +283,7 @@ async fn gzip_case(response_size: usize, chunk_size: usize) {
 async fn body_stream() {
     let _ = env_logger::try_init();
 
-    let source = futures::stream::iter::<Vec<Result<Bytes, std::io::Error>>>(vec![
+    let source = futures_util::stream::iter::<Vec<Result<Bytes, std::io::Error>>>(vec![
         Ok(Bytes::from_static(b"123")),
         Ok(Bytes::from_static(b"4567")),
     ]);

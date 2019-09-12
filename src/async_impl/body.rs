@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use futures::Stream;
+use futures_core::Stream;
 use hyper::body::Payload;
 use std::fmt;
 use std::future::Future;
@@ -30,7 +30,7 @@ impl Body {
     ///
     /// ```
     /// # use reqwest::Body;
-    /// # use futures;
+    /// # use futures_util;
     /// # fn main() {
     /// let chunks: Vec<Result<_, ::std::io::Error>> = vec![
     ///     Ok("hello"),
@@ -38,14 +38,14 @@ impl Body {
     ///     Ok("world"),
     /// ];
     ///
-    /// let stream = futures::stream::iter(chunks);
+    /// let stream = futures_util::stream::iter(chunks);
     ///
     /// let body = Body::wrap_stream(stream);
     /// # }
     /// ```
     pub fn wrap_stream<S>(stream: S) -> Body
     where
-        S: futures::TryStream + Send + Sync + 'static,
+        S: futures_core::stream::TryStream + Send + Sync + 'static,
         S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
         hyper::Chunk: From<S::Ok>,
     {
@@ -157,7 +157,7 @@ impl Stream for ImplStream {
                         return Poll::Ready(Some(Err(crate::error::timedout(None))));
                     }
                 }
-                futures::ready!(Pin::new(body).poll_data(cx))
+                futures_core::ready!(Pin::new(body).poll_data(cx))
                     .map(|opt_chunk| opt_chunk.map(Into::into).map_err(crate::error::from))
             }
             Inner::Reusable(ref mut bytes) => {
