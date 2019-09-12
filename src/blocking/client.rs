@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use futures::channel::{mpsc, oneshot};
-use futures::{StreamExt, TryFutureExt};
+use futures_channel::{mpsc, oneshot};
+use futures_util::{StreamExt, TryFutureExt};
 
 use log::{error, trace};
 
@@ -652,15 +652,15 @@ where
 {
     use std::task::Poll;
 
-    futures::pin_mut!(fut);
+    futures_util::pin_mut!(fut);
 
     // "select" on the sender being canceled, and the future completing
-    let res = futures::future::poll_fn(|cx| {
+    let res = futures_util::future::poll_fn(|cx| {
         match fut.as_mut().poll(cx) {
             Poll::Ready(val) => Poll::Ready(Some(val)),
             Poll::Pending => {
                 // check if the callback is canceled
-                futures::ready!(tx.poll_cancel(cx));
+                futures_core::ready!(tx.poll_cancel(cx));
                 Poll::Ready(None)
             }
         }

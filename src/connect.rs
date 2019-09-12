@@ -1,4 +1,4 @@
-use futures::FutureExt;
+use futures_util::FutureExt;
 use http::uri::Scheme;
 use hyper::client::connect::{Connect, Connected, Destination};
 use tokio::io::{AsyncRead, AsyncWrite};

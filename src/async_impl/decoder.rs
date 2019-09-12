@@ -19,8 +19,8 @@ use std::task::{Context, Poll};
 
 use async_compression::stream::GzipDecoder;
 use bytes::Bytes;
-use futures::stream::Peekable;
-use futures::Stream;
+use futures_core::Stream;
+use futures_util::stream::Peekable;
 use hyper::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
 use hyper::HeaderMap;
 
@@ -80,7 +80,7 @@ impl Decoder {
     ///
     /// This decoder will buffer and decompress chunks that are gzipped.
     fn gzip(body: Body) -> Decoder {
-        use futures::stream::StreamExt;
+        use futures_util::StreamExt;
 
         Decoder {
             inner: Inner::Pending(Pending(IoStream(body.into_stream()).peekable())),
@@ -142,7 +142,7 @@ impl Stream for Decoder {
             },
             Inner::PlainText(ref mut body) => return Pin::new(body).poll_next(cx),
             Inner::Gzip(ref mut decoder) => {
-                return match futures::ready!(Pin::new(decoder).poll_next(cx)) {
+                return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::from_io(err)))),
                     None => Poll::Ready(None),
@@ -159,17 +159,19 @@ impl Future for Pending {
     type Output = Result<Inner, std::io::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        use futures::stream::StreamExt;
+        use futures_util::StreamExt;
 
-        match futures::ready!(Pin::new(&mut self.0).peek(cx)) {
+        match futures_core::ready!(Pin::new(&mut self.0).peek(cx)) {
             Some(Ok(_)) => {
                 // fallthrough
             }
             Some(Err(_e)) => {
                 // error was just a ref, so we need to really poll to move it
-                return Poll::Ready(Err(futures::ready!(Pin::new(&mut self.0).poll_next(cx))
-                    .expect("just peeked Some")
-                    .unwrap_err()));
+                return Poll::Ready(Err(futures_core::ready!(
+                    Pin::new(&mut self.0).poll_next(cx)
+                )
+                .expect("just peeked Some")
+                .unwrap_err()));
             }
             None => return Poll::Ready(Ok(Inner::PlainText(Body::empty().into_stream()))),
         };
@@ -186,7 +188,7 @@ impl Stream for IoStream {
     type Item = Result<Bytes, std::io::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        match futures::ready!(Pin::new(&mut self.0).poll_next(cx)) {
+        match futures_core::ready!(Pin::new(&mut self.0).poll_next(cx)) {
             Some(Ok(chunk)) => Poll::Ready(Some(Ok(chunk))),
             Some(Err(err)) => Poll::Ready(Some(Err(err.into_io()))),
             None => Poll::Ready(None),

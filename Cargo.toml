@@ -20,7 +20,9 @@ all-features = true
 base64 = "0.10"
 bytes = "0.4"
 encoding_rs = "0.8"
-futures-preview = { version = "=0.3.0-alpha.18" }
+futures-core-preview = { version = "=0.3.0-alpha.18" }
+futures-channel-preview = { version = "=0.3.0-alpha.18" }
+futures-util-preview = { version = "=0.3.0-alpha.18" }
 http = "0.1.15"
 hyper = "=0.13.0-alpha.1"
 log = "0.4"

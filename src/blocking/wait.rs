@@ -23,10 +23,10 @@ where
     let mut park = ParkThread::new();
     // Arc shouldn't be necessary, since UnparkThread is reference counted internally,
     // but let's just stay safe for now.
-    let waker = futures::task::waker(Arc::new(UnparkWaker(park.unpark())));
+    let waker = futures_util::task::waker(Arc::new(UnparkWaker(park.unpark())));
     let mut cx = Context::from_waker(&waker);
 
-    futures::pin_mut!(fut);
+    futures_util::pin_mut!(fut);
 
     loop {
         match fut.as_mut().poll(&mut cx) {
@@ -60,7 +60,7 @@ pub(crate) enum Waited<E> {
 
 struct UnparkWaker(UnparkThread);
 
-impl futures::task::ArcWake for UnparkWaker {
+impl futures_util::task::ArcWake for UnparkWaker {
     fn wake_by_ref(arc_self: &Arc<Self>) {
         arc_self.0.unpark();
     }

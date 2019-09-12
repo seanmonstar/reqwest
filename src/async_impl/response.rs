@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
-use futures::{StreamExt, TryStreamExt};
+use futures_util::{StreamExt, TryStreamExt};
 use http;
 use hyper::client::connect::HttpInfo;
 use hyper::header::CONTENT_LENGTH;

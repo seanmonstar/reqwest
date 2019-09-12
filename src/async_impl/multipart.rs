@@ -7,7 +7,7 @@ use mime_guess::Mime;
 use percent_encoding::{self, AsciiSet, NON_ALPHANUMERIC};
 use uuid::Uuid;
 
-use futures::StreamExt;
+use futures_util::StreamExt;
 
 use super::Body;
 
@@ -473,7 +473,8 @@ impl PercentEncoding {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::TryStreamExt;
+    use futures_util::TryStreamExt;
+    use futures_util::{future, stream};
     use tokio;
 
     #[test]
@@ -493,17 +494,21 @@ mod tests {
         let mut form = Form::new()
             .part(
                 "reader1",
-                Part::stream(Body::wrap_stream(futures::stream::once(
-                    futures::future::ready::<Result<String, crate::Error>>(Ok("part1".to_owned())),
-                ))),
+                Part::stream(Body::wrap_stream(stream::once(future::ready::<
+                    Result<String, crate::Error>,
+                >(Ok(
+                    "part1".to_owned(),
+                ))))),
             )
             .part("key1", Part::text("value1"))
             .part("key2", Part::text("value2").mime(mime::IMAGE_BMP))
             .part(
                 "reader2",
-                Part::stream(Body::wrap_stream(futures::stream::once(
-                    futures::future::ready::<Result<String, crate::Error>>(Ok("part2".to_owned())),
-                ))),
+                Part::stream(Body::wrap_stream(stream::once(future::ready::<
+                    Result<String, crate::Error>,
+                >(Ok(
+                    "part2".to_owned(),
+                ))))),
             )
             .part("key3", Part::text("value3").file_name("filename"));
         form.inner.boundary = "boundary".to_string();

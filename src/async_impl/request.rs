@@ -1,7 +1,7 @@
 use std::fmt;
+use std::future::Future;
 
 use base64::encode;
-use futures::Future;
 use serde::Serialize;
 use serde_json;
 use serde_urlencoded;

@@ -17,7 +17,7 @@ use crate::{async_impl, StatusCode, Url, Version};
 /// A Response to a submitted `Request`.
 pub struct Response {
     inner: async_impl::Response,
-    body: Option<Pin<Box<dyn futures::io::AsyncRead + Send + Sync>>>,
+    body: Option<Pin<Box<dyn futures_util::io::AsyncRead + Send + Sync>>>,
     timeout: Option<Duration>,
     _thread_handle: KeepCoreThreadAlive,
 }
@@ -340,8 +340,8 @@ impl Response {
 
     // private
 
-    fn body_mut(&mut self) -> Pin<&mut dyn futures::io::AsyncRead> {
-        use futures::stream::TryStreamExt;
+    fn body_mut(&mut self) -> Pin<&mut dyn futures_util::io::AsyncRead> {
+        use futures_util::TryStreamExt;
         if self.body.is_none() {
             let body = mem::replace(self.inner.body_mut(), async_impl::Decoder::empty());
 
@@ -355,7 +355,7 @@ impl Response {
 
 impl Read for Response {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        use futures::io::AsyncReadExt;
+        use futures_util::io::AsyncReadExt;
 
         let timeout = self.timeout;
         wait::timeout(self.body_mut().read(buf), timeout).map_err(|e| match e {
