@@ -60,8 +60,6 @@ mod request;
 mod response;
 mod wait;
 
-pub(crate) use self::wait::Waited;
-
 pub use self::body::Body;
 pub use self::client::{Client, ClientBuilder};
 pub use self::request::{Request, RequestBuilder};

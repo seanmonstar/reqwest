@@ -111,9 +111,9 @@ impl RequestBuilder {
                     Ok(value) => {
                         req.headers_mut().append(key, value);
                     }
-                    Err(e) => error = Some(crate::error::from(e.into())),
+                    Err(e) => error = Some(crate::error::builder(e.into())),
                 },
-                Err(e) => error = Some(crate::error::from(e.into())),
+                Err(e) => error = Some(crate::error::builder(e.into())),
             };
         }
         if let Some(err) = error {
@@ -250,7 +250,7 @@ impl RequestBuilder {
             let serializer = serde_urlencoded::Serializer::new(&mut pairs);
 
             if let Err(err) = query.serialize(serializer) {
-                error = Some(crate::error::from(err));
+                error = Some(crate::error::builder(err));
             }
         }
         if let Ok(ref mut req) = self.request {
@@ -276,7 +276,7 @@ impl RequestBuilder {
                     );
                     *req.body_mut() = Some(body.into());
                 }
-                Err(err) => error = Some(crate::error::from(err)),
+                Err(err) => error = Some(crate::error::builder(err)),
             }
         }
         if let Some(err) = error {
@@ -300,7 +300,7 @@ impl RequestBuilder {
                         .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
                     *req.body_mut() = Some(body.into());
                 }
-                Err(err) => error = Some(crate::error::from(err)),
+                Err(err) => error = Some(crate::error::builder(err)),
             }
         }
         if let Some(err) = error {

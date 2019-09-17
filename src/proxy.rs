@@ -350,7 +350,7 @@ impl ProxyScheme {
             "socks5" => Self::socks5(to_addr()?)?,
             #[cfg(feature = "socks")]
             "socks5h" => Self::socks5h(to_addr()?)?,
-            _ => return Err(crate::error::unknown_proxy_scheme()),
+            _ => return Err(crate::error::builder("unknown proxy scheme")),
         };
 
         if let Some(pwd) = url.password() {

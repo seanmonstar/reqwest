@@ -137,14 +137,14 @@ impl Stream for Decoder {
         let new_value = match self.inner {
             Inner::Pending(ref mut future) => match Pin::new(future).poll(cx) {
                 Poll::Ready(Ok(inner)) => inner,
-                Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(crate::error::from_io(e)))),
+                Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(crate::error::decode_io(e)))),
                 Poll::Pending => return Poll::Pending,
             },
             Inner::PlainText(ref mut body) => return Pin::new(body).poll_next(cx),
             Inner::Gzip(ref mut decoder) => {
                 return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes))),
-                    Some(Err(err)) => Poll::Ready(Some(Err(crate::error::from_io(err)))),
+                    Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                     None => Poll::Ready(None),
                 }
             }

@@ -75,7 +75,7 @@ impl Connector {
     where
         T: Into<Option<IpAddr>>,
     {
-        let tls = tls.build().map_err(crate::error::from)?;
+        let tls = tls.build().map_err(crate::error::builder)?;
 
         let mut http = http_connector()?;
         http.set_local_address(local_addr.into());

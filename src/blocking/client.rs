@@ -550,7 +550,7 @@ impl ClientHandle {
             .spawn(move || {
                 use tokio::runtime::current_thread::Runtime;
 
-                let mut rt = match Runtime::new().map_err(crate::error::from) {
+                let mut rt = match Runtime::new().map_err(crate::error::builder) {
                     Err(e) => {
                         if let Err(e) = spawn_tx.send(Err(e)) {
                             error!("Failed to communicate runtime creation failure: {:?}", e);
@@ -587,7 +587,7 @@ impl ClientHandle {
 
                 rt.block_on(f)
             })
-            .map_err(crate::error::from)?;
+            .map_err(crate::error::builder)?;
 
         // Wait for the runtime thread to start up...
         match wait::timeout(spawn_rx, None) {
@@ -639,8 +639,8 @@ impl ClientHandle {
                 self.timeout.0,
                 KeepCoreThreadAlive(Some(self.inner.clone())),
             )),
-            Err(wait::Waited::TimedOut) => Err(crate::error::timedout(Some(url))),
-            Err(wait::Waited::Executor(err)) => Err(crate::error::from(err).with_url(url)),
+            Err(wait::Waited::TimedOut(e)) => Err(crate::error::request(e).with_url(url)),
+            Err(wait::Waited::Executor(err)) => Err(crate::error::request(err).with_url(url)),
             Err(wait::Waited::Inner(err)) => Err(err.with_url(url)),
         }
     }

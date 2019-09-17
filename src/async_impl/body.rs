@@ -154,11 +154,11 @@ impl Stream for ImplStream {
             } => {
                 if let Some(ref mut timeout) = timeout {
                     if let Poll::Ready(()) = Pin::new(timeout).poll(cx) {
-                        return Poll::Ready(Some(Err(crate::error::timedout(None))));
+                        return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
                     }
                 }
                 futures_core::ready!(Pin::new(body).poll_data(cx))
-                    .map(|opt_chunk| opt_chunk.map(Into::into).map_err(crate::error::from))
+                    .map(|opt_chunk| opt_chunk.map(Into::into).map_err(crate::error::body))
             }
             Inner::Reusable(ref mut bytes) => {
                 if bytes.is_empty() {

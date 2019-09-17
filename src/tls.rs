@@ -55,7 +55,7 @@ impl Certificate {
     pub fn from_der(der: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             #[cfg(feature = "default-tls")]
-            native: native_tls::Certificate::from_der(der).map_err(crate::error::from)?,
+            native: native_tls::Certificate::from_der(der).map_err(crate::error::builder)?,
             #[cfg(feature = "rustls-tls")]
             original: Cert::Der(der.to_owned()),
         })
@@ -80,7 +80,7 @@ impl Certificate {
     pub fn from_pem(pem: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             #[cfg(feature = "default-tls")]
-            native: native_tls::Certificate::from_pem(pem).map_err(crate::error::from)?,
+            native: native_tls::Certificate::from_pem(pem).map_err(crate::error::builder)?,
             #[cfg(feature = "rustls-tls")]
             original: Cert::Pem(pem.to_owned()),
         })
@@ -100,18 +100,18 @@ impl Certificate {
             Cert::Der(buf) => tls
                 .root_store
                 .add(&::rustls::Certificate(buf))
-                .map_err(|e| crate::error::from(TLSError::WebPKIError(e)))?,
+                .map_err(|e| crate::error::builder(TLSError::WebPKIError(e)))?,
             Cert::Pem(buf) => {
                 let mut pem = Cursor::new(buf);
                 let certs = pemfile::certs(&mut pem).map_err(|_| {
-                    crate::error::from(TLSError::General(String::from(
+                    crate::error::builder(TLSError::General(String::from(
                         "No valid certificate was found",
                     )))
                 })?;
                 for c in certs {
                     tls.root_store
                         .add(&c)
-                        .map_err(|e| crate::error::from(TLSError::WebPKIError(e)))?;
+                        .map_err(|e| crate::error::builder(TLSError::WebPKIError(e)))?;
                 }
             }
         }
@@ -151,7 +151,7 @@ impl Identity {
     pub fn from_pkcs12_der(der: &[u8], password: &str) -> crate::Result<Identity> {
         Ok(Identity {
             inner: ClientCert::Pkcs12(
-                native_tls::Identity::from_pkcs12(der, password).map_err(crate::error::from)?,
+                native_tls::Identity::from_pkcs12(der, password).map_err(crate::error::builder)?,
             ),
         })
     }
@@ -184,7 +184,7 @@ impl Identity {
             let mut pem = Cursor::new(buf);
             let certs = pemfile::certs(&mut pem)
                 .map_err(|_| TLSError::General(String::from("No valid certificate was found")))
-                .map_err(crate::error::from)?;
+                .map_err(crate::error::builder)?;
             pem.set_position(0);
             let mut sk = pemfile::pkcs8_private_keys(&mut pem)
                 .and_then(|pkcs8_keys| {
@@ -199,11 +199,11 @@ impl Identity {
                     pemfile::rsa_private_keys(&mut pem)
                 })
                 .map_err(|_| TLSError::General(String::from("No valid private key was found")))
-                .map_err(crate::error::from)?;
+                .map_err(crate::error::builder)?;
             if let (Some(sk), false) = (sk.pop(), certs.is_empty()) {
                 (sk, certs)
             } else {
-                return Err(crate::error::from(TLSError::General(String::from(
+                return Err(crate::error::builder(TLSError::General(String::from(
                     "private key or certificate not found",
                 ))));
             }
@@ -225,7 +225,7 @@ impl Identity {
                 Ok(())
             }
             #[cfg(feature = "rustls-tls")]
-            ClientCert::Pem { .. } => Err(crate::error::from(crate::error::Kind::TlsIncompatible)),
+            ClientCert::Pem { .. } => Err(crate::error::builder("incompatible TLS identity type")),
         }
     }
 
@@ -237,7 +237,7 @@ impl Identity {
                 Ok(())
             }
             #[cfg(feature = "default-tls")]
-            ClientCert::Pkcs12(..) => Err(crate::error::from(crate::error::Kind::TlsIncompatible)),
+            ClientCert::Pkcs12(..) => Err(crate::error::builder("incompatible TLS identity type")),
         }
     }
 }
