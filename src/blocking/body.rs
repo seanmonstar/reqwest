@@ -258,9 +258,8 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
                     buf.advance_mut(n);
                 },
                 Err(e) => {
-                    let ret = io::Error::new(e.kind(), e.to_string());
                     tx.take().expect("tx only taken on error").abort();
-                    return Err(crate::error::from(ret));
+                    return Err(crate::error::body(e));
                 }
             }
         }
@@ -273,7 +272,7 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
             .expect("tx only taken on error")
             .send_data(buf.take().freeze().into())
             .await
-            .map_err(crate::error::from)?;
+            .map_err(crate::error::body)?;
 
         written += buf_len;
     }

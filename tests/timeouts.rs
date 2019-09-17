@@ -38,7 +38,7 @@ fn timeout_closes_connection() {
     let url = format!("http://{}/closes", server.addr());
     let err = client.get(&url).send().unwrap_err();
 
-    assert_eq!(err.get_ref().unwrap().to_string(), "timed out");
+    assert!(err.is_timeout());
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
 }
 
@@ -84,7 +84,7 @@ fn write_timeout_large_body() {
         .send()
         .unwrap_err();
 
-    assert_eq!(err.get_ref().unwrap().to_string(), "timed out");
+    assert!(err.is_timeout());
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
 }
 
@@ -116,7 +116,7 @@ fn test_response_timeout() {
         .send()
         .unwrap_err();
 
-    assert_eq!(err.get_ref().unwrap().to_string(), "timed out");
+    assert!(err.is_timeout());
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
 }
 
@@ -158,5 +158,5 @@ fn test_read_timeout() {
     );
 
     let err = res.text().unwrap_err();
-    assert_eq!(err.to_string(), "timed out");
+    assert!(err.is_timeout());
 }

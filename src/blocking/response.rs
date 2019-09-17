@@ -205,8 +205,8 @@ impl Response {
     /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
     pub fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
         wait::timeout(self.inner.json(), self.timeout).map_err(|e| match e {
-            wait::Waited::TimedOut => crate::error::timedout(None),
-            wait::Waited::Executor(e) => crate::error::from(e),
+            wait::Waited::TimedOut(e) => crate::error::decode(e),
+            wait::Waited::Executor(e) => crate::error::decode(e),
             wait::Waited::Inner(e) => e,
         })
     }
@@ -253,8 +253,8 @@ impl Response {
     pub fn text_with_charset(self, default_encoding: &str) -> crate::Result<String> {
         wait::timeout(self.inner.text_with_charset(default_encoding), self.timeout).map_err(|e| {
             match e {
-                wait::Waited::TimedOut => crate::error::timedout(None),
-                wait::Waited::Executor(e) => crate::error::from(e),
+                wait::Waited::TimedOut(e) => crate::error::decode(e),
+                wait::Waited::Executor(e) => crate::error::decode(e),
                 wait::Waited::Inner(e) => e,
             }
         })
@@ -284,7 +284,7 @@ impl Response {
     where
         W: io::Write,
     {
-        io::copy(self, w).map_err(crate::error::from)
+        io::copy(self, w).map_err(crate::error::response)
     }
 
     /// Turn a response into an error if the server returned an error.
@@ -359,8 +359,8 @@ impl Read for Response {
 
         let timeout = self.timeout;
         wait::timeout(self.body_mut().read(buf), timeout).map_err(|e| match e {
-            wait::Waited::TimedOut => crate::error::timedout(None).into_io(),
-            wait::Waited::Executor(e) => crate::error::from(e).into_io(),
+            wait::Waited::TimedOut(e) => crate::error::response(e).into_io(),
+            wait::Waited::Executor(e) => crate::error::response(e).into_io(),
             wait::Waited::Inner(e) => e,
         })
     }

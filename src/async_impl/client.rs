@@ -746,13 +746,17 @@ impl Future for PendingRequest {
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if let Some(delay) = self.as_mut().timeout().as_mut().as_pin_mut() {
             if let Poll::Ready(()) = delay.poll(cx) {
-                return Poll::Ready(Err(crate::error::timedout(Some(self.url.clone()))));
+                return Poll::Ready(Err(
+                    crate::error::request(crate::error::TimedOut).with_url(self.url.clone())
+                ));
             }
         }
 
         loop {
             let res = match self.as_mut().in_flight().as_mut().poll(cx) {
-                Poll::Ready(Err(e)) => return Poll::Ready(url_error!(e, &self.url)),
+                Poll::Ready(Err(e)) => {
+                    return Poll::Ready(Err(crate::error::request(e).with_url(self.url.clone())));
+                }
                 Poll::Ready(Ok(res)) => res,
                 Poll::Pending => return Poll::Pending,
             };

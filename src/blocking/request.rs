@@ -149,9 +149,9 @@ impl RequestBuilder {
                     Ok(value) => {
                         req.headers_mut().append(key, value);
                     }
-                    Err(e) => error = Some(crate::error::from(e.into())),
+                    Err(e) => error = Some(crate::error::builder(e.into())),
                 },
-                Err(e) => error = Some(crate::error::from(e.into())),
+                Err(e) => error = Some(crate::error::builder(e.into())),
             };
         }
         if let Some(err) = error {
@@ -323,7 +323,7 @@ impl RequestBuilder {
             let serializer = serde_urlencoded::Serializer::new(&mut pairs);
 
             if let Err(err) = query.serialize(serializer) {
-                error = Some(crate::error::from(err));
+                error = Some(crate::error::builder(err));
             }
         }
         if let Ok(ref mut req) = self.request {
@@ -374,7 +374,7 @@ impl RequestBuilder {
                     );
                     *req.body_mut() = Some(body.into());
                 }
-                Err(err) => error = Some(crate::error::from(err)),
+                Err(err) => error = Some(crate::error::builder(err)),
             }
         }
         if let Some(err) = error {
@@ -417,7 +417,7 @@ impl RequestBuilder {
                         .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
                     *req.body_mut() = Some(body.into());
                 }
-                Err(err) => error = Some(crate::error::from(err)),
+                Err(err) => error = Some(crate::error::builder(err)),
             }
         }
         if let Some(err) = error {
@@ -797,8 +797,9 @@ mod tests {
 
     #[test]
     fn add_json_fail() {
-        use serde::ser::Error;
+        use serde::ser::Error as _;
         use serde::{Serialize, Serializer};
+        use std::error::Error as _;
         struct MyStruct;
         impl Serialize for MyStruct {
             fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
@@ -813,7 +814,9 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.post(some_url);
         let json_data = MyStruct;
-        assert!(r.json(&json_data).build().unwrap_err().is_serialization());
+        let err = r.json(&json_data).build().unwrap_err();
+        assert!(err.is_builder()); // well, duh ;)
+        assert!(err.source().unwrap().is::<serde_json::Error>());
     }
 
     #[test]

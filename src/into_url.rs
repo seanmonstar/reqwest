@@ -27,7 +27,7 @@ impl PolyfillTryInto for Url {
 
 impl<'a> PolyfillTryInto for &'a str {
     fn into_url(self) -> crate::Result<Url> {
-        Url::parse(self).map_err(crate::error::from)?.into_url()
+        Url::parse(self).map_err(crate::error::builder)?.into_url()
     }
 }
 
@@ -56,7 +56,7 @@ mod tests {
         let err = "file:///etc/hosts".into_url().unwrap_err();
         assert_eq!(
             err.to_string(),
-            "file:///etc/hosts: URL scheme is not allowed"
+            "builder error for url (file:///etc/hosts): URL scheme is not allowed"
         );
     }
 }

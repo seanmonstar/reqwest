@@ -270,8 +270,8 @@ fn test_error_for_status_4xx() {
     let url = format!("http://{}/1", server.addr());
     let res = reqwest::blocking::get(&url).unwrap();
 
-    let err = res.error_for_status().err().unwrap();
-    assert!(err.is_client_error());
+    let err = res.error_for_status().unwrap_err();
+    assert!(err.is_status());
     assert_eq!(err.status(), Some(reqwest::StatusCode::BAD_REQUEST));
 }
 
@@ -299,8 +299,8 @@ fn test_error_for_status_5xx() {
     let url = format!("http://{}/1", server.addr());
     let res = reqwest::blocking::get(&url).unwrap();
 
-    let err = res.error_for_status().err().unwrap();
-    assert!(err.is_server_error());
+    let err = res.error_for_status().unwrap_err();
+    assert!(err.is_status());
     assert_eq!(
         err.status(),
         Some(reqwest::StatusCode::INTERNAL_SERVER_ERROR)

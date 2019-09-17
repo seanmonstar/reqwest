@@ -7,14 +7,14 @@ use tokio::clock;
 use tokio_executor::{
     enter,
     park::{Park, ParkThread, Unpark, UnparkThread},
-    EnterError,
 };
 
 pub(crate) fn timeout<F, I, E>(fut: F, timeout: Option<Duration>) -> Result<I, Waited<E>>
 where
     F: Future<Output = Result<I, E>>,
 {
-    let _entered = enter().map_err(Waited::Executor)?;
+    let _entered =
+        enter().map_err(|_| Waited::Executor(crate::error::BlockingClientInAsyncContext))?;
     let deadline = timeout.map(|d| {
         log::trace!("wait at most {:?}", d);
         clock::now() + d
@@ -39,7 +39,7 @@ where
             let now = clock::now();
             if now >= deadline {
                 log::trace!("wait timeout exceeded");
-                return Err(Waited::TimedOut);
+                return Err(Waited::TimedOut(crate::error::TimedOut));
             }
 
             log::trace!("park timeout {:?}", deadline - now);
@@ -53,8 +53,8 @@ where
 
 #[derive(Debug)]
 pub(crate) enum Waited<E> {
-    TimedOut,
-    Executor(EnterError),
+    TimedOut(crate::error::TimedOut),
+    Executor(crate::error::BlockingClientInAsyncContext),
     Inner(E),
 }
 
