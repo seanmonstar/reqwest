@@ -18,6 +18,7 @@ use url::Url;
 
 use super::body::Body;
 use super::Decoder;
+#[cfg(feature = "cookies")]
 use crate::cookie;
 
 /// A Response to a submitted `Request`.
@@ -99,6 +100,11 @@ impl Response {
     /// Retrieve the cookies contained in the response.
     ///
     /// Note that invalid 'Set-Cookie' headers will be ignored.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled.
+    #[cfg(feature = "cookies")]
     pub fn cookies<'a>(&'a self) -> impl Iterator<Item = cookie::Cookie<'a>> + 'a {
         cookie::extract_response_cookies(&self.headers).filter_map(Result::ok)
     }

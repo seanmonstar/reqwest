@@ -1,6 +1,5 @@
 //! The cookies module contains types for working with request and response cookies.
 
-use crate::cookie_crate;
 use crate::header;
 use std::borrow::Cow;
 use std::fmt;
@@ -18,7 +17,7 @@ fn tm_to_systemtime(tm: time::Tm) -> SystemTime {
 }
 
 /// Error representing a parse failure of a 'Set-Cookie' header.
-pub struct CookieParseError(cookie::ParseError);
+pub struct CookieParseError(cookie_crate::ParseError);
 
 impl<'a> fmt::Debug for CookieParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -35,7 +34,7 @@ impl<'a> fmt::Display for CookieParseError {
 impl std::error::Error for CookieParseError {}
 
 /// A single HTTP cookie.
-pub struct Cookie<'a>(cookie::Cookie<'a>);
+pub struct Cookie<'a>(cookie_crate::Cookie<'a>);
 
 impl<'a> fmt::Debug for Cookie<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -50,20 +49,20 @@ impl Cookie<'static> {
         N: Into<Cow<'static, str>>,
         V: Into<Cow<'static, str>>,
     {
-        Cookie(cookie::Cookie::new(name, value))
+        Cookie(cookie_crate::Cookie::new(name, value))
     }
 }
 
 impl<'a> Cookie<'a> {
     fn parse(value: &'a crate::header::HeaderValue) -> Result<Cookie<'a>, CookieParseError> {
         std::str::from_utf8(value.as_bytes())
-            .map_err(cookie::ParseError::from)
-            .and_then(cookie::Cookie::parse)
+            .map_err(cookie_crate::ParseError::from)
+            .and_then(cookie_crate::Cookie::parse)
             .map_err(CookieParseError)
             .map(Cookie)
     }
 
-    pub(crate) fn into_inner(self) -> cookie::Cookie<'a> {
+    pub(crate) fn into_inner(self) -> cookie_crate::Cookie<'a> {
         self.0
     }
 

@@ -156,6 +156,7 @@
 //!   `native-tls` library to connect over HTTPS.
 //! - **default-tls-vendored**: Enables the `vendored` feature of `native-tls`.
 //! - **rustls-tls**: Provides TLS support via the `rustls` library.
+//! - **cookies**: Provides cookie session support.
 //!
 //!
 //! [hyper]: http://hyper.rs
@@ -171,8 +172,6 @@
 ////! - **socks**: Provides SOCKS5 proxy support.
 ////! - **trust-dns**: Enables a trust-dns async resolver instead of default
 ////!   threadpool using `getaddrinfo`.
-
-extern crate cookie as cookie_crate;
 
 #[cfg(test)]
 #[macro_use]
@@ -208,6 +207,7 @@ mod error;
 mod async_impl;
 pub mod blocking;
 mod connect;
+#[cfg(feature = "cookies")]
 pub mod cookie;
 //#[cfg(feature = "trust-dns")]
 //mod dns;
