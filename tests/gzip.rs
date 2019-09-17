@@ -1,11 +1,11 @@
 #[macro_use]
 mod support;
 
-use std::io::{Read, Write};
+use std::io::Write;
 use std::time::Duration;
 
-#[test]
-fn test_gzip_response() {
+#[tokio::test]
+async fn test_gzip_response() {
     let content: String = (0..50).into_iter().map(|i| format!("test {}", i)).collect();
     let chunk_size = content.len() / 3;
     let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
@@ -41,16 +41,16 @@ fn test_gzip_response() {
         write_timeout: Duration::from_millis(10),
         response: response
     };
-    let mut res = reqwest::blocking::get(&format!("http://{}/gzip", server.addr())).unwrap();
+    let url = format!("http://{}/gzip", server.addr());
+    let res = reqwest::get(&url).await.unwrap();
 
-    let mut body = String::new();
-    res.read_to_string(&mut body).unwrap();
+    let body = res.text().await.unwrap();
 
     assert_eq!(body, content);
 }
 
-#[test]
-fn test_gzip_empty_body() {
+#[tokio::test]
+async fn test_gzip_empty_body() {
     let server = server! {
         request: b"\
             HEAD /gzip HTTP/1.1\r\n\
@@ -68,20 +68,20 @@ fn test_gzip_empty_body() {
             \r\n"
     };
 
-    let client = reqwest::blocking::Client::new();
-    let mut res = client
+    let client = reqwest::Client::new();
+    let res = client
         .head(&format!("http://{}/gzip", server.addr()))
         .send()
+        .await
         .unwrap();
 
-    let mut body = std::string::String::new();
-    res.read_to_string(&mut body).unwrap();
+    let body = res.text().await.unwrap();
 
     assert_eq!(body, "");
 }
 
-#[test]
-fn test_gzip_invalid_body() {
+#[tokio::test]
+async fn test_gzip_invalid_body() {
     let server = server! {
         request: b"\
             GET /gzip HTTP/1.1\r\n\
@@ -99,17 +99,16 @@ fn test_gzip_invalid_body() {
             \r\n\
             0"
     };
-
-    let mut res = reqwest::blocking::get(&format!("http://{}/gzip", server.addr())).unwrap();
+    let url = format!("http://{}/gzip", server.addr());
+    let res = reqwest::get(&url).await.unwrap();
     // this tests that the request.send() didn't error, but that the error
     // is in reading the body
 
-    let mut body = std::string::String::new();
-    res.read_to_string(&mut body).unwrap_err();
+    res.text().await.unwrap_err();
 }
 
-#[test]
-fn test_accept_header_is_not_changed_if_set() {
+#[tokio::test]
+async fn test_accept_header_is_not_changed_if_set() {
     let server = server! {
         request: b"\
             GET /accept HTTP/1.1\r\n\
@@ -126,7 +125,7 @@ fn test_accept_header_is_not_changed_if_set() {
             \r\n\
             "
     };
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::Client::new();
 
     let res = client
         .get(&format!("http://{}/accept", server.addr()))
@@ -135,13 +134,14 @@ fn test_accept_header_is_not_changed_if_set() {
             reqwest::header::HeaderValue::from_static("application/json"),
         )
         .send()
+        .await
         .unwrap();
 
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
-#[test]
-fn test_accept_encoding_header_is_not_changed_if_set() {
+#[tokio::test]
+async fn test_accept_encoding_header_is_not_changed_if_set() {
     let server = server! {
         request: b"\
             GET /accept-encoding HTTP/1.1\r\n\
@@ -158,7 +158,7 @@ fn test_accept_encoding_header_is_not_changed_if_set() {
             \r\n\
             "
     };
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::Client::new();
 
     let res = client
         .get(&format!("http://{}/accept-encoding", server.addr()))
@@ -167,6 +167,7 @@ fn test_accept_encoding_header_is_not_changed_if_set() {
             reqwest::header::HeaderValue::from_static("identity"),
         )
         .send()
+        .await
         .unwrap();
 
     assert_eq!(res.status(), reqwest::StatusCode::OK);

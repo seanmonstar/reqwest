@@ -138,7 +138,6 @@ impl fmt::Display for Error {
         match self.inner.kind {
             Kind::Builder => f.write_str("builder error")?,
             Kind::Request => f.write_str("error sending request")?,
-            Kind::Response => f.write_str("error reading response")?,
             Kind::Body => f.write_str("request or response body error")?,
             Kind::Decode => f.write_str("error decoding response body")?,
             Kind::Redirect => f.write_str("error following redirect")?,
@@ -173,7 +172,6 @@ impl StdError for Error {
 pub(crate) enum Kind {
     Builder,
     Request,
-    Response,
     Redirect,
     Status(StatusCode),
     Body,
@@ -198,10 +196,6 @@ pub(crate) fn request<E: Into<BoxError>>(e: E) -> Error {
     Error::new(Kind::Request, Some(e))
 }
 
-pub(crate) fn response<E: Into<BoxError>>(e: E) -> Error {
-    Error::new(Kind::Response, Some(e))
-}
-
 pub(crate) fn loop_detected(url: Url) -> Error {
     Error::new(Kind::Redirect, Some("infinite redirect loop detected")).with_url(url)
 }
@@ -220,6 +214,7 @@ pub(crate) fn url_bad_scheme(url: Url) -> Error {
 
 // io::Error helpers
 
+#[cfg(feature = "blocking")]
 pub(crate) fn into_io(e: Error) -> io::Error {
     e.into_io()
 }
@@ -271,7 +266,7 @@ mod tests {
         let root = Error::new(Kind::Request, None::<Error>);
         assert!(root.source().is_none());
 
-        let link = super::response(root);
+        let link = super::body(root);
         assert!(link.source().is_some());
         assert_send::<Error>();
         assert_sync::<Error>();
@@ -287,7 +282,7 @@ mod tests {
     fn roundtrip_io_error() {
         let orig = super::request("orig");
         // Convert reqwest::Error into an io::Error...
-        let io = super::into_io(orig);
+        let io = orig.into_io();
         // Convert that io::Error back into a reqwest::Error...
         let err = super::decode_io(io);
         // It should have pulled out the original, not nested it...

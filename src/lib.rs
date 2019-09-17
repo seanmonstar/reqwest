@@ -156,6 +156,7 @@
 //!   `native-tls` library to connect over HTTPS.
 //! - **default-tls-vendored**: Enables the `vendored` feature of `native-tls`.
 //! - **rustls-tls**: Provides TLS support via the `rustls` library.
+//! - **blocking**: Provides the [blocking][] client API.
 //! - **cookies**: Provides cookie session support.
 //!
 //!
@@ -205,6 +206,7 @@ pub use self::tls::{Certificate, Identity};
 mod error;
 
 mod async_impl;
+#[cfg(feature = "blocking")]
 pub mod blocking;
 mod connect;
 #[cfg(feature = "cookies")]

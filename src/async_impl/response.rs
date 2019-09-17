@@ -346,6 +346,7 @@ impl Response {
     // on the `Response` itself.
     //
     // This method is just used by the blocking API.
+    #[cfg(feature = "blocking")]
     pub(crate) fn body_mut(&mut self) -> &mut Decoder {
         &mut self.body
     }

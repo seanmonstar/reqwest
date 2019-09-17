@@ -1,11 +1,11 @@
 #[macro_use]
 mod support;
 
-#[test]
-fn text_part() {
+#[tokio::test]
+async fn text_part() {
     let _ = env_logger::try_init();
 
-    let form = reqwest::blocking::multipart::Form::new().text("foo", "bar");
+    let form = reqwest::multipart::Form::new().text("foo", "bar");
 
     let expected_body = format!(
         "\
@@ -39,16 +39,18 @@ fn text_part() {
 
     let url = format!("http://{}/multipart/1", server.addr());
 
-    let res = reqwest::blocking::Client::new()
+    let res = reqwest::Client::new()
         .post(&url)
         .multipart(form)
         .send()
+        .await
         .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
+#[cfg(feature = "blocking")]
 #[test]
 fn file() {
     let _ = env_logger::try_init();
