@@ -27,6 +27,11 @@ matrix:
         - rust: nightly
           env: FEATURES="--features rustls-tls"
 
+        # optional cookies
+        #- rust: stable
+        - rust: nightly
+          env: FEATURES="--features cookies"
+
         # socks
         #- rust: stable
         #- rust: nightly

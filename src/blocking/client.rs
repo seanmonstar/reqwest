@@ -392,6 +392,11 @@ impl ClientBuilder {
     ///     .build()
     ///     .unwrap();
     /// ```
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled.
+    #[cfg(feature = "cookies")]
     pub fn cookie_store(self, enable: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.cookie_store(enable))
     }

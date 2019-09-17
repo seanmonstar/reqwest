@@ -11,6 +11,7 @@ use serde::de::DeserializeOwned;
 
 use super::client::KeepCoreThreadAlive;
 use super::wait;
+#[cfg(feature = "cookies")]
 use crate::cookie;
 use crate::{async_impl, StatusCode, Url, Version};
 
@@ -121,6 +122,11 @@ impl Response {
     /// Retrieve the cookies contained in the response.
     ///
     /// Note that invalid 'Set-Cookie' headers will be ignored.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled.
+    #[cfg(feature = "cookies")]
     pub fn cookies<'a>(&'a self) -> impl Iterator<Item = cookie::Cookie<'a>> + 'a {
         cookie::extract_response_cookies(self.headers()).filter_map(Result::ok)
     }

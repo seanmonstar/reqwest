@@ -1,5 +1,7 @@
 use std::net::IpAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+#[cfg(feature = "cookies")]
+use std::sync::RwLock;
 use std::time::Duration;
 use std::{fmt, str};
 
@@ -23,6 +25,7 @@ use log::debug;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use crate::connect::Connector;
+#[cfg(feature = "cookies")]
 use crate::cookie;
 use crate::into_url::{expect_uri, try_uri};
 use crate::proxy::get_proxies;
@@ -76,6 +79,7 @@ struct Config {
     http1_title_case_headers: bool,
     local_address: Option<IpAddr>,
     nodelay: bool,
+    #[cfg(feature = "cookies")]
     cookie_store: Option<cookie::CookieStore>,
 }
 
@@ -115,6 +119,7 @@ impl ClientBuilder {
                 http1_title_case_headers: false,
                 local_address: None,
                 nodelay: false,
+                #[cfg(feature = "cookies")]
                 cookie_store: None,
             },
         }
@@ -210,11 +215,10 @@ impl ClientBuilder {
 
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
 
-        let cookie_store = config.cookie_store.map(RwLock::new);
-
         Ok(Client {
             inner: Arc::new(ClientRef {
-                cookie_store,
+                #[cfg(feature = "cookies")]
+                cookie_store: config.cookie_store.map(RwLock::new),
                 gzip: config.gzip,
                 hyper: hyper_client,
                 headers: config.headers,
@@ -430,6 +434,11 @@ impl ClientBuilder {
     /// additional requests.
     ///
     /// By default, no cookie store is used.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled.
+    #[cfg(feature = "cookies")]
     pub fn cookie_store(mut self, enable: bool) -> ClientBuilder {
         self.config.cookie_store = if enable {
             Some(cookie::CookieStore::default())
@@ -561,10 +570,13 @@ impl Client {
         }
 
         // Add cookies from the cookie store.
-        if let Some(cookie_store_wrapper) = self.inner.cookie_store.as_ref() {
-            if headers.get(crate::header::COOKIE).is_none() {
-                let cookie_store = cookie_store_wrapper.read().unwrap();
-                add_cookie_header(&mut headers, &cookie_store, &url);
+        #[cfg(feature = "cookies")]
+        {
+            if let Some(cookie_store_wrapper) = self.inner.cookie_store.as_ref() {
+                if headers.get(crate::header::COOKIE).is_none() {
+                    let cookie_store = cookie_store_wrapper.read().unwrap();
+                    add_cookie_header(&mut headers, &cookie_store, &url);
+                }
             }
         }
 
@@ -662,6 +674,7 @@ impl fmt::Debug for ClientBuilder {
 }
 
 struct ClientRef {
+    #[cfg(feature = "cookies")]
     cookie_store: Option<RwLock<cookie::CookieStore>>,
     gzip: bool,
     headers: HeaderMap,
@@ -760,12 +773,16 @@ impl Future for PendingRequest {
                 Poll::Ready(Ok(res)) => res,
                 Poll::Pending => return Poll::Pending,
             };
-            if let Some(store_wrapper) = self.client.cookie_store.as_ref() {
-                let mut store = store_wrapper.write().unwrap();
-                let cookies = cookie::extract_response_cookies(&res.headers())
-                    .filter_map(|res| res.ok())
-                    .map(|cookie| cookie.into_inner().into_owned());
-                store.0.store_response_cookies(cookies, &self.url);
+
+            #[cfg(feature = "cookies")]
+            {
+                if let Some(store_wrapper) = self.client.cookie_store.as_ref() {
+                    let mut store = store_wrapper.write().unwrap();
+                    let cookies = cookie::extract_response_cookies(&res.headers())
+                        .filter_map(|res| res.ok())
+                        .map(|cookie| cookie.into_inner().into_owned());
+                    store.0.store_response_cookies(cookies, &self.url);
+                }
             }
             let should_redirect = match res.status() {
                 StatusCode::MOVED_PERMANENTLY | StatusCode::FOUND | StatusCode::SEE_OTHER => {
@@ -854,9 +871,14 @@ impl Future for PendingRequest {
                                 .expect("valid request parts");
 
                             // Add cookies from the cookie store.
-                            if let Some(cookie_store_wrapper) = self.client.cookie_store.as_ref() {
-                                let cookie_store = cookie_store_wrapper.read().unwrap();
-                                add_cookie_header(&mut headers, &cookie_store, &self.url);
+                            #[cfg(feature = "cookies")]
+                            {
+                                if let Some(cookie_store_wrapper) =
+                                    self.client.cookie_store.as_ref()
+                                {
+                                    let cookie_store = cookie_store_wrapper.read().unwrap();
+                                    add_cookie_header(&mut headers, &cookie_store, &self.url);
+                                }
                             }
 
                             *req.headers_mut() = headers.clone();
@@ -909,6 +931,7 @@ fn make_referer(next: &Url, previous: &Url) -> Option<HeaderValue> {
     referer.as_str().parse().ok()
 }
 
+#[cfg(feature = "cookies")]
 fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &cookie::CookieStore, url: &Url) {
     let header = cookie_store
         .0

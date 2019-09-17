@@ -397,6 +397,7 @@ async fn test_invalid_location_stops_redirect_gh484() {
     );
 }
 
+#[cfg(feature = "cookies")]
 #[tokio::test]
 async fn test_redirect_302_with_set_cookies() {
     let code = 302;
