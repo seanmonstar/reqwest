@@ -5,6 +5,7 @@ use std::time::Duration;
 
 /// Tests that internal client future cancels when the oneshot channel
 /// is canceled.
+#[cfg(feature = "blocking")]
 #[test]
 fn timeout_closes_connection() {
     let _ = env_logger::try_init();
@@ -42,6 +43,7 @@ fn timeout_closes_connection() {
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
 }
 
+#[cfg(feature = "blocking")]
 #[test]
 fn write_timeout_large_body() {
     let _ = env_logger::try_init();
@@ -88,8 +90,8 @@ fn write_timeout_large_body() {
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
 }
 
-#[test]
-fn test_response_timeout() {
+#[tokio::test]
+async fn test_response_timeout() {
     let _ = env_logger::try_init();
     let server = server! {
         request: b"\
@@ -108,20 +110,21 @@ fn test_response_timeout() {
     };
 
     let url = format!("http://{}/response-timeout", server.addr());
-    let err = reqwest::blocking::Client::builder()
+    let err = reqwest::Client::builder()
         .timeout(Duration::from_millis(500))
         .build()
         .unwrap()
         .get(&url)
         .send()
+        .await
         .unwrap_err();
 
     assert!(err.is_timeout());
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
 }
 
-#[test]
-fn test_read_timeout() {
+#[tokio::test]
+async fn test_read_timeout() {
     let _ = env_logger::try_init();
     let server = server! {
         request: b"\
@@ -142,12 +145,13 @@ fn test_read_timeout() {
     };
 
     let url = format!("http://{}/read-timeout", server.addr());
-    let res = reqwest::blocking::Client::builder()
+    let res = reqwest::Client::builder()
         .timeout(Duration::from_millis(500))
         .build()
         .unwrap()
         .get(&url)
         .send()
+        .await
         .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
@@ -157,6 +161,6 @@ fn test_read_timeout() {
         &"5"
     );
 
-    let err = res.text().unwrap_err();
+    let err = res.text().await.unwrap_err();
     assert!(err.is_timeout());
 }

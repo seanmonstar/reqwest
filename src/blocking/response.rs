@@ -290,7 +290,7 @@ impl Response {
     where
         W: io::Write,
     {
-        io::copy(self, w).map_err(crate::error::response)
+        io::copy(self, w).map_err(crate::error::decode_io)
     }
 
     /// Turn a response into an error if the server returned an error.
@@ -365,8 +365,8 @@ impl Read for Response {
 
         let timeout = self.timeout;
         wait::timeout(self.body_mut().read(buf), timeout).map_err(|e| match e {
-            wait::Waited::TimedOut(e) => crate::error::response(e).into_io(),
-            wait::Waited::Executor(e) => crate::error::response(e).into_io(),
+            wait::Waited::TimedOut(e) => crate::error::decode(e).into_io(),
+            wait::Waited::Executor(e) => crate::error::decode(e).into_io(),
             wait::Waited::Inner(e) => e,
         })
     }

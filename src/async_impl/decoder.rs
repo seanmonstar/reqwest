@@ -60,7 +60,7 @@ impl Decoder {
     /// An empty decoder.
     ///
     /// This decoder will produce a single 0 byte chunk.
-    #[inline]
+    #[cfg(feature = "blocking")]
     pub(crate) fn empty() -> Decoder {
         Decoder {
             inner: Inner::PlainText(Body::empty().into_stream()),

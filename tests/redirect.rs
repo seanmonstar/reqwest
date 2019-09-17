@@ -165,6 +165,7 @@ async fn test_redirect_307_and_308_tries_to_post_again() {
     }
 }
 
+#[cfg(feature = "blocking")]
 #[test]
 fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
     let client = reqwest::blocking::Client::new();

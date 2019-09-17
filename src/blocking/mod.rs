@@ -3,7 +3,11 @@
 //! The blocking `Client` will block the current thread to execute, instead
 //! of returning futures that need to be executed on a runtime.
 //!
-//! ## Making a GET request
+//! # Optional
+//!
+//! This requires the optional `blocking` feature to be enabled.
+//!
+//! # Making a GET request
 //!
 //! For a single request, you can use the [`get`](get) shortcut method.
 //!
@@ -28,7 +32,7 @@
 //! [`Client`](Client) and reuse it, taking advantage of keep-alive connection
 //! pooling.
 //!
-//! ## Making POST requests (or setting request bodies)
+//! # Making POST requests (or setting request bodies)
 //!
 //! There are several ways you can set the body of a request. The basic one is
 //! by using the `body()` method of a [`RequestBuilder`](RequestBuilder). This lets you set the

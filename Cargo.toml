@@ -85,12 +85,24 @@ default-tls-vendored = ["default-tls", "native-tls/vendored"]
 
 rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 
+blocking = []
+
 cookies = ["cookie_crate", "cookie_store"]
 
 #trust-dns = ["trust-dns-resolver"]
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.6"
+
+[[example]]
+name = "blocking"
+path = "examples/blocking.rs"
+required-features = ["blocking"]
+
+[[test]]
+name = "blocking"
+path = "tests/blocking.rs"
+required-features = ["blocking"]
 
 [[test]]
 name = "cookie"
