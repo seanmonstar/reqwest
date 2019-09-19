@@ -158,6 +158,7 @@
 //! - **rustls-tls**: Provides TLS support via the `rustls` library.
 //! - **blocking**: Provides the [blocking][] client API.
 //! - **cookies**: Provides cookie session support.
+//! - **gzip**: Provides response body gzip decompression.
 //!
 //!
 //! [hyper]: http://hyper.rs

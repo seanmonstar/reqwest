@@ -15,5 +15,5 @@ install:
   - cargo -vV
 build: false
 test_script:
-  - cargo test -- --test-threads=1
+  - cargo test --features blocking,gzip -- --test-threads=1
 skip_branch_with_pr: true

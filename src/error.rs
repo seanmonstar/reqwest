@@ -99,6 +99,7 @@ impl Error {
         self
     }
 
+    #[allow(unused)]
     pub(crate) fn into_io(self) -> io::Error {
         io::Error::new(io::ErrorKind::Other, self)
     }
@@ -214,11 +215,12 @@ pub(crate) fn url_bad_scheme(url: Url) -> Error {
 
 // io::Error helpers
 
-#[cfg(feature = "blocking")]
+#[allow(unused)]
 pub(crate) fn into_io(e: Error) -> io::Error {
     e.into_io()
 }
 
+#[allow(unused)]
 pub(crate) fn decode_io(e: io::Error) -> Error {
     if e.get_ref().map(|r| r.is::<Error>()).unwrap_or(false) {
         *e.into_inner()
