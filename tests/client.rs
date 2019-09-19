@@ -11,7 +11,9 @@ async fn auto_headers() {
 
             assert_eq!(req.headers()["accept"], "*/*");
             assert_eq!(req.headers()["user-agent"], DEFAULT_USER_AGENT);
-            assert_eq!(req.headers()["accept-encoding"], "gzip");
+            if cfg!(feature = "gzip") {
+                assert_eq!(req.headers()["accept-encoding"], "gzip");
+            }
 
             http::Response::default()
         }

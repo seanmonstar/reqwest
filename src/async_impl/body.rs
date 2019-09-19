@@ -67,6 +67,7 @@ impl Body {
         }
     }
 
+    #[cfg(any(feature = "blocking", feature = "gzip",))]
     pub(crate) fn empty() -> Body {
         Body::wrap(hyper::Body::empty())
     }

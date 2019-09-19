@@ -37,7 +37,6 @@ time = "0.1.42"
 
 # TODO: candidates for optional features
 
-async-compression = { version = "0.1.0-alpha.4", default-features = false, features = ["gzip", "stream"] }
 
 serde = "1.0"
 serde_json = "1.0"
@@ -63,6 +62,9 @@ futures-channel-preview = { version = "=0.3.0-alpha.18", optional = true }
 cookie_crate = { version = "0.12", package = "cookie", optional = true }
 cookie_store = { version = "0.9", optional = true }
 
+## gzip
+async-compression = { version = "0.1.0-alpha.4", default-features = false, features = ["gzip", "stream"], optional = true }
+
 ## socks
 #socks = { version = "0.3.2", optional = true }
 
@@ -87,9 +89,11 @@ default-tls-vendored = ["default-tls", "native-tls/vendored"]
 
 rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 
-blocking = ["futures-channel-preview"]
+blocking = ["futures-channel-preview", "futures-util-preview/io"]
 
 cookies = ["cookie_crate", "cookie_store"]
+
+gzip = ["async-compression"]
 
 #trust-dns = ["trust-dns-resolver"]
 
@@ -110,4 +114,9 @@ required-features = ["blocking"]
 name = "cookie"
 path = "tests/cookie.rs"
 required-features = ["cookies"]
+
+[[test]]
+name = "gzip"
+path = "tests/gzip.rs"
+required-features = ["gzip"]
 

@@ -32,6 +32,16 @@ matrix:
         - rust: nightly
           env: FEATURES="--features cookies"
 
+        # optional blocking
+        #- rust: stable
+        - rust: nightly
+          env: FEATURES="--features blocking"
+
+        # optional gzip
+        #- rust: stable
+        - rust: nightly
+          env: FEATURES="--features gzip"
+
         # socks
         #- rust: stable
         #- rust: nightly

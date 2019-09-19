@@ -53,7 +53,6 @@ pub struct Client {
 /// use std::time::Duration;
 ///
 /// let client = reqwest::blocking::Client::builder()
-///     .gzip(true)
 ///     .timeout(Duration::from_secs(10))
 ///     .build()?;
 /// # Ok(())
@@ -256,19 +255,34 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.default_headers(headers))
     }
 
-    /// Enable auto gzip decompression by checking the ContentEncoding response header.
+    /// Enable auto gzip decompression by checking the `Content-Encoding` response header.
     ///
     /// If auto gzip decompresson is turned on:
+    ///
     /// - When sending a request and if the request's headers do not already contain
     ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `gzip`.
-    ///   The body is **not** automatically compressed.
+    ///   The request body is **not** automatically compressed.
     /// - When receiving a response, if it's headers contain a `Content-Encoding` value that
     ///   equals to `gzip`, both values `Content-Encoding` and `Content-Length` are removed from the
-    ///   headers' set. The body is automatically decompressed.
+    ///   headers' set. The response body is automatically decompressed.
     ///
-    /// Default is enabled.
+    /// If the `gzip` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `gzip` feature to be enabled
+    #[cfg(feature = "gzip")]
     pub fn gzip(self, enable: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.gzip(enable))
+    }
+
+    /// Disable auto response body gzip decompression.
+    ///
+    /// This method exists even if the optional `gzip` feature is not enabled.
+    /// This can be used to ensure a `Client` doesn't use gzip decompression
+    /// even if another dependency were to enable the optional `gzip` feature.
+    pub fn no_gzip(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.no_gzip())
     }
 
     /// Add a `Proxy` to the list of proxies the `Client` will use.
