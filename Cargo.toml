@@ -22,7 +22,6 @@ base64 = "0.10"
 bytes = "0.4"
 encoding_rs = "0.8"
 futures-core-preview = { version = "=0.3.0-alpha.18" }
-futures-channel-preview = { version = "=0.3.0-alpha.18" }
 futures-util-preview = { version = "=0.3.0-alpha.18" }
 http = "0.1.15"
 hyper = "=0.13.0-alpha.1"
@@ -57,6 +56,9 @@ rustls = { version = "0.16", features = ["dangerous_configuration"], optional = 
 tokio-rustls = { version = "=0.12.0-alpha.2", optional = true }
 webpki-roots = { version = "0.17", optional = true }
 
+## blocking
+futures-channel-preview = { version = "=0.3.0-alpha.18", optional = true }
+
 ## cookies
 cookie_crate = { version = "0.12", package = "cookie", optional = true }
 cookie_store = { version = "0.9", optional = true }
@@ -85,7 +87,7 @@ default-tls-vendored = ["default-tls", "native-tls/vendored"]
 
 rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 
-blocking = []
+blocking = ["futures-channel-preview"]
 
 cookies = ["cookie_crate", "cookie_store"]
 
