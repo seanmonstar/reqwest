@@ -1,5 +1,5 @@
-#[macro_use]
 mod support;
+use support::*;
 
 #[tokio::test]
 async fn text_part() {
@@ -17,25 +17,26 @@ async fn text_part() {
         form.boundary()
     );
 
-    let server = server! {
-        request: format!("\
-            POST /multipart/1 HTTP/1.1\r\n\
-            content-type: multipart/form-data; boundary={}\r\n\
-            content-length: 125\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            {}\
-            ", form.boundary(), expected_body),
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: multipart\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+    let ct = format!("multipart/form-data; boundary={}", form.boundary());
+
+    let server = server::http(move |mut req| {
+        let ct = ct.clone();
+        let expected_body = expected_body.clone();
+        async move {
+            assert_eq!(req.method(), "POST");
+            assert_eq!(req.headers()["content-type"], ct);
+            assert_eq!(req.headers()["content-length"], "125");
+
+            let mut full: Vec<u8> = Vec::new();
+            while let Some(item) = req.body_mut().next().await {
+                full.extend(&*item.unwrap());
+            }
+
+            assert_eq!(full, expected_body.as_bytes());
+
+            http::Response::default()
+        }
+    });
 
     let url = format!("http://{}/multipart/1", server.addr());
 
@@ -50,9 +51,74 @@ async fn text_part() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
+#[tokio::test]
+async fn stream_part() {
+    use futures_util::{future, stream};
+
+    let _ = env_logger::try_init();
+
+    let stream = reqwest::Body::wrap_stream(stream::once(future::ready(Ok::<_, reqwest::Error>(
+        "part1 part2".to_owned(),
+    ))));
+    let part = reqwest::multipart::Part::stream(stream);
+
+    let form = reqwest::multipart::Form::new()
+        .text("foo", "bar")
+        .part("part_stream", part);
+
+    let expected_body = format!(
+        "\
+         --{0}\r\n\
+         Content-Disposition: form-data; name=\"foo\"\r\n\
+         \r\n\
+         bar\r\n\
+         --{0}\r\n\
+         Content-Disposition: form-data; name=\"part_stream\"\r\n\
+         \r\n\
+         part1 part2\r\n\
+         --{0}--\r\n\
+         ",
+        form.boundary()
+    );
+
+    let ct = format!("multipart/form-data; boundary={}", form.boundary());
+
+    let server = server::http(move |mut req| {
+        let ct = ct.clone();
+        let expected_body = expected_body.clone();
+        async move {
+            assert_eq!(req.method(), "POST");
+            assert_eq!(req.headers()["content-type"], ct);
+            assert_eq!(req.headers()["transfer-encoding"], "chunked");
+
+            let mut full: Vec<u8> = Vec::new();
+            while let Some(item) = req.body_mut().next().await {
+                full.extend(&*item.unwrap());
+            }
+
+            assert_eq!(full, expected_body.as_bytes());
+
+            http::Response::default()
+        }
+    });
+
+    let url = format!("http://{}/multipart/1", server.addr());
+
+    let client = reqwest::Client::new();
+
+    let res = client
+        .post(&url)
+        .multipart(form)
+        .send()
+        .await
+        .expect("Failed to post multipart");
+    assert_eq!(res.url().as_str(), &url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
 #[cfg(feature = "blocking")]
 #[test]
-fn file() {
+fn blocking_file_part() {
     let _ = env_logger::try_init();
 
     let form = reqwest::blocking::multipart::Form::new()
@@ -73,25 +139,30 @@ fn file() {
         fcontents
     );
 
-    let server = server! {
-        request: format!("\
-            POST /multipart/2 HTTP/1.1\r\n\
-            content-type: multipart/form-data; boundary={}\r\n\
-            content-length: {}\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            {}\
-            ", form.boundary(), expected_body.len(), expected_body),
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: multipart\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+    let ct = format!("multipart/form-data; boundary={}", form.boundary());
+
+    let server = server::http(move |mut req| {
+        let ct = ct.clone();
+        let expected_body = expected_body.clone();
+        async move {
+            assert_eq!(req.method(), "POST");
+            assert_eq!(req.headers()["content-type"], ct);
+            // files know their exact size
+            assert_eq!(
+                req.headers()["content-length"],
+                expected_body.len().to_string()
+            );
+
+            let mut full: Vec<u8> = Vec::new();
+            while let Some(item) = req.body_mut().next().await {
+                full.extend(&*item.unwrap());
+            }
+
+            assert_eq!(full, expected_body.as_bytes());
+
+            http::Response::default()
+        }
+    });
 
     let url = format!("http://{}/multipart/2", server.addr());
 

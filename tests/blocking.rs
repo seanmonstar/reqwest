@@ -1,35 +1,15 @@
-#[macro_use]
 mod support;
+use support::*;
 
 #[test]
 fn test_response_text() {
-    let server = server! {
-        request: b"\
-            GET /text HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: test\r\n\
-            Content-Length: 5\r\n\
-            \r\n\
-            Hello\
-            "
-    };
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
 
     let url = format!("http://{}/text", server.addr());
     let res = reqwest::blocking::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"5"
-    );
+    assert_eq!(res.content_length(), Some(5));
 
     let body = res.text().unwrap();
     assert_eq!(b"Hello", body.as_bytes());
@@ -37,34 +17,20 @@ fn test_response_text() {
 
 #[test]
 fn test_response_non_utf_8_text() {
-    let server = server! {
-        request: b"\
-            GET /text HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: test\r\n\
-            Content-Length: 4\r\n\
-            Content-Type: text/plain; charset=gbk\r\n\
-            \r\n\
-            \xc4\xe3\xba\xc3\
-            "
-    };
+    let server = server::http(move |_req| {
+        async {
+            http::Response::builder()
+                .header("content-type", "text/plain; charset=gbk")
+                .body(b"\xc4\xe3\xba\xc3"[..].into())
+                .unwrap()
+        }
+    });
 
     let url = format!("http://{}/text", server.addr());
     let res = reqwest::blocking::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"4"
-    );
+    assert_eq!(res.content_length(), Some(4));
 
     let body = res.text().unwrap();
     assert_eq!("你好", &body);
@@ -73,33 +39,13 @@ fn test_response_non_utf_8_text() {
 
 #[test]
 fn test_response_json() {
-    let server = server! {
-        request: b"\
-            GET /json HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: test\r\n\
-            Content-Length: 7\r\n\
-            \r\n\
-            \"Hello\"\
-            "
-    };
+    let server = server::http(move |_req| async { http::Response::new("\"Hello\"".into()) });
 
     let url = format!("http://{}/json", server.addr());
     let res = reqwest::blocking::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"7"
-    );
+    assert_eq!(res.content_length(), Some(7));
 
     let body = res.json::<String>().unwrap();
     assert_eq!("Hello", body);
@@ -107,66 +53,27 @@ fn test_response_json() {
 
 #[test]
 fn test_response_copy_to() {
-    let server = server! {
-        request: b"\
-            GET /1 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: test\r\n\
-            Content-Length: 5\r\n\
-            \r\n\
-            Hello\
-            "
-    };
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
 
     let url = format!("http://{}/1", server.addr());
-    let res = reqwest::blocking::get(&url).unwrap();
+    let mut res = reqwest::blocking::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"5"
-    );
 
-    assert_eq!("Hello".to_owned(), res.text().unwrap());
+    let mut dst = Vec::new();
+    res.copy_to(&mut dst).unwrap();
+    assert_eq!(dst, b"Hello");
 }
 
 #[test]
 fn test_get() {
-    let server = server! {
-        request: b"\
-            GET /1 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: test\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+    let server = server::http(move |_req| async { http::Response::default() });
 
     let url = format!("http://{}/1", server.addr());
     let res = reqwest::blocking::get(&url).unwrap();
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"0"
-    );
     assert_eq!(res.remote_addr(), Some(server.addr()));
 
     assert_eq!(res.text().unwrap().len(), 0)
@@ -174,24 +81,17 @@ fn test_get() {
 
 #[test]
 fn test_post() {
-    let server = server! {
-        request: b"\
-            POST /2 HTTP/1.1\r\n\
-            content-length: 5\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            Hello\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: post\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+    let server = server::http(move |mut req| {
+        async move {
+            assert_eq!(req.method(), "POST");
+            assert_eq!(req.headers()["content-length"], "5");
+
+            let data = req.body_mut().next().await.unwrap().unwrap();
+            assert_eq!(&*data, b"Hello");
+
+            http::Response::default()
+        }
+    });
 
     let url = format!("http://{}/2", server.addr());
     let res = reqwest::blocking::Client::new()
@@ -202,36 +102,25 @@ fn test_post() {
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"post");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"0"
-    );
-
-    assert_eq!(res.text().unwrap().len(), 0)
 }
 
 #[test]
 fn test_post_form() {
-    let server = server! {
-        request: b"\
-            POST /form HTTP/1.1\r\n\
-            content-type: application/x-www-form-urlencoded\r\n\
-            content-length: 24\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            hello=world&sean=monstar\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: post-form\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+    let server = server::http(move |mut req| {
+        async move {
+            assert_eq!(req.method(), "POST");
+            assert_eq!(req.headers()["content-length"], "24");
+            assert_eq!(
+                req.headers()["content-type"],
+                "application/x-www-form-urlencoded"
+            );
+
+            let data = req.body_mut().next().await.unwrap().unwrap();
+            assert_eq!(&*data, b"hello=world&sean=monstar");
+
+            http::Response::default()
+        }
+    });
 
     let form = &[("hello", "world"), ("sean", "monstar")];
 
@@ -250,22 +139,14 @@ fn test_post_form() {
 /// returns a error.
 #[test]
 fn test_error_for_status_4xx() {
-    let server = server! {
-        request: b"\
-            GET /1 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 400 OK\r\n\
-            Server: test\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+    let server = server::http(move |_req| {
+        async {
+            http::Response::builder()
+                .status(400)
+                .body(Default::default())
+                .unwrap()
+        }
+    });
 
     let url = format!("http://{}/1", server.addr());
     let res = reqwest::blocking::get(&url).unwrap();
@@ -279,22 +160,14 @@ fn test_error_for_status_4xx() {
 /// returns a error.
 #[test]
 fn test_error_for_status_5xx() {
-    let server = server! {
-        request: b"\
-            GET /1 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 500 OK\r\n\
-            Server: test\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+    let server = server::http(move |_req| {
+        async {
+            http::Response::builder()
+                .status(500)
+                .body(Default::default())
+                .unwrap()
+        }
+    });
 
     let url = format!("http://{}/1", server.addr());
     let res = reqwest::blocking::get(&url).unwrap();
@@ -309,144 +182,75 @@ fn test_error_for_status_5xx() {
 
 #[test]
 fn test_default_headers() {
-    use reqwest::header;
-    let mut headers = header::HeaderMap::with_capacity(1);
-    headers.insert(header::COOKIE, header::HeaderValue::from_static("a=b;c=d"));
+    let server = server::http(move |req| {
+        async move {
+            assert_eq!(req.headers()["reqwest-test"], "orly");
+            http::Response::default()
+        }
+    });
+
+    let mut headers = http::HeaderMap::with_capacity(1);
+    headers.insert("reqwest-test", "orly".parse().unwrap());
     let client = reqwest::blocking::Client::builder()
         .default_headers(headers)
         .build()
         .unwrap();
-
-    let server = server! {
-        request: b"\
-            GET /1 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            cookie: a=b;c=d\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: test\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
 
     let url = format!("http://{}/1", server.addr());
     let res = client.get(&url).send().unwrap();
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"0"
-    );
-
-    let server = server! {
-        request: b"\
-            GET /2 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            cookie: a=b;c=d\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: test\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
-
-    let url = format!("http://{}/2", server.addr());
-    let res = client.get(&url).send().unwrap();
-
-    assert_eq!(res.url().as_str(), &url);
-    assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"0"
-    );
 }
 
 #[test]
 fn test_override_default_headers() {
-    use reqwest::header;
-    let mut headers = header::HeaderMap::with_capacity(1);
+    let server = server::http(move |req| {
+        async move {
+            // not 'iamatoken'
+            assert_eq!(req.headers()[&http::header::AUTHORIZATION], "secret");
+            http::Response::default()
+        }
+    });
+
+    let mut headers = http::HeaderMap::with_capacity(1);
     headers.insert(
-        header::AUTHORIZATION,
-        header::HeaderValue::from_static("iamatoken"),
+        http::header::AUTHORIZATION,
+        http::header::HeaderValue::from_static("iamatoken"),
     );
     let client = reqwest::blocking::Client::builder()
         .default_headers(headers)
         .build()
         .unwrap();
 
-    let server = server! {
-        request: b"\
-            GET /3 HTTP/1.1\r\n\
-            authorization: secret\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: test\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
-
     let url = format!("http://{}/3", server.addr());
     let res = client
         .get(&url)
         .header(
-            header::AUTHORIZATION,
-            header::HeaderValue::from_static("secret"),
+            http::header::AUTHORIZATION,
+            http::header::HeaderValue::from_static("secret"),
         )
         .send()
         .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"0"
-    );
 }
 
 #[test]
 fn test_appended_headers_not_overwritten() {
-    let client = reqwest::blocking::Client::new();
+    let server = server::http(move |req| {
+        async move {
+            let mut accepts = req.headers().get_all("accept").into_iter();
+            assert_eq!(accepts.next().unwrap(), "application/json");
+            assert_eq!(accepts.next().unwrap(), "application/json+hal");
+            assert_eq!(accepts.next(), None);
 
-    let server = server! {
-        request: b"\
-            GET /4 HTTP/1.1\r\n\
-            accept: application/json\r\n\
-            accept: application/json+hal\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: test\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+            http::Response::default()
+        }
+    });
+
+    let client = reqwest::blocking::Client::new();
 
     let url = format!("http://{}/4", server.addr());
     let res = client
@@ -458,11 +262,6 @@ fn test_appended_headers_not_overwritten() {
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"0"
-    );
 
     // make sure this also works with default headers
     use reqwest::header;
@@ -476,24 +275,6 @@ fn test_appended_headers_not_overwritten() {
         .build()
         .unwrap();
 
-    let server = server! {
-        request: b"\
-            GET /4 HTTP/1.1\r\n\
-            accept: application/json\r\n\
-            accept: application/json+hal\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: test\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
-
     let url = format!("http://{}/4", server.addr());
     let res = client
         .get(&url)
@@ -504,9 +285,4 @@ fn test_appended_headers_not_overwritten() {
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(res.headers().get(reqwest::header::SERVER).unwrap(), &"test");
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"0"
-    );
 }

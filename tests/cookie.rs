@@ -1,38 +1,32 @@
-#[macro_use]
 mod support;
+use support::*;
 
-#[test]
-fn cookie_response_accessor() {
-    let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::r#async::Client::new();
+#[tokio::test]
+async fn cookie_response_accessor() {
+    let server = server::http(move |_req| {
+        async move {
+            http::Response::builder()
+                .header("Set-Cookie", "key=val")
+                .header(
+                    "Set-Cookie",
+                    "expires=1; Expires=Wed, 21 Oct 2015 07:28:00 GMT",
+                )
+                .header("Set-Cookie", "path=1; Path=/the-path")
+                .header("Set-Cookie", "maxage=1; Max-Age=100")
+                .header("Set-Cookie", "domain=1; Domain=mydomain")
+                .header("Set-Cookie", "secure=1; Secure")
+                .header("Set-Cookie", "httponly=1; HttpOnly")
+                .header("Set-Cookie", "samesitelax=1; SameSite=Lax")
+                .header("Set-Cookie", "samesitestrict=1; SameSite=Strict")
+                .body(Default::default())
+                .unwrap()
+        }
+    });
 
-    let server = server! {
-        request: b"\
-            GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Set-Cookie: key=val\r\n\
-            Set-Cookie: expires=1; Expires=Wed, 21 Oct 2015 07:28:00 GMT\r\n\
-            Set-Cookie: path=1; Path=/the-path\r\n\
-            Set-Cookie: maxage=1; Max-Age=100\r\n\
-            Set-Cookie: domain=1; Domain=mydomain\r\n\
-            Set-Cookie: secure=1; Secure\r\n\
-            Set-Cookie: httponly=1; HttpOnly\r\n\
-            Set-Cookie: samesitelax=1; SameSite=Lax\r\n\
-            Set-Cookie: samesitestrict=1; SameSite=Strict\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+    let client = reqwest::Client::new();
 
     let url = format!("http://{}/", server.addr());
-    let res = rt.block_on(client.get(&url).send()).unwrap();
+    let res = client.get(&url).send().await.unwrap();
 
     let cookies = res.cookies().collect::<Vec<_>>();
 
@@ -79,273 +73,143 @@ fn cookie_response_accessor() {
     assert!(cookies[8].same_site_strict());
 }
 
-#[test]
-fn cookie_store_simple() {
-    let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::r#async::Client::builder()
+#[tokio::test]
+async fn cookie_store_simple() {
+    let server = server::http(move |req| {
+        async move {
+            if req.uri() == "/2" {
+                assert_eq!(req.headers()["cookie"], "key=val");
+            }
+            http::Response::builder()
+                .header("Set-Cookie", "key=val; HttpOnly")
+                .body(Default::default())
+                .unwrap()
+        }
+    });
+
+    let client = reqwest::Client::builder()
         .cookie_store(true)
         .build()
         .unwrap();
 
-    let server = server! {
-        request: b"\
-            GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Set-Cookie: key=val; HttpOnly\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    client.get(&url).send().await.unwrap();
 
-    let server = server! {
-        request: b"\
-            GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            cookie: key=val\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
-    let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    let url = format!("http://{}/2", server.addr());
+    client.get(&url).send().await.unwrap();
 }
 
-#[test]
-fn cookie_store_overwrite_existing() {
-    let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::r#async::Client::builder()
+#[tokio::test]
+async fn cookie_store_overwrite_existing() {
+    let server = server::http(move |req| {
+        async move {
+            if req.uri() == "/" {
+                http::Response::builder()
+                    .header("Set-Cookie", "key=val")
+                    .body(Default::default())
+                    .unwrap()
+            } else if req.uri() == "/2" {
+                assert_eq!(req.headers()["cookie"], "key=val");
+                http::Response::builder()
+                    .header("Set-Cookie", "key=val2")
+                    .body(Default::default())
+                    .unwrap()
+            } else {
+                assert_eq!(req.uri(), "/3");
+                assert_eq!(req.headers()["cookie"], "key=val2");
+                http::Response::default()
+            }
+        }
+    });
+
+    let client = reqwest::Client::builder()
         .cookie_store(true)
         .build()
         .unwrap();
 
-    let server = server! {
-        request: b"\
-            GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Set-Cookie: key=val\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    client.get(&url).send().await.unwrap();
 
-    let server = server! {
-        request: b"\
-            GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            cookie: key=val\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Set-Cookie: key=val2\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
-    let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    let url = format!("http://{}/2", server.addr());
+    client.get(&url).send().await.unwrap();
 
-    let server = server! {
-        request: b"\
-            GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            cookie: key=val2\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
-    let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    let url = format!("http://{}/3", server.addr());
+    client.get(&url).send().await.unwrap();
 }
 
-#[test]
-fn cookie_store_max_age() {
-    let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-    let client = reqwest::r#async::Client::builder()
+#[tokio::test]
+async fn cookie_store_max_age() {
+    let server = server::http(move |req| {
+        async move {
+            assert_eq!(req.headers().get("cookie"), None);
+            http::Response::builder()
+                .header("Set-Cookie", "key=val; Max-Age=0")
+                .body(Default::default())
+                .unwrap()
+        }
+    });
+
+    let client = reqwest::Client::builder()
         .cookie_store(true)
         .build()
         .unwrap();
-
-    let server = server! {
-        request: b"\
-            GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Set-Cookie: key=val; Max-Age=0\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
-
-    let server = server! {
-        request: b"\
-            GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
-    let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    client.get(&url).send().await.unwrap();
+    client.get(&url).send().await.unwrap();
 }
 
-#[test]
-fn cookie_store_expires() {
-    let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
+#[tokio::test]
+async fn cookie_store_expires() {
+    let server = server::http(move |req| {
+        async move {
+            assert_eq!(req.headers().get("cookie"), None);
+            http::Response::builder()
+                .header(
+                    "Set-Cookie",
+                    "key=val; Expires=Wed, 21 Oct 2015 07:28:00 GMT",
+                )
+                .body(Default::default())
+                .unwrap()
+        }
+    });
+
     let client = reqwest::r#async::Client::builder()
         .cookie_store(true)
         .build()
         .unwrap();
 
-    let server = server! {
-        request: b"\
-            GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Set-Cookie: key=val; Expires=Wed, 21 Oct 2015 07:28:00 GMT\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
-
-    let server = server! {
-        request: b"\
-            GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
-    let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    client.get(&url).send().await.unwrap();
+    client.get(&url).send().await.unwrap();
 }
 
-#[test]
-fn cookie_store_path() {
-    let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
+#[tokio::test]
+async fn cookie_store_path() {
+    let server = server::http(move |req| {
+        async move {
+            if req.uri() == "/" {
+                assert_eq!(req.headers().get("cookie"), None);
+                http::Response::builder()
+                    .header("Set-Cookie", "key=val; Path=/subpath")
+                    .body(Default::default())
+                    .unwrap()
+            } else {
+                assert_eq!(req.uri(), "/subpath");
+                assert_eq!(req.headers()["cookie"], "key=val");
+                http::Response::default()
+            }
+        }
+    });
+
     let client = reqwest::r#async::Client::builder()
         .cookie_store(true)
         .build()
         .unwrap();
 
-    let server = server! {
-        request: b"\
-            GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Set-Cookie: key=val; Path=/subpath\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
     let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    client.get(&url).send().await.unwrap();
+    client.get(&url).send().await.unwrap();
 
-    let server = server! {
-        request: b"\
-            GET / HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
-    let url = format!("http://{}/", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
-
-    let server = server! {
-        request: b"\
-            GET /subpath HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            cookie: key=val\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
     let url = format!("http://{}/subpath", server.addr());
-    rt.block_on(client.get(&url).send()).unwrap();
+    client.get(&url).send().await.unwrap();
 }
