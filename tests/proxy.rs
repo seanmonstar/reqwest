@@ -1,30 +1,21 @@
-#[macro_use]
 mod support;
+use support::*;
 
 use std::env;
 
 #[tokio::test]
 async fn http_proxy() {
-    let server = server! {
-        request: b"\
-            GET http://hyper.rs/prox HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: hyper.rs\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: proxied\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+    let url = "http://hyper.rs/prox";
+    let server = server::http(move |req| {
+        assert_eq!(req.method(), "GET");
+        assert_eq!(req.uri(), url);
+        assert_eq!(req.headers()["host"], "hyper.rs");
+
+        async { http::Response::default() }
+    });
 
     let proxy = format!("http://{}", server.addr());
 
-    let url = "http://hyper.rs/prox";
     let res = reqwest::Client::builder()
         .proxy(reqwest::Proxy::http(&proxy).unwrap())
         .build()
@@ -36,35 +27,25 @@ async fn http_proxy() {
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(
-        res.headers().get(reqwest::header::SERVER).unwrap(),
-        &"proxied"
-    );
 }
 
 #[tokio::test]
 async fn http_proxy_basic_auth() {
-    let server = server! {
-        request: b"\
-            GET http://hyper.rs/prox HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            proxy-authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==\r\n\
-            host: hyper.rs\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: proxied\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+    let url = "http://hyper.rs/prox";
+    let server = server::http(move |req| {
+        assert_eq!(req.method(), "GET");
+        assert_eq!(req.uri(), url);
+        assert_eq!(req.headers()["host"], "hyper.rs");
+        assert_eq!(
+            req.headers()["proxy-authorization"],
+            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="
+        );
+
+        async { http::Response::default() }
+    });
 
     let proxy = format!("http://{}", server.addr());
 
-    let url = "http://hyper.rs/prox";
     let res = reqwest::Client::builder()
         .proxy(
             reqwest::Proxy::http(&proxy)
@@ -80,35 +61,25 @@ async fn http_proxy_basic_auth() {
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(
-        res.headers().get(reqwest::header::SERVER).unwrap(),
-        &"proxied"
-    );
 }
 
 #[tokio::test]
 async fn http_proxy_basic_auth_parsed() {
-    let server = server! {
-        request: b"\
-            GET http://hyper.rs/prox HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            proxy-authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==\r\n\
-            host: hyper.rs\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: proxied\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+    let url = "http://hyper.rs/prox";
+    let server = server::http(move |req| {
+        assert_eq!(req.method(), "GET");
+        assert_eq!(req.uri(), url);
+        assert_eq!(req.headers()["host"], "hyper.rs");
+        assert_eq!(
+            req.headers()["proxy-authorization"],
+            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="
+        );
+
+        async { http::Response::default() }
+    });
 
     let proxy = format!("http://Aladdin:open sesame@{}", server.addr());
 
-    let url = "http://hyper.rs/prox";
     let res = reqwest::Client::builder()
         .proxy(reqwest::Proxy::http(&proxy).unwrap())
         .build()
@@ -120,30 +91,16 @@ async fn http_proxy_basic_auth_parsed() {
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(
-        res.headers().get(reqwest::header::SERVER).unwrap(),
-        &"proxied"
-    );
 }
 
 #[tokio::test]
 async fn test_no_proxy() {
-    let server = server! {
-        request: b"\
-            GET /4 HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: test\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+    let server = server::http(move |req| {
+        assert_eq!(req.method(), "GET");
+        assert_eq!(req.uri(), "/4");
+
+        async { http::Response::default() }
+    });
     let proxy = format!("http://{}", server.addr());
     let url = format!("http://{}/4", server.addr());
 
@@ -164,28 +121,20 @@ async fn test_no_proxy() {
 
 #[tokio::test]
 async fn test_using_system_proxy() {
-    let server = server! {
-        request: b"\
-            GET http://hyper.rs/prox HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: hyper.rs\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Server: proxied\r\n\
-            Content-Length: 0\r\n\
-            \r\n\
-            "
-    };
+    let url = "http://hyper.rs/prox";
+    let server = server::http(move |req| {
+        assert_eq!(req.method(), "GET");
+        assert_eq!(req.uri(), url);
+        assert_eq!(req.headers()["host"], "hyper.rs");
+
+        async { http::Response::default() }
+    });
+
     // save system setting first.
     let system_proxy = env::var("http_proxy");
     // set-up http proxy.
     env::set_var("http_proxy", format!("http://{}", server.addr()));
 
-    let url = "http://hyper.rs/prox";
     let res = reqwest::Client::builder()
         .use_sys_proxy()
         .build()
@@ -197,14 +146,37 @@ async fn test_using_system_proxy() {
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(
-        res.headers().get(reqwest::header::SERVER).unwrap(),
-        &"proxied"
-    );
 
     // reset user setting.
     match system_proxy {
         Err(_) => env::remove_var("http_proxy"),
         Ok(proxy) => env::set_var("http_proxy", proxy),
     }
+}
+
+#[tokio::test]
+async fn http_over_http() {
+    let url = "http://hyper.rs/prox";
+
+    let server = server::http(move |req| {
+        assert_eq!(req.method(), "GET");
+        assert_eq!(req.uri(), url);
+        assert_eq!(req.headers()["host"], "hyper.rs");
+
+        async { http::Response::default() }
+    });
+
+    let proxy = format!("http://{}", server.addr());
+
+    let res = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::http(&proxy).unwrap())
+        .build()
+        .unwrap()
+        .get(url)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.url().as_str(), url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
 }

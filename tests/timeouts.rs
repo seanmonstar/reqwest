@@ -1,7 +1,64 @@
-#[macro_use]
 mod support;
+use support::*;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+#[tokio::test]
+async fn request_timeout() {
+    let _ = env_logger::try_init();
+
+    let server = server::http(move |_req| {
+        async {
+            // delay returning the response
+            tokio::timer::delay(Instant::now() + Duration::from_secs(2)).await;
+            http::Response::default()
+        }
+    });
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_millis(500))
+        .build()
+        .unwrap();
+
+    let url = format!("http://{}/slow", server.addr());
+
+    let res = client.get(&url).send().await;
+
+    let err = res.unwrap_err();
+
+    assert!(err.is_timeout());
+    assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
+}
+
+#[tokio::test]
+async fn response_timeout() {
+    let _ = env_logger::try_init();
+
+    let server = server::http(move |_req| {
+        async {
+            // immediate response, but delayed body
+            let body = hyper::Body::wrap_stream(futures_util::stream::once(async {
+                tokio::timer::delay(Instant::now() + Duration::from_secs(2)).await;
+                Ok::<_, std::convert::Infallible>("Hello")
+            }));
+
+            http::Response::new(body)
+        }
+    });
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_millis(500))
+        .build()
+        .unwrap();
+
+    let url = format!("http://{}/slow", server.addr());
+    let res = client.get(&url).send().await.expect("Failed to get");
+    let body = res.text().await;
+
+    let err = body.unwrap_err();
+
+    assert!(err.is_timeout());
+}
 
 /// Tests that internal client future cancels when the oneshot channel
 /// is canceled.
@@ -17,24 +74,13 @@ fn timeout_closes_connection() {
         .build()
         .unwrap();
 
-    let server = server! {
-        request: b"\
-            GET /closes HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Content-Length: 5\r\n\
-            \r\n\
-            Hello\
-            ",
-        read_timeout: Duration::from_secs(2),
-        read_closes: true
-    };
+    let server = server::http(move |_req| {
+        async {
+            // delay returning the response
+            tokio::timer::delay(Instant::now() + Duration::from_secs(2)).await;
+            http::Response::default()
+        }
+    });
 
     let url = format!("http://{}/closes", server.addr());
     let err = client.get(&url).send().unwrap_err();
@@ -47,7 +93,7 @@ fn timeout_closes_connection() {
 #[test]
 fn write_timeout_large_body() {
     let _ = env_logger::try_init();
-    let body = String::from_utf8(vec![b'x'; 20_000]).unwrap();
+    let body = vec![b'x'; 20_000];
     let len = 8192;
 
     // Make Client drop *after* the Server, so the background doesn't
@@ -57,28 +103,15 @@ fn write_timeout_large_body() {
         .build()
         .unwrap();
 
-    let server = server! {
-        request: format!("\
-            POST /write-timeout HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            content-length: {}\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            {}\
-            ", body.len(), body),
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Content-Length: 5\r\n\
-            \r\n\
-            Hello\
-            ",
-        read_timeout: Duration::from_secs(2),
-        read_closes: true
-    };
+    let server = server::http(move |_req| {
+        async {
+            // delay returning the response
+            tokio::timer::delay(Instant::now() + Duration::from_secs(2)).await;
+            http::Response::default()
+        }
+    });
 
-    let cursor = std::io::Cursor::new(body.into_bytes());
+    let cursor = std::io::Cursor::new(body);
     let url = format!("http://{}/write-timeout", server.addr());
     let err = client
         .post(&url)
@@ -88,79 +121,4 @@ fn write_timeout_large_body() {
 
     assert!(err.is_timeout());
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
-}
-
-#[tokio::test]
-async fn test_response_timeout() {
-    let _ = env_logger::try_init();
-    let server = server! {
-        request: b"\
-            GET /response-timeout HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Content-Length: 0\r\n\
-            ",
-        response_timeout: Duration::from_secs(1)
-    };
-
-    let url = format!("http://{}/response-timeout", server.addr());
-    let err = reqwest::Client::builder()
-        .timeout(Duration::from_millis(500))
-        .build()
-        .unwrap()
-        .get(&url)
-        .send()
-        .await
-        .unwrap_err();
-
-    assert!(err.is_timeout());
-    assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
-}
-
-#[tokio::test]
-async fn test_read_timeout() {
-    let _ = env_logger::try_init();
-    let server = server! {
-        request: b"\
-            GET /read-timeout HTTP/1.1\r\n\
-            user-agent: $USERAGENT\r\n\
-            accept: */*\r\n\
-            accept-encoding: gzip\r\n\
-            host: $HOST\r\n\
-            \r\n\
-            ",
-        response: b"\
-            HTTP/1.1 200 OK\r\n\
-            Content-Length: 5\r\n\
-            \r\n\
-            Hello\
-            ",
-        write_timeout: Duration::from_secs(1)
-    };
-
-    let url = format!("http://{}/read-timeout", server.addr());
-    let res = reqwest::Client::builder()
-        .timeout(Duration::from_millis(500))
-        .build()
-        .unwrap()
-        .get(&url)
-        .send()
-        .await
-        .unwrap();
-
-    assert_eq!(res.url().as_str(), &url);
-    assert_eq!(res.status(), reqwest::StatusCode::OK);
-    assert_eq!(
-        res.headers().get(reqwest::header::CONTENT_LENGTH).unwrap(),
-        &"5"
-    );
-
-    let err = res.text().await.unwrap_err();
-    assert!(err.is_timeout());
 }
