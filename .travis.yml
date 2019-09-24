@@ -47,9 +47,17 @@ matrix:
         #- rust: nightly
         #  env: FEATURES="--features socks"
 
+        # trust-dns
         #- rust: stable
         #- rust: nightly
         #  env: FEATURES="--features trust-dns"
+
+        # wasm
+        - name: "WASM"
+          env: TARGET=wasm32-unknown-unknown
+          rust: nightly
+          install: rustup target add "$TARGET"
+          script: cargo check --target "$TARGET"
 
         # android
         #- rust: stable
