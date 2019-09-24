@@ -17,13 +17,34 @@ publish = false
 [package.metadata.docs.rs]
 all-features = true
 
+[features]
+default = ["default-tls"]
+
+tls = []
+
+default-tls = ["hyper-tls", "native-tls", "tls", "tokio-tls"]
+default-tls-vendored = ["default-tls", "native-tls/vendored"]
+
+#rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
+
+blocking = ["futures-channel-preview", "futures-util-preview/io"]
+
+cookies = ["cookie_crate", "cookie_store"]
+
+gzip = ["async-compression"]
+
+#trust-dns = ["trust-dns-resolver"]
+
 [dependencies]
+http = "0.1.15"
+url = "2.1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 base64 = "0.10"
 bytes = "0.4"
 encoding_rs = "0.8"
 futures-core-preview = { version = "=0.3.0-alpha.18" }
 futures-util-preview = { version = "=0.3.0-alpha.18" }
-http = "0.1.15"
 http-body = "=0.2.0-alpha.1"
 hyper = "=0.13.0-alpha.2"
 log = "0.4"
@@ -32,12 +53,10 @@ mime_guess = "2.0"
 percent-encoding = "2.1"
 tokio = { version = "=0.2.0-alpha.5", default-features = false, features = ["rt-full", "tcp"] }
 tokio-executor = "=0.2.0-alpha.5"
-url = "2.1"
 uuid = { version = "0.7", features = ["v4"] }
 time = "0.1.42"
 
 # TODO: candidates for optional features
-
 
 serde = "1.0"
 serde_json = "1.0"
@@ -72,7 +91,7 @@ async-compression = { version = "0.1.0-alpha.4", default-features = false, featu
 ## trust-dns
 #trust-dns-resolver = { version = "0.11", optional = true }
 
-[dev-dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.6"
 hyper = { version = "=0.13.0-alpha.2", features = ["unstable-stream"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -80,27 +99,25 @@ libflate = "0.1"
 doc-comment = "0.3"
 tokio-fs = { version = "=0.2.0-alpha.5" }
 
-[features]
-default = ["default-tls"]
-
-tls = []
-
-default-tls = ["hyper-tls", "native-tls", "tls", "tokio-tls"]
-default-tls-vendored = ["default-tls", "native-tls/vendored"]
-
-# re-enable CI also
-#rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
-
-blocking = ["futures-channel-preview", "futures-util-preview/io"]
-
-cookies = ["cookie_crate", "cookie_store"]
-
-gzip = ["async-compression"]
-
-#trust-dns = ["trust-dns-resolver"]
-
 [target.'cfg(windows)'.dependencies]
 winreg = "0.6"
+
+# wasm
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3.25"
+wasm-bindgen = "0.2.48"
+wasm-bindgen-futures = { version = "", features = ["futures_0_3"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
+version = "0.3.25"
+features = [
+    "Headers",
+    "Request",
+    "RequestInit",
+    "Response",
+    "Window",
+]
 
 [[example]]
 name = "blocking"

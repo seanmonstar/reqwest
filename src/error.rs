@@ -1,3 +1,4 @@
+#![cfg_attr(target_arch = "wasm32", allow(unused))]
 use std::error::Error as StdError;
 use std::fmt;
 use std::io;
@@ -12,7 +13,7 @@ pub struct Error {
     inner: Box<Inner>,
 }
 
-type BoxError = Box<dyn StdError + Send + Sync>;
+pub(crate) type BoxError = Box<dyn StdError + Send + Sync>;
 
 struct Inner {
     kind: Kind,
@@ -211,6 +212,12 @@ pub(crate) fn status_code(url: Url, status: StatusCode) -> Error {
 
 pub(crate) fn url_bad_scheme(url: Url) -> Error {
     Error::new(Kind::Builder, Some("URL scheme is not allowed")).with_url(url)
+}
+
+if_wasm! {
+    pub(crate) fn wasm(js_val: wasm_bindgen::JsValue) -> BoxError {
+        format!("{:?}", js_val).into()
+    }
 }
 
 // io::Error helpers
