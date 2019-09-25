@@ -1,13 +1,16 @@
 //! multipart/form-data
 use std::borrow::Cow;
 use std::fmt;
+use std::pin::Pin;
 
+use bytes::Bytes;
 use http::HeaderMap;
 use mime_guess::Mime;
 use percent_encoding::{self, AsciiSet, NON_ALPHANUMERIC};
 use uuid::Uuid;
 
-use futures_util::StreamExt;
+use futures_core::Stream;
+use futures_util::{future, stream, StreamExt};
 
 use super::Body;
 
@@ -96,50 +99,58 @@ impl Form {
         self.with_inner(|inner| inner.percent_encode_noop())
     }
 
-    /// Consume this instance and transform into an instance of hyper::Body for use in a request.
-    pub(crate) fn stream(mut self) -> hyper::Body {
+    /// Consume this instance and transform into an instance of Body for use in a request.
+    pub(crate) fn stream(mut self) -> Body {
         if self.inner.fields.is_empty() {
-            return hyper::Body::empty();
+            return Body::empty();
         }
 
         // create initial part to init reduce chain
         let (name, part) = self.inner.fields.remove(0);
-        let start = self.part_stream(name, part);
+        let start = Box::pin(self.part_stream(name, part))
+            as Pin<Box<dyn Stream<Item = crate::Result<Bytes>> + Send + Sync>>;
 
         let fields = self.inner.take_fields();
         // for each field, chain an additional stream
         let stream = fields.into_iter().fold(start, |memo, (name, part)| {
             let part_stream = self.part_stream(name, part);
-            hyper::Body::wrap_stream(memo.chain(part_stream))
+            Box::pin(memo.chain(part_stream))
+                as Pin<Box<dyn Stream<Item = crate::Result<Bytes>> + Send + Sync>>
         });
         // append special ending boundary
-        let last = hyper::Body::from(format!("--{}--\r\n", self.boundary()));
-        hyper::Body::wrap_stream(stream.chain(last))
+        let last = stream::once(future::ready(Ok(
+            format!("--{}--\r\n", self.boundary()).into()
+        )));
+        Body::wrap_stream(stream.chain(last))
     }
 
     /// Generate a hyper::Body stream for a single Part instance of a Form request.
-    pub(crate) fn part_stream<T>(&mut self, name: T, part: Part) -> hyper::Body
+    pub(crate) fn part_stream<T>(
+        &mut self,
+        name: T,
+        part: Part,
+    ) -> impl Stream<Item = Result<Bytes, crate::Error>>
     where
         T: Into<Cow<'static, str>>,
     {
         // start with boundary
-        let boundary = hyper::Body::from(format!("--{}\r\n", self.boundary()));
+        let boundary = stream::once(future::ready(Ok(
+            format!("--{}\r\n", self.boundary()).into()
+        )));
         // append headers
-        let header = hyper::Body::from({
+        let header = stream::once(future::ready(Ok({
             let mut h = self
                 .inner
                 .percent_encoding
                 .encode_headers(&name.into(), &part.meta);
             h.extend_from_slice(b"\r\n\r\n");
-            h
-        });
+            h.into()
+        })));
         // then append form data followed by terminating CRLF
-        hyper::Body::wrap_stream(
-            boundary
-                .chain(header)
-                .chain(hyper::Body::wrap_stream(part.value.into_stream()))
-                .chain(hyper::Body::from("\r\n".to_owned())),
-        )
+        boundary
+            .chain(header)
+            .chain(part.value.into_stream())
+            .chain(stream::once(future::ready(Ok("\r\n".into()))))
     }
 
     pub(crate) fn compute_length(&mut self) -> Option<u64> {
@@ -482,8 +493,8 @@ mod tests {
         let form = Form::new();
 
         let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-        let body = form.stream();
-        let s = body.map(|try_c| try_c.map(|c| c.into_bytes())).try_concat();
+        let body = form.stream().into_stream();
+        let s = body.map(|try_c| try_c.map(Bytes::from)).try_concat();
 
         let out = rt.block_on(s);
         assert_eq!(out.unwrap(), Vec::new());
@@ -530,8 +541,8 @@ mod tests {
              Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
              value3\r\n--boundary--\r\n";
         let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-        let body = form.stream();
-        let s = body.map(|try_c| try_c.map(|c| c.into_bytes())).try_concat();
+        let body = form.stream().into_stream();
+        let s = body.map(|try_c| try_c.map(Bytes::from)).try_concat();
 
         let out = rt.block_on(s).unwrap();
         // These prints are for debug purposes in case the test fails
@@ -557,8 +568,8 @@ mod tests {
                         value2\r\n\
                         --boundary--\r\n";
         let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-        let body = form.stream();
-        let s = body.map(|try_c| try_c.map(|c| c.into_bytes())).try_concat();
+        let body = form.stream().into_stream();
+        let s = body.map(|try_c| try_c.map(Bytes::from)).try_concat();
 
         let out = rt.block_on(s).unwrap();
         // These prints are for debug purposes in case the test fails

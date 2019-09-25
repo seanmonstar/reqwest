@@ -80,12 +80,14 @@ async fn test_redirect_307_and_308_tries_to_get_again() {
 
 #[tokio::test]
 async fn test_redirect_307_and_308_tries_to_post_again() {
+    let _ = env_logger::try_init();
     let client = reqwest::Client::new();
     let codes = [307u16, 308];
     for &code in codes.iter() {
         let redirect = server::http(move |mut req| {
             async move {
                 assert_eq!(req.method(), "POST");
+                assert_eq!(req.headers()["content-length"], "5");
 
                 let data = req.body_mut().next().await.unwrap().unwrap();
                 assert_eq!(&*data, b"Hello");

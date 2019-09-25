@@ -5,11 +5,11 @@ use std::sync::RwLock;
 use std::time::Duration;
 use std::{fmt, str};
 
-use crate::header::{
+use bytes::Bytes;
+use http::header::{
     Entry, HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_LENGTH,
     CONTENT_TYPE, LOCATION, PROXY_AUTHORIZATION, RANGE, REFERER, TRANSFER_ENCODING, USER_AGENT,
 };
-use bytes::Bytes;
 use http::Uri;
 use hyper::client::ResponseFuture;
 use mime;
@@ -24,6 +24,7 @@ use log::debug;
 
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
+use super::Body;
 use crate::connect::Connector;
 #[cfg(feature = "cookies")]
 use crate::cookie;
@@ -472,7 +473,7 @@ impl ClientBuilder {
     }
 }
 
-type HyperClient = hyper::Client<Connector>;
+type HyperClient = hyper::Client<Connector, super::body::ImplStream>;
 
 impl Client {
     /// Constructs a new `Client`.
@@ -612,10 +613,10 @@ impl Client {
 
         let (reusable, body) = match body {
             Some(body) => {
-                let (reusable, body) = body.into_hyper();
+                let (reusable, body) = body.try_reuse();
                 (Some(reusable), body)
             }
-            None => (None, hyper::Body::empty()),
+            None => (None, Body::empty()),
         };
 
         self.proxy_auth(&uri, &mut headers);
@@ -623,7 +624,7 @@ impl Client {
         let mut req = hyper::Request::builder()
             .method(method.clone())
             .uri(uri.clone())
-            .body(body)
+            .body(body.into_stream())
             .expect("valid request parts");
 
         *req.headers_mut() = headers.clone();
@@ -884,13 +885,13 @@ impl Future for PendingRequest {
                             debug!("redirecting to {:?} '{}'", self.method, self.url);
                             let uri = expect_uri(&self.url);
                             let body = match self.body {
-                                Some(Some(ref body)) => hyper::Body::from(body.clone()),
-                                _ => hyper::Body::empty(),
+                                Some(Some(ref body)) => Body::reusable(body.clone()),
+                                _ => Body::empty(),
                             };
                             let mut req = hyper::Request::builder()
                                 .method(self.method.clone())
                                 .uri(uri.clone())
-                                .body(body)
+                                .body(body.into_stream())
                                 .expect("valid request parts");
 
                             // Add cookies from the cookie store.

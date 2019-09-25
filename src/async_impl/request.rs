@@ -219,7 +219,7 @@ impl RequestBuilder {
         };
 
         if let Ok(ref mut req) = builder.request {
-            *req.body_mut() = Some(Body::wrap(multipart.stream()))
+            *req.body_mut() = Some(multipart.stream())
         }
         builder
     }
