@@ -24,13 +24,14 @@ encoding_rs = "0.8"
 futures-core-preview = { version = "=0.3.0-alpha.18" }
 futures-util-preview = { version = "=0.3.0-alpha.18" }
 http = "0.1.15"
-hyper = "=0.13.0-alpha.1"
+http-body = "=0.2.0-alpha.1"
+hyper = "=0.13.0-alpha.2"
 log = "0.4"
 mime = "0.3.7"
 mime_guess = "2.0"
 percent-encoding = "2.1"
-tokio = { version = "=0.2.0-alpha.4", default-features = false, features = ["rt-full", "tcp"] }
-tokio-executor = "=0.2.0-alpha.4"
+tokio = { version = "=0.2.0-alpha.5", default-features = false, features = ["rt-full", "tcp"] }
+tokio-executor = "=0.2.0-alpha.5"
 url = "2.1"
 uuid = { version = "0.7", features = ["v4"] }
 time = "0.1.42"
@@ -45,15 +46,15 @@ serde_urlencoded = "0.6.1"
 # Optional deps...
 
 ## default-tls
-hyper-tls = { version = "=0.4.0-alpha.1", optional = true }
+hyper-tls = { version = "=0.4.0-alpha.2", optional = true }
 native-tls = { version = "0.2", optional = true }
-tokio-tls = { version = "=0.3.0-alpha.4", optional = true }
+tokio-tls = { version = "=0.3.0-alpha.5", optional = true }
 
 ## rustls-tls
-hyper-rustls = { version = "=0.18.0-alpha.1", optional = true }
-rustls = { version = "0.16", features = ["dangerous_configuration"], optional = true }
-tokio-rustls = { version = "=0.12.0-alpha.2", optional = true }
-webpki-roots = { version = "0.17", optional = true }
+#hyper-rustls = { version = "=0.18.0-alpha.1", optional = true }
+#rustls = { version = "0.16", features = ["dangerous_configuration"], optional = true }
+#tokio-rustls = { version = "=0.12.0-alpha.2", optional = true }
+#webpki-roots = { version = "0.17", optional = true }
 
 ## blocking
 futures-channel-preview = { version = "=0.3.0-alpha.18", optional = true }
@@ -73,11 +74,11 @@ async-compression = { version = "0.1.0-alpha.4", default-features = false, featu
 
 [dev-dependencies]
 env_logger = "0.6"
+hyper = { version = "=0.13.0-alpha.2", features = ["unstable-stream"] }
 serde = { version = "1.0", features = ["derive"] }
 libflate = "0.1"
 doc-comment = "0.3"
-bytes = "0.4"
-tokio-fs = { version = "=0.2.0-alpha.4" }
+tokio-fs = { version = "=0.2.0-alpha.5" }
 
 [features]
 default = ["default-tls"]
@@ -87,7 +88,8 @@ tls = []
 default-tls = ["hyper-tls", "native-tls", "tls", "tokio-tls"]
 default-tls-vendored = ["default-tls", "native-tls/vendored"]
 
-rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
+# re-enable CI also
+#rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 
 blocking = ["futures-channel-preview", "futures-util-preview/io"]
 

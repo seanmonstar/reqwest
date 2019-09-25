@@ -19,13 +19,13 @@ matrix:
 
         # rustls-tls
         #- rust: stable
-        - rust: nightly
-          env: FEATURES="--no-default-features --features rustls-tls"
+        #- rust: nightly
+        #  env: FEATURES="--no-default-features --features rustls-tls"
 
         # default-tls and rustls-tls
         #- rust: stable
-        - rust: nightly
-          env: FEATURES="--features rustls-tls"
+        #- rust: nightly
+        #  env: FEATURES="--features rustls-tls"
 
         # optional cookies
         #- rust: stable
