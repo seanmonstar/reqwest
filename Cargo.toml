@@ -27,7 +27,7 @@ default-tls-vendored = ["default-tls", "native-tls/vendored"]
 
 #rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 
-blocking = ["futures-channel-preview", "futures-util-preview/io"]
+blocking = ["futures-channel-preview", "futures-util-preview/io", "tokio/rt-full"]
 
 cookies = ["cookie_crate", "cookie_store"]
 
@@ -51,7 +51,7 @@ log = "0.4"
 mime = "0.3.7"
 mime_guess = "2.0"
 percent-encoding = "2.1"
-tokio = { version = "=0.2.0-alpha.5", default-features = false, features = ["rt-full", "tcp"] }
+tokio = { version = "=0.2.0-alpha.5", default-features = false, features = ["io", "tcp", "timer"] }
 tokio-executor = "=0.2.0-alpha.5"
 uuid = { version = "0.7", features = ["v4"] }
 time = "0.1.42"
@@ -97,7 +97,6 @@ hyper = { version = "=0.13.0-alpha.2", features = ["unstable-stream"] }
 serde = { version = "1.0", features = ["derive"] }
 libflate = "0.1"
 doc-comment = "0.3"
-tokio-fs = { version = "=0.2.0-alpha.5" }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.6"
