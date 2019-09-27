@@ -1,20 +1,20 @@
 language: rust
 matrix:
     fast_finish: true
-    #allow_failures:
-    #    - rust: nightly
+    allow_failures:
+        - rust: nightly
     include:
         - os: osx
           rust: nightly
           #rust: stable
 
         #- rust: stable
-        #- rust: beta
+        - rust: beta
         - rust: nightly
 
         # Disable default-tls
         #- rust: stable
-        - rust: nightly
+        - rust: beta
           env: FEATURES="--no-default-features"
 
         # rustls-tls
@@ -29,44 +29,42 @@ matrix:
 
         # optional cookies
         #- rust: stable
-        - rust: nightly
+        - rust: beta
           env: FEATURES="--features cookies"
 
         # optional blocking
         #- rust: stable
-        - rust: nightly
+        - rust: beta
           env: FEATURES="--features blocking"
 
         # optional gzip
         #- rust: stable
-        - rust: nightly
+        - rust: beta
           env: FEATURES="--features gzip"
 
         # optional json
         #- rust: stable
-        - rust: nightly
+        - rust: beta
           env: FEATURES="--features json"
 
         # socks
         #- rust: stable
-        #- rust: nightly
         #  env: FEATURES="--features socks"
 
         # trust-dns
         #- rust: stable
-        #- rust: nightly
         #  env: FEATURES="--features trust-dns"
 
         # wasm
         - name: "WASM"
           env: TARGET=wasm32-unknown-unknown
-          rust: nightly
+          rust: beta
           install: rustup target add "$TARGET"
           script: cargo check --target "$TARGET"
 
         # android
         #- rust: stable
-        - rust: nightly
+        - rust: beta
           env: TARGET=aarch64-linux-android
           before_install:
             - wget https://dl.google.com/android/repository/android-ndk-r19c-linux-x86_64.zip;
@@ -94,6 +92,7 @@ dist: trusty
 env:
   global:
     - REQWEST_TEST_BODY_FULL=1
+    - RUST_BACKTRACE=1
 script:
   - cargo build $FEATURES
   - cargo test -v $FEATURES -- --test-threads=1
