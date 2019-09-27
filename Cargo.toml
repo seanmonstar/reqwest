@@ -37,6 +37,8 @@ json = ["serde_json"]
 
 #trust-dns = ["trust-dns-resolver"]
 
+unstable-stream = []
+
 [dependencies]
 http = "0.1.15"
 url = "2.1"

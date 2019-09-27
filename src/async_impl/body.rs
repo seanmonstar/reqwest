@@ -5,7 +5,6 @@ use std::task::{Context, Poll};
 
 use bytes::Bytes;
 use futures_core::Stream;
-use futures_util::TryStreamExt;
 use http_body::Body as HttpBody;
 use tokio::timer::Delay;
 
@@ -55,12 +54,28 @@ impl Body {
     /// let body = Body::wrap_stream(stream);
     /// # }
     /// ```
+    ///
+    /// # Unstable
+    ///
+    /// This requires the `unstable-stream` feature to be enabled.
+    #[cfg(feature = "unstable-stream")]
     pub fn wrap_stream<S>(stream: S) -> Body
     where
         S: futures_core::stream::TryStream + Send + Sync + 'static,
         S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
         hyper::Chunk: From<S::Ok>,
     {
+        Body::stream(stream)
+    }
+
+    pub(crate) fn stream<S>(stream: S) -> Body
+    where
+        S: futures_core::stream::TryStream + Send + Sync + 'static,
+        S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+        hyper::Chunk: From<S::Ok>,
+    {
+        use futures_util::TryStreamExt;
+
         let body = Box::pin(WrapStream(
             stream.map_ok(hyper::Chunk::from).map_err(Into::into),
         ));
