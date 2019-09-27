@@ -47,6 +47,13 @@ matrix:
         - rust: beta
           env: FEATURES="--features json"
 
+        # optional unstable-stream
+        #- rust: stable
+        - rust: beta
+          env: FEATURES="--features unstable-stream"
+
+
+
         # socks
         #- rust: stable
         #  env: FEATURES="--features socks"

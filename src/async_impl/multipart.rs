@@ -121,7 +121,7 @@ impl Form {
         let last = stream::once(future::ready(Ok(
             format!("--{}--\r\n", self.boundary()).into()
         )));
-        Body::wrap_stream(stream.chain(last))
+        Body::stream(stream.chain(last))
     }
 
     /// Generate a hyper::Body stream for a single Part instance of a Form request.
@@ -505,7 +505,7 @@ mod tests {
         let mut form = Form::new()
             .part(
                 "reader1",
-                Part::stream(Body::wrap_stream(stream::once(future::ready::<
+                Part::stream(Body::stream(stream::once(future::ready::<
                     Result<String, crate::Error>,
                 >(Ok(
                     "part1".to_owned(),
@@ -515,7 +515,7 @@ mod tests {
             .part("key2", Part::text("value2").mime(mime::IMAGE_BMP))
             .part(
                 "reader2",
-                Part::stream(Body::wrap_stream(stream::once(future::ready::<
+                Part::stream(Body::stream(stream::once(future::ready::<
                     Result<String, crate::Error>,
                 >(Ok(
                     "part2".to_owned(),
