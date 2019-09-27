@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use http;
 use hyper::header::HeaderMap;
+#[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
 
 use super::client::KeepCoreThreadAlive;
@@ -50,6 +51,7 @@ impl Response {
     /// Checking for general status class:
     ///
     /// ```rust
+    /// # #[cfg(feature = "json")]
     /// # fn run() -> Result<(), Box<std::error::Error>> {
     /// let resp = reqwest::blocking::get("http://httpbin.org/get")?;
     /// if resp.status().is_success() {
@@ -181,6 +183,10 @@ impl Response {
 
     /// Try and deserialize the response body as JSON using `serde`.
     ///
+    /// # Optional
+    ///
+    /// This requires the optional `json` feature enabled.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -208,7 +214,9 @@ impl Response {
     /// This method fails whenever the response body is not in JSON format
     /// or it cannot be properly deserialized to target type `T`. For more
     /// details please see [`serde_json::from_reader`].
+    ///
     /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
+    #[cfg(feature = "json")]
     pub fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
         wait::timeout(self.inner.json(), self.timeout).map_err(|e| match e {
             wait::Waited::TimedOut(e) => crate::error::decode(e),

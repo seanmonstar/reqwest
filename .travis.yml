@@ -42,6 +42,11 @@ matrix:
         - rust: nightly
           env: FEATURES="--features gzip"
 
+        # optional json
+        #- rust: stable
+        - rust: nightly
+          env: FEATURES="--features json"
+
         # socks
         #- rust: stable
         #- rust: nightly

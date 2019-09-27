@@ -3,6 +3,7 @@ use std::fmt;
 use base64::encode;
 use http::HttpTryFrom;
 use serde::Serialize;
+#[cfg(feature = "json")]
 use serde_json;
 use serde_urlencoded;
 
@@ -388,6 +389,12 @@ impl RequestBuilder {
     /// Sets the body to the JSON serialization of the passed value, and
     /// also sets the `Content-Type: application/json` header.
     ///
+    /// # Optional
+    ///
+    /// This requires the optional `json` feature enabled.
+    ///
+    /// # Examples
+    ///
     /// ```rust
     /// # use reqwest::Error;
     /// # use std::collections::HashMap;
@@ -408,6 +415,7 @@ impl RequestBuilder {
     ///
     /// Serialization can fail if `T`'s implementation of `Serialize` decides to
     /// fail, or if `T` contains a map with non-string keys.
+    #[cfg(feature = "json")]
     pub fn json<T: Serialize + ?Sized>(mut self, json: &T) -> RequestBuilder {
         let mut error = None;
         if let Ok(ref mut req) = self.request {
@@ -552,6 +560,7 @@ mod tests {
     use crate::header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE, HOST};
     use crate::Method;
     use serde::Serialize;
+    #[cfg(feature = "json")]
     use serde_json;
     use serde_urlencoded;
     use std::collections::{BTreeMap, HashMap};
@@ -776,6 +785,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "json")]
     fn add_json() {
         let client = Client::new();
         let some_url = "https://google.com/";
@@ -796,6 +806,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "json")]
     fn add_json_fail() {
         use serde::ser::Error as _;
         use serde::{Serialize, Serializer};

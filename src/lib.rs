@@ -95,12 +95,13 @@
 //!
 //! There is also a `json` method helper on the [`RequestBuilder`][builder] that works in
 //! a similar fashion the `form` method. It can take any value that can be
-//! serialized into JSON.
+//! serialized into JSON. The feature `json` is required.
 //!
 //! ```rust
 //! # use reqwest::Error;
 //! # use std::collections::HashMap;
 //! #
+//! # #[cfg(feature = "json")]
 //! # async fn run() -> Result<(), Error> {
 //! // This will POST a body of `{"lang":"rust","body":"json"}`
 //! let mut map = HashMap::new();
@@ -159,6 +160,7 @@
 //! - **blocking**: Provides the [blocking][] client API.
 //! - **cookies**: Provides cookie session support.
 //! - **gzip**: Provides response body gzip decompression.
+//! - **json**: Provides serialization and deserialization for JSON bodies.
 //!
 //!
 //! [hyper]: http://hyper.rs

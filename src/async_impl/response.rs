@@ -11,7 +11,9 @@ use hyper::header::CONTENT_LENGTH;
 use hyper::{HeaderMap, StatusCode, Version};
 use log::debug;
 use mime::Mime;
+#[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
+#[cfg(feature = "json")]
 use serde_json;
 use tokio::timer::Delay;
 use url::Url;
@@ -197,6 +199,10 @@ impl Response {
 
     /// Try to deserialize the response body as JSON.
     ///
+    /// # Optional
+    ///
+    /// This requires the optional `json` feature enabled.
+    ///
     /// # Examples
     ///
     /// ```
@@ -229,7 +235,9 @@ impl Response {
     /// This method fails whenever the response body is not in JSON format
     /// or it cannot be properly deserialized to target type `T`. For more
     /// details please see [`serde_json::from_reader`].
+    ///
     /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
+    #[cfg(feature = "json")]
     pub async fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
         let full = self.bytes().await?;
 
