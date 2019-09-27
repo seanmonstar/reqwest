@@ -3,6 +3,7 @@ use std::future::Future;
 
 use base64::encode;
 use serde::Serialize;
+#[cfg(feature = "json")]
 use serde_json;
 use serde_urlencoded;
 
@@ -287,10 +288,15 @@ impl RequestBuilder {
 
     /// Send a JSON body.
     ///
+    /// # Optional
+    ///
+    /// This requires the optional `json` feature enabled.
+    ///
     /// # Errors
     ///
     /// Serialization can fail if `T`'s implementation of `Serialize` decides to
     /// fail, or if `T` contains a map with non-string keys.
+    #[cfg(feature = "json")]
     pub fn json<T: Serialize + ?Sized>(mut self, json: &T) -> RequestBuilder {
         let mut error = None;
         if let Ok(ref mut req) = self.request {

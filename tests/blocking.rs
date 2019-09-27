@@ -38,6 +38,7 @@ fn test_response_non_utf_8_text() {
 }
 
 #[test]
+#[cfg(feature = "json")]
 fn test_response_json() {
     let server = server::http(move |_req| async { http::Response::new("\"Hello\"".into()) });
 

@@ -33,6 +33,8 @@ cookies = ["cookie_crate", "cookie_store"]
 
 gzip = ["async-compression"]
 
+json = ["serde_json"]
+
 #trust-dns = ["trust-dns-resolver"]
 
 [dependencies]
@@ -59,7 +61,6 @@ time = "0.1.42"
 # TODO: candidates for optional features
 
 serde = "1.0"
-serde_json = "1.0"
 serde_urlencoded = "0.6.1"
 
 # Optional deps...
@@ -84,6 +85,9 @@ cookie_store = { version = "0.9", optional = true }
 
 ## gzip
 async-compression = { version = "0.1.0-alpha.4", default-features = false, features = ["gzip", "stream"], optional = true }
+
+## json
+serde_json = { version = "1.0", optional = true }
 
 ## socks
 #socks = { version = "0.3.2", optional = true }
@@ -123,6 +127,16 @@ features = [
 name = "blocking"
 path = "examples/blocking.rs"
 required-features = ["blocking"]
+
+[[example]]
+name = "json_dynamic"
+path = "examples/json_dynamic.rs"
+required-features = ["json"]
+
+[[example]]
+name = "json_typed"
+path = "examples/json_typed.rs"
+required-features = ["json"]
 
 [[test]]
 name = "blocking"

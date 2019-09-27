@@ -45,6 +45,7 @@ async fn response_text() {
 }
 
 #[tokio::test]
+#[cfg(feature = "json")]
 async fn response_json() {
     let _ = env_logger::try_init();
 
