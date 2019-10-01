@@ -329,6 +329,6 @@ impl HttpBody for WrapHyper {
     }
 
     fn size_hint(&self) -> http_body::SizeHint {
-        self.0.size_hint()
+        HttpBody::size_hint(&self.0)
     }
 }
