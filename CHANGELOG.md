@@ -1,3 +1,8 @@
+## v0.9.21
+
+- Add `executor` method to `ClientBuilder`.
+- Send `User-Agent` header in `CONNECT` requests to proxies.
+
 ## v0.9.20
 
 - Improve error message when proxy connections fail to tunnel.
