@@ -138,6 +138,11 @@ impl ClientBuilder {
 
         let mut connector = {
             #[cfg(feature = "tls")]
+            fn user_agent(headers: &HeaderMap) -> HeaderValue {
+                headers[USER_AGENT].clone()
+            }
+
+            #[cfg(feature = "tls")]
             match config.tls {
                 #[cfg(feature = "default-tls")]
                 TlsBackend::Default => {
@@ -156,6 +161,7 @@ impl ClientBuilder {
                     Connector::new_default_tls(
                         tls,
                         proxies.clone(),
+                        user_agent(&config.headers),
                         config.local_address,
                         config.nodelay,
                     )?
@@ -189,6 +195,7 @@ impl ClientBuilder {
                     Connector::new_rustls_tls(
                         tls,
                         proxies.clone(),
+                        user_agent(&config.headers),
                         config.local_address,
                         config.nodelay,
                     )?
