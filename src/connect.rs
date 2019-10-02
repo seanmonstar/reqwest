@@ -11,6 +11,8 @@ use native_tls::{TlsConnector, TlsConnectorBuilder};
 use futures::Poll;
 #[cfg(feature = "tls")]
 use bytes::BufMut;
+#[cfg(feature = "tls")]
+use http::header::HeaderValue;
 
 use std::io;
 use std::sync::Arc;
@@ -32,7 +34,9 @@ pub(crate) struct Connector {
     proxies: Arc<Vec<Proxy>>,
     timeout: Option<Duration>,
     #[cfg(feature = "tls")]
-    nodelay: bool
+    nodelay: bool,
+    #[cfg(feature = "tls")]
+    user_agent: HeaderValue,
 }
 
 enum Inner {
@@ -69,6 +73,7 @@ impl Connector {
     pub(crate) fn new_default_tls<T>(
         tls: TlsConnectorBuilder,
         proxies: Arc<Vec<Proxy>>,
+        user_agent: HeaderValue,
         local_addr: T,
         nodelay: bool) -> ::Result<Connector>
         where
@@ -84,7 +89,8 @@ impl Connector {
             inner: Inner::DefaultTls(http, tls),
             proxies,
             timeout: None,
-            nodelay
+            nodelay,
+            user_agent,
         })
     }
 
@@ -92,6 +98,7 @@ impl Connector {
     pub(crate) fn new_rustls_tls<T>(
         tls: rustls::ClientConfig,
         proxies: Arc<Vec<Proxy>>,
+        user_agent: HeaderValue,
         local_addr: T,
         nodelay: bool) -> ::Result<Connector>
         where
@@ -114,7 +121,8 @@ impl Connector {
             inner: Inner::RustlsTls { http, tls, tls_proxy },
             proxies,
             timeout: None,
-            nodelay
+            nodelay,
+            user_agent,
         })
     }
 
@@ -326,9 +334,10 @@ impl Connect for Connector {
                         http.set_nodelay(nodelay);
                         let http = ::hyper_tls::HttpsConnector::from((http, tls.clone()));
                         let tls = tls.clone();
+                        let user_agent = self.user_agent.clone();
                         return timeout!(http.connect(ndst).and_then(move |(conn, connected)| {
                             trace!("tunneling HTTPS over proxy");
-                            tunnel(conn, host.clone(), port, auth)
+                            tunnel(conn, host.clone(), port, user_agent, auth)
                                 .and_then(move |tunneled| {
                                     tls.connect_async(&host, tunneled)
                                         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
@@ -348,12 +357,13 @@ impl Connect for Connector {
                         http.set_nodelay(nodelay);
                         let http = ::hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
                         let tls = tls.clone();
+                        let user_agent = self.user_agent.clone();
                         return timeout!(http.connect(ndst).and_then(move |(conn, connected)| {
                             trace!("tunneling HTTPS over proxy");
                             let maybe_dnsname = DNSNameRef::try_from_ascii_str(&host)
                                 .map(|dnsname| dnsname.to_owned())
                                 .map_err(|_| io::Error::new(io::ErrorKind::Other, "Invalid DNS Name"));
-                            tunnel(conn, host, port, auth)
+                            tunnel(conn, host, port, user_agent, auth)
                                 .and_then(move |tunneled| Ok((maybe_dnsname?, tunneled)))
                                 .and_then(move |(dnsname, tunneled)| {
                                     RustlsConnector::from(tls).connect(dnsname.as_ref(), tunneled)
@@ -388,12 +398,18 @@ pub(crate) type Conn = Box<dyn AsyncConn + Send + Sync + 'static>;
 pub(crate) type Connecting = Box<dyn Future<Item=(Conn, Connected), Error=io::Error> + Send>;
 
 #[cfg(feature = "tls")]
-fn tunnel<T>(conn: T, host: String, port: u16, auth: Option<::http::header::HeaderValue>) -> Tunnel<T> {
+fn tunnel<T>(conn: T, host: String, port: u16, user_agent: HeaderValue, auth: Option<HeaderValue>) -> Tunnel<T> {
     let mut buf = format!("\
         CONNECT {0}:{1} HTTP/1.1\r\n\
         Host: {0}:{1}\r\n\
     ", host, port).into_bytes();
 
+    // user-agent
+    buf.extend_from_slice(b"User-Agent: ");
+    buf.extend_from_slice(user_agent.as_bytes());
+    buf.extend_from_slice(b"\r\n");
+
+    // proxy-authorization
     match auth {
         Some(value) => {
             debug!("tunnel to {}:{} using basic auth", host, port);
@@ -699,6 +715,7 @@ mod tests {
     use super::tunnel;
     use proxy;
 
+    static TUNNEL_UA: &'static str = "tunnel-test/x.y";
     static TUNNEL_OK: &'static [u8] = b"\
         HTTP/1.1 200 OK\r\n\
         \r\n\
@@ -717,9 +734,10 @@ mod tests {
             let connect_expected = format!("\
                 CONNECT {0}:{1} HTTP/1.1\r\n\
                 Host: {0}:{1}\r\n\
-                {2}\
+                User-Agent: {2}\r\n\
+                {3}\
                 \r\n\
-            ", addr.ip(), addr.port(), $auth).into_bytes();
+            ", addr.ip(), addr.port(), TUNNEL_UA, $auth).into_bytes();
 
             thread::spawn(move || {
                 let (mut sock, _) = listener.accept().unwrap();
@@ -742,7 +760,7 @@ mod tests {
         let host = addr.ip().to_string();
         let port = addr.port();
         let work = work.and_then(|tcp| {
-            tunnel(tcp, host, port, None)
+            tunnel(tcp, host, port, TUNNEL_UA.parse().unwrap(), None)
         });
 
         rt.block_on(work).unwrap();
@@ -757,7 +775,7 @@ mod tests {
         let host = addr.ip().to_string();
         let port = addr.port();
         let work = work.and_then(|tcp| {
-            tunnel(tcp, host, port, None)
+            tunnel(tcp, host, port, TUNNEL_UA.parse().unwrap(), None)
         });
 
         rt.block_on(work).unwrap_err();
@@ -772,7 +790,7 @@ mod tests {
         let host = addr.ip().to_string();
         let port = addr.port();
         let work = work.and_then(|tcp| {
-            tunnel(tcp, host, port, None)
+            tunnel(tcp, host, port, TUNNEL_UA.parse().unwrap(), None)
         });
 
         rt.block_on(work).unwrap_err();
@@ -791,7 +809,7 @@ mod tests {
         let host = addr.ip().to_string();
         let port = addr.port();
         let work = work.and_then(|tcp| {
-            tunnel(tcp, host, port, None)
+            tunnel(tcp, host, port, TUNNEL_UA.parse().unwrap(), None)
         });
 
         let error = rt.block_on(work).unwrap_err();
@@ -810,7 +828,7 @@ mod tests {
         let host = addr.ip().to_string();
         let port = addr.port();
         let work = work.and_then(|tcp| {
-            tunnel(tcp, host, port, Some(proxy::encode_basic_auth("Aladdin", "open sesame")))
+            tunnel(tcp, host, port, TUNNEL_UA.parse().unwrap(), Some(proxy::encode_basic_auth("Aladdin", "open sesame")))
         });
 
         rt.block_on(work).unwrap();
