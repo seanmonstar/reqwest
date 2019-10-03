@@ -84,6 +84,119 @@ impl ClientBuilder {
         ClientHandle::new(self).map(|handle| Client { inner: handle })
     }
 
+
+    // Higher-level options
+
+    /// Sets the default headers for every request.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use reqwest::header;
+    /// # fn build_client() -> Result<(), reqwest::Error> {
+    /// let mut headers = header::HeaderMap::new();
+    /// headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("secret"));
+    ///
+    /// // get a client builder
+    /// let client = reqwest::blocking::Client::builder()
+    ///     .default_headers(headers)
+    ///     .build()?;
+    /// let res = client.get("https://www.rust-lang.org").send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// Override the default headers:
+    ///
+    /// ```rust
+    /// use reqwest::header;
+    /// # fn build_client() -> Result<(), reqwest::Error> {
+    /// let mut headers = header::HeaderMap::new();
+    /// headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("secret"));
+    ///
+    /// // get a client builder
+    /// let client = reqwest::blocking::Client::builder()
+    ///     .default_headers(headers)
+    ///     .build()?;
+    /// let res = client
+    ///     .get("https://www.rust-lang.org")
+    ///     .header(header::AUTHORIZATION, "token")
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn default_headers(self, headers: header::HeaderMap) -> ClientBuilder {
+        self.with_inner(move |inner| inner.default_headers(headers))
+    }
+
+    /// Enable a persistent cookie store for the client.
+    ///
+    /// Cookies received in responses will be preserved and included in
+    /// additional requests.
+    ///
+    /// By default, no cookie store is used.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled.
+    #[cfg(feature = "cookies")]
+    pub fn cookie_store(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.cookie_store(enable))
+    }
+
+    /// Enable auto gzip decompression by checking the `Content-Encoding` response header.
+    ///
+    /// If auto gzip decompresson is turned on:
+    ///
+    /// - When sending a request and if the request's headers do not already contain
+    ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `gzip`.
+    ///   The request body is **not** automatically compressed.
+    /// - When receiving a response, if it's headers contain a `Content-Encoding` value that
+    ///   equals to `gzip`, both values `Content-Encoding` and `Content-Length` are removed from the
+    ///   headers' set. The response body is automatically decompressed.
+    ///
+    /// If the `gzip` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `gzip` feature to be enabled
+    #[cfg(feature = "gzip")]
+    pub fn gzip(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.gzip(enable))
+    }
+
+    /// Disable auto response body gzip decompression.
+    ///
+    /// This method exists even if the optional `gzip` feature is not enabled.
+    /// This can be used to ensure a `Client` doesn't use gzip decompression
+    /// even if another dependency were to enable the optional `gzip` feature.
+    pub fn no_gzip(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.no_gzip())
+    }
+
+    // Redirect options
+
+    /// Set a `RedirectPolicy` for this client.
+    ///
+    /// Default will follow redirects up to a maximum of 10.
+    pub fn redirect(self, policy: RedirectPolicy) -> ClientBuilder {
+        self.with_inner(move |inner| inner.redirect(policy))
+    }
+
+    /// Enable or disable automatic setting of the `Referer` header.
+    ///
+    /// Default is `true`.
+    pub fn referer(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.referer(enable))
+    }
+
+    // Proxy options
+
+    /// Add a `Proxy` to the list of proxies the `Client` will use.
+    pub fn proxy(self, proxy: Proxy) -> ClientBuilder {
+        self.with_inner(move |inner| inner.proxy(proxy))
+    }
+
     /// Disable proxy setting.
     pub fn no_proxy(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.no_proxy())
@@ -94,22 +207,79 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.use_sys_proxy())
     }
 
+    // Timeout options
+
+    /// Set a timeout for connect, read and write operations of a `Client`.
+    ///
+    /// Default is 30 seconds.
+    ///
+    /// Pass `None` to disable timeout.
+    pub fn timeout<T>(mut self, timeout: T) -> ClientBuilder
+    where
+        T: Into<Option<Duration>>,
+    {
+        self.timeout = Timeout(timeout.into());
+        self
+    }
+
+    /// Set a timeout for only the connect phase of a `Client`.
+    ///
+    /// Default is `None`.
+    pub fn connect_timeout<T>(self, timeout: T) -> ClientBuilder
+    where
+        T: Into<Option<Duration>>,
+    {
+        let timeout = timeout.into();
+        if let Some(dur) = timeout {
+            self.with_inner(|inner| inner.connect_timeout(dur))
+        } else {
+            self
+        }
+    }
+
+    // HTTP options
+
+    /// Sets the maximum idle connection per host allowed in the pool.
+    pub fn max_idle_per_host(self, max: usize) -> ClientBuilder {
+        self.with_inner(move |inner| inner.max_idle_per_host(max))
+    }
+
+    /// Enable case sensitive headers.
+    pub fn http1_title_case_headers(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.http1_title_case_headers())
+    }
+
+    /// Only use HTTP/2.
+    pub fn http2_prior_knowledge(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.http2_prior_knowledge())
+    }
+
+    // TCP options
+
     /// Set that all sockets have `SO_NODELAY` set to `true`.
     pub fn tcp_nodelay(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.tcp_nodelay())
     }
 
-    /// Use native TLS backend.
-    #[cfg(feature = "default-tls")]
-    pub fn use_default_tls(self) -> ClientBuilder {
-        self.with_inner(move |inner| inner.use_default_tls())
+    /// Bind to a local IP Address.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::net::IpAddr;
+    /// let local_addr = IpAddr::from([12, 4, 1, 8]);
+    /// let client = reqwest::blocking::Client::builder()
+    ///     .local_address(local_addr)
+    ///     .build().unwrap();
+    /// ```
+    pub fn local_address<T>(self, addr: T) -> ClientBuilder
+    where
+        T: Into<Option<IpAddr>>,
+    {
+        self.with_inner(move |inner| inner.local_address(addr))
     }
 
-    /// Use rustls TLS backend.
-    #[cfg(feature = "rustls-tls")]
-    pub fn use_rustls_tls(self) -> ClientBuilder {
-        self.with_inner(move |inner| inner.use_rustls_tls())
-    }
+    // TLS options
 
     /// Add a custom root certificate.
     ///
@@ -118,16 +288,16 @@ impl ClientBuilder {
     /// trusted store.
     ///
     /// # Example
+    ///
     /// ```
     /// # use std::fs::File;
     /// # use std::io::Read;
-    /// # fn build_client() -> Result<(), Box<std::error::Error>> {
+    /// # fn build_client() -> Result<(), Box<dyn std::error::Error>> {
     /// // read a local binary DER encoded certificate
-    /// let mut buf = Vec::new();
-    /// File::open("my-cert.der")?.read_to_end(&mut buf)?;
+    /// let der = std::fs::read("my-cert.der")?;
     ///
     /// // create a certificate
-    /// let cert = reqwest::Certificate::from_der(&buf)?;
+    /// let cert = reqwest::Certificate::from_der(&der)?;
     ///
     /// // get a client builder
     /// let client = reqwest::blocking::Client::builder()
@@ -138,9 +308,10 @@ impl ClientBuilder {
     /// # }
     /// ```
     ///
-    /// # Errors
+    /// # Optional
     ///
-    /// This method fails if adding root certificate was unsuccessful.
+    /// This requires the optional `default-tls` or `rustls-tls` feature to be
+    /// enabled.
     #[cfg(feature = "tls")]
     pub fn add_root_certificate(self, cert: Certificate) -> ClientBuilder {
         self.with_inner(move |inner| inner.add_root_certificate(cert))
@@ -213,131 +384,33 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.danger_accept_invalid_certs(accept_invalid_certs))
     }
 
-    /// Sets the default headers for every request.
+    /// Force using the native TLS backend.
     ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use reqwest::header;
-    /// # fn build_client() -> Result<(), Box<std::error::Error>> {
-    /// let mut headers = header::HeaderMap::new();
-    /// headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("secret"));
-    ///
-    /// // get a client builder
-    /// let client = reqwest::blocking::Client::builder()
-    ///     .default_headers(headers)
-    ///     .build()?;
-    /// let res = client.get("https://www.rust-lang.org").send()?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// Override the default headers:
-    ///
-    /// ```rust
-    /// use reqwest::header;
-    /// # fn build_client() -> Result<(), Box<std::error::Error>> {
-    /// let mut headers = header::HeaderMap::new();
-    /// headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("secret"));
-    ///
-    /// // get a client builder
-    /// let client = reqwest::blocking::Client::builder()
-    ///     .default_headers(headers)
-    ///     .build()?;
-    /// let res = client
-    ///     .get("https://www.rust-lang.org")
-    ///     .header(header::AUTHORIZATION, "token")
-    ///     .send()?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn default_headers(self, headers: header::HeaderMap) -> ClientBuilder {
-        self.with_inner(move |inner| inner.default_headers(headers))
-    }
-
-    /// Enable auto gzip decompression by checking the `Content-Encoding` response header.
-    ///
-    /// If auto gzip decompresson is turned on:
-    ///
-    /// - When sending a request and if the request's headers do not already contain
-    ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `gzip`.
-    ///   The request body is **not** automatically compressed.
-    /// - When receiving a response, if it's headers contain a `Content-Encoding` value that
-    ///   equals to `gzip`, both values `Content-Encoding` and `Content-Length` are removed from the
-    ///   headers' set. The response body is automatically decompressed.
-    ///
-    /// If the `gzip` feature is turned on, the default option is enabled.
+    /// Since multiple TLS backends can be optionally enabled, this option will
+    /// force the `native-tls` backend to be used for this `Client`.
     ///
     /// # Optional
     ///
-    /// This requires the optional `gzip` feature to be enabled
-    #[cfg(feature = "gzip")]
-    pub fn gzip(self, enable: bool) -> ClientBuilder {
-        self.with_inner(|inner| inner.gzip(enable))
+    /// This requires the optional `default-tls` feature to be enabled.
+    #[cfg(feature = "default-tls")]
+    pub fn use_default_tls(self) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_default_tls())
     }
 
-    /// Disable auto response body gzip decompression.
+    /// Force using the Rustls TLS backend.
     ///
-    /// This method exists even if the optional `gzip` feature is not enabled.
-    /// This can be used to ensure a `Client` doesn't use gzip decompression
-    /// even if another dependency were to enable the optional `gzip` feature.
-    pub fn no_gzip(self) -> ClientBuilder {
-        self.with_inner(|inner| inner.no_gzip())
+    /// Since multiple TLS backends can be optionally enabled, this option will
+    /// force the `rustls` backend to be used for this `Client`.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `rustls-tls` feature to be enabled.
+    #[cfg(feature = "rustls-tls")]
+    pub fn use_rustls_tls(self) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_rustls_tls())
     }
 
-    /// Add a `Proxy` to the list of proxies the `Client` will use.
-    pub fn proxy(self, proxy: Proxy) -> ClientBuilder {
-        self.with_inner(move |inner| inner.proxy(proxy))
-    }
-
-    /// Set a `RedirectPolicy` for this client.
-    ///
-    /// Default will follow redirects up to a maximum of 10.
-    pub fn redirect(self, policy: RedirectPolicy) -> ClientBuilder {
-        self.with_inner(move |inner| inner.redirect(policy))
-    }
-
-    /// Enable or disable automatic setting of the `Referer` header.
-    ///
-    /// Default is `true`.
-    pub fn referer(self, enable: bool) -> ClientBuilder {
-        self.with_inner(|inner| inner.referer(enable))
-    }
-
-    /// Set a timeout for connect, read and write operations of a `Client`.
-    ///
-    /// Default is 30 seconds.
-    ///
-    /// Pass `None` to disable timeout.
-    pub fn timeout<T>(mut self, timeout: T) -> ClientBuilder
-    where
-        T: Into<Option<Duration>>,
-    {
-        self.timeout = Timeout(timeout.into());
-        self
-    }
-
-    /// Sets the maximum idle connection per host allowed in the pool.
-    ///
-    /// Default is usize::MAX (no limit).
-    pub fn max_idle_per_host(self, max: usize) -> ClientBuilder {
-        self.with_inner(move |inner| inner.max_idle_per_host(max))
-    }
-
-    /// Set a timeout for only the connect phase of a `Client`.
-    ///
-    /// Default is `None`.
-    pub fn connect_timeout<T>(self, timeout: T) -> ClientBuilder
-    where
-        T: Into<Option<Duration>>,
-    {
-        let timeout = timeout.into();
-        if let Some(dur) = timeout {
-            self.with_inner(|inner| inner.connect_timeout(dur))
-        } else {
-            self
-        }
-    }
+    // private
 
     fn with_inner<F>(mut self, func: F) -> ClientBuilder
     where
@@ -345,74 +418,6 @@ impl ClientBuilder {
     {
         self.inner = func(self.inner);
         self
-    }
-
-    /// Only use HTTP/2.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// let client = reqwest::blocking::Client::builder()
-    ///     .h2_prior_knowledge()
-    ///     .build().unwrap();
-    /// ```
-    pub fn h2_prior_knowledge(self) -> ClientBuilder {
-        self.with_inner(|inner| inner.h2_prior_knowledge())
-    }
-
-    /// Enable case sensitive headers.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// let client = reqwest::blocking::Client::builder()
-    ///     .http1_title_case_headers()
-    ///     .build().unwrap();
-    /// ```
-    pub fn http1_title_case_headers(self) -> ClientBuilder {
-        self.with_inner(|inner| inner.http1_title_case_headers())
-    }
-
-    /// Bind to a local IP Address
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use std::net::IpAddr;
-    /// let local_addr = IpAddr::from([12, 4, 1, 8]);
-    /// let client = reqwest::blocking::Client::builder()
-    ///     .local_address(local_addr)
-    ///     .build().unwrap();
-    /// ```
-    pub fn local_address<T>(self, addr: T) -> ClientBuilder
-    where
-        T: Into<Option<IpAddr>>,
-    {
-        self.with_inner(move |inner| inner.local_address(addr))
-    }
-
-    /// Enable a persistent cookie store for the client.
-    ///
-    /// Cookies received in responses will be preserved and included in
-    /// additional requests.
-    ///
-    /// By default, no cookie store is used.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// let client = reqwest::blocking::Client::builder()
-    ///     .cookie_store(true)
-    ///     .build()
-    ///     .unwrap();
-    /// ```
-    ///
-    /// # Optional
-    ///
-    /// This requires the optional `cookies` feature to be enabled.
-    #[cfg(feature = "cookies")]
-    pub fn cookie_store(self, enable: bool) -> ClientBuilder {
-        self.with_inner(|inner| inner.cookie_store(enable))
     }
 }
 

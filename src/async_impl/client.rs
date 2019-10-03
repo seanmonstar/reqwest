@@ -239,84 +239,72 @@ impl ClientBuilder {
         })
     }
 
-    /// Set that all sockets have `SO_NODELAY` set to `true`.
-    pub fn tcp_nodelay(mut self) -> ClientBuilder {
-        self.config.nodelay = true;
-        self
-    }
-
-    /// Use native TLS backend.
-    #[cfg(feature = "default-tls")]
-    pub fn use_default_tls(mut self) -> ClientBuilder {
-        self.config.tls = TlsBackend::Default;
-        self
-    }
-
-    /// Use rustls TLS backend.
-    #[cfg(feature = "rustls-tls")]
-    pub fn use_rustls_tls(mut self) -> ClientBuilder {
-        self.config.tls = TlsBackend::Rustls;
-        self
-    }
-
-    /// Add a custom root certificate.
-    ///
-    /// This can be used to connect to a server that has a self-signed
-    /// certificate for example.
-    #[cfg(feature = "tls")]
-    pub fn add_root_certificate(mut self, cert: Certificate) -> ClientBuilder {
-        self.config.root_certs.push(cert);
-        self
-    }
-
-    /// Sets the identity to be used for client certificate authentication.
-    #[cfg(feature = "tls")]
-    pub fn identity(mut self, identity: Identity) -> ClientBuilder {
-        self.config.identity = Some(identity);
-        self
-    }
-
-    /// Controls the use of hostname verification.
-    ///
-    /// Defaults to `false`.
-    ///
-    /// # Warning
-    ///
-    /// You should think very carefully before you use this method. If
-    /// hostname verification is not used, any valid certificate for any
-    /// site will be trusted for use from any other. This introduces a
-    /// significant vulnerability to man-in-the-middle attacks.
-    #[cfg(feature = "default-tls")]
-    pub fn danger_accept_invalid_hostnames(
-        mut self,
-        accept_invalid_hostname: bool,
-    ) -> ClientBuilder {
-        self.config.hostname_verification = !accept_invalid_hostname;
-        self
-    }
-
-    /// Controls the use of certificate validation.
-    ///
-    /// Defaults to `false`.
-    ///
-    /// # Warning
-    ///
-    /// You should think very carefully before using this method. If
-    /// invalid certificates are trusted, *any* certificate for *any* site
-    /// will be trusted for use. This includes expired certificates. This
-    /// introduces significant vulnerabilities, and should only be used
-    /// as a last resort.
-    #[cfg(feature = "tls")]
-    pub fn danger_accept_invalid_certs(mut self, accept_invalid_certs: bool) -> ClientBuilder {
-        self.config.certs_verification = !accept_invalid_certs;
-        self
-    }
+    // Higher-level options
 
     /// Sets the default headers for every request.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use reqwest::header;
+    /// # async fn doc() -> Result<(), reqwest::Error> {
+    /// let mut headers = header::HeaderMap::new();
+    /// headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("secret"));
+    ///
+    /// // get a client builder
+    /// let client = reqwest::Client::builder()
+    ///     .default_headers(headers)
+    ///     .build()?;
+    /// let res = client.get("https://www.rust-lang.org").send().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// Override the default headers:
+    ///
+    /// ```rust
+    /// use reqwest::header;
+    /// # async fn doc() -> Result<(), reqwest::Error> {
+    /// let mut headers = header::HeaderMap::new();
+    /// headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("secret"));
+    ///
+    /// // get a client builder
+    /// let client = reqwest::Client::builder()
+    ///     .default_headers(headers)
+    ///     .build()?;
+    /// let res = client
+    ///     .get("https://www.rust-lang.org")
+    ///     .header(header::AUTHORIZATION, "token")
+    ///     .send()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn default_headers(mut self, headers: HeaderMap) -> ClientBuilder {
         for (key, value) in headers.iter() {
             self.config.headers.insert(key, value.clone());
         }
+        self
+    }
+
+
+    /// Enable a persistent cookie store for the client.
+    ///
+    /// Cookies received in responses will be preserved and included in
+    /// additional requests.
+    ///
+    /// By default, no cookie store is used.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled.
+    #[cfg(feature = "cookies")]
+    pub fn cookie_store(mut self, enable: bool) -> ClientBuilder {
+        self.config.cookie_store = if enable {
+            Some(cookie::CookieStore::default())
+        } else {
+            None
+        };
         self
     }
 
@@ -359,6 +347,26 @@ impl ClientBuilder {
         }
     }
 
+    // Redirect options
+
+    /// Set a `RedirectPolicy` for this client.
+    ///
+    /// Default will follow redirects up to a maximum of 10.
+    pub fn redirect(mut self, policy: RedirectPolicy) -> ClientBuilder {
+        self.config.redirect_policy = policy;
+        self
+    }
+
+    /// Enable or disable automatic setting of the `Referer` header.
+    ///
+    /// Default is `true`.
+    pub fn referer(mut self, enable: bool) -> ClientBuilder {
+        self.config.referer = enable;
+        self
+    }
+
+    // Proxy options
+
     /// Add a `Proxy` to the list of proxies the `Client` will use.
     pub fn proxy(mut self, proxy: Proxy) -> ClientBuilder {
         self.config.proxies.push(proxy);
@@ -384,21 +392,7 @@ impl ClientBuilder {
         self
     }
 
-    /// Set a `RedirectPolicy` for this client.
-    ///
-    /// Default will follow redirects up to a maximum of 10.
-    pub fn redirect(mut self, policy: RedirectPolicy) -> ClientBuilder {
-        self.config.redirect_policy = policy;
-        self
-    }
-
-    /// Enable or disable automatic setting of the `Referer` header.
-    ///
-    /// Default is `true`.
-    pub fn referer(mut self, enable: bool) -> ClientBuilder {
-        self.config.referer = enable;
-        self
-    }
+    // Timeout options
 
     /// Enables a request timeout.
     ///
@@ -408,26 +402,6 @@ impl ClientBuilder {
     /// Default is no timeout.
     pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
         self.config.timeout = Some(timeout);
-        self
-    }
-
-    /// Sets the maximum idle connection per host allowed in the pool.
-    ///
-    /// Default is usize::MAX (no limit).
-    pub fn max_idle_per_host(mut self, max: usize) -> ClientBuilder {
-        self.config.max_idle_per_host = max;
-        self
-    }
-
-    /// Only use HTTP/2.
-    pub fn h2_prior_knowledge(mut self) -> ClientBuilder {
-        self.config.http2_only = true;
-        self
-    }
-
-    /// Enable case sensitive headers.
-    pub fn http1_title_case_headers(mut self) -> ClientBuilder {
-        self.config.http1_title_case_headers = true;
         self
     }
 
@@ -444,7 +418,45 @@ impl ClientBuilder {
         self
     }
 
-    /// Bind to a local IP Address
+    // HTTP options
+
+    /// Sets the maximum idle connection per host allowed in the pool.
+    pub fn max_idle_per_host(mut self, max: usize) -> ClientBuilder {
+        self.config.max_idle_per_host = max;
+        self
+    }
+
+    /// Enable case sensitive headers.
+    pub fn http1_title_case_headers(mut self) -> ClientBuilder {
+        self.config.http1_title_case_headers = true;
+        self
+    }
+
+    /// Only use HTTP/2.
+    pub fn http2_prior_knowledge(mut self) -> ClientBuilder {
+        self.config.http2_only = true;
+        self
+    }
+
+    // TCP options
+
+    /// Set that all sockets have `SO_NODELAY` set to `true`.
+    pub fn tcp_nodelay(mut self) -> ClientBuilder {
+        self.config.nodelay = true;
+        self
+    }
+
+    /// Bind to a local IP Address.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::net::IpAddr;
+    /// let local_addr = IpAddr::from([12, 4, 1, 8]);
+    /// let client = reqwest::Client::builder()
+    ///     .local_address(local_addr)
+    ///     .build().unwrap();
+    /// ```
     pub fn local_address<T>(mut self, addr: T) -> ClientBuilder
     where
         T: Into<Option<IpAddr>>,
@@ -453,25 +465,110 @@ impl ClientBuilder {
         self
     }
 
-    /// Enable a persistent cookie store for the client.
+    // TLS options
+
+    /// Add a custom root certificate.
     ///
-    /// Cookies received in responses will be preserved and included in
-    /// additional requests.
-    ///
-    /// By default, no cookie store is used.
+    /// This can be used to connect to a server that has a self-signed
+    /// certificate for example.
     ///
     /// # Optional
     ///
-    /// This requires the optional `cookies` feature to be enabled.
-    #[cfg(feature = "cookies")]
-    pub fn cookie_store(mut self, enable: bool) -> ClientBuilder {
-        self.config.cookie_store = if enable {
-            Some(cookie::CookieStore::default())
-        } else {
-            None
-        };
+    /// This requires the optional `default-tls` or `rustls-tls` feature to be
+    /// enabled.
+    #[cfg(feature = "tls")]
+    pub fn add_root_certificate(mut self, cert: Certificate) -> ClientBuilder {
+        self.config.root_certs.push(cert);
         self
     }
+
+    /// Sets the identity to be used for client certificate authentication.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls` or `rustls-tls` feature to be
+    /// enabled.
+    #[cfg(feature = "tls")]
+    pub fn identity(mut self, identity: Identity) -> ClientBuilder {
+        self.config.identity = Some(identity);
+        self
+    }
+
+    /// Controls the use of hostname verification.
+    ///
+    /// Defaults to `false`.
+    ///
+    /// # Warning
+    ///
+    /// You should think very carefully before you use this method. If
+    /// hostname verification is not used, any valid certificate for any
+    /// site will be trusted for use from any other. This introduces a
+    /// significant vulnerability to man-in-the-middle attacks.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls` feature to be enabled.
+    #[cfg(feature = "default-tls")]
+    pub fn danger_accept_invalid_hostnames(
+        mut self,
+        accept_invalid_hostname: bool,
+    ) -> ClientBuilder {
+        self.config.hostname_verification = !accept_invalid_hostname;
+        self
+    }
+
+    /// Controls the use of certificate validation.
+    ///
+    /// Defaults to `false`.
+    ///
+    /// # Warning
+    ///
+    /// You should think very carefully before using this method. If
+    /// invalid certificates are trusted, *any* certificate for *any* site
+    /// will be trusted for use. This includes expired certificates. This
+    /// introduces significant vulnerabilities, and should only be used
+    /// as a last resort.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls` or `rustls-tls` feature to be
+    /// enabled.
+    #[cfg(feature = "tls")]
+    pub fn danger_accept_invalid_certs(mut self, accept_invalid_certs: bool) -> ClientBuilder {
+        self.config.certs_verification = !accept_invalid_certs;
+        self
+    }
+
+    /// Force using the native TLS backend.
+    ///
+    /// Since multiple TLS backends can be optionally enabled, this option will
+    /// force the `native-tls` backend to be used for this `Client`.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls` feature to be enabled.
+    #[cfg(feature = "default-tls")]
+    pub fn use_default_tls(mut self) -> ClientBuilder {
+        self.config.tls = TlsBackend::Default;
+        self
+    }
+
+
+    /// Force using the Rustls TLS backend.
+    ///
+    /// Since multiple TLS backends can be optionally enabled, this option will
+    /// force the `rustls` backend to be used for this `Client`.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `rustls-tls` feature to be enabled.
+    #[cfg(feature = "rustls-tls")]
+    pub fn use_rustls_tls(mut self) -> ClientBuilder {
+        self.config.tls = TlsBackend::Rustls;
+        self
+    }
+
+
 }
 
 type HyperClient = hyper::Client<Connector, super::body::ImplStream>;
