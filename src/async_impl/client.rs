@@ -444,12 +444,6 @@ impl ClientBuilder {
         self
     }
 
-    #[doc(hidden)]
-    #[deprecated(note = "DNS no longer uses blocking threads")]
-    pub fn dns_threads(self, _threads: usize) -> ClientBuilder {
-        self
-    }
-
     /// Bind to a local IP Address
     pub fn local_address<T>(mut self, addr: T) -> ClientBuilder
     where
