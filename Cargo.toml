@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.10.0-alpha.0" # remember to update html_root_url
+version = "0.10.0-alpha.1" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 repository = "https://github.com/seanmonstar/reqwest"
@@ -11,8 +11,6 @@ license = "MIT/Apache-2.0"
 categories = ["web-programming::http-client"]
 edition = "2018"
 autotests = true
-
-publish = false
 
 [package.metadata.docs.rs]
 all-features = true
@@ -112,7 +110,7 @@ winreg = "0.6"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3.25"
 wasm-bindgen = "0.2.48"
-wasm-bindgen-futures = { version = "", features = ["futures_0_3"] }
+wasm-bindgen-futures = { version = "0.3", features = ["futures_0_3"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3.25"

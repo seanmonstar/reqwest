@@ -1,3 +1,18 @@
+# v0.10.0-alpha.1
+
+- Add `std::future::Future` support.
+- Add `wasm32-unknown-unknown` support (with fewer features).
+- Add ability to pass async `Response` as the `body` of another `Request`.
+- Change default `Client` API to async. The previous blocking client API is avaialble at `reqwest::blocking`.
+- Change default feature set to reduce unnecessary dependencies. Most features are disabled by default:
+  - `blocking`: The `reqwest::blocking` (synchronous) client API.
+  - `cookies`: Cookie store support.
+  - `gzip`: Automatic response body decompression.
+  - `json`: Request and response JSON body methods.
+- Change `futures::Stream` support to a disabled-by-default `unstable-stream` feature.
+- Change `Error` internal design, removing several `Error::is_*` inspector methods.
+- Update `url` to v2.0.
+
 ## v0.9.19
 
 - Add `ClientBuilder::use_sys_proxy()` to enable automatic detect of HTTP proxies configured on the system.
