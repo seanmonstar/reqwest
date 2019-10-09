@@ -538,7 +538,7 @@ impl fmt::Debug for Client {
 
 impl fmt::Debug for ClientBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("ClientBuilder").finish()
+        self.inner.fmt(f)
     }
 }
 
