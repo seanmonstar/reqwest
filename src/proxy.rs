@@ -48,7 +48,7 @@ use winreg::RegKey;
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Proxy {
     intercept: Intercept,
 }
@@ -259,6 +259,12 @@ impl Proxy {
             Intercept::Https(_) => uri.scheme() == "https",
             Intercept::Custom(ref custom) => custom.call(uri).is_some(),
         }
+    }
+}
+
+impl fmt::Debug for Proxy {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("Proxy").field(&self.intercept).finish()
     }
 }
 

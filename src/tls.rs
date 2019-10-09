@@ -254,6 +254,7 @@ impl fmt::Debug for Identity {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum TlsBackend {
     #[cfg(feature = "default-tls")]
     Default,

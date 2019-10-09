@@ -12,7 +12,6 @@ use http::header::{
 };
 use http::Uri;
 use hyper::client::ResponseFuture;
-use mime;
 #[cfg(feature = "default-tls")]
 use native_tls::TlsConnector;
 use std::future::Future;
@@ -58,6 +57,7 @@ pub struct ClientBuilder {
 }
 
 struct Config {
+    // NOTE: When adding a new field, update `fmt::Debug for ClientBuilder`
     gzip: bool,
     headers: HeaderMap,
     #[cfg(feature = "default-tls")]
@@ -91,10 +91,7 @@ impl ClientBuilder {
     pub fn new() -> ClientBuilder {
         let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(2);
         headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
-        headers.insert(
-            ACCEPT,
-            HeaderValue::from_str(mime::STAR_STAR.as_ref()).expect("unable to parse mime"),
-        );
+        headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
 
         ClientBuilder {
             config: Config {
@@ -567,8 +564,6 @@ impl ClientBuilder {
         self.config.tls = TlsBackend::Rustls;
         self
     }
-
-
 }
 
 type HyperClient = hyper::Client<Connector, super::body::ImplStream>;
@@ -781,17 +776,90 @@ impl Client {
 
 impl fmt::Debug for Client {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Client")
-            .field("gzip", &self.inner.gzip)
-            .field("redirect_policy", &self.inner.redirect_policy)
-            .field("referer", &self.inner.referer)
-            .finish()
+        let mut builder = f.debug_struct("ClientBuilder");
+        self.inner.fmt_fields(&mut builder);
+        builder.finish()
     }
 }
 
 impl fmt::Debug for ClientBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("ClientBuilder").finish()
+        let mut builder = f.debug_struct("ClientBuilder");
+        self.config.fmt_fields(&mut builder);
+        builder.finish()
+    }
+}
+
+impl Config {
+    fn fmt_fields(&self, f: &mut fmt::DebugStruct<'_, '_>) {
+        // Instead of deriving Debug, only print fields when their output
+        // would provide relevant or interesting data.
+
+        #[cfg(feature = "cookies")]
+        {
+            if let Some(_) = self.cookie_store {
+                f.field("cookie_store", &true);
+            }
+        }
+
+        f.field("gzip", &self.gzip);
+
+        if !self.proxies.is_empty() {
+            f.field("proxies", &self.proxies);
+        }
+
+        if !self.redirect_policy.is_default() {
+            f.field("redirect_policy", &self.redirect_policy);
+        }
+
+        if self.referer {
+            f.field("referer", &true);
+        }
+
+        f.field("default_headers", &self.headers);
+
+        if self.http1_title_case_headers {
+            f.field("http1_title_case_headers", &true);
+        }
+
+        if self.http2_only {
+            f.field("http2_prior_knowledge", &true);
+        }
+
+        if let Some(ref d) = self.connect_timeout {
+            f.field("connect_timeout", d);
+        }
+
+        if let Some(ref d) = self.timeout {
+            f.field("timeout", d);
+        }
+
+        if let Some(ref v) = self.local_address {
+            f.field("local_address", v);
+        }
+
+        if self.nodelay {
+            f.field("tcp_nodelay", &true);
+        }
+
+        #[cfg(feature = "default-tls")]
+        {
+            if !self.hostname_verification {
+                f.field("danger_accept_invalid_hostnames", &true);
+            }
+        }
+
+        #[cfg(feature = "tls")]
+        {
+            if !self.certs_verification {
+                f.field("danger_accept_invalid_certs", &true);
+            }
+        }
+
+        #[cfg(all(feature = "default-tls", feature = "rustls-tls"))]
+        {
+            f.field("tls_backend", &self.tls);
+        }
     }
 }
 
@@ -807,6 +875,43 @@ struct ClientRef {
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
 }
+
+impl ClientRef {
+    fn fmt_fields(&self, f: &mut fmt::DebugStruct<'_, '_>) {
+        // Instead of deriving Debug, only print fields when their output
+        // would provide relevant or interesting data.
+
+        #[cfg(feature = "cookies")]
+        {
+            if let Some(_) = self.cookie_store {
+                f.field("cookie_store", &true);
+            }
+        }
+
+        f.field("gzip", &self.gzip);
+
+        if !self.proxies.is_empty() {
+            f.field("proxies", &self.proxies);
+        }
+
+        if !self.redirect_policy.is_default() {
+            f.field("redirect_policy", &self.redirect_policy);
+        }
+
+        if self.referer {
+            f.field("referer", &true);
+        }
+
+        f.field("default_headers", &self.headers);
+
+
+        if let Some(ref d) = self.request_timeout {
+            f.field("timeout", d);
+        }
+    }
+}
+
+
 
 pub(super) struct Pending {
     inner: PendingInner,
