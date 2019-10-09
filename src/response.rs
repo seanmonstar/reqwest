@@ -205,7 +205,6 @@ impl Response {
         wait::timeout(self.inner.json(), self.timeout).map_err(|e| {
             match e {
                 wait::Waited::TimedOut => ::error::timedout(None),
-                wait::Waited::Executor(e) => ::error::from(e),
                 wait::Waited::Inner(e) => e,
             }
         })
@@ -263,7 +262,6 @@ impl Response {
         wait::timeout(self.inner.text_with_charset(default_encoding), self.timeout).map_err(|e| {
             match e {
                 wait::Waited::TimedOut => ::error::timedout(None),
-                wait::Waited::Executor(e) => ::error::from(e),
                 wait::Waited::Inner(e) => e,
             }
         })
@@ -378,7 +376,6 @@ impl Stream for WaitBody {
             Some(Err(e)) => {
                 let req_err = match e {
                     wait::Waited::TimedOut => ::error::timedout(None),
-                    wait::Waited::Executor(e) => ::error::from(e),
                     wait::Waited::Inner(e) => e,
                 };
 
