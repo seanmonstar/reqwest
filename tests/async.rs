@@ -354,3 +354,35 @@ fn body_stream() {
 
     rt.block_on(res_future).unwrap();
 }
+
+#[test]
+fn blocking_inside_async_context() {
+    let _ = env_logger::try_init();
+
+    let server = server! {
+        request: b"\
+            GET /enter HTTP/1.1\r\n\
+            user-agent: $USERAGENT\r\n\
+            accept: */*\r\n\
+            accept-encoding: gzip\r\n\
+            host: $HOST\r\n\
+            \r\n\
+            ",
+        response: b"\
+            HTTP/1.1 200 OK\r\n\
+            Content-Length: 18\r\n\
+            \r\n\
+            Blocky McBlockface\
+            "
+    };
+
+    let mut rt = Runtime::new().expect("new rt");
+    let url = format!("http://{}/enter", server.addr());
+
+    rt.block_on(futures::future::lazy(|| {
+        let mut resp = reqwest::get(&url)?;
+        let text = resp.text()?;
+        assert_eq!("Blocky McBlockface", text);
+        Ok::<_, reqwest::Error>(())
+    })).unwrap();
+}

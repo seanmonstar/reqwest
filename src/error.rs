@@ -2,8 +2,6 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 
-use tokio_executor::EnterError;
-
 use {StatusCode, Url};
 
 /// The Errors that may occur when processing a `Request`.
@@ -153,8 +151,7 @@ impl Error {
             Kind::RedirectLoop |
             Kind::Status(_) |
             Kind::UnknownProxyScheme |
-            Kind::Timer |
-            Kind::BlockingClientInFutureContext => None,
+            Kind::Timer => None,
         }
     }
 
@@ -248,8 +245,6 @@ impl fmt::Debug for Error {
     }
 }
 
-static BLOCK_IN_FUTURE: &'static str = "blocking Client used inside a Future context";
-
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(ref url) = self.inner.url {
@@ -289,7 +284,6 @@ impl fmt::Display for Error {
             }
             Kind::UnknownProxyScheme => f.write_str("Unknown proxy scheme"),
             Kind::Timer => f.write_str("timer unavailable"),
-            Kind::BlockingClientInFutureContext => f.write_str(BLOCK_IN_FUTURE),
         }
     }
 }
@@ -326,7 +320,6 @@ impl StdError for Error {
             }
             Kind::UnknownProxyScheme => "Unknown proxy scheme",
             Kind::Timer => "timer unavailable",
-            Kind::BlockingClientInFutureContext => BLOCK_IN_FUTURE,
         }
     }
 
@@ -354,8 +347,7 @@ impl StdError for Error {
             Kind::RedirectLoop |
             Kind::Status(_) |
             Kind::UnknownProxyScheme |
-            Kind::Timer |
-            Kind::BlockingClientInFutureContext => None,
+            Kind::Timer => None,
         }
     }
 
@@ -381,8 +373,7 @@ impl StdError for Error {
             Kind::RedirectLoop |
             Kind::Status(_) |
             Kind::UnknownProxyScheme |
-            Kind::Timer |
-            Kind::BlockingClientInFutureContext => None,
+            Kind::Timer => None,
         }
     }
 }
@@ -410,7 +401,6 @@ pub(crate) enum Kind {
     Status(StatusCode),
     UnknownProxyScheme,
     Timer,
-    BlockingClientInFutureContext,
 }
 
 
@@ -482,15 +472,8 @@ where T: Into<Kind> {
     fn from(err: ::wait::Waited<T>) -> Kind {
         match err {
             ::wait::Waited::TimedOut =>  io_timeout().into(),
-            ::wait::Waited::Executor(e) => e.into(),
             ::wait::Waited::Inner(e) => e.into(),
         }
-    }
-}
-
-impl From<EnterError> for Kind {
-    fn from(_err: EnterError) -> Kind {
-        Kind::BlockingClientInFutureContext
     }
 }
 
