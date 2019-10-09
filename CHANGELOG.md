@@ -1,3 +1,7 @@
+## v0.9.22
+
+- Revert returning an error when using blocking `Client` inside an asynchronous context. Log a warning instead.
+
 ## v0.9.21
 
 - Add `executor` method to `ClientBuilder`.
