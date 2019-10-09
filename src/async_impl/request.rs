@@ -15,6 +15,9 @@ use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_
 use crate::{Method, Url};
 use http::HttpTryFrom;
 
+#[cfg(feature = "typed-headers")]
+use headers::HeaderMapExt;
+
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
     method: Method,
@@ -133,29 +136,15 @@ impl RequestBuilder {
         self
     }
 
-    /// Set a header with a type implementing hyper v0.11's `Header` trait.
-    ///
-    /// This method is provided to ease migration, and requires the `hyper-011`
-    /// Cargo feature enabled on `reqwest`.
-    #[cfg(feature = "hyper-011")]
-    pub fn header_011<H>(self, header: H) -> RequestBuilder
+    /// Set a header with a type implementing `Header` trait.
+    #[cfg(feature = "typed-headers")]
+    pub fn typed_header<H>(self, header: H) -> RequestBuilder
     where
-        H: crate::hyper_011::header::Header,
+        H: headers::Header,
     {
-        let mut headers = crate::hyper_011::Headers::new();
-        headers.set(header);
-        let map = crate::header::HeaderMap::from(headers);
-        self.headers(map)
-    }
-
-    /// Set multiple headers using hyper v0.11's `Headers` map.
-    ///
-    /// This method is provided to ease migration, and requires the `hyper-011`
-    /// Cargo feature enabled on `reqwest`.
-    #[cfg(feature = "hyper-011")]
-    pub fn headers_011(self, headers: crate::hyper_011::Headers) -> RequestBuilder {
-        let map = crate::header::HeaderMap::from(headers);
-        self.headers(map)
+        let mut headers = crate::header::HeaderMap::new();
+        headers.typed_insert(header);
+        self.headers(headers)
     }
 
     /// Enable HTTP basic authentication.
