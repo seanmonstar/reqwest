@@ -15,7 +15,7 @@ async fn promise<T>(promise: js_sys::Promise) -> Result<T, crate::error::BoxErro
 where
     T: JsCast,
 {
-    use wasm_bindgen_futures::futures_0_3::JsFuture;
+    use wasm_bindgen_futures::JsFuture;
 
     let js_val = JsFuture::from(promise)
         .await
