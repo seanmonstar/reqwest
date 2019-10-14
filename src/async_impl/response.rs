@@ -156,8 +156,9 @@ impl Response {
     /// and with malformed sequences replaced with the REPLACEMENT CHARACTER.
     /// You can provide a default encoding for decoding the raw message, while the
     /// `charset` parameter of `Content-Type` header is still prioritized. For more information
-    /// about the possible encoding name, please go to
-    /// https://docs.rs/encoding_rs/0.8.17/encoding_rs/#relationship-with-windows-code-pages
+    /// about the possible encoding name, please go to [`encoding_rs`] docs.
+    ///
+    /// [`encoding_rs`]: https://docs.rs/encoding_rs/0.8/encoding_rs/#relationship-with-windows-code-pages
     ///
     /// # Example
     ///
