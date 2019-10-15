@@ -55,7 +55,6 @@ mime_guess = "2.0"
 percent-encoding = "2.1"
 tokio = { version = "=0.2.0-alpha.6", default-features = false, features = ["io", "tcp", "timer"] }
 tokio-executor = "=0.2.0-alpha.6"
-uuid = { version = "0.7", features = ["v4"] }
 time = "0.1.42"
 
 # TODO: candidates for optional features

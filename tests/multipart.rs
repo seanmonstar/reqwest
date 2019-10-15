@@ -25,7 +25,10 @@ async fn text_part() {
         async move {
             assert_eq!(req.method(), "POST");
             assert_eq!(req.headers()["content-type"], ct);
-            assert_eq!(req.headers()["content-length"], "125");
+            assert_eq!(
+                req.headers()["content-length"],
+                expected_body.len().to_string()
+            );
 
             let mut full: Vec<u8> = Vec::new();
             while let Some(item) = req.body_mut().next().await {
