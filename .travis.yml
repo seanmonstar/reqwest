@@ -102,4 +102,4 @@ env:
     - RUST_BACKTRACE=1
 script:
   - cargo build $FEATURES
-  - cargo test -v $FEATURES -- --test-threads=1
+  - cargo test -v $FEATURES --features __internal_proxy_sys_no_cache -- --test-threads=1
