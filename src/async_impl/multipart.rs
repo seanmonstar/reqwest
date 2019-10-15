@@ -7,7 +7,6 @@ use bytes::Bytes;
 use http::HeaderMap;
 use mime_guess::Mime;
 use percent_encoding::{self, AsciiSet, NON_ALPHANUMERIC};
-use uuid::Uuid;
 
 use futures_core::Stream;
 use futures_util::{future, stream, StreamExt};
@@ -265,7 +264,7 @@ impl PartProps for Part {
 impl<P: PartProps> FormParts<P> {
     pub(crate) fn new() -> Self {
         FormParts {
-            boundary: format!("{}", Uuid::new_v4().to_simple()),
+            boundary: gen_boundary(),
             computed_headers: Vec::new(),
             fields: Vec::new(),
             percent_encoding: PercentEncoding::PathSegment,
@@ -479,6 +478,51 @@ impl PercentEncoding {
             format!("{}*=utf-8''{}", name, legal_value)
         }
     }
+}
+
+fn gen_boundary() -> String {
+    let a = random();
+    let b = random();
+    let c = random();
+    let d = random();
+
+    format!("{:016x}-{:016x}-{:016x}-{:016x}", a, b, c, d)
+}
+
+// xor-shift
+fn random() -> u64 {
+    use std::cell::Cell;
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    use std::num::Wrapping;
+
+    thread_local! {
+        static RNG: Cell<Wrapping<u64>> = Cell::new(Wrapping(seed()));
+    }
+
+    fn seed() -> u64 {
+        let seed = RandomState::new();
+
+        let mut out = 0;
+        let mut cnt = 0;
+        while out == 0 {
+            cnt += 1;
+            let mut hasher = seed.build_hasher();
+            hasher.write_usize(cnt);
+            out = hasher.finish();
+        }
+        out
+    }
+
+    RNG.with(|rng| {
+        let mut n = rng.get();
+        debug_assert_ne!(n.0, 0);
+        n ^= n >> 12;
+        n ^= n << 25;
+        n ^= n >> 27;
+        rng.set(n);
+        n.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
+    })
 }
 
 #[cfg(test)]
