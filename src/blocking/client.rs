@@ -261,6 +261,20 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.http2_prior_knowledge())
     }
 
+    /// Sets the `SETTINGS_INITIAL_WINDOW_SIZE` option for HTTP2 stream-level flow control.
+    ///
+    /// Default is currently 65,535 but may change internally to optimize for common uses.
+    pub fn http2_initial_stream_window_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+        self.with_inner(|inner| inner.http2_initial_stream_window_size(sz))
+    }
+
+    /// Sets the max connection-level flow control for HTTP2
+    ///
+    /// Default is currently 65,535 but may change internally to optimize for common uses.
+    pub fn http2_initial_connection_window_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+        self.with_inner(|inner| inner.http2_initial_connection_window_size(sz))
+    }
+
     // TCP options
 
     /// Set that all sockets have `SO_NODELAY` set to `true`.
