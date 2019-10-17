@@ -60,7 +60,11 @@ pub struct Proxy {
 pub enum ProxyScheme {
     Http {
         auth: Option<HeaderValue>,
-        uri: hyper::Uri,
+        host: http::uri::Authority,
+    },
+    Https {
+        auth: Option<HeaderValue>,
+        host: http::uri::Authority,
     },
     #[cfg(feature = "socks")]
     Socks5 {
@@ -226,6 +230,7 @@ impl Proxy {
             | Intercept::Http(ProxyScheme::Http { ref auth, .. }) => auth.clone(),
             Intercept::Custom(ref custom) => custom.call(uri).and_then(|scheme| match scheme {
                 ProxyScheme::Http { auth, .. } => auth,
+                ProxyScheme::Https { auth, .. } => auth,
                 #[cfg(feature = "socks")]
                 _ => None,
             }),
@@ -278,10 +283,18 @@ impl ProxyScheme {
     // To start conservative, keep builders private for now.
 
     /// Proxy traffic via the specified URL over HTTP
-    fn http<T: IntoUrl>(url: T) -> crate::Result<Self> {
+    fn http(host: &str) -> crate::Result<Self> {
         Ok(ProxyScheme::Http {
             auth: None,
-            uri: crate::into_url::expect_uri(&url.into_url()?),
+            host: host.parse().map_err(crate::error::builder)?,
+        })
+    }
+
+    /// Proxy traffic via the specified URL over HTTPS
+    fn https(host: &str) -> crate::Result<Self> {
+        Ok(ProxyScheme::Https {
+            auth: None,
+            host: host.parse().map_err(crate::error::builder)?,
         })
     }
 
@@ -330,7 +343,11 @@ impl ProxyScheme {
             ProxyScheme::Http { ref mut auth, .. } => {
                 let header = encode_basic_auth(&username.into(), &password.into());
                 *auth = Some(header);
-            }
+            },
+            ProxyScheme::Https { ref mut auth, .. } => {
+                let header = encode_basic_auth(&username.into(), &password.into());
+                *auth = Some(header);
+            },
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { ref mut auth, .. } => {
                 *auth = Some((username.into(), password.into()));
@@ -338,11 +355,32 @@ impl ProxyScheme {
         }
     }
 
+    fn if_no_auth(mut self, update: &Option<HeaderValue>) -> Self {
+        match self {
+            ProxyScheme::Http { ref mut auth, .. } => {
+                if auth.is_none() {
+                    *auth = update.clone();
+                }
+            },
+            ProxyScheme::Https { ref mut auth, .. } => {
+                if auth.is_none() {
+                    *auth = update.clone();
+                }
+            },
+            #[cfg(feature = "socks")]
+            ProxyScheme::Socks5 { .. } => {}
+        }
+
+        self
+    }
+
     /// Convert a URL into a proxy scheme
     ///
     /// Supported schemes: HTTP, HTTPS, (SOCKS5, SOCKS5H if `socks` feature is enabled).
     // Private for now...
     fn parse(url: Url) -> crate::Result<Self> {
+        use url::Position;
+
         // Resolve URL to a host and port
         #[cfg(feature = "socks")]
         let to_addr = || {
@@ -357,7 +395,8 @@ impl ProxyScheme {
         };
 
         let mut scheme = match url.scheme() {
-            "http" | "https" => Self::http(url.clone())?,
+            "http" => Self::http(&url[Position::BeforeHost..Position::AfterPort])?,
+            "https" => Self::https(&url[Position::BeforeHost..Position::AfterPort])?,
             #[cfg(feature = "socks")]
             "socks5" => Self::socks5(to_addr()?)?,
             #[cfg(feature = "socks")]
@@ -375,13 +414,22 @@ impl ProxyScheme {
     }
 
     #[cfg(test)]
-    fn http_uri(&self) -> &http::Uri {
+    fn scheme(&self) -> &str {
         match self {
-            ProxyScheme::Http { ref uri, .. } => {
-                uri
-            },
+            ProxyScheme::Http { .. } => "http",
+            ProxyScheme::Https { .. } => "https",
             #[cfg(feature = "socks")]
-            _ => panic!("socks not expected"),
+            ProxyScheme::Socks5 => "socks5",
+        }
+    }
+
+    #[cfg(test)]
+    fn host(&self) -> &str {
+        match self {
+            ProxyScheme::Http { host, .. } => host.as_str(),
+            ProxyScheme::Https { host, .. } => host.as_str(),
+            #[cfg(feature = "socks")]
+            ProxyScheme::Socks5 => panic!("socks5"),
         }
     }
 }
@@ -433,20 +481,7 @@ impl Custom {
 
         (self.func)(&url)
             .and_then(|result| result.ok())
-            .map(|scheme| match scheme {
-                ProxyScheme::Http { auth, uri } => {
-                    if auth.is_some() {
-                        ProxyScheme::Http { auth, uri }
-                    } else {
-                        ProxyScheme::Http {
-                            auth: self.auth.clone(),
-                            uri,
-                        }
-                    }
-                }
-                #[cfg(feature = "socks")]
-                socks => socks,
-            })
+            .map(|scheme| scheme.if_no_auth(&self.auth))
     }
 }
 
@@ -659,11 +694,18 @@ mod tests {
     }
 
     fn intercepted_uri(p: &Proxy, s: &str) -> Uri {
-        match p.intercept(&url(s)).unwrap() {
-            ProxyScheme::Http { uri, .. } => uri,
+        let (scheme, host) = match p.intercept(&url(s)).unwrap() {
+            ProxyScheme::Http { host, .. } => ("http", host),
+            ProxyScheme::Https { host, .. } => ("https", host),
             #[cfg(feature = "socks")]
             _ => panic!("intercepted as socks"),
-        }
+        };
+        http::Uri::builder()
+            .scheme(scheme)
+            .authority(host)
+            .path_and_query("/")
+            .build()
+            .expect("intercepted_uri")
     }
 
     #[test]
@@ -728,6 +770,19 @@ mod tests {
     }
 
     #[test]
+    fn test_proxy_scheme_parse() {
+        let ps = "http://foo:bar@localhost:1239".into_proxy_scheme().unwrap();
+
+        match ps {
+            ProxyScheme::Http { auth, host } => {
+                assert_eq!(auth.unwrap(), encode_basic_auth("foo", "bar"));
+                assert_eq!(host, "localhost:1239");
+            },
+            other => panic!("unexpected: {:?}", other),
+        }
+    }
+
+    #[test]
     fn test_get_sys_proxies_parsing() {
         // save system setting first.
         let _g1 = env_guard("HTTP_PROXY");
@@ -744,7 +799,9 @@ mod tests {
         env::set_var("http_proxy", "http://127.0.0.1/");
         let proxies = get_sys_proxies();
 
-        assert_eq!(proxies["http"].http_uri(), "http://127.0.0.1/");
+        let p = &proxies["http"];
+        assert_eq!(p.scheme(), "http");
+        assert_eq!(p.host(), "127.0.0.1");
 
         // reset user setting when guards drop
     }
@@ -759,7 +816,7 @@ mod tests {
         env::set_var("HTTP_PROXY", "http://evil/");
 
         // not in CGI yet
-        assert_eq!(get_sys_proxies()["http"].http_uri(), "http://evil/");
+        assert_eq!(get_sys_proxies()["http"].host(), "evil");
 
         // set like we're in CGI
         env::set_var("REQUEST_METHOD", "GET");
