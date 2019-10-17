@@ -78,6 +78,8 @@ struct Config {
     tls: TlsBackend,
     http2_only: bool,
     http1_title_case_headers: bool,
+    http2_initial_stream_window_size: Option<u32>,
+    http2_initial_connection_window_size: Option<u32>,
     local_address: Option<IpAddr>,
     nodelay: bool,
     #[cfg(feature = "cookies")]
@@ -115,6 +117,8 @@ impl ClientBuilder {
                 tls: TlsBackend::default(),
                 http2_only: false,
                 http1_title_case_headers: false,
+                http2_initial_stream_window_size: None,
+                http2_initial_connection_window_size: None,
                 local_address: None,
                 nodelay: false,
                 #[cfg(feature = "cookies")]
@@ -208,6 +212,13 @@ impl ClientBuilder {
         let mut builder = hyper::Client::builder();
         if config.http2_only {
             builder.http2_only(true);
+        }
+
+        if let Some(http2_initial_stream_window_size) = config.http2_initial_stream_window_size {
+            builder.http2_initial_stream_window_size(http2_initial_stream_window_size);
+        }
+        if let Some(http2_initial_connection_window_size) = config.http2_initial_connection_window_size {
+            builder.http2_initial_connection_window_size(http2_initial_connection_window_size);
         }
 
         builder.max_idle_per_host(config.max_idle_per_host);
@@ -432,6 +443,22 @@ impl ClientBuilder {
     /// Only use HTTP/2.
     pub fn http2_prior_knowledge(mut self) -> ClientBuilder {
         self.config.http2_only = true;
+        self
+    }
+
+    /// Sets the `SETTINGS_INITIAL_WINDOW_SIZE` option for HTTP2 stream-level flow control.
+    ///
+    /// Default is currently 65,535 but may change internally to optimize for common uses.
+    pub fn http2_initial_stream_window_size(mut self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+        self.config.http2_initial_stream_window_size = sz.into();
+        self
+    }
+
+    /// Sets the max connection-level flow control for HTTP2
+    ///
+    /// Default is currently 65,535 but may change internally to optimize for common uses.
+    pub fn http2_initial_connection_window_size(mut self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+        self.config.http2_initial_connection_window_size = sz.into();
         self
     }
 
