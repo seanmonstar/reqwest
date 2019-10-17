@@ -373,6 +373,17 @@ impl ProxyScheme {
 
         Ok(scheme)
     }
+
+    #[cfg(test)]
+    fn http_uri(&self) -> &http::Uri {
+        match self {
+            ProxyScheme::Http { ref uri, .. } => {
+                uri
+            },
+            #[cfg(feature = "socks")]
+            _ => panic!("socks not expected"),
+        }
+    }
 }
 
 type SystemProxyMap = HashMap<String, ProxyScheme>;
@@ -521,26 +532,49 @@ fn get_sys_proxies() -> SystemProxyMap {
     proxies
 }
 
-fn insert_proxy(proxies: &mut SystemProxyMap, schema: String, addr: String) {
+fn insert_proxy(proxies: &mut SystemProxyMap, scheme: impl Into<String>, addr: String) -> bool {
     if let Ok(valid_addr) = addr.into_proxy_scheme() {
-        proxies.insert(schema, valid_addr);
+        proxies.insert(scheme.into(), valid_addr);
+        true
+    } else {
+        false
     }
 }
 
 fn get_from_environment() -> SystemProxyMap {
     let mut proxies = HashMap::new();
 
-    const PROXY_KEY_ENDS: &str = "_proxy";
-
-    for (key, value) in env::vars() {
-        let key: String = key.to_lowercase();
-        if key.ends_with(PROXY_KEY_ENDS) {
-            let end_indx = key.len() - PROXY_KEY_ENDS.len();
-            let schema = &key[..end_indx];
-            insert_proxy(&mut proxies, String::from(schema), value);
+    if is_cgi() {
+        if log::log_enabled!(log::Level::Warn) {
+            if env::var_os("HTTP_PROXY").is_some() {
+                log::warn!("HTTP_PROXY environment variable ignored in CGI");
+            }
         }
+    } else if !insert_from_env(&mut proxies, "http", "HTTP_PROXY") {
+        insert_from_env(&mut proxies, "http", "http_proxy");
     }
+
+    if !insert_from_env(&mut proxies, "https", "HTTPS_PROXY") {
+        insert_from_env(&mut proxies, "https", "https_proxy");
+    }
+
     proxies
+}
+
+fn insert_from_env(proxies: &mut SystemProxyMap, scheme: &str, var: &str) -> bool {
+    if let Ok(val) = env::var(var) {
+        insert_proxy(proxies, scheme, val)
+    } else {
+        false
+    }
+}
+
+/// Check if we are being executed in a CGI context.
+///
+/// If so, a malicious client can send the `Proxy:` header, and it will
+/// be in the `HTTP_PROXY` env var. So we don't use it :)
+fn is_cgi() -> bool {
+    env::var_os("REQUEST_METHOD").is_some()
 }
 
 #[cfg(target_os = "windows")]
@@ -565,7 +599,7 @@ fn get_from_registry_impl() -> Result<SystemProxyMap, Box<dyn Error>> {
                 [protocol, address] => {
                     insert_proxy(
                         &mut proxies,
-                        String::from(*protocol),
+                        *protocol,
                         String::from(*address),
                     );
                 }
@@ -580,21 +614,16 @@ fn get_from_registry_impl() -> Result<SystemProxyMap, Box<dyn Error>> {
     } else {
         // Use one setting for all protocols.
         if proxy_server.starts_with("http:") {
-            insert_proxy(&mut proxies, String::from("http"), proxy_server);
+            insert_proxy(&mut proxies, "http", proxy_server);
         } else {
             insert_proxy(
                 &mut proxies,
-                String::from("http"),
+                "http",
                 format!("http://{}", proxy_server),
             );
             insert_proxy(
                 &mut proxies,
-                String::from("https"),
-                format!("https://{}", proxy_server),
-            );
-            insert_proxy(
-                &mut proxies,
-                String::from("ftp"),
+                "https",
                 format!("https://{}", proxy_server),
             );
         }
@@ -699,12 +728,12 @@ mod tests {
     }
 
     #[test]
-    fn test_get_sys_proxies() {
+    fn test_get_sys_proxies_parsing() {
         // save system setting first.
-        let system_proxy = env::var("http_proxy");
+        let _g1 = env_guard("HTTP_PROXY");
+        let _g2 = env_guard("http_proxy");
 
-        // remove proxy.
-        env::remove_var("http_proxy");
+        // empty
         assert_eq!(get_sys_proxies().contains_key("http"), false);
 
         // the system proxy setting url is invalid.
@@ -715,18 +744,51 @@ mod tests {
         env::set_var("http_proxy", "http://127.0.0.1/");
         let proxies = get_sys_proxies();
 
-        match &proxies["http"] {
-            ProxyScheme::Http { uri, .. } => {
-                assert_eq!(uri, "http://127.0.0.1/");
-            },
-            #[cfg(feature = "socks")]
-            _ => panic!("socks not expected"),
-        }
+        assert_eq!(proxies["http"].http_uri(), "http://127.0.0.1/");
 
-        // reset user setting.
-        match system_proxy {
-            Err(_) => env::remove_var("http_proxy"),
-            Ok(proxy) => env::set_var("http_proxy", proxy),
+        // reset user setting when guards drop
+    }
+
+    #[test]
+    fn test_get_sys_proxies_in_cgi() {
+        // save system setting first.
+        let _g1 = env_guard("REQUEST_METHOD");
+        let _g2 = env_guard("HTTP_PROXY");
+
+
+        env::set_var("HTTP_PROXY", "http://evil/");
+
+        // not in CGI yet
+        assert_eq!(get_sys_proxies()["http"].http_uri(), "http://evil/");
+
+        // set like we're in CGI
+        env::set_var("REQUEST_METHOD", "GET");
+        assert!(!get_sys_proxies().contains_key("http"));
+
+        // reset user setting when guards drop
+    }
+
+    /// Guard an environment variable, resetting it to the original value
+    /// when dropped.
+    fn env_guard(name: impl Into<String>) -> EnvGuard {
+        let name = name.into();
+        let orig_val = env::var(&name).ok();
+        env::remove_var(&name);
+        EnvGuard { name, orig_val }
+    }
+
+    struct EnvGuard {
+        name: String,
+        orig_val: Option<String>,
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            if let Some(val) = self.orig_val.take() {
+                env::set_var(&self.name, val);
+            } else {
+                env::remove_var(&self.name);
+            }
         }
     }
 }
