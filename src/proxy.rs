@@ -180,11 +180,13 @@ impl Proxy {
         }))
     }
 
-    /*
-    pub fn unix<P: AsRef<Path>(path: P) -> Proxy {
-
+    pub(crate) fn system() -> Proxy {
+        if cfg!(feature = "__internal_proxy_sys_no_cache") {
+            Proxy::new(Intercept::System(Arc::new(get_sys_proxies())))
+        } else {
+            Proxy::new(Intercept::System(SYS_PROXIES.clone()))
+        }
     }
-    */
 
     fn new(intercept: Intercept) -> Proxy {
         Proxy { intercept }
@@ -248,6 +250,9 @@ impl Proxy {
                     None
                 }
             }
+            Intercept::System(ref map) => {
+                map.get(uri.scheme()).cloned()
+            }
             Intercept::Custom(ref custom) => custom.call(uri),
         }
     }
@@ -257,6 +262,7 @@ impl Proxy {
             Intercept::All(_) => true,
             Intercept::Http(_) => uri.scheme() == "http",
             Intercept::Https(_) => uri.scheme() == "https",
+            Intercept::System(ref map) => map.contains_key(uri.scheme()),
             Intercept::Custom(ref custom) => custom.call(uri).is_some(),
         }
     }
@@ -369,11 +375,14 @@ impl ProxyScheme {
     }
 }
 
+type SystemProxyMap = HashMap<String, ProxyScheme>;
+
 #[derive(Clone, Debug)]
 enum Intercept {
     All(ProxyScheme),
     Http(ProxyScheme),
     Https(ProxyScheme),
+    System(Arc<SystemProxyMap>),
     Custom(Custom),
 }
 
@@ -383,6 +392,7 @@ impl Intercept {
             Intercept::All(ref mut s)
             | Intercept::Http(ref mut s)
             | Intercept::Https(ref mut s) => s.set_basic_auth(username, password),
+            Intercept::System(_) => unimplemented!(),
             Intercept::Custom(ref mut custom) => {
                 let header = encode_basic_auth(username, password);
                 custom.auth = Some(header);
@@ -484,6 +494,10 @@ impl Dst for Uri {
     }
 }
 
+lazy_static! {
+    static ref SYS_PROXIES: Arc<SystemProxyMap> = Arc::new(get_sys_proxies());
+}
+
 /// Get system proxies information.
 ///
 /// It can only support Linux, Unix like, and windows system.  Note that it will always
@@ -493,8 +507,8 @@ impl Dst for Uri {
 /// Returns:
 ///     System proxies information as a hashmap like
 ///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}
-pub fn get_proxies() -> HashMap<String, Url> {
-    let proxies: HashMap<String, Url> = get_from_environment();
+fn get_sys_proxies() -> SystemProxyMap {
+    let proxies = get_from_environment();
 
     // TODO: move the following #[cfg] to `if expression` when attributes on `if` expressions allowed
     #[cfg(target_os = "windows")]
@@ -507,14 +521,14 @@ pub fn get_proxies() -> HashMap<String, Url> {
     proxies
 }
 
-fn insert_proxy(proxies: &mut HashMap<String, Url>, schema: String, addr: String) {
-    if let Ok(valid_addr) = Url::parse(&addr) {
+fn insert_proxy(proxies: &mut SystemProxyMap, schema: String, addr: String) {
+    if let Ok(valid_addr) = addr.into_proxy_scheme() {
         proxies.insert(schema, valid_addr);
     }
 }
 
-fn get_from_environment() -> HashMap<String, Url> {
-    let mut proxies: HashMap<String, Url> = HashMap::new();
+fn get_from_environment() -> SystemProxyMap {
+    let mut proxies = HashMap::new();
 
     const PROXY_KEY_ENDS: &str = "_proxy";
 
@@ -530,7 +544,7 @@ fn get_from_environment() -> HashMap<String, Url> {
 }
 
 #[cfg(target_os = "windows")]
-fn get_from_registry_impl() -> Result<HashMap<String, Url>, Box<dyn Error>> {
+fn get_from_registry_impl() -> Result<SystemProxyMap, Box<dyn Error>> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let internet_setting: RegKey =
         hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")?;
@@ -542,7 +556,7 @@ fn get_from_registry_impl() -> Result<HashMap<String, Url>, Box<dyn Error>> {
         return Ok(HashMap::new());
     }
 
-    let mut proxies: HashMap<String, Url> = HashMap::new();
+    let mut proxies = HashMap::new();
     if proxy_server.contains("=") {
         // per-protocol settings.
         for p in proxy_server.split(";") {
@@ -589,7 +603,7 @@ fn get_from_registry_impl() -> Result<HashMap<String, Url>, Box<dyn Error>> {
 }
 
 #[cfg(target_os = "windows")]
-fn get_from_registry() -> HashMap<String, Url> {
+fn get_from_registry() -> SystemProxyMap {
     get_from_registry_impl().unwrap_or(HashMap::new())
 }
 
@@ -685,24 +699,30 @@ mod tests {
     }
 
     #[test]
-    fn test_get_proxies() {
+    fn test_get_sys_proxies() {
         // save system setting first.
         let system_proxy = env::var("http_proxy");
 
         // remove proxy.
         env::remove_var("http_proxy");
-        assert_eq!(get_proxies().contains_key("http"), false);
+        assert_eq!(get_sys_proxies().contains_key("http"), false);
 
         // the system proxy setting url is invalid.
         env::set_var("http_proxy", "123465");
-        assert_eq!(get_proxies().contains_key("http"), false);
+        assert_eq!(get_sys_proxies().contains_key("http"), false);
 
         // set valid proxy
         env::set_var("http_proxy", "http://127.0.0.1/");
-        let proxies = get_proxies();
-        let http_target = proxies.get("http").unwrap().as_str();
+        let proxies = get_sys_proxies();
 
-        assert_eq!(http_target, "http://127.0.0.1/");
+        match &proxies["http"] {
+            ProxyScheme::Http { uri, .. } => {
+                assert_eq!(uri, "http://127.0.0.1/");
+            },
+            #[cfg(feature = "socks")]
+            _ => panic!("socks not expected"),
+        }
+
         // reset user setting.
         match system_proxy {
             Err(_) => env::remove_var("http_proxy"),

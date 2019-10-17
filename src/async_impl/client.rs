@@ -28,7 +28,6 @@ use crate::connect::Connector;
 #[cfg(feature = "cookies")]
 use crate::cookie;
 use crate::into_url::{expect_uri, try_uri};
-use crate::proxy::get_proxies;
 use crate::redirect::{self, remove_sensitive_headers, RedirectPolicy};
 #[cfg(feature = "tls")]
 use crate::tls::TlsBackend;
@@ -69,6 +68,7 @@ struct Config {
     #[cfg(feature = "tls")]
     identity: Option<Identity>,
     proxies: Vec<Proxy>,
+    auto_sys_proxy: bool,
     redirect_policy: RedirectPolicy,
     referer: bool,
     timeout: Option<Duration>,
@@ -104,6 +104,7 @@ impl ClientBuilder {
                 connect_timeout: None,
                 max_idle_per_host: std::usize::MAX,
                 proxies: Vec::new(),
+                auto_sys_proxy: true,
                 redirect_policy: RedirectPolicy::default(),
                 referer: true,
                 timeout: None,
@@ -131,7 +132,11 @@ impl ClientBuilder {
     /// cannot load the system configuration.
     pub fn build(self) -> crate::Result<Client> {
         let config = self.config;
-        let proxies = Arc::new(config.proxies);
+        let mut proxies = config.proxies;
+        if config.auto_sys_proxy {
+            proxies.push(Proxy::system());
+        }
+        let proxies = Arc::new(proxies);
 
         let mut connector = {
             #[cfg(feature = "tls")]
@@ -365,27 +370,28 @@ impl ClientBuilder {
     // Proxy options
 
     /// Add a `Proxy` to the list of proxies the `Client` will use.
+    ///
+    /// # Note
+    ///
+    /// Adding a proxy will disable the automatic usage of the "system" proxy.
     pub fn proxy(mut self, proxy: Proxy) -> ClientBuilder {
         self.config.proxies.push(proxy);
+        self.config.auto_sys_proxy = false;
         self
     }
 
     /// Clear all `Proxies`, so `Client` will use no proxy anymore.
+    ///
+    /// This also disables the automatic usage of the "system" proxy.
     pub fn no_proxy(mut self) -> ClientBuilder {
         self.config.proxies.clear();
+        self.config.auto_sys_proxy = false;
         self
     }
 
-    /// Add system proxy setting to the list of proxies
-    pub fn use_sys_proxy(mut self) -> ClientBuilder {
-        let proxies = get_proxies();
-        self.config.proxies.push(Proxy::custom(move |url| {
-            if proxies.contains_key(url.scheme()) {
-                Some((*proxies.get(url.scheme()).unwrap()).clone())
-            } else {
-                None
-            }
-        }));
+    #[doc(hidden)]
+    #[deprecated(note = "the system proxy is used automatically")]
+    pub fn use_sys_proxy(self) -> ClientBuilder {
         self
     }
 
@@ -776,7 +782,7 @@ impl Client {
 
 impl fmt::Debug for Client {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut builder = f.debug_struct("ClientBuilder");
+        let mut builder = f.debug_struct("Client");
         self.inner.fmt_fields(&mut builder);
         builder.finish()
     }

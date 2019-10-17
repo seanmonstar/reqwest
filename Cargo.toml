@@ -37,6 +37,12 @@ json = ["serde_json"]
 
 unstable-stream = []
 
+# Internal (PRIVATE!) features used to aid testing.
+# Don't rely on these whatsoever. They may disappear at anytime.
+
+# When enabled, disable using the cached SYS_PROXIES.
+__internal_proxy_sys_no_cache = []
+
 [dependencies]
 http = "0.1.15"
 url = "2.1"
@@ -49,6 +55,7 @@ futures-core-preview = { version = "=0.3.0-alpha.19" }
 futures-util-preview = { version = "=0.3.0-alpha.19" }
 http-body = "=0.2.0-alpha.3"
 hyper = { version = "=0.13.0-alpha.4", default-features = false, features = ["tcp"] }
+lazy_static = "1.4"
 log = "0.4"
 mime = "0.3.7"
 mime_guess = "2.0"
@@ -150,4 +157,3 @@ required-features = ["cookies"]
 name = "gzip"
 path = "tests/gzip.rs"
 required-features = ["gzip"]
-

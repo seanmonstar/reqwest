@@ -263,6 +263,9 @@ if_hyper! {
     #[macro_use]
     extern crate doc_comment;
 
+    #[macro_use]
+    extern crate lazy_static;
+
     #[cfg(test)]
     doctest!("../README.md");
 

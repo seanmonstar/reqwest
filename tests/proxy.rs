@@ -119,30 +119,28 @@ async fn test_no_proxy() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
+#[cfg_attr(not(feature = "__internal_proxy_sys_no_cache"), ignore)]
 #[tokio::test]
 async fn test_using_system_proxy() {
-    let url = "http://hyper.rs/prox";
+    let url = "http://not.a.real.sub.hyper.rs/prox";
     let server = server::http(move |req| {
         assert_eq!(req.method(), "GET");
         assert_eq!(req.uri(), url);
-        assert_eq!(req.headers()["host"], "hyper.rs");
+        assert_eq!(req.headers()["host"], "not.a.real.sub.hyper.rs");
 
         async { http::Response::default() }
     });
+
+    // Note: we're relying on the `__internal_proxy_sys_no_cache` feature to
+    // check the environment every time.
 
     // save system setting first.
     let system_proxy = env::var("http_proxy");
     // set-up http proxy.
     env::set_var("http_proxy", format!("http://{}", server.addr()));
 
-    let res = reqwest::Client::builder()
-        .use_sys_proxy()
-        .build()
-        .unwrap()
-        .get(url)
-        .send()
-        .await
-        .unwrap();
+    // system proxy is used by default
+    let res = reqwest::get(url).await.unwrap();
 
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);

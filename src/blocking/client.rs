@@ -193,18 +193,25 @@ impl ClientBuilder {
     // Proxy options
 
     /// Add a `Proxy` to the list of proxies the `Client` will use.
+    ///
+    /// # Note
+    ///
+    /// Adding a proxy will disable the automatic usage of the "system" proxy.
     pub fn proxy(self, proxy: Proxy) -> ClientBuilder {
         self.with_inner(move |inner| inner.proxy(proxy))
     }
 
-    /// Disable proxy setting.
+    /// Clear all `Proxies`, so `Client` will use no proxy anymore.
+    ///
+    /// This also disables the automatic usage of the "system" proxy.
     pub fn no_proxy(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.no_proxy())
     }
 
-    /// Enable system proxy setting.
+    #[doc(hidden)]
+    #[deprecated(note = "the system proxy is used automatically")]
     pub fn use_sys_proxy(self) -> ClientBuilder {
-        self.with_inner(move |inner| inner.use_sys_proxy())
+        self
     }
 
     // Timeout options
