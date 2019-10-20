@@ -115,7 +115,7 @@ winreg = "0.6"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3.28"
-wasm-bindgen = "0.2.51"
+wasm-bindgen = { version = "0.2.51", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4.1"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
