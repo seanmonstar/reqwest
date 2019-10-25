@@ -193,18 +193,25 @@ impl ClientBuilder {
     // Proxy options
 
     /// Add a `Proxy` to the list of proxies the `Client` will use.
+    ///
+    /// # Note
+    ///
+    /// Adding a proxy will disable the automatic usage of the "system" proxy.
     pub fn proxy(self, proxy: Proxy) -> ClientBuilder {
         self.with_inner(move |inner| inner.proxy(proxy))
     }
 
-    /// Disable proxy setting.
+    /// Clear all `Proxies`, so `Client` will use no proxy anymore.
+    ///
+    /// This also disables the automatic usage of the "system" proxy.
     pub fn no_proxy(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.no_proxy())
     }
 
-    /// Enable system proxy setting.
+    #[doc(hidden)]
+    #[deprecated(note = "the system proxy is used automatically")]
     pub fn use_sys_proxy(self) -> ClientBuilder {
-        self.with_inner(move |inner| inner.use_sys_proxy())
+        self
     }
 
     // Timeout options
@@ -252,6 +259,20 @@ impl ClientBuilder {
     /// Only use HTTP/2.
     pub fn http2_prior_knowledge(self) -> ClientBuilder {
         self.with_inner(|inner| inner.http2_prior_knowledge())
+    }
+
+    /// Sets the `SETTINGS_INITIAL_WINDOW_SIZE` option for HTTP2 stream-level flow control.
+    ///
+    /// Default is currently 65,535 but may change internally to optimize for common uses.
+    pub fn http2_initial_stream_window_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+        self.with_inner(|inner| inner.http2_initial_stream_window_size(sz))
+    }
+
+    /// Sets the max connection-level flow control for HTTP2
+    ///
+    /// Default is currently 65,535 but may change internally to optimize for common uses.
+    pub fn http2_initial_connection_window_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+        self.with_inner(|inner| inner.http2_initial_connection_window_size(sz))
     }
 
     // TCP options
@@ -538,7 +559,7 @@ impl fmt::Debug for Client {
 
 impl fmt::Debug for ClientBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("ClientBuilder").finish()
+        self.inner.fmt(f)
     }
 }
 

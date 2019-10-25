@@ -1,5 +1,5 @@
 use futures_util::FutureExt;
-use http::uri::Scheme;
+use http::uri::{Scheme, Authority};
 use hyper::client::connect::{Connect, Connected, Destination};
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -255,22 +255,13 @@ impl Connector {
     ) -> Result<(Conn, Connected), io::Error> {
         log::trace!("proxy({:?}) intercepts {:?}", proxy_scheme, dst);
 
-        let (puri, _auth) = match proxy_scheme {
-            ProxyScheme::Http { uri, auth, .. } => (uri, auth),
+        let (proxy_dst, _auth) = match proxy_scheme {
+            ProxyScheme::Http { host, auth } => (into_dst(Scheme::HTTP, host), auth),
+            ProxyScheme::Https { host, auth } => (into_dst(Scheme::HTTPS, host), auth),
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => return this.connect_socks(dst, proxy_scheme),
         };
 
-        let mut ndst = dst.clone();
-
-        let new_scheme = puri.scheme_part().map(Scheme::as_str).unwrap_or("http");
-        ndst.set_scheme(new_scheme)
-            .expect("proxy target scheme should be valid");
-
-        ndst.set_host(puri.host().expect("proxy target should have host"))
-            .expect("proxy target host should be valid");
-
-        ndst.set_port(puri.port_part().map(|port| port.as_u16()));
 
         #[cfg(feature = "tls")]
         let auth = _auth;
@@ -285,7 +276,7 @@ impl Connector {
                     http.set_nodelay(self.nodelay);
                     let tls_connector = tokio_tls::TlsConnector::from(tls.clone());
                     let http = hyper_tls::HttpsConnector::from((http, tls_connector));
-                    let (conn, connected) = http.connect(ndst).await?;
+                    let (conn, connected) = http.connect(proxy_dst).await?;
                     log::trace!("tunneling HTTPS over proxy");
                     let tunneled = tunnel(conn, host.clone(), port, self.user_agent.clone(), auth).await?;
                     let tls_connector = tokio_tls::TlsConnector::from(tls.clone());
@@ -313,7 +304,7 @@ impl Connector {
                     http.set_nodelay(no_delay);
                     let http = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
                     let tls = tls.clone();
-                    let (conn, connected) = http.connect(ndst).await?;
+                    let (conn, connected) = http.connect(proxy_dst).await?;
                     log::trace!("tunneling HTTPS over proxy");
                     let maybe_dnsname = DNSNameRef::try_from_ascii_str(&host)
                         .map(|dnsname| dnsname.to_owned())
@@ -336,8 +327,22 @@ impl Connector {
             Inner::Http(_) => (),
         }
 
-        self.connect_with_maybe_proxy(ndst, true).await
+        self.connect_with_maybe_proxy(proxy_dst, true).await
     }
+}
+
+fn into_dst(scheme: Scheme, host: Authority) -> Destination {
+    use std::convert::TryInto;
+
+    // TODO: Should the `http` crate get `From<(Scheme, Authority)> for Uri`?
+    http::Uri::builder()
+        .scheme(scheme)
+        .authority(host)
+        .path_and_query(http::uri::PathAndQuery::from_static("/"))
+        .build()
+        .expect("scheme and authority is valid Uri")
+        .try_into()
+        .expect("scheme and authority is valid Destination")
 }
 
 //#[cfg(feature = "trust-dns")]

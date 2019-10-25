@@ -37,6 +37,12 @@ json = ["serde_json"]
 
 unstable-stream = []
 
+# Internal (PRIVATE!) features used to aid testing.
+# Don't rely on these whatsoever. They may disappear at anytime.
+
+# When enabled, disable using the cached SYS_PROXIES.
+__internal_proxy_sys_no_cache = []
+
 [dependencies]
 http = "0.1.15"
 url = "2.1"
@@ -49,13 +55,13 @@ futures-core-preview = { version = "=0.3.0-alpha.19" }
 futures-util-preview = { version = "=0.3.0-alpha.19" }
 http-body = "=0.2.0-alpha.3"
 hyper = { version = "=0.13.0-alpha.4", default-features = false, features = ["tcp"] }
+lazy_static = "1.4"
 log = "0.4"
 mime = "0.3.7"
 mime_guess = "2.0"
 percent-encoding = "2.1"
 tokio = { version = "=0.2.0-alpha.6", default-features = false, features = ["io", "tcp", "timer"] }
 tokio-executor = "=0.2.0-alpha.6"
-uuid = { version = "0.7", features = ["v4"] }
 time = "0.1.42"
 
 # TODO: candidates for optional features
@@ -81,7 +87,7 @@ futures-channel-preview = { version = "=0.3.0-alpha.19", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.12", package = "cookie", optional = true }
-cookie_store = { version = "0.9", optional = true }
+cookie_store = { version = "0.10", optional = true }
 
 ## gzip
 async-compression = { version = "0.1.0-alpha.5", default-features = false, features = ["gzip", "stream"], optional = true }
@@ -108,9 +114,9 @@ winreg = "0.6"
 # wasm
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-js-sys = "0.3.25"
-wasm-bindgen = "0.2.48"
-wasm-bindgen-futures = { version = "0.3", features = ["futures_0_3"] }
+js-sys = "0.3.28"
+wasm-bindgen = { version = "0.2.51", features = ["serde-serialize"] }
+wasm-bindgen-futures = "0.4.1"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3.25"
@@ -151,4 +157,3 @@ required-features = ["cookies"]
 name = "gzip"
 path = "tests/gzip.rs"
 required-features = ["gzip"]
-

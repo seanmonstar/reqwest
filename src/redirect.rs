@@ -14,7 +14,6 @@ use crate::Url;
 ///   the allowed maximum redirect hops in a chain.
 /// - `none` can be used to disable all redirect behavior.
 /// - `custom` can be used to create a customized policy.
-#[derive(Debug)]
 pub struct RedirectPolicy {
     inner: Policy,
 }
@@ -142,10 +141,18 @@ impl RedirectPolicy {
         })
         .inner
     }
+
+    pub(crate) fn is_default(&self) -> bool {
+        match self.inner {
+            Policy::Limit(10) => true,
+            _ => false,
+        }
+    }
 }
 
 impl Default for RedirectPolicy {
     fn default() -> RedirectPolicy {
+        // Keep `is_default` in sync
         RedirectPolicy::limited(10)
     }
 }
@@ -204,6 +211,12 @@ enum Policy {
     Custom(Box<dyn Fn(RedirectAttempt) -> RedirectAction + Send + Sync + 'static>),
     Limit(usize),
     None,
+}
+
+impl fmt::Debug for RedirectPolicy {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("RedirectPolicy").field(&self.inner).finish()
+    }
 }
 
 impl fmt::Debug for Policy {
