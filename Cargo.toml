@@ -48,7 +48,7 @@ http = "0.1.15"
 url = "2.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-base64 = "0.10"
+base64 = "0.11"
 bytes = "0.4"
 encoding_rs = "0.8"
 futures-core-preview = { version = "=0.3.0-alpha.19" }
