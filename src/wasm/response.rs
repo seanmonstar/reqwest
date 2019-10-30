@@ -1,5 +1,7 @@
 use std::fmt;
 
+use bytes::Bytes;
+use js_sys::Uint8Array;
 use http::{HeaderMap, StatusCode};
 
 /// A Response to a submitted `Request`.
@@ -59,6 +61,22 @@ impl Response {
         } else {
             Err(crate::error::decode("response.text isn't string"))
         }
+    }
+
+    /// Get the response as bytes
+    pub async fn bytes(self) -> crate::Result<Bytes> {
+        let p = self.http.body().array_buffer()
+            .map_err(crate::error::wasm)
+            .map_err(crate::error::decode)?;
+
+        let buf_js = super::promise::<wasm_bindgen::JsValue>(p)
+            .await
+            .map_err(crate::error::decode)?;
+
+        let buffer = Uint8Array::new(&buf_js);
+        let mut bytes = vec![0; buffer.length() as usize];
+        buffer.copy_to(&mut bytes);
+        Ok(bytes.into())
     }
 }
 
