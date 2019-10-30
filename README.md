@@ -26,7 +26,7 @@ Async:
 use std::collections::HashMap;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let resp: HashMap<String, String> = reqwest::get("https://httpbin.org/ip")
         .await?
         .json()
@@ -41,7 +41,7 @@ Blocking:
 ```rust,no_run
 use std::collections::HashMap;
 
-fn main() -> Result<(), Box<std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let resp: HashMap<String, String> = reqwest::blocking::get("https://httpbin.org/ip")?
         .json()?;
     println!("{:#?}", resp);
