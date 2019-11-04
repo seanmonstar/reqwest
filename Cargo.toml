@@ -77,10 +77,10 @@ native-tls = { version = "0.2", optional = true }
 tokio-tls = { version = "=0.3.0-alpha.6", optional = true }
 
 ## rustls-tls
-#hyper-rustls = { version = "=0.18.0-alpha.1", optional = true }
+#hyper-rustls = { version = "=0.18.0-alpha.2", optional = true }
 #rustls = { version = "0.16", features = ["dangerous_configuration"], optional = true }
-#tokio-rustls = { version = "=0.12.0-alpha.2", optional = true }
-#webpki-roots = { version = "0.17", optional = true }
+#tokio-rustls = { version = "=0.12.0-alpha.8", optional = true }
+#webpki-roots = { version = "0.18", optional = true }
 
 ## blocking
 futures-channel-preview = { version = "=0.3.0-alpha.19", optional = true }

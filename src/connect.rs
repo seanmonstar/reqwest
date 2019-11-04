@@ -232,12 +232,12 @@ impl Connector {
                 // Disable Nagle's algorithm for TLS handshake
                 //
                 // https://www.openssl.org/docs/man1.1.1/man3/SSL_connect.html#NOTES
-                http.set_nodelay(no_delay || (dst.scheme() == "https"));
+                http.set_nodelay(self.nodelay || (dst.scheme() == "https"));
 
                 let http = hyper_rustls::HttpsConnector::from((http, tls.clone()));
                 let (io, connected) = http.connect(dst).await?;
                 if let hyper_rustls::MaybeHttpsStream::Https(stream) = &io {
-                    if !no_delay {
+                    if !self.nodelay {
                         let (io, _) = stream.get_ref();
                         io.set_nodelay(false)?;
                     }
@@ -301,7 +301,7 @@ impl Connector {
                     let host = dst.host().to_owned();
                     let port = dst.port().unwrap_or(443);
                     let mut http = http.clone();
-                    http.set_nodelay(no_delay);
+                    http.set_nodelay(self.nodelay);
                     let http = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
                     let tls = tls.clone();
                     let (conn, connected) = http.connect(proxy_dst).await?;
@@ -309,7 +309,7 @@ impl Connector {
                     let maybe_dnsname = DNSNameRef::try_from_ascii_str(&host)
                         .map(|dnsname| dnsname.to_owned())
                         .map_err(|_| io::Error::new(io::ErrorKind::Other, "Invalid DNS Name"));
-                    let tunneled = tunnel(conn, host, port, auth).await?;
+                    let tunneled = tunnel(conn, host, port, self.user_agent.clone(), auth).await?;
                     let dnsname = maybe_dnsname?;
                     let io = RustlsConnector::from(tls)
                         .connect(dnsname.as_ref(), tunneled)
