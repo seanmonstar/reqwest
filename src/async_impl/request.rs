@@ -89,6 +89,20 @@ impl Request {
         &mut self.body
     }
 
+    /// Attempt to clone the request.
+    ///
+    /// `None` is returned if the request can not be cloned, i.e. if the body is a stream.
+    pub fn try_clone(&self) -> Option<Request> {
+        let body = match self.body.as_ref() {
+            Some(ref body) => Some(body.try_clone()?),
+            None => None,
+        };
+        let mut req = Request::new(self.method().clone(), self.url().clone());
+        *req.headers_mut() = self.headers().clone();
+        req.body = body;
+        Some(req)
+    }
+
     pub(super) fn pieces(self) -> (Method, Url, HeaderMap, Option<Body>) {
         (self.method, self.url, self.headers, self.body)
     }
@@ -323,6 +337,36 @@ impl RequestBuilder {
             Err(err) => Pending::new_err(err),
         }
     }
+
+    /// Attempt to clone the RequestBuilder.
+    ///
+    /// `None` is returned if the RequestBuilder can not be cloned,
+    /// i.e. if the request body is a stream.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use reqwest::Error;
+    /// #
+    /// # fn run() -> Result<(), Error> {
+    /// let client = reqwest::Client::new();
+    /// let builder = client.post("http://httpbin.org/post")
+    ///     .body("from a &str!");
+    /// let clone = builder.try_clone();
+    /// assert!(clone.is_some());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn try_clone(&self) -> Option<RequestBuilder> {
+        self.request
+            .as_ref()
+            .ok()
+            .and_then(|req| req.try_clone())
+            .map(|req| RequestBuilder {
+                client: self.client.clone(),
+                request: Ok(req),
+            })
+    }
 }
 
 impl fmt::Debug for Request {
@@ -380,6 +424,7 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
 #[cfg(test)]
 mod tests {
     use super::Client;
+    use crate::Method;
     use serde::Serialize;
     use std::collections::BTreeMap;
 
@@ -486,6 +531,52 @@ mod tests {
 
         assert_eq!(req.url().query(), None);
         assert_eq!(req.url().as_str(), "https://google.com/");
+    }
+
+    #[test]
+    fn try_clone_reusable() {
+        let client = Client::new();
+        let builder = client.post("http://httpbin.org/post")
+            .header("foo", "bar")
+            .body("from a &str!");
+        let req = builder
+            .try_clone()
+            .expect("clone successful")
+            .build()
+            .expect("request is valid");
+        assert_eq!(req.url().as_str(), "http://httpbin.org/post");
+        assert_eq!(req.method(), Method::POST);
+        assert_eq!(req.headers()["foo"], "bar");
+    }
+
+    #[test]
+    fn try_clone_no_body() {
+        let client = Client::new();
+        let builder = client.get("http://httpbin.org/get");
+        let req = builder
+            .try_clone()
+            .expect("clone successful")
+            .build()
+            .expect("request is valid");
+        assert_eq!(req.url().as_str(), "http://httpbin.org/get");
+        assert_eq!(req.method(), Method::GET);
+        assert!(req.body().is_none());
+    }
+
+    #[test]
+    #[cfg(feature = "unstable-stream")]
+    fn try_clone_stream() {
+        let chunks: Vec<Result<_, ::std::io::Error>> = vec![
+            Ok("hello"),
+            Ok(" "),
+            Ok("world"),
+        ];
+        let stream = futures_util::stream::iter(chunks);
+        let client = Client::new();
+        let builder = client.get("http://httpbin.org/get")
+            .body(super::Body::wrap_stream(stream));
+        let clone = builder.try_clone();
+        assert!(clone.is_none());
     }
 
     /*
