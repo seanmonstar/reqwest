@@ -1,9 +1,10 @@
-use std::future::Future;
 use http::Method;
+use js_sys::Uint8Array;
+use std::future::Future;
 use wasm_bindgen::UnwrapThrowExt as _;
 
-use crate::IntoUrl;
 use super::{Request, RequestBuilder, Response};
+use crate::IntoUrl;
 
 /// dox
 #[derive(Clone, Debug)]
@@ -91,7 +92,10 @@ impl Client {
         RequestBuilder::new(self.clone(), req)
     }
 
-    pub(super) fn execute_request(&self, req: Request) -> impl Future<Output = crate::Result<Response>> {
+    pub(super) fn execute_request(
+        &self,
+        req: Request,
+    ) -> impl Future<Output = crate::Result<Response>> {
         fetch(req)
     }
 }
@@ -107,11 +111,20 @@ async fn fetch(req: Request) -> crate::Result<Response> {
 
     for (name, value) in req.headers() {
         js_headers
-            .append(name.as_str(), value.to_str().map_err(crate::error::builder)?)
+            .append(
+                name.as_str(),
+                value.to_str().map_err(crate::error::builder)?,
+            )
             .map_err(crate::error::wasm)
             .map_err(crate::error::builder)?;
     }
     init.headers(&js_headers.into());
+
+    if let Some(body) = req.body() {
+        let body_bytes: &[u8] = body.bytes();
+        let body_array: Uint8Array = body_bytes.into();
+        init.body(Some(&body_array.into()));
+    }
 
     let js_req = web_sys::Request::new_with_str_and_init(req.url().as_str(), &init)
         .map_err(crate::error::wasm)
@@ -160,5 +173,4 @@ impl ClientBuilder {
     pub fn build(self) -> Result<Client, crate::Error> {
         Ok(Client(()))
     }
-
 }
