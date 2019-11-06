@@ -132,7 +132,7 @@
 //!
 //! ** NOTE ** Proxies are enabled by default
 //!
-//! System proxies look in environment varables to set http or https proxies.
+//! System proxies look in environment variables to set http or https proxies.
 //!
 //! `HTTP_PROXY` or `http_proxy` provide http proxies for http connections while
 //! `HTTPS_PROXY` or `https_proxy` provide https proxies for https connections
