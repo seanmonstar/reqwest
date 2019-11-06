@@ -130,10 +130,16 @@
 //!
 //! ## Proxies
 //!
-//! A `Client` can be configured to make use of HTTP proxies by adding
-//! [`Proxy`](Proxy)s to a `ClientBuilder`.
+//! ** NOTE ** Proxies are enabled by default
 //!
-//! ** NOTE** System proxies will be used in the next breaking change.
+//! System proxies look in environment varables to set http or https proxies.
+//!
+//! `HTTP_PROXY` or `http_proxy` provide http proxies for http connections while
+//! `HTTPS_PROXY` or `https_proxy` provide https proxies for https connections
+//!
+//! These can be overwritten by adding a [`Proxy`](Proxy) to `ClientBuilder`
+//! i.e. `let proxy = reqwest::Proxy::http("https://secure.example")?;`
+//! or disabled by calling `ClientBuilder::no_proxy()`
 //!
 //! ## TLS
 //!
