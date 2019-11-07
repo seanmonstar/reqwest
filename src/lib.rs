@@ -139,7 +139,7 @@
 //!
 //! These can be overwritten by adding a [`Proxy`](Proxy) to `ClientBuilder`
 //! i.e. `let proxy = reqwest::Proxy::http("https://secure.example")?;`
-//! or disabled by calling `ClientBuilder::no_proxy()`
+//! or disabled by calling `ClientBuilder::no_proxy()`.
 //!
 //! ## TLS
 //!
