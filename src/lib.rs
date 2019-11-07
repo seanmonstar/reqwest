@@ -135,7 +135,7 @@
 //! System proxies look in environment variables to set HTTP or HTTPS proxies.
 //!
 //! `HTTP_PROXY` or `http_proxy` provide http proxies for http connections while
-//! `HTTPS_PROXY` or `https_proxy` provide https proxies for https connections
+//! `HTTPS_PROXY` or `https_proxy` provide HTTPS proxies for HTTPS connections.
 //!
 //! These can be overwritten by adding a [`Proxy`](Proxy) to `ClientBuilder`
 //! i.e. `let proxy = reqwest::Proxy::http("https://secure.example")?;`
