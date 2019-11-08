@@ -13,7 +13,7 @@
 //!
 //! - Async and [blocking](blocking) Clients
 //! - Plain bodies, [JSON](#json), [urlencoded](#forms), [multipart](multipart)
-//! - Customizable [redirect policy](#redirect-policy)
+//! - Customizable [redirect policy](#redirect-policies)
 //! - HTTP [Proxies](#proxies)
 //! - Uses system-native [TLS](#tls)
 //! - Cookies
