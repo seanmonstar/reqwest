@@ -35,6 +35,16 @@ struct WrapStream<S>(S);
 struct WrapHyper(hyper::Body);
 
 impl Body {
+    /// Returns a reference to the internal data of the `Body`.
+    ///
+    /// `None` is returned, if the underlying data is a stream.
+    pub fn as_bytes(&self) -> Option<&Bytes> {
+        match &self.inner {
+            Inner::Reusable(bytes) => Some(&bytes),
+            Inner::Streaming { .. } => None,
+        }
+    }
+
     /// Wrap a futures `Stream` in a box inside `Body`.
     ///
     /// # Example
@@ -337,5 +347,18 @@ impl HttpBody for WrapHyper {
 
     fn size_hint(&self) -> http_body::SizeHint {
         HttpBody::size_hint(&self.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Body;
+    use bytes::Bytes;
+
+    #[test]
+    fn test_as_bytes() {
+        let test_data = b"Test body";
+        let body = Body::from(&test_data[..]);
+        assert_eq!(body.as_bytes(), Some(&Bytes::from_static(&test_data[..])));
     }
 }
