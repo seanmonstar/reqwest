@@ -38,9 +38,9 @@ impl Body {
     /// Returns a reference to the internal data of the `Body`.
     ///
     /// `None` is returned, if the underlying data is a stream.
-    pub fn as_bytes(&self) -> Option<&Bytes> {
+    pub fn as_bytes(&self) -> Option<&[u8]> {
         match &self.inner {
-            Inner::Reusable(bytes) => Some(&bytes),
+            Inner::Reusable(bytes) => Some(bytes.as_ref()),
             Inner::Streaming { .. } => None,
         }
     }
@@ -353,12 +353,11 @@ impl HttpBody for WrapHyper {
 #[cfg(test)]
 mod tests {
     use super::Body;
-    use bytes::Bytes;
 
     #[test]
     fn test_as_bytes() {
         let test_data = b"Test body";
         let body = Body::from(&test_data[..]);
-        assert_eq!(body.as_bytes(), Some(&Bytes::from_static(&test_data[..])));
+        assert_eq!(body.as_bytes(), Some(&test_data[..]));
     }
 }
