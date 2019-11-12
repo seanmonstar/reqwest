@@ -1,3 +1,15 @@
+# v0.10.0-alpha.2
+
+- Add `Request::try_clone()` method.
+- Add HTTP2 window size configuration to `ClientBuilder`.
+- Add `Body::as_bytes()` method.
+- Add `Response::bytes()` method for WASM target.
+- Add `RequestBuilder::body()` method for WASM target.
+- Change to enable system/environment proxy detection by default.
+- Fix checking `HTTP_PROXY` environment variable if it the environment is from a CGI script.
+- Fix removal of username/password of parsed proxy URL.
+- Fix pinning `async-compression` dependency to last alpha.
+
 # v0.10.0-alpha.1
 
 - Add `std::future::Future` support.
