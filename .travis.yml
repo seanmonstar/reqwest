@@ -5,51 +5,42 @@ matrix:
         - rust: nightly
     include:
         - os: osx
-          rust: nightly
-          #rust: stable
+          rust: stable
 
-        #- rust: stable
+        - rust: stable
         - rust: beta
         - rust: nightly
 
         # Disable default-tls
-        #- rust: stable
-        - rust: beta
+        - rust: stable
           env: FEATURES="--no-default-features"
 
         # rustls-tls
         #- rust: stable
-        #- rust: nightly
         #  env: FEATURES="--no-default-features --features rustls-tls"
 
         # default-tls and rustls-tls
         #- rust: stable
-        #- rust: nightly
         #  env: FEATURES="--features rustls-tls"
 
         # optional cookies
-        #- rust: stable
-        - rust: beta
+        - rust: stable
           env: FEATURES="--features cookies"
 
         # optional blocking
-        #- rust: stable
-        - rust: beta
+        - rust: stable
           env: FEATURES="--features blocking"
 
         # optional gzip
-        #- rust: stable
-        - rust: beta
+        - rust: stable
           env: FEATURES="--features gzip"
 
         # optional json
-        #- rust: stable
-        - rust: beta
+        - rust: stable
           env: FEATURES="--features json"
 
         # optional unstable-stream
-        #- rust: stable
-        - rust: beta
+        - rust: stable
           env: FEATURES="--features unstable-stream"
 
 
@@ -65,13 +56,12 @@ matrix:
         # wasm
         - name: "WASM"
           env: TARGET=wasm32-unknown-unknown
-          rust: beta
+          rust: stable
           install: rustup target add "$TARGET"
           script: cargo check --target "$TARGET"
 
         # android
-        #- rust: stable
-        - rust: beta
+        - rust: stable
           env: TARGET=aarch64-linux-android
           before_install:
             - wget https://dl.google.com/android/repository/android-ndk-r19c-linux-x86_64.zip;
@@ -90,8 +80,8 @@ matrix:
 
 
         # minimum version
-        #- rust: 1.39.0
-        #  script: cargo build
+        - rust: 1.39.0
+          script: cargo check
 
 sudo: false
 dist: trusty

@@ -1,7 +1,7 @@
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
 #![cfg_attr(test, deny(warnings))]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.10.0-alpha.1")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.10.0-alpha.2")]
 
 //! # reqwest
 //!
@@ -13,7 +13,7 @@
 //!
 //! - Async and [blocking](blocking) Clients
 //! - Plain bodies, [JSON](#json), [urlencoded](#forms), [multipart](multipart)
-//! - Customizable [redirect policy](#redirect-policy)
+//! - Customizable [redirect policy](#redirect-policies)
 //! - HTTP [Proxies](#proxies)
 //! - Uses system-native [TLS](#tls)
 //! - Cookies
@@ -130,10 +130,16 @@
 //!
 //! ## Proxies
 //!
-//! A `Client` can be configured to make use of HTTP proxies by adding
-//! [`Proxy`](Proxy)s to a `ClientBuilder`.
+//! ** NOTE ** Proxies are enabled by default.
 //!
-//! ** NOTE** System proxies will be used in the next breaking change.
+//! System proxies look in environment variables to set HTTP or HTTPS proxies.
+//!
+//! `HTTP_PROXY` or `http_proxy` provide http proxies for http connections while
+//! `HTTPS_PROXY` or `https_proxy` provide HTTPS proxies for HTTPS connections.
+//!
+//! These can be overwritten by adding a [`Proxy`](Proxy) to `ClientBuilder`
+//! i.e. `let proxy = reqwest::Proxy::http("https://secure.example")?;`
+//! or disabled by calling `ClientBuilder::no_proxy()`.
 //!
 //! ## TLS
 //!
