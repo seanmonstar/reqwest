@@ -44,6 +44,12 @@ pub(crate) trait PartProps {
 
 // ===== impl Form =====
 
+impl Default for Form {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Form {
     /// Creates a new async Form without any content.
     pub fn new() -> Form {

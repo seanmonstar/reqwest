@@ -86,6 +86,12 @@ struct Config {
     cookie_store: Option<cookie::CookieStore>,
 }
 
+impl Default for ClientBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClientBuilder {
     /// Constructs a new `ClientBuilder`.
     ///
@@ -600,6 +606,12 @@ impl ClientBuilder {
 }
 
 type HyperClient = hyper::Client<Connector, super::body::ImplStream>;
+
+impl Default for Client {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Client {
     /// Constructs a new `Client`.
