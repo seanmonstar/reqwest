@@ -552,7 +552,7 @@ lazy_static! {
 ///
 /// Returns:
 ///     System proxies information as a hashmap like
-///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}592:11
+///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}
 fn get_sys_proxies() -> SystemProxyMap {
     let proxies = get_from_environment();
 
