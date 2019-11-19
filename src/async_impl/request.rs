@@ -4,6 +4,7 @@ use std::io::Write;
 
 use base64;
 use base64::write::EncoderWriter as Base64Encoder;
+use bytes::Bytes;
 use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
@@ -165,7 +166,7 @@ impl RequestBuilder {
             }
         }
 
-        self.header(crate::header::AUTHORIZATION, header_value.as_slice())
+        self.header(crate::header::AUTHORIZATION, Bytes::from(header_value))
     }
 
     /// Enable HTTP bearer authentication.
