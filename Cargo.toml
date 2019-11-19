@@ -44,7 +44,7 @@ unstable-stream = []
 __internal_proxy_sys_no_cache = []
 
 [dependencies]
-http = "0.1.19"
+http = "0.1.15"
 url = "2.1"
 bytes = "0.4"
 
