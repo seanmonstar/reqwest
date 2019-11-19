@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.10.0-alpha.3" # remember to update html_root_url
+version = "0.10.0-alpha.2" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 repository = "https://github.com/seanmonstar/reqwest"
@@ -46,7 +46,7 @@ __internal_proxy_sys_no_cache = []
 [dependencies]
 http = "0.1.19"
 url = "2.1"
-bytes = "0.4.12"
+bytes = "0.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 base64 = "0.11"
