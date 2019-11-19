@@ -1,7 +1,9 @@
 use std::fmt;
 use std::future::Future;
+use std::io::Write;
 
-use base64::encode;
+use base64;
+use base64::write::EncoderWriter as Base64Encoder;
 use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
@@ -153,12 +155,17 @@ impl RequestBuilder {
         U: fmt::Display,
         P: fmt::Display,
     {
-        let auth = match password {
-            Some(password) => format!("{}:{}", username, password),
-            None => format!("{}:", username),
-        };
-        let header_value = format!("Basic {}", encode(&auth));
-        self.header(crate::header::AUTHORIZATION, &*header_value)
+        let mut header_value = b"Basic ".to_vec();
+        {
+            let mut encoder = Base64Encoder::new(&mut header_value, base64::STANDARD);
+            // The unwraps here are fine because Vec::write* is infallible.
+            write!(encoder, "{}:", username).unwrap();
+            if let Some(password) = password {
+                write!(encoder, "{}", password).unwrap();
+            }
+        }
+
+        self.header(crate::header::AUTHORIZATION, header_value.as_slice())
     }
 
     /// Enable HTTP bearer authentication.
@@ -167,7 +174,7 @@ impl RequestBuilder {
         T: fmt::Display,
     {
         let header_value = format!("Bearer {}", token);
-        self.header(crate::header::AUTHORIZATION, &*header_value)
+        self.header(crate::header::AUTHORIZATION, header_value)
     }
 
     /// Set the request body.
