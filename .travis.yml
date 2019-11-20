@@ -46,7 +46,7 @@ matrix:
           script: cargo build --target "$TARGET" --no-default-features
 
         # minimum version
-        - rust: 1.34.0
+        - rust: 1.36.0
           script: cargo build
 
 sudo: false
