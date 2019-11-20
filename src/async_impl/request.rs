@@ -95,9 +95,33 @@ impl Request {
 
 impl RequestBuilder {
     pub(super) fn new(client: Client, request: ::Result<Request>) -> RequestBuilder {
-        RequestBuilder {
-            client,
-            request,
+        let mut builder = RequestBuilder { client, request };
+        let authority = if let Ok(ref mut req) = builder.request {
+            if req.url.has_authority() {
+                let url = req.url.clone();
+                let username = url.username().to_owned();
+                let password = url.password().map(ToOwned::to_owned);
+                if !username.is_empty() || password.is_some() {
+                    if req.url_mut().set_username("").is_err()
+                        || req.url_mut().set_password(None).is_err()
+                    {
+                        Err(::error::url_cannot_be_base_or_no_host(url))
+                    } else {
+                        Ok(Some((username, password)))
+                    }
+                } else {
+                    Ok(None)
+                }
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        };
+        if let Ok(Some((username, password))) = authority {
+            builder.basic_auth(username, password)
+        } else {
+            builder
         }
     }
 

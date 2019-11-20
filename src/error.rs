@@ -147,6 +147,7 @@ impl Error {
             Kind::UrlEncoded(ref e) => Some(e),
             Kind::Json(ref e) => Some(e),
             Kind::UrlBadScheme |
+            Kind::UrlCannotBeBaseOrNoHost |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
             Kind::Status(_) |
@@ -257,6 +258,9 @@ impl fmt::Display for Error {
             Kind::Mime(ref e) => fmt::Display::fmt(e, f),
             Kind::Url(ref e) => fmt::Display::fmt(e, f),
             Kind::UrlBadScheme => f.write_str("URL scheme is not allowed"),
+            Kind::UrlCannotBeBaseOrNoHost => {
+                f.write_str("URL is cannot-be-a-base or does not have a host")
+            },
             #[cfg(all(feature = "default-tls", feature = "rustls-tls"))]
             Kind::TlsIncompatible => f.write_str("Incompatible TLS identity type"),
             #[cfg(feature = "default-tls")]
@@ -296,6 +300,7 @@ impl StdError for Error {
             Kind::Mime(ref e) => e.description(),
             Kind::Url(ref e) => e.description(),
             Kind::UrlBadScheme => "URL scheme is not allowed",
+            Kind::UrlCannotBeBaseOrNoHost => "URL is cannot-be-a-base or does not have a host",
             #[cfg(all(feature = "default-tls", feature = "rustls-tls"))]
             Kind::TlsIncompatible => "Incompatible TLS identity type",
             #[cfg(feature = "default-tls")]
@@ -343,6 +348,7 @@ impl StdError for Error {
             Kind::UrlEncoded(ref e) => e.cause(),
             Kind::Json(ref e) => e.cause(),
             Kind::UrlBadScheme |
+            Kind::UrlCannotBeBaseOrNoHost |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
             Kind::Status(_) |
@@ -369,6 +375,7 @@ impl StdError for Error {
             Kind::UrlEncoded(ref e) => e.source(),
             Kind::Json(ref e) => e.source(),
             Kind::UrlBadScheme |
+            Kind::UrlCannotBeBaseOrNoHost |
             Kind::TooManyRedirects |
             Kind::RedirectLoop |
             Kind::Status(_) |
@@ -385,6 +392,7 @@ pub(crate) enum Kind {
     Mime(::mime::FromStrError),
     Url(::url::ParseError),
     UrlBadScheme,
+    UrlCannotBeBaseOrNoHost,
     #[cfg(all(feature = "default-tls", feature = "rustls-tls"))]
     TlsIncompatible,
     #[cfg(feature = "default-tls")]
@@ -587,6 +595,10 @@ pub(crate) fn status_code(url: Url, status: StatusCode) -> Error {
 
 pub(crate) fn url_bad_scheme(url: Url) -> Error {
     Error::new(Kind::UrlBadScheme, Some(url))
+}
+
+pub(crate) fn url_cannot_be_base_or_no_host(url: Url) -> Error {
+    Error::new(Kind::UrlCannotBeBaseOrNoHost, Some(url))
 }
 
 #[cfg(feature = "trust-dns")]
