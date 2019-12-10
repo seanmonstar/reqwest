@@ -208,8 +208,8 @@ impl Connector {
     ) -> Result<Conn, BoxError> {
         match self.inner {
             #[cfg(not(feature = "tls"))]
-            Inner::Http(http) => {
-                let io = http.connect(dst).await?;
+            Inner::Http(mut http) => {
+                let io = http.call(dst).await?;
                 Ok(Conn {
                     inner: Box::new(io),
                     is_proxy,

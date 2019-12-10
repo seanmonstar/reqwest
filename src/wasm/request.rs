@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::fmt;
 
 use http::Method;
