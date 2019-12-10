@@ -97,12 +97,14 @@ impl RequestBuilder {
     pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
     where
         HeaderName: TryFrom<K>,
+        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
         HeaderValue: TryFrom<V>,
+        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
         let mut error = None;
         if let Ok(ref mut req) = self.request {
-            match HeaderName::try_from(key) {
-                Ok(key) => match HeaderValue::try_from(value) {
+            match <HeaderName as TryFrom<K>>::try_from(key) {
+                Ok(key) => match <HeaderValue as TryFrom<V>>::try_from(value) {
                     Ok(value) => {
                         req.headers_mut().append(key, value);
                     }
