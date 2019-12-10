@@ -77,7 +77,7 @@ fn timeout_closes_connection() {
     let server = server::http(move |_req| {
         async {
             // delay returning the response
-            tokio::timer::delay_for(Duration::from_secs(2)).await;
+            tokio::time::delay_for(Duration::from_secs(2)).await;
             http::Response::default()
         }
     });
@@ -106,7 +106,7 @@ fn write_timeout_large_body() {
     let server = server::http(move |_req| {
         async {
             // delay returning the response
-            tokio::timer::delay_for(Duration::from_secs(2)).await;
+            tokio::time::delay_for(Duration::from_secs(2)).await;
             http::Response::default()
         }
     });
