@@ -10,10 +10,6 @@ pub(crate) fn timeout<F, I, E>(fut: F, timeout: Option<Duration>) -> Result<I, W
 where
     F: Future<Output = Result<I, E>>,
 {
-    /*
-    let _entered =
-        enter().map_err(|_| Waited::Executor(crate::error::BlockingClientInAsyncContext))?;
-    */
     let deadline = timeout.map(|d| {
         log::trace!("wait at most {:?}", d);
         Instant::now() + d
@@ -52,7 +48,6 @@ where
 #[derive(Debug)]
 pub(crate) enum Waited<E> {
     TimedOut(crate::error::TimedOut),
-    Executor(crate::error::BlockingClientInAsyncContext),
     Inner(E),
 }
 

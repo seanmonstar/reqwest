@@ -24,6 +24,8 @@ use pin_project_lite::pin_project;
 //use crate::dns::TrustDnsResolver;
 use crate::proxy::{Proxy, ProxyScheme};
 use crate::error::BoxError;
+#[cfg(feature = "default-tls")]
+use self::native_tls_conn::NativeTlsConn;
 
 //#[cfg(feature = "trust-dns")]
 //type HttpConnector = hyper::client::HttpConnector<TrustDnsResolver>;
@@ -307,7 +309,7 @@ impl Connector {
                         .await
                         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
                     return Ok(Conn {
-                        inner: Box::new(io),
+                        inner: Box::new(NativeTlsConn { inner: io }),
                         is_proxy: false,
                     });
                 }
@@ -453,8 +455,8 @@ impl Service<Uri> for Connector
 //}
 
 
-pub(crate) trait AsyncConn: AsyncRead + AsyncWrite {}
-impl<T: AsyncRead + AsyncWrite> AsyncConn for T {}
+pub(crate) trait AsyncConn: AsyncRead + AsyncWrite + Connection {}
+impl<T: AsyncRead + AsyncWrite + Connection> AsyncConn for T {}
 
 pin_project! {
     pub(crate) struct Conn {
@@ -466,7 +468,7 @@ pin_project! {
 
 impl Connection for Conn {
     fn connected(&self) -> Connected {
-        Connected::new().proxy(self.is_proxy)
+        self.inner.connected().proxy(self.is_proxy)
     }
 }
 
@@ -619,6 +621,94 @@ fn tunnel_eof() -> io::Error {
         io::ErrorKind::UnexpectedEof,
         "unexpected eof while tunneling",
     )
+}
+
+#[cfg(feature = "default-tls")]
+mod native_tls_conn {
+    use std::mem::MaybeUninit;
+    use std::{pin::Pin, task::{Context, Poll}};
+    use bytes::{Buf, BufMut};
+    use hyper::client::connect::{Connected, Connection};
+    use pin_project_lite::pin_project;
+    use tokio::io::{AsyncRead, AsyncWrite};
+    use tokio_tls::TlsStream;
+
+
+    pin_project! {
+        pub(super) struct NativeTlsConn<T> {
+            #[pin] pub(super) inner: TlsStream<T>,
+        }
+    }
+
+    impl<T: Connection + AsyncRead + AsyncWrite + Unpin> Connection for NativeTlsConn<T> {
+        fn connected(&self) -> Connected {
+            self.inner.get_ref().connected()
+        }
+    }
+
+    impl<T: AsyncRead + AsyncWrite + Unpin> AsyncRead for NativeTlsConn<T> {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            cx: &mut Context,
+            buf: &mut [u8]
+        ) -> Poll<tokio::io::Result<usize>> {
+            let this = self.project();
+            AsyncRead::poll_read(this.inner, cx, buf)
+        }
+
+        unsafe fn prepare_uninitialized_buffer(
+            &self,
+            buf: &mut [MaybeUninit<u8>]
+        ) -> bool {
+            self.inner.prepare_uninitialized_buffer(buf)
+        }
+
+        fn poll_read_buf<B: BufMut>(
+            self: Pin<&mut Self>,
+            cx: &mut Context,
+            buf: &mut B
+        ) -> Poll<tokio::io::Result<usize>>
+            where
+                Self: Sized
+        {
+            let this = self.project();
+            AsyncRead::poll_read_buf(this.inner, cx, buf)
+        }
+    }
+
+    impl<T: AsyncRead + AsyncWrite + Unpin> AsyncWrite for NativeTlsConn<T> {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            cx: &mut Context,
+            buf: &[u8]
+        ) -> Poll<Result<usize, tokio::io::Error>> {
+            let this = self.project();
+            AsyncWrite::poll_write(this.inner, cx, buf)
+        }
+
+        fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), tokio::io::Error>> {
+            let this = self.project();
+            AsyncWrite::poll_flush(this.inner, cx)
+        }
+
+        fn poll_shutdown(
+            self: Pin<&mut Self>,
+            cx: &mut Context
+        ) -> Poll<Result<(), tokio::io::Error>> {
+            let this = self.project();
+            AsyncWrite::poll_shutdown(this.inner, cx)
+        }
+
+        fn poll_write_buf<B: Buf>(
+            self: Pin<&mut Self>,
+            cx: &mut Context,
+            buf: &mut B
+        ) -> Poll<Result<usize, tokio::io::Error>> where
+            Self: Sized {
+            let this = self.project();
+            AsyncWrite::poll_write_buf(this.inner, cx, buf)
+        }
+    }
 }
 
 #[cfg(feature = "socks")]

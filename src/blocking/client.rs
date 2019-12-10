@@ -684,7 +684,6 @@ impl ClientHandle {
                 KeepCoreThreadAlive(Some(self.inner.clone())),
             )),
             Err(wait::Waited::TimedOut(e)) => Err(crate::error::request(e).with_url(url)),
-            Err(wait::Waited::Executor(err)) => Err(crate::error::request(err).with_url(url)),
             Err(wait::Waited::Inner(err)) => Err(err.with_url(url)),
         }
     }
