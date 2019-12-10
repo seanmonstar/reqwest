@@ -2,6 +2,8 @@ use std::fmt;
 use std::fs::File;
 use std::future::Future;
 use std::io::{self, Cursor, Read};
+use std::mem::{self, MaybeUninit};
+use std::ptr;
 
 use bytes::Bytes;
 
@@ -246,9 +248,17 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
         if buf.is_empty() {
             if buf.remaining_mut() == 0 {
                 buf.reserve(8192);
+                // zero out the reserved memory
+                unsafe {
+                    let uninit = mem::transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(buf.bytes_mut());
+                    ptr::write_bytes(uninit.as_mut_ptr(), 0, uninit.len());
+                }
             }
 
-            match body.read(unsafe { buf.bytes_mut() }) {
+            let bytes = unsafe {
+                mem::transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(buf.bytes_mut())
+            };
+            match body.read(bytes) {
                 Ok(0) => {
                     // The buffer was empty and nothing's left to
                     // read. Return.
