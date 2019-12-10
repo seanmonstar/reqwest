@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::pin::Pin;
 
-use bytes::Bytes;
+use bytes::{Bytes};
 use http::HeaderMap;
 use mime_guess::Mime;
 use percent_encoding::{self, AsciiSet, NON_ALPHANUMERIC};
@@ -536,18 +536,18 @@ mod tests {
     use super::*;
     use futures_util::TryStreamExt;
     use futures_util::{future, stream};
-    use tokio;
+    use tokio::{self, runtime};
 
     #[test]
     fn form_empty() {
         let form = Form::new();
 
-        let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
+        let mut rt = runtime::Builder::new().basic_scheduler().enable_all().build().expect("new rt");
         let body = form.stream().into_stream();
-        let s = body.map(|try_c| try_c.map(Bytes::from)).try_concat();
+        let s = body.map_ok(|try_c| try_c.to_vec()).try_concat();
 
         let out = rt.block_on(s);
-        assert_eq!(out.unwrap(), Vec::new());
+        assert!(out.unwrap().is_empty());
     }
 
     #[test]
@@ -590,9 +590,9 @@ mod tests {
              --boundary\r\n\
              Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
              value3\r\n--boundary--\r\n";
-        let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
+        let mut rt = runtime::Builder::new().basic_scheduler().enable_all().build().expect("new rt");
         let body = form.stream().into_stream();
-        let s = body.map(|try_c| try_c.map(Bytes::from)).try_concat();
+        let s = body.map(|try_c| try_c.map(|r| r.to_vec())).try_concat();
 
         let out = rt.block_on(s).unwrap();
         // These prints are for debug purposes in case the test fails
@@ -617,9 +617,9 @@ mod tests {
                         \r\n\
                         value2\r\n\
                         --boundary--\r\n";
-        let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
+        let mut rt = runtime::Builder::new().basic_scheduler().enable_all().build().expect("new rt");
         let body = form.stream().into_stream();
-        let s = body.map(|try_c| try_c.map(Bytes::from)).try_concat();
+        let s = body.map(|try_c| try_c.map(|r| r.to_vec())).try_concat();
 
         let out = rt.block_on(s).unwrap();
         // These prints are for debug purposes in case the test fails

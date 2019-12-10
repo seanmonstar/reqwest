@@ -1,5 +1,6 @@
 mod support;
 use support::*;
+use futures_util::stream::StreamExt;
 
 #[tokio::test]
 async fn text_part() {

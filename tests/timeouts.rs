@@ -10,7 +10,7 @@ async fn request_timeout() {
     let server = server::http(move |_req| {
         async {
             // delay returning the response
-            tokio::timer::delay(Instant::now() + Duration::from_secs(2)).await;
+            tokio::time::delay_for(Duration::from_secs(2)).await;
             http::Response::default()
         }
     });
@@ -38,7 +38,7 @@ async fn response_timeout() {
         async {
             // immediate response, but delayed body
             let body = hyper::Body::wrap_stream(futures_util::stream::once(async {
-                tokio::timer::delay(Instant::now() + Duration::from_secs(2)).await;
+                tokio::time::delay_for(Duration::from_secs(2)).await;
                 Ok::<_, std::convert::Infallible>("Hello")
             }));
 

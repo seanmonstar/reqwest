@@ -1,5 +1,6 @@
 mod support;
 use support::*;
+use futures_util::stream::StreamExt;
 
 #[tokio::test]
 async fn test_redirect_301_and_302_and_303_changes_post_to_get() {

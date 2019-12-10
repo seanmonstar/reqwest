@@ -8,6 +8,7 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 
 pub use http::Response;
+use tokio::runtime;
 
 pub struct Server {
     addr: net::SocketAddr,
@@ -66,7 +67,7 @@ where
     thread::Builder::new()
         .name(tname)
         .spawn(move || {
-            let mut rt = tokio::runtime::current_thread::Runtime::new().expect("rt new");
+            let mut rt = runtime::Builder::new().basic_scheduler().enable_all().build().expect("new rt");
             rt.block_on(srv).unwrap();
             let _ = panic_tx.send(());
         })

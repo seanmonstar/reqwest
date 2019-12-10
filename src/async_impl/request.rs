@@ -1,10 +1,10 @@
+use std::convert::TryFrom;
 use std::fmt;
 use std::future::Future;
 use std::io::Write;
 
 use base64;
 use base64::write::EncoderWriter as Base64Encoder;
-use bytes::Bytes;
 use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
@@ -16,7 +16,6 @@ use super::multipart;
 use super::response::Response;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
 use crate::{Method, Url};
-use http::HttpTryFrom;
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -119,13 +118,15 @@ impl RequestBuilder {
     /// Add a `Header` to this Request.
     pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
     where
-        HeaderName: HttpTryFrom<K>,
-        HeaderValue: HttpTryFrom<V>,
+        HeaderName: TryFrom<K>,
+        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
+        HeaderValue: TryFrom<V>,
+        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
         let mut error = None;
         if let Ok(ref mut req) = self.request {
-            match <HeaderName as HttpTryFrom<K>>::try_from(key) {
-                Ok(key) => match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
+            match <HeaderName as TryFrom<K>>::try_from(key) {
+                Ok(key) => match <HeaderValue as TryFrom<V>>::try_from(value) {
                     Ok(value) => {
                         req.headers_mut().append(key, value);
                     }
@@ -166,7 +167,7 @@ impl RequestBuilder {
             }
         }
 
-        self.header(crate::header::AUTHORIZATION, Bytes::from(header_value))
+        self.header(crate::header::AUTHORIZATION, header_value)
     }
 
     /// Enable HTTP bearer authentication.

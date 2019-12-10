@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use tokio::clock;
+use tokio::time::Instant;
 use tokio_executor::{
     enter,
     park::{Park, ParkThread, Unpark, UnparkThread},
@@ -17,7 +17,7 @@ where
         enter().map_err(|_| Waited::Executor(crate::error::BlockingClientInAsyncContext))?;
     let deadline = timeout.map(|d| {
         log::trace!("wait at most {:?}", d);
-        clock::now() + d
+        Instant::now() + d
     });
 
     let mut park = ParkThread::new();
@@ -36,7 +36,7 @@ where
         }
 
         if let Some(deadline) = deadline {
-            let now = clock::now();
+            let now = Instant::now();
             if now >= deadline {
                 log::trace!("wait timeout exceeded");
                 return Err(Waited::TimedOut(crate::error::TimedOut));

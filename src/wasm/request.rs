@@ -1,4 +1,3 @@
-use http::HttpTryFrom;
 use std::fmt;
 
 use http::Method;
@@ -96,13 +95,13 @@ impl RequestBuilder {
     /// Add a `Header` to this Request.
     pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
     where
-        HeaderName: HttpTryFrom<K>,
-        HeaderValue: HttpTryFrom<V>,
+        HeaderName: TryFrom<K>,
+        HeaderValue: TryFrom<V>,
     {
         let mut error = None;
         if let Ok(ref mut req) = self.request {
-            match <HeaderName as HttpTryFrom<K>>::try_from(key) {
-                Ok(key) => match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
+            match HeaderName::try_from(key) {
+                Ok(key) => match HeaderValue::try_from(value) {
                     Ok(value) => {
                         req.headers_mut().append(key, value);
                     }

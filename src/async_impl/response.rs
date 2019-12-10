@@ -2,9 +2,9 @@ use std::borrow::Cow;
 use std::fmt;
 use std::net::SocketAddr;
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use encoding_rs::{Encoding, UTF_8};
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::stream::StreamExt;
 use http;
 use hyper::client::connect::HttpInfo;
 use hyper::header::CONTENT_LENGTH;
@@ -15,7 +15,7 @@ use mime::Mime;
 use serde::de::DeserializeOwned;
 #[cfg(feature = "json")]
 use serde_json;
-use tokio::timer::Delay;
+use tokio::time::Delay;
 use url::Url;
 
 use super::body::Body;
@@ -260,8 +260,12 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn bytes(self) -> crate::Result<Bytes> {
-        self.body.try_concat().await
+    pub async fn bytes(mut self) -> crate::Result<Bytes> {
+        let mut buf = BytesMut::new();
+        while let Some(chunk) = self.body.next().await {
+            buf.extend(chunk?);
+        }
+        Ok(buf.freeze())
     }
 
     /// Stream a chunk of the response body.
@@ -408,11 +412,12 @@ struct ResponseUrl(Url);
 pub trait ResponseBuilderExt {
     /// A builder method for the `http::response::Builder` type that allows the user to add a `Url`
     /// to the `http::Response`
-    fn url(&mut self, url: Url) -> &mut Self;
+    fn url(self, url: Url) -> Self;
 }
 
+
 impl ResponseBuilderExt for http::response::Builder {
-    fn url(&mut self, url: Url) -> &mut Self {
+    fn url(self, url: Url) -> Self {
         self.extension(ResponseUrl(url))
     }
 }
