@@ -82,12 +82,12 @@ fn test_get() {
 
 #[test]
 fn test_post() {
-    let server = server::http(move |mut req| {
+    let server = server::http(move |req| {
         async move {
             assert_eq!(req.method(), "POST");
             assert_eq!(req.headers()["content-length"], "5");
 
-            let data = req.body_mut().next().await.unwrap().unwrap();
+            let data = hyper::body::to_bytes(req.into_body()).await.unwrap();
             assert_eq!(&*data, b"Hello");
 
             http::Response::default()
@@ -107,7 +107,7 @@ fn test_post() {
 
 #[test]
 fn test_post_form() {
-    let server = server::http(move |mut req| {
+    let server = server::http(move |req| {
         async move {
             assert_eq!(req.method(), "POST");
             assert_eq!(req.headers()["content-length"], "24");
@@ -116,7 +116,7 @@ fn test_post_form() {
                 "application/x-www-form-urlencoded"
             );
 
-            let data = req.body_mut().next().await.unwrap().unwrap();
+            let data = hyper::body::to_bytes(req.into_body()).await.unwrap();
             assert_eq!(&*data, b"hello=world&sean=monstar");
 
             http::Response::default()
