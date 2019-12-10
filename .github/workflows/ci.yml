@@ -1,0 +1,247 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+env:
+  REQWEST_TEST_BODY_FULL: 1
+  RUST_BACKTRACE: 1
+
+jobs:
+  style:
+    name: Check Style
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+          profile: minimal
+          override: true
+
+      - name: cargo fmt -- --check
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+  build:
+    name: ${{ matrix.name }}
+    needs: [style]
+
+    runs-on: ${{ matrix.os || 'ubuntu-latest' }}
+
+    # The build matrix does not yet support 'allow failures' at job level.
+    # See `jobs.nightly` for the active nightly job definition.
+    strategy:
+      matrix:
+        name:
+          - linux / stable
+          - linux / beta
+          # - linux / nightly
+          - macOS / stable
+          - windows / stable-x86_64-msvc
+          - windows / stable-i686-msvc
+          - windows / stable-x86_64-gnu
+          - windows / stable-i686-gnu
+          - "feat.: default-tls disabled"
+          # - "feat.: rustls-tls"
+          # - "feat.: default-tls and rustls-tls"
+          - "feat.: cookies"
+          - "feat.: blocking"
+          - "feat.: gzip"
+          - "feat.: json"
+          - "feat.: unstable-stream"
+          # - "feat.: socks"
+          # - "feat.: trust-dns"
+
+        include:
+          - name: linux / stable
+            test-features: "--features __internal_proxy_sys_no_cache"
+          - name: linux / beta
+            rust: beta
+            test-features: "--features __internal_proxy_sys_no_cache"
+          # - name: linux / nightly
+          #   rust: nightly
+          #   test-features: "--features __internal_proxy_sys_no_cache"
+          - name: macOS / stable
+            os: macOS-latest
+            test-features: "--features __internal_proxy_sys_no_cache"
+
+          - name: windows / stable-x86_64-msvc
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            features: "--features blocking,gzip,json"
+          - name: windows / stable-i686-msvc
+            os: windows-latest
+            target: i686-pc-windows-msvc
+            features: "--features blocking,gzip,json"
+          - name: windows / stable-x86_64-gnu
+            os: windows-latest
+            rust: stable-x86_64-pc-windows-gnu
+            target: x86_64-pc-windows-gnu
+            features: "--features blocking,gzip,json"
+          - name: windows / stable-i686-gnu
+            os: windows-latest
+            rust: stable-i686-pc-windows-gnu
+            target: i686-pc-windows-gnu
+            features: "--features blocking,gzip,json"
+
+          - name: "feat.: default-tls disabled"
+            features: "--no-default-features"
+          # - name: "feat.: rustls-tls
+          #   features: "--no-default-features --features rustls-tls"
+          # - name: "feat.: default-tls and rustls-tls"
+          #   features: "--features rustls-tls"
+          - name: "feat.: cookies"
+            features: "--features cookies"
+          - name: "feat.: blocking"
+            features: "--features blocking"
+          - name: "feat.: gzip"
+            features: "--features gzip"
+          - name: "feat.: json"
+            features: "--features json"
+          - name: "feat.: unstable-stream"
+            features: "--features unstable-stream"
+          # - name: "feat.: socks"
+          #   features: "--features socks"
+          # - name: "feat.: trust-dns"
+          #   features: "--features trust-dns"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust || 'stable' }}
+          target: ${{ matrix.target }}
+          profile: minimal
+          override: true
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: ${{ matrix.features }}
+
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: ${{ matrix.features }} ${{ matrix.test-features }} -- --test-threads=1
+
+  # Separate build job for nightly because of the missing feature for allowed failures at
+  # job level. See `jobs.build.strategy.matrix`.
+  nightly:
+    name: linux / nightly
+    needs: [style]
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          profile: minimal
+          override: true
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --features __internal_proxy_sys_no_cache -- --test-threads=1
+
+  minversion:
+    name: Minimum version ${{ matrix.rust }}
+    needs: [style]
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        rust: [1.39.0]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          profile: minimal
+          override: true
+
+      - name: Check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+
+  android:
+    name: Android
+    needs: [style]
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: aarch64-linux-android
+          profile: minimal
+          override: true
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          # disable default-tls feature since cross-compiling openssl is dragons
+          args: --target aarch64-linux-android --no-default-features
+
+  wasm:
+    name: WASM
+    needs: [style]
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          profile: minimal
+          override: true
+
+      - name: Check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --target wasm32-unknown-unknown
