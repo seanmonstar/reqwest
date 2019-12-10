@@ -6,10 +6,13 @@ use std::time::Duration;
 
 use tokio::time::Instant;
 
+
 pub(crate) fn timeout<F, I, E>(fut: F, timeout: Option<Duration>) -> Result<I, Waited<E>>
 where
     F: Future<Output = Result<I, E>>,
 {
+    enter();
+
     let deadline = timeout.map(|d| {
         log::trace!("wait at most {:?}", d);
         Instant::now() + d
@@ -56,5 +59,16 @@ struct ThreadWaker(Thread);
 impl futures_util::task::ArcWake for ThreadWaker {
     fn wake_by_ref(arc_self: &Arc<Self>) {
         arc_self.0.unpark();
+    }
+}
+
+fn enter() {
+    // Check we aren't already in a runtime
+    #[cfg(debug_assertions)]
+    {
+        tokio::runtime::Builder::new()
+            .build()
+            .expect("build shell runtime")
+            .enter(|| {});
     }
 }

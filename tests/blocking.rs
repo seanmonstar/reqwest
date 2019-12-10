@@ -287,3 +287,17 @@ fn test_appended_headers_not_overwritten() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
+
+#[test]
+#[should_panic]
+fn test_blocking_inside_a_runtime() {
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
+
+    let url = format!("http://{}/text", server.addr());
+
+    let mut rt = tokio::runtime::Builder::new().build().expect("new rt");
+
+    rt.block_on(async move {
+        let _should_panic = reqwest::blocking::get(&url);
+    });
+}
