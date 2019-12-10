@@ -67,7 +67,11 @@ where
     thread::Builder::new()
         .name(tname)
         .spawn(move || {
-            let mut rt = runtime::Builder::new().basic_scheduler().enable_all().build().expect("new rt");
+            let mut rt = runtime::Builder::new()
+                .basic_scheduler()
+                .enable_all()
+                .build()
+                .expect("new rt");
             rt.block_on(srv).unwrap();
             let _ = panic_tx.send(());
         })

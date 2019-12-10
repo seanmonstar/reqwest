@@ -1,6 +1,6 @@
 mod support;
-use support::*;
 use futures_util::stream::StreamExt;
+use support::*;
 
 use reqwest::Client;
 
