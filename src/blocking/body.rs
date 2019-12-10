@@ -248,7 +248,7 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
                 buf.reserve(8192);
             }
 
-            match body.read(&mut buf) {
+            match body.read(unsafe { buf.bytes_mut() }) {
                 Ok(0) => {
                     // The buffer was empty and nothing's left to
                     // read. Return.
