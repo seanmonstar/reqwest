@@ -140,8 +140,10 @@ impl RequestBuilder {
     /// ```
     pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
     where
-        HeaderName: std::convert::TryFrom<K>,
-        HeaderValue: std::convert::TryFrom<V>,
+        HeaderName: TryFrom<K>,
+        HeaderValue: TryFrom<V>,
+        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
+        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
         let mut error = None;
         if let Ok(ref mut req) = self.request {
