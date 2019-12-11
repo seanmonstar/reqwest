@@ -1,3 +1,7 @@
+## v0.9.24
+
+- Fix stray `dbg!` macro usage.
+
 ## v0.9.23
 
 - Fix when passing a `Url` that contains a username and password, extract it and send as basic authorizaton (#715).
