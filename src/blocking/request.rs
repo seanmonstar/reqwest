@@ -122,7 +122,19 @@ impl Request {
 
 impl RequestBuilder {
     pub(crate) fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
-        RequestBuilder { client, request }
+        let mut builder = RequestBuilder { client, request };
+
+        let auth = builder
+            .request
+            .as_mut()
+            .ok()
+            .and_then(|req| async_impl::request::extract_authority(req.url_mut()));
+
+        if let Some((username, password)) = auth {
+            builder.basic_auth(username, password)
+        } else {
+            builder
+        }
     }
 
     /// Add a `Header` to this Request.
@@ -871,5 +883,19 @@ mod tests {
 
         assert_eq!(req.url().query(), None);
         assert_eq!(req.url().as_str(), "https://google.com/");
+    }
+
+    #[test]
+    fn convert_url_authority_into_basic_auth() {
+        let client = Client::new();
+        let some_url = "https://Aladdin:open sesame@localhost/";
+
+        let req = client
+            .get(some_url)
+            .build()
+            .expect("request build");
+
+        assert_eq!(req.url().as_str(), "https://localhost/");
+        assert_eq!(req.headers()["authorization"], "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
     }
 }
