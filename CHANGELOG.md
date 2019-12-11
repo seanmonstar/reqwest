@@ -1,3 +1,7 @@
+## v0.9.23
+
+- Fix when passing a `Url` that contains a username and password, extract it and send as basic authorizaton (#715).
+
 ## v0.9.22
 
 - Revert returning an error when using blocking `Client` inside an asynchronous context. Log a warning instead.
