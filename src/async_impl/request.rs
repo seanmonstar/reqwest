@@ -95,9 +95,18 @@ impl Request {
 
 impl RequestBuilder {
     pub(super) fn new(client: Client, request: ::Result<Request>) -> RequestBuilder {
-        RequestBuilder {
-            client,
-            request,
+        let mut builder = RequestBuilder { client, request };
+
+        let auth = builder
+            .request
+            .as_mut()
+            .ok()
+            .and_then(|req| extract_authority(&mut req.url));
+
+        if let Some((username, password)) = auth {
+            builder.basic_auth(username, password)
+        } else {
+            builder
         }
     }
 
@@ -170,7 +179,7 @@ impl RequestBuilder {
             Some(password) => format!("{}:{}", username, password),
             None => format!("{}:", username)
         };
-        let header_value = format!("Basic {}", encode(&auth));
+        let header_value = format!("Basic {}", encode(&dbg!(auth)));
         self.header(::header::AUTHORIZATION, &*header_value)
     }
 
@@ -424,6 +433,37 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
     }
 }
 
+
+/// Check the request URL for a "username:password" type authority, and if
+/// found, remove it from the URL and return it.
+pub(crate) fn extract_authority(url: &mut Url) -> Option<(String, Option<String>)> {
+    use url::percent_encoding::percent_decode;
+
+    if url.has_authority() {
+        let username: String = percent_decode(url.username().as_bytes())
+            .decode_utf8()
+            .ok()?
+            .into();
+        let password = url.password().and_then(|pass| {
+            percent_decode(pass.as_bytes())
+                .decode_utf8()
+                .ok()
+                .map(String::from)
+        });
+        if !username.is_empty() || password.is_some() {
+            url
+                .set_username("")
+                .expect("has_authority means set_username shouldn't fail");
+            url
+                .set_password(None)
+                .expect("has_authority means set_password shouldn't fail");
+            return Some((username, password))
+        }
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::Client;
@@ -534,6 +574,20 @@ mod tests {
 
         assert_eq!(req.url().query(), None);
         assert_eq!(req.url().as_str(), "https://google.com/");
+    }
+
+    #[test]
+    fn convert_url_authority_into_basic_auth() {
+        let client = Client::new();
+        let some_url = "https://Aladdin:open sesame@localhost/";
+
+        let req = client
+            .get(some_url)
+            .build()
+            .expect("request build");
+
+        assert_eq!(req.url().as_str(), "https://localhost/");
+        assert_eq!(req.headers()["authorization"], "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
     }
 
     /*
