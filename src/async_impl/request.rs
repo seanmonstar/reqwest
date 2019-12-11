@@ -179,7 +179,7 @@ impl RequestBuilder {
             Some(password) => format!("{}:{}", username, password),
             None => format!("{}:", username)
         };
-        let header_value = format!("Basic {}", encode(&dbg!(auth)));
+        let header_value = format!("Basic {}", encode(&auth));
         self.header(::header::AUTHORIZATION, &*header_value)
     }
 
