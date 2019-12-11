@@ -1,29 +1,27 @@
 use std::future::Future;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::thread::{self, Thread};
 use std::time::Duration;
 
-use tokio::clock;
-use tokio_executor::{
-    enter,
-    park::{Park, ParkThread, Unpark, UnparkThread},
-};
+use tokio::time::Instant;
+
 
 pub(crate) fn timeout<F, I, E>(fut: F, timeout: Option<Duration>) -> Result<I, Waited<E>>
 where
     F: Future<Output = Result<I, E>>,
 {
-    let _entered =
-        enter().map_err(|_| Waited::Executor(crate::error::BlockingClientInAsyncContext))?;
+    enter();
+
     let deadline = timeout.map(|d| {
         log::trace!("wait at most {:?}", d);
-        clock::now() + d
+        Instant::now() + d
     });
 
-    let mut park = ParkThread::new();
-    // Arc shouldn't be necessary, since UnparkThread is reference counted internally,
+    let thread = ThreadWaker(thread::current());
+    // Arc shouldn't be necessary, since `Thread` is reference counted internally,
     // but let's just stay safe for now.
-    let waker = futures_util::task::waker(Arc::new(UnparkWaker(park.unpark())));
+    let waker = futures_util::task::waker(Arc::new(thread));
     let mut cx = Context::from_waker(&waker);
 
     futures_util::pin_mut!(fut);
@@ -36,17 +34,16 @@ where
         }
 
         if let Some(deadline) = deadline {
-            let now = clock::now();
+            let now = Instant::now();
             if now >= deadline {
                 log::trace!("wait timeout exceeded");
                 return Err(Waited::TimedOut(crate::error::TimedOut));
             }
 
             log::trace!("park timeout {:?}", deadline - now);
-            park.park_timeout(deadline - now)
-                .expect("ParkThread doesn't error");
+            thread::park_timeout(deadline - now);
         } else {
-            park.park().expect("ParkThread doesn't error");
+            thread::park();
         }
     }
 }
@@ -54,14 +51,24 @@ where
 #[derive(Debug)]
 pub(crate) enum Waited<E> {
     TimedOut(crate::error::TimedOut),
-    Executor(crate::error::BlockingClientInAsyncContext),
     Inner(E),
 }
 
-struct UnparkWaker(UnparkThread);
+struct ThreadWaker(Thread);
 
-impl futures_util::task::ArcWake for UnparkWaker {
+impl futures_util::task::ArcWake for ThreadWaker {
     fn wake_by_ref(arc_self: &Arc<Self>) {
         arc_self.0.unpark();
+    }
+}
+
+fn enter() {
+    // Check we aren't already in a runtime
+    #[cfg(debug_assertions)]
+    {
+        tokio::runtime::Builder::new()
+            .build()
+            .expect("build shell runtime")
+            .enter(|| {});
     }
 }

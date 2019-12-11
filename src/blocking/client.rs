@@ -593,9 +593,8 @@ impl ClientHandle {
         let handle = thread::Builder::new()
             .name("reqwest-internal-sync-runtime".into())
             .spawn(move || {
-                use tokio::runtime::current_thread::Runtime;
-
-                let mut rt = match Runtime::new().map_err(crate::error::builder) {
+                use tokio::runtime;
+                let mut rt = match runtime::Builder::new().basic_scheduler().enable_all().build().map_err(crate::error::builder) {
                     Err(e) => {
                         if let Err(e) = spawn_tx.send(Err(e)) {
                             error!("Failed to communicate runtime creation failure: {:?}", e);
@@ -685,7 +684,6 @@ impl ClientHandle {
                 KeepCoreThreadAlive(Some(self.inner.clone())),
             )),
             Err(wait::Waited::TimedOut(e)) => Err(crate::error::request(e).with_url(url)),
-            Err(wait::Waited::Executor(err)) => Err(crate::error::request(err).with_url(url)),
             Err(wait::Waited::Inner(err)) => Err(err.with_url(url)),
         }
     }
@@ -705,7 +703,7 @@ where
             Poll::Ready(val) => Poll::Ready(Some(val)),
             Poll::Pending => {
                 // check if the callback is canceled
-                futures_core::ready!(tx.poll_cancel(cx));
+                futures_core::ready!(tx.poll_canceled(cx));
                 Poll::Ready(None)
             }
         }

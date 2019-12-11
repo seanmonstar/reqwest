@@ -11,13 +11,14 @@ use http::header::{
     CONTENT_TYPE, LOCATION, PROXY_AUTHORIZATION, RANGE, REFERER, TRANSFER_ENCODING, USER_AGENT,
 };
 use http::Uri;
+use http::uri::Scheme;
 use hyper::client::ResponseFuture;
 #[cfg(feature = "default-tls")]
 use native_tls::TlsConnector;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio::{clock, timer::Delay};
+use tokio::time::Delay;
 
 use log::debug;
 
@@ -726,7 +727,7 @@ impl Client {
         // insert default headers in the request headers
         // without overwriting already appended headers.
         for (key, value) in &self.inner.headers {
-            if let Ok(Entry::Vacant(entry)) = headers.entry(key) {
+            if let Entry::Vacant(entry) = headers.entry(key) {
                 entry.insert(value.clone());
             }
         }
@@ -772,7 +773,7 @@ impl Client {
         let timeout = self
             .inner
             .request_timeout
-            .map(|dur| tokio::timer::delay(clock::now() + dur));
+            .map(|dur| tokio::time::delay_for(dur));
 
         Pending {
             inner: PendingInner::Request(PendingRequest {
@@ -799,7 +800,7 @@ impl Client {
         // Only set the header here if the destination scheme is 'http',
         // since otherwise, the header will be included in the CONNECT tunnel
         // request instead.
-        if dst.scheme_part() != Some(&::http::uri::Scheme::HTTP) {
+        if dst.scheme() != Some(&Scheme::HTTP) {
             return;
         }
 

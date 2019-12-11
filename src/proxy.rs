@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use crate::{IntoUrl, Url};
 use http::{header::HeaderValue, Uri};
-use hyper::client::connect::Destination;
 use percent_encoding::percent_decode;
 use std::collections::HashMap;
 use std::env;
@@ -509,24 +508,9 @@ pub(crate) trait Dst {
 }
 
 #[doc(hidden)]
-impl Dst for Destination {
-    fn scheme(&self) -> &str {
-        Destination::scheme(self)
-    }
-
-    fn host(&self) -> &str {
-        Destination::host(self)
-    }
-
-    fn port(&self) -> Option<u16> {
-        Destination::port(self)
-    }
-}
-
-#[doc(hidden)]
 impl Dst for Uri {
     fn scheme(&self) -> &str {
-        self.scheme_part()
+        self.scheme()
             .expect("Uri should have a scheme")
             .as_str()
     }
@@ -536,7 +520,7 @@ impl Dst for Uri {
     }
 
     fn port(&self) -> Option<u16> {
-        self.port_part().map(|p| p.as_u16())
+        self.port().map(|p| p.as_u16())
     }
 }
 

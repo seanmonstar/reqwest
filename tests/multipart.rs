@@ -1,4 +1,5 @@
 mod support;
+use futures_util::stream::StreamExt;
 use support::*;
 
 #[tokio::test]

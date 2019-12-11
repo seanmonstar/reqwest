@@ -82,12 +82,12 @@ fn test_get() {
 
 #[test]
 fn test_post() {
-    let server = server::http(move |mut req| {
+    let server = server::http(move |req| {
         async move {
             assert_eq!(req.method(), "POST");
             assert_eq!(req.headers()["content-length"], "5");
 
-            let data = req.body_mut().next().await.unwrap().unwrap();
+            let data = hyper::body::to_bytes(req.into_body()).await.unwrap();
             assert_eq!(&*data, b"Hello");
 
             http::Response::default()
@@ -107,7 +107,7 @@ fn test_post() {
 
 #[test]
 fn test_post_form() {
-    let server = server::http(move |mut req| {
+    let server = server::http(move |req| {
         async move {
             assert_eq!(req.method(), "POST");
             assert_eq!(req.headers()["content-length"], "24");
@@ -116,7 +116,7 @@ fn test_post_form() {
                 "application/x-www-form-urlencoded"
             );
 
-            let data = req.body_mut().next().await.unwrap().unwrap();
+            let data = hyper::body::to_bytes(req.into_body()).await.unwrap();
             assert_eq!(&*data, b"hello=world&sean=monstar");
 
             http::Response::default()
@@ -286,4 +286,18 @@ fn test_appended_headers_not_overwritten() {
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
+#[test]
+#[should_panic]
+fn test_blocking_inside_a_runtime() {
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
+
+    let url = format!("http://{}/text", server.addr());
+
+    let mut rt = tokio::runtime::Builder::new().build().expect("new rt");
+
+    rt.block_on(async move {
+        let _should_panic = reqwest::blocking::get(&url);
+    });
 }
