@@ -573,7 +573,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "unstable-stream")]
+    #[cfg(feature = "stream")]
     fn try_clone_stream() {
         let chunks: Vec<Result<_, ::std::io::Error>> = vec![
             Ok("hello"),
