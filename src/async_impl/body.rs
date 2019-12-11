@@ -65,10 +65,10 @@ impl Body {
     /// # }
     /// ```
     ///
-    /// # Unstable
+    /// # Optional
     ///
-    /// This requires the `unstable-stream` feature to be enabled.
-    #[cfg(feature = "unstable-stream")]
+    /// This requires the `stream` feature to be enabled.
+    #[cfg(feature = "stream")]
     pub fn wrap_stream<S>(stream: S) -> Body
     where
         S: futures_core::stream::TryStream + Send + Sync + 'static,
