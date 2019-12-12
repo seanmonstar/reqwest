@@ -130,7 +130,7 @@
 //!
 //! ## Proxies
 //!
-//! ** NOTE ** Proxies are enabled by default.
+//! **NOTE**: System proxies are enabled by default.
 //!
 //! System proxies look in environment variables to set HTTP or HTTPS proxies.
 //!
