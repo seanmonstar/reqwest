@@ -1,4 +1,3 @@
-use futures_util::FutureExt;
 use hyper::service::Service;
 use http::uri::{Scheme, Authority};
 use http::Uri;
@@ -413,47 +412,19 @@ impl Service<Uri> for Connector
         let timeout = self.timeout;
         for prox in self.proxies.iter() {
             if let Some(proxy_scheme) = prox.intercept(&dst) {
-                return with_timeout(
+                return Box::pin(with_timeout(
                     self.clone().connect_via_proxy(dst, proxy_scheme),
                     timeout,
-                )
-                .boxed();
+                ));
             }
         }
 
-        with_timeout(
+        Box::pin(with_timeout(
             self.clone().connect_with_maybe_proxy(dst, false),
             timeout,
-        )
-        .boxed()
+        ))
     }
 }
-
-//impl Connect for Connector {
-//    type Transport = Conn;
-//    type Error = BoxError;
-//    type Future = Connecting;
-//
-//    fn connect(&self, dst: Uri) -> Self::Future {
-//        let timeout = self.timeout;
-//        for prox in self.proxies.iter() {
-//            if let Some(proxy_scheme) = prox.intercept(&dst) {
-//                return with_timeout(
-//                    self.clone().connect_via_proxy(dst, proxy_scheme),
-//                    timeout,
-//                )
-//                    .boxed();
-//            }
-//        }
-//
-//        with_timeout(
-//            self.clone().connect_with_maybe_proxy(dst, false),
-//            timeout,
-//        )
-//            .boxed()
-//    }
-//}
-
 
 pub(crate) trait AsyncConn: AsyncRead + AsyncWrite + Connection {}
 impl<T: AsyncRead + AsyncWrite + Connection> AsyncConn for T {}

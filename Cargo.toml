@@ -51,8 +51,8 @@ bytes = "0.5"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 base64 = "0.11"
 encoding_rs = "0.8"
-futures-core = { version = "0.3.0" }
-futures-util = { version = "0.3.0" }
+futures-core = { version = "0.3.0", default-features = false }
+futures-util = { version = "0.3.0", default-features = false }
 http-body = "0.3.0"
 hyper = { version = "0.13", default-features = false, features = ["tcp"] }
 lazy_static = "1.4"
