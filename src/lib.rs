@@ -276,7 +276,7 @@ if_hyper! {
     doctest!("../README.md");
 
     pub use self::async_impl::{
-        multipart, Body, Client, ClientBuilder, Request, RequestBuilder, Response,
+        multipart, Body, Client, ClientBuilder, Request, RequestBuilder, Response, ResponseBuilderExt,
     };
     pub use self::proxy::Proxy;
     pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
