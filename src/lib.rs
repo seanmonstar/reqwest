@@ -130,7 +130,7 @@
 //!
 //! ## Proxies
 //!
-//! ** NOTE ** Proxies are enabled by default.
+//! **NOTE**: System proxies are enabled by default.
 //!
 //! System proxies look in environment variables to set HTTP or HTTPS proxies.
 //!
@@ -166,7 +166,7 @@
 //! - **cookies**: Provides cookie session support.
 //! - **gzip**: Provides response body gzip decompression.
 //! - **json**: Provides serialization and deserialization for JSON bodies.
-//! - **unstable-stream** *(unstable)*: Adds support for `futures::Stream`.
+//! - **stream**: Adds support for `futures::Stream`.
 //!
 //!
 //! [hyper]: http://hyper.rs

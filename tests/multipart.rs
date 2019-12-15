@@ -1,4 +1,5 @@
 mod support;
+use futures_util::stream::StreamExt;
 use support::*;
 
 #[tokio::test]
@@ -54,7 +55,7 @@ async fn text_part() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
-#[cfg(feature = "unstable-stream")]
+#[cfg(feature = "stream")]
 #[tokio::test]
 async fn stream_part() {
     use futures_util::{future, stream};

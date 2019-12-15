@@ -258,9 +258,6 @@ pub(crate) fn decode_io(e: io::Error) -> Error {
 #[derive(Debug)]
 pub(crate) struct TimedOut;
 
-#[derive(Debug)]
-pub(crate) struct BlockingClientInAsyncContext;
-
 impl fmt::Display for TimedOut {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str("operation timed out")
@@ -268,14 +265,6 @@ impl fmt::Display for TimedOut {
 }
 
 impl StdError for TimedOut {}
-
-impl fmt::Display for BlockingClientInAsyncContext {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("blocking Client used inside a Future context")
-    }
-}
-
-impl StdError for BlockingClientInAsyncContext {}
 
 #[cfg(test)]
 mod tests {
