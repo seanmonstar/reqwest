@@ -1,3 +1,10 @@
+//! Redirect Handling
+//!
+//! By default, a `Client` will automatically handle HTTP redirects, having a
+//! maximum redirect chain of 10 hops. To customize this behavior, a
+//! `redirect::Policy` can be used with a `ClientBuilder`.
+
+use std::error::Error as StdError;
 use std::fmt;
 
 use crate::header::{HeaderMap, AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, WWW_AUTHENTICATE};
@@ -14,14 +21,14 @@ use crate::Url;
 ///   the allowed maximum redirect hops in a chain.
 /// - `none` can be used to disable all redirect behavior.
 /// - `custom` can be used to create a customized policy.
-pub struct RedirectPolicy {
-    inner: Policy,
+pub struct Policy {
+    inner: PolicyKind,
 }
 
 /// A type that holds information on the next request and previous requests
 /// in redirect chain.
 #[derive(Debug)]
-pub struct RedirectAttempt<'a> {
+pub struct Attempt<'a> {
     status: StatusCode,
     next: &'a Url,
     previous: &'a [Url],
@@ -29,50 +36,50 @@ pub struct RedirectAttempt<'a> {
 
 /// An action to perform when a redirect status code is found.
 #[derive(Debug)]
-pub struct RedirectAction {
-    inner: Action,
+pub struct Action {
+    inner: ActionKind,
 }
 
-impl RedirectPolicy {
-    /// Create a RedirectPolicy with a maximum number of redirects.
+impl Policy {
+    /// Create a `Policy` with a maximum number of redirects.
     ///
     /// An `Error` will be returned if the max is reached.
-    pub fn limited(max: usize) -> RedirectPolicy {
-        RedirectPolicy {
-            inner: Policy::Limit(max),
+    pub fn limited(max: usize) -> Self {
+        Self {
+            inner: PolicyKind::Limit(max),
         }
     }
 
-    /// Create a RedirectPolicy that does not follow any redirect.
-    pub fn none() -> RedirectPolicy {
-        RedirectPolicy {
-            inner: Policy::None,
+    /// Create a `Policy` that does not follow any redirect.
+    pub fn none() -> Self {
+        Self {
+            inner: PolicyKind::None,
         }
     }
 
-    /// Create a custom RedirectPolicy using the passed function.
+    /// Create a custom `Policy` using the passed function.
     ///
     /// # Note
     ///
-    /// The default RedirectPolicy handles redirect loops and a maximum loop
+    /// The default `Policy` handles a maximum loop
     /// chain, but the custom variant does not do that for you automatically.
     /// The custom policy should have some way of handling those.
     ///
     /// Information on the next request and previous requests can be found
-    /// on the [`RedirectAttempt`] argument passed to the closure.
+    /// on the [`Attempt`] argument passed to the closure.
     ///
     /// Actions can be conveniently created from methods on the
-    /// [`RedirectAttempt`].
+    /// [`Attempt`].
     ///
     /// # Example
     ///
     /// ```rust
-    /// # use reqwest::{Error, RedirectPolicy};
+    /// # use reqwest::{Error, redirect};
     /// #
     /// # fn run() -> Result<(), Error> {
-    /// let custom = RedirectPolicy::custom(|attempt| {
+    /// let custom = redirect::Policy::custom(|attempt| {
     ///     if attempt.previous().len() > 5 {
-    ///         attempt.too_many_redirects()
+    ///         attempt.error("too many redirects")
     ///     } else if attempt.url().host_str() == Some("example.domain") {
     ///         // prevent redirects to 'example.domain'
     ///         attempt.stop()
@@ -87,54 +94,52 @@ impl RedirectPolicy {
     /// # }
     /// ```
     ///
-    /// [`RedirectAttempt`]: struct.RedirectAttempt.html
-    pub fn custom<T>(policy: T) -> RedirectPolicy
+    /// [`Attempt`]: struct.Attempt.html
+    pub fn custom<T>(policy: T) -> Self
     where
-        T: Fn(RedirectAttempt) -> RedirectAction + Send + Sync + 'static,
+        T: Fn(Attempt) -> Action + Send + Sync + 'static,
     {
-        RedirectPolicy {
-            inner: Policy::Custom(Box::new(policy)),
+        Self {
+            inner: PolicyKind::Custom(Box::new(policy)),
         }
     }
 
-    /// Apply this policy to a given [`RedirectAttempt`] to produce a [`RedirectAction`].
+    /// Apply this policy to a given [`Attempt`] to produce a [`Action`].
     ///
     /// # Note
     ///
-    /// This method can be used together with RedirectPolicy::custom()
-    /// to construct one RedirectPolicy that wraps another.
+    /// This method can be used together with `Policy::custom()`
+    /// to construct one `Policy` that wraps another.
     ///
     /// # Example
     ///
     /// ```rust
-    /// # use reqwest::{Error, RedirectPolicy};
+    /// # use reqwest::{Error, redirect};
     /// #
     /// # fn run() -> Result<(), Error> {
-    /// let custom = RedirectPolicy::custom(|attempt| {
+    /// let custom = redirect::Policy::custom(|attempt| {
     ///     eprintln!("{}, Location: {:?}", attempt.status(), attempt.url());
-    ///     RedirectPolicy::default().redirect(attempt)
+    ///     redirect::Policy::default().redirect(attempt)
     /// });
     /// # Ok(())
     /// # }
     /// ```
-    pub fn redirect(&self, attempt: RedirectAttempt) -> RedirectAction {
+    pub fn redirect(&self, attempt: Attempt) -> Action {
         match self.inner {
-            Policy::Custom(ref custom) => custom(attempt),
-            Policy::Limit(max) => {
+            PolicyKind::Custom(ref custom) => custom(attempt),
+            PolicyKind::Limit(max) => {
                 if attempt.previous.len() == max {
-                    attempt.too_many_redirects()
-                } else if attempt.previous.contains(attempt.next) {
-                    attempt.loop_detected()
+                    attempt.error(TooManyRedirects)
                 } else {
                     attempt.follow()
                 }
             }
-            Policy::None => attempt.stop(),
+            PolicyKind::None => attempt.stop(),
         }
     }
 
-    pub(crate) fn check(&self, status: StatusCode, next: &Url, previous: &[Url]) -> Action {
-        self.redirect(RedirectAttempt {
+    pub(crate) fn check(&self, status: StatusCode, next: &Url, previous: &[Url]) -> ActionKind {
+        self.redirect(Attempt {
             status,
             next,
             previous,
@@ -144,20 +149,20 @@ impl RedirectPolicy {
 
     pub(crate) fn is_default(&self) -> bool {
         match self.inner {
-            Policy::Limit(10) => true,
+            PolicyKind::Limit(10) => true,
             _ => false,
         }
     }
 }
 
-impl Default for RedirectPolicy {
-    fn default() -> RedirectPolicy {
+impl Default for Policy {
+    fn default() -> Policy {
         // Keep `is_default` in sync
-        RedirectPolicy::limited(10)
+        Policy::limited(10)
     }
 }
 
-impl<'a> RedirectAttempt<'a> {
+impl<'a> Attempt<'a> {
     /// Get the type of redirect.
     pub fn status(&self) -> StatusCode {
         self.status
@@ -173,70 +178,60 @@ impl<'a> RedirectAttempt<'a> {
         self.previous
     }
     /// Returns an action meaning reqwest should follow the next URL.
-    pub fn follow(self) -> RedirectAction {
-        RedirectAction {
-            inner: Action::Follow,
+    pub fn follow(self) -> Action {
+        Action {
+            inner: ActionKind::Follow,
         }
     }
 
     /// Returns an action meaning reqwest should not follow the next URL.
     ///
     /// The 30x response will be returned as the `Ok` result.
-    pub fn stop(self) -> RedirectAction {
-        RedirectAction {
-            inner: Action::Stop,
+    pub fn stop(self) -> Action {
+        Action {
+            inner: ActionKind::Stop,
         }
     }
 
-    /// Returns an action meaning there was a loop of redirects found.
+    /// Returns an action failing the redirect with an error.
     ///
-    /// An `Error` will be returned for the result of the sent request.
-    pub fn loop_detected(self) -> RedirectAction {
-        RedirectAction {
-            inner: Action::LoopDetected,
-        }
-    }
-
-    /// Returns an action meaning there was a loop of redirects found.
-    ///
-    /// An `Error` will be returned for the result of the sent request.
-    pub fn too_many_redirects(self) -> RedirectAction {
-        RedirectAction {
-            inner: Action::TooManyRedirects,
+    /// The `Error` will be returned for the result of the sent request.
+    pub fn error<E: Into<Box<dyn StdError + Send + Sync>>>(self, error: E) -> Action {
+        Action {
+            inner: ActionKind::Error(error.into()),
         }
     }
 }
 
-enum Policy {
-    Custom(Box<dyn Fn(RedirectAttempt) -> RedirectAction + Send + Sync + 'static>),
+enum PolicyKind {
+    Custom(Box<dyn Fn(Attempt) -> Action + Send + Sync + 'static>),
     Limit(usize),
     None,
 }
 
-impl fmt::Debug for RedirectPolicy {
+impl fmt::Debug for Policy {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple("RedirectPolicy").field(&self.inner).finish()
+        f.debug_tuple("Policy").field(&self.inner).finish()
     }
 }
 
-impl fmt::Debug for Policy {
+impl fmt::Debug for PolicyKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Policy::Custom(..) => f.pad("Custom"),
-            Policy::Limit(max) => f.debug_tuple("Limit").field(&max).finish(),
-            Policy::None => f.pad("None"),
+            PolicyKind::Custom(..) => f.pad("Custom"),
+            PolicyKind::Limit(max) => f.debug_tuple("Limit").field(&max).finish(),
+            PolicyKind::None => f.pad("None"),
         }
     }
 }
 
 // pub(crate)
 
-#[derive(Debug, PartialEq)]
-pub(crate) enum Action {
+#[derive(Debug)]
+pub(crate) enum ActionKind {
     Follow,
     Stop,
-    LoopDetected,
-    TooManyRedirects,
+    Error(Box<dyn StdError + Send + Sync>),
 }
 
 pub(crate) fn remove_sensitive_headers(headers: &mut HeaderMap, next: &Url, previous: &[Url]) {
@@ -253,48 +248,42 @@ pub(crate) fn remove_sensitive_headers(headers: &mut HeaderMap, next: &Url, prev
     }
 }
 
-/*
-This was the desired way of doing it, but ran in to inference issues when
-using closures, since the arguments received are references (&Url and &[Url]),
-and the compiler could not infer the lifetimes of those references. That means
-people would need to annotate the closure's argument types, which is garbase.
+#[derive(Debug)]
+struct TooManyRedirects;
 
-pub trait Redirect {
-    fn redirect(&self, next: &Url, previous: &[Url]) -> Result<bool>;
-}
-
-impl<F> Redirect for F
-where F: Fn(&Url, &[Url]) -> Result<bool> {
-    fn redirect(&self, next: &Url, previous: &[Url]) -> Result<bool> {
-        self(next, previous)
+impl fmt::Display for TooManyRedirects {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("too many redirects")
     }
 }
-*/
+
+impl StdError for TooManyRedirects {}
 
 #[test]
 fn test_redirect_policy_limit() {
-    let policy = RedirectPolicy::default();
+    let policy = Policy::default();
     let next = Url::parse("http://x.y/z").unwrap();
     let mut previous = (0..9)
         .map(|i| Url::parse(&format!("http://a.b/c/{}", i)).unwrap())
         .collect::<Vec<_>>();
 
-    assert_eq!(
-        policy.check(StatusCode::FOUND, &next, &previous),
-        Action::Follow
-    );
+
+    match policy.check(StatusCode::FOUND, &next, &previous) {
+        ActionKind::Follow => (),
+        other => panic!("unexpected {:?}", other),
+    }
 
     previous.push(Url::parse("http://a.b.d/e/33").unwrap());
 
-    assert_eq!(
-        policy.check(StatusCode::FOUND, &next, &previous),
-        Action::TooManyRedirects
-    );
+    match policy.check(StatusCode::FOUND, &next, &previous) {
+        ActionKind::Error(err) if err.is::<TooManyRedirects>() => (),
+        other => panic!("unexpected {:?}", other),
+    }
 }
 
 #[test]
 fn test_redirect_policy_custom() {
-    let policy = RedirectPolicy::custom(|attempt| {
+    let policy = Policy::custom(|attempt| {
         if attempt.url().host_str() == Some("foo") {
             attempt.stop()
         } else {
@@ -303,10 +292,16 @@ fn test_redirect_policy_custom() {
     });
 
     let next = Url::parse("http://bar/baz").unwrap();
-    assert_eq!(policy.check(StatusCode::FOUND, &next, &[]), Action::Follow);
+    match policy.check(StatusCode::FOUND, &next, &[]) {
+        ActionKind::Follow => (),
+        other => panic!("unexpected {:?}", other),
+    }
 
     let next = Url::parse("http://foo/baz").unwrap();
-    assert_eq!(policy.check(StatusCode::FOUND, &next, &[]), Action::Stop);
+     match policy.check(StatusCode::FOUND, &next, &[]) {
+        ActionKind::Stop => (),
+        other => panic!("unexpected {:?}", other),
+    }
 }
 
 #[test]
