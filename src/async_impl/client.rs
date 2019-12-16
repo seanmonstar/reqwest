@@ -29,7 +29,7 @@ use crate::connect::Connector;
 #[cfg(feature = "cookies")]
 use crate::cookie;
 use crate::into_url::{expect_uri, try_uri};
-use crate::redirect::{self, remove_sensitive_headers, RedirectPolicy};
+use crate::redirect::{self, remove_sensitive_headers};
 #[cfg(feature = "tls")]
 use crate::tls::TlsBackend;
 #[cfg(feature = "tls")]
@@ -70,7 +70,7 @@ struct Config {
     identity: Option<Identity>,
     proxies: Vec<Proxy>,
     auto_sys_proxy: bool,
-    redirect_policy: RedirectPolicy,
+    redirect_policy: redirect::Policy,
     referer: bool,
     timeout: Option<Duration>,
     #[cfg(feature = "tls")]
@@ -114,7 +114,7 @@ impl ClientBuilder {
                 max_idle_per_host: std::usize::MAX,
                 proxies: Vec::new(),
                 auto_sys_proxy: true,
-                redirect_policy: RedirectPolicy::default(),
+                redirect_policy: redirect::Policy::default(),
                 referer: true,
                 timeout: None,
                 #[cfg(feature = "tls")]
@@ -372,7 +372,7 @@ impl ClientBuilder {
     /// Set a `RedirectPolicy` for this client.
     ///
     /// Default will follow redirects up to a maximum of 10.
-    pub fn redirect(mut self, policy: RedirectPolicy) -> ClientBuilder {
+    pub fn redirect(mut self, policy: redirect::Policy) -> ClientBuilder {
         self.config.redirect_policy = policy;
         self
     }
@@ -915,7 +915,7 @@ struct ClientRef {
     gzip: bool,
     headers: HeaderMap,
     hyper: HyperClient,
-    redirect_policy: RedirectPolicy,
+    redirect_policy: redirect::Policy,
     referer: bool,
     request_timeout: Option<Duration>,
     proxies: Arc<Vec<Proxy>>,
@@ -1124,7 +1124,7 @@ impl Future for PendingRequest {
                         .check(res.status(), &loc, &self.urls);
 
                     match action {
-                        redirect::Action::Follow => {
+                        redirect::ActionKind::Follow => {
                             self.url = loc;
 
                             let mut headers =
@@ -1159,14 +1159,12 @@ impl Future for PendingRequest {
                             *self.as_mut().in_flight().get_mut() = self.client.hyper.request(req);
                             continue;
                         }
-                        redirect::Action::Stop => {
+                        redirect::ActionKind::Stop => {
                             debug!("redirect_policy disallowed redirection to '{}'", loc);
                         }
-                        redirect::Action::LoopDetected => {
-                            return Poll::Ready(Err(crate::error::loop_detected(self.url.clone())));
-                        }
-                        redirect::Action::TooManyRedirects => {
-                            return Poll::Ready(Err(crate::error::too_many_redirects(
+                        redirect::ActionKind::Error(err) => {
+                            return Poll::Ready(Err(crate::error::redirect(
+                                err,
                                 self.url.clone(),
                             )));
                         }

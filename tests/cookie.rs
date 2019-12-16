@@ -173,7 +173,7 @@ async fn cookie_store_expires() {
         }
     });
 
-    let client = reqwest::r#async::Client::builder()
+    let client = reqwest::Client::builder()
         .cookie_store(true)
         .build()
         .unwrap();
@@ -201,7 +201,7 @@ async fn cookie_store_path() {
         }
     });
 
-    let client = reqwest::r#async::Client::builder()
+    let client = reqwest::Client::builder()
         .cookie_store(true)
         .build()
         .unwrap();
