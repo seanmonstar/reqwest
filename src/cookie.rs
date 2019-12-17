@@ -1,57 +1,11 @@
-//! The cookies module contains types for working with request and response cookies.
+//! HTTP Cookies
 
 use crate::header;
-use std::borrow::Cow;
 use std::fmt;
 use std::time::SystemTime;
 
-/// Convert a time::Tm time to SystemTime.
-fn tm_to_systemtime(tm: time::Tm) -> SystemTime {
-    let seconds = tm.to_timespec().sec;
-    let duration = std::time::Duration::from_secs(seconds.abs() as u64);
-    if seconds > 0 {
-        SystemTime::UNIX_EPOCH + duration
-    } else {
-        SystemTime::UNIX_EPOCH - duration
-    }
-}
-
-/// Error representing a parse failure of a 'Set-Cookie' header.
-pub struct CookieParseError(cookie_crate::ParseError);
-
-impl<'a> fmt::Debug for CookieParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl<'a> fmt::Display for CookieParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl std::error::Error for CookieParseError {}
-
 /// A single HTTP cookie.
 pub struct Cookie<'a>(cookie_crate::Cookie<'a>);
-
-impl<'a> fmt::Debug for Cookie<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl Cookie<'static> {
-    /// Construct a new cookie with the given name and value.
-    pub fn new<N, V>(name: N, value: V) -> Self
-    where
-        N: Into<Cow<'static, str>>,
-        V: Into<Cow<'static, str>>,
-    {
-        Cookie(cookie_crate::Cookie::new(name, value))
-    }
-}
 
 impl<'a> Cookie<'a> {
     fn parse(value: &'a crate::header::HeaderValue) -> Result<Cookie<'a>, CookieParseError> {
@@ -119,6 +73,12 @@ impl<'a> Cookie<'a> {
     }
 }
 
+impl<'a> fmt::Debug for Cookie<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 pub(crate) fn extract_response_cookies<'a>(
     headers: &'a hyper::HeaderMap,
 ) -> impl Iterator<Item = Result<Cookie<'a>, CookieParseError>> + 'a {
@@ -137,3 +97,31 @@ impl<'a> fmt::Debug for CookieStore {
         self.0.fmt(f)
     }
 }
+
+/// Convert a time::Tm time to SystemTime.
+fn tm_to_systemtime(tm: time::Tm) -> SystemTime {
+    let seconds = tm.to_timespec().sec;
+    let duration = std::time::Duration::from_secs(seconds.abs() as u64);
+    if seconds > 0 {
+        SystemTime::UNIX_EPOCH + duration
+    } else {
+        SystemTime::UNIX_EPOCH - duration
+    }
+}
+
+/// Error representing a parse failure of a 'Set-Cookie' header.
+pub(crate) struct CookieParseError(cookie_crate::ParseError);
+
+impl<'a> fmt::Debug for CookieParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl<'a> fmt::Display for CookieParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::error::Error for CookieParseError {}
