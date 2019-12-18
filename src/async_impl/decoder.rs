@@ -192,7 +192,7 @@ mod imp {
         fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
             use futures_util::StreamExt;
 
-            match futures_core::ready!(Pin::new(&mut self.0).peek(cx)) {
+            match futures_core::ready!(Pin::new(&mut self.0).poll_peek(cx)) {
                 Some(Ok(_)) => {
                     // fallthrough
                 }

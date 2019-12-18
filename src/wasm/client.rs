@@ -139,8 +139,8 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         .map_err(crate::error::request)?;
 
     // Convert from the js Response
-    let mut resp = http::Response::builder();
-    resp.status(js_resp.status());
+    let mut resp = http::Response::builder()
+        .status(js_resp.status());
 
     let js_headers = js_resp.headers();
     let js_iter = js_sys::try_iter(&js_headers)
@@ -150,7 +150,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     for item in js_iter {
         let item = item.expect_throw("headers iterator doesn't throw");
         let v: Vec<String> = item.into_serde().expect_throw("headers into_serde");
-        resp.header(
+        resp = resp.header(
             v.get(0).expect_throw("headers name"),
             v.get(1).expect_throw("headers value"),
         );

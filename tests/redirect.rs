@@ -1,4 +1,5 @@
 mod support;
+use futures_util::stream::StreamExt;
 use support::*;
 
 #[tokio::test]
@@ -239,7 +240,7 @@ async fn test_redirect_policy_can_stop_redirects_without_an_error() {
     let url = format!("http://{}/no-redirect", server.addr());
 
     let res = reqwest::Client::builder()
-        .redirect(reqwest::RedirectPolicy::none())
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .unwrap()
         .get(&url)

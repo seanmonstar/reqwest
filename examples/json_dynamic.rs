@@ -4,6 +4,9 @@
 //! really care about the structure of the JSON and just need to display it or
 //! process it at runtime.
 
+// This is using the `tokio` runtime. You'll need the following dependency:
+//
+// `tokio = { version = "0.2", features = ["macros"] }`
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
     let echo_json: serde_json::Value = reqwest::Client::new()

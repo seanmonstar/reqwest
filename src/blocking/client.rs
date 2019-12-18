@@ -13,7 +13,7 @@ use log::{error, trace};
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::wait;
-use crate::{async_impl, header, IntoUrl, Method, Proxy, RedirectPolicy};
+use crate::{async_impl, header, IntoUrl, Method, Proxy, redirect};
 #[cfg(feature = "tls")]
 use crate::{Certificate, Identity};
 
@@ -176,10 +176,10 @@ impl ClientBuilder {
 
     // Redirect options
 
-    /// Set a `RedirectPolicy` for this client.
+    /// Set a `redirect::Policy` for this client.
     ///
     /// Default will follow redirects up to a maximum of 10.
-    pub fn redirect(self, policy: RedirectPolicy) -> ClientBuilder {
+    pub fn redirect(self, policy: redirect::Policy) -> ClientBuilder {
         self.with_inner(move |inner| inner.redirect(policy))
     }
 
@@ -541,7 +541,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails if there was an error while sending request,
-    /// redirect loop was detected or redirect limit was exhausted.
+    /// or redirect limit was exhausted.
     pub fn execute(&self, request: Request) -> crate::Result<Response> {
         self.inner.execute_request(request)
     }
@@ -593,9 +593,8 @@ impl ClientHandle {
         let handle = thread::Builder::new()
             .name("reqwest-internal-sync-runtime".into())
             .spawn(move || {
-                use tokio::runtime::current_thread::Runtime;
-
-                let mut rt = match Runtime::new().map_err(crate::error::builder) {
+                use tokio::runtime;
+                let mut rt = match runtime::Builder::new().basic_scheduler().enable_all().build().map_err(crate::error::builder) {
                     Err(e) => {
                         if let Err(e) = spawn_tx.send(Err(e)) {
                             error!("Failed to communicate runtime creation failure: {:?}", e);
@@ -685,7 +684,6 @@ impl ClientHandle {
                 KeepCoreThreadAlive(Some(self.inner.clone())),
             )),
             Err(wait::Waited::TimedOut(e)) => Err(crate::error::request(e).with_url(url)),
-            Err(wait::Waited::Executor(err)) => Err(crate::error::request(err).with_url(url)),
             Err(wait::Waited::Inner(err)) => Err(err.with_url(url)),
         }
     }
@@ -705,7 +703,7 @@ where
             Poll::Ready(val) => Poll::Ready(Some(val)),
             Poll::Pending => {
                 // check if the callback is canceled
-                futures_core::ready!(tx.poll_cancel(cx));
+                futures_core::ready!(tx.poll_canceled(cx));
                 Poll::Ready(None)
             }
         }

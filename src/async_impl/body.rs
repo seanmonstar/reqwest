@@ -6,7 +6,7 @@ use std::task::{Context, Poll};
 use bytes::Bytes;
 use futures_core::Stream;
 use http_body::Body as HttpBody;
-use tokio::timer::Delay;
+use tokio::time::Delay;
 
 /// An asynchronous request body.
 pub struct Body {
@@ -21,7 +21,7 @@ enum Inner {
     Streaming {
         body: Pin<
             Box<
-                dyn HttpBody<Data = hyper::Chunk, Error = Box<dyn std::error::Error + Send + Sync>>
+                dyn HttpBody<Data = Bytes, Error = Box<dyn std::error::Error + Send + Sync>>
                     + Send
                     + Sync,
             >,
@@ -65,15 +65,15 @@ impl Body {
     /// # }
     /// ```
     ///
-    /// # Unstable
+    /// # Optional
     ///
-    /// This requires the `unstable-stream` feature to be enabled.
-    #[cfg(feature = "unstable-stream")]
+    /// This requires the `stream` feature to be enabled.
+    #[cfg(feature = "stream")]
     pub fn wrap_stream<S>(stream: S) -> Body
     where
         S: futures_core::stream::TryStream + Send + Sync + 'static,
         S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
-        hyper::Chunk: From<S::Ok>,
+        Bytes: From<S::Ok>,
     {
         Body::stream(stream)
     }
@@ -82,12 +82,12 @@ impl Body {
     where
         S: futures_core::stream::TryStream + Send + Sync + 'static,
         S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
-        hyper::Chunk: From<S::Ok>,
+        Bytes: From<S::Ok>,
     {
         use futures_util::TryStreamExt;
 
         let body = Box::pin(WrapStream(
-            stream.map_ok(hyper::Chunk::from).map_err(Into::into),
+            stream.map_ok(Bytes::from).map_err(Into::into),
         ));
         Body {
             inner: Inner::Streaming {
@@ -198,7 +198,7 @@ impl fmt::Debug for Body {
 // ===== impl ImplStream =====
 
 impl HttpBody for ImplStream {
-    type Data = hyper::Chunk;
+    type Data = Bytes;
     type Error = crate::Error;
 
     fn poll_data(
@@ -291,10 +291,10 @@ impl Stream for ImplStream {
 impl<S, D, E> HttpBody for WrapStream<S>
 where
     S: Stream<Item = Result<D, E>>,
-    D: Into<hyper::Chunk>,
+    D: Into<Bytes>,
     E: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
-    type Data = hyper::Chunk;
+    type Data = Bytes;
     type Error = E;
 
     fn poll_data(
@@ -321,7 +321,7 @@ where
 // ===== impl WrapHyper =====
 
 impl HttpBody for WrapHyper {
-    type Data = hyper::Chunk;
+    type Data = Bytes;
     type Error = Box<dyn std::error::Error + Send + Sync>;
 
     fn poll_data(

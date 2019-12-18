@@ -11,13 +11,14 @@ use http::header::{
     CONTENT_TYPE, LOCATION, PROXY_AUTHORIZATION, RANGE, REFERER, TRANSFER_ENCODING, USER_AGENT,
 };
 use http::Uri;
+use http::uri::Scheme;
 use hyper::client::ResponseFuture;
 #[cfg(feature = "default-tls")]
 use native_tls::TlsConnector;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio::{clock, timer::Delay};
+use tokio::time::Delay;
 
 use log::debug;
 
@@ -28,7 +29,7 @@ use crate::connect::Connector;
 #[cfg(feature = "cookies")]
 use crate::cookie;
 use crate::into_url::{expect_uri, try_uri};
-use crate::redirect::{self, remove_sensitive_headers, RedirectPolicy};
+use crate::redirect::{self, remove_sensitive_headers};
 #[cfg(feature = "tls")]
 use crate::tls::TlsBackend;
 #[cfg(feature = "tls")]
@@ -69,7 +70,7 @@ struct Config {
     identity: Option<Identity>,
     proxies: Vec<Proxy>,
     auto_sys_proxy: bool,
-    redirect_policy: RedirectPolicy,
+    redirect_policy: redirect::Policy,
     referer: bool,
     timeout: Option<Duration>,
     #[cfg(feature = "tls")]
@@ -113,7 +114,7 @@ impl ClientBuilder {
                 max_idle_per_host: std::usize::MAX,
                 proxies: Vec::new(),
                 auto_sys_proxy: true,
-                redirect_policy: RedirectPolicy::default(),
+                redirect_policy: redirect::Policy::default(),
                 referer: true,
                 timeout: None,
                 #[cfg(feature = "tls")]
@@ -371,7 +372,7 @@ impl ClientBuilder {
     /// Set a `RedirectPolicy` for this client.
     ///
     /// Default will follow redirects up to a maximum of 10.
-    pub fn redirect(mut self, policy: RedirectPolicy) -> ClientBuilder {
+    pub fn redirect(mut self, policy: redirect::Policy) -> ClientBuilder {
         self.config.redirect_policy = policy;
         self
     }
@@ -726,7 +727,7 @@ impl Client {
         // insert default headers in the request headers
         // without overwriting already appended headers.
         for (key, value) in &self.inner.headers {
-            if let Ok(Entry::Vacant(entry)) = headers.entry(key) {
+            if let Entry::Vacant(entry) = headers.entry(key) {
                 entry.insert(value.clone());
             }
         }
@@ -772,7 +773,7 @@ impl Client {
         let timeout = self
             .inner
             .request_timeout
-            .map(|dur| tokio::timer::delay(clock::now() + dur));
+            .map(|dur| tokio::time::delay_for(dur));
 
         Pending {
             inner: PendingInner::Request(PendingRequest {
@@ -799,7 +800,7 @@ impl Client {
         // Only set the header here if the destination scheme is 'http',
         // since otherwise, the header will be included in the CONNECT tunnel
         // request instead.
-        if dst.scheme_part() != Some(&::http::uri::Scheme::HTTP) {
+        if dst.scheme() != Some(&Scheme::HTTP) {
             return;
         }
 
@@ -914,7 +915,7 @@ struct ClientRef {
     gzip: bool,
     headers: HeaderMap,
     hyper: HyperClient,
-    redirect_policy: RedirectPolicy,
+    redirect_policy: redirect::Policy,
     referer: bool,
     request_timeout: Option<Duration>,
     proxies: Arc<Vec<Proxy>>,
@@ -1123,7 +1124,7 @@ impl Future for PendingRequest {
                         .check(res.status(), &loc, &self.urls);
 
                     match action {
-                        redirect::Action::Follow => {
+                        redirect::ActionKind::Follow => {
                             self.url = loc;
 
                             let mut headers =
@@ -1158,14 +1159,12 @@ impl Future for PendingRequest {
                             *self.as_mut().in_flight().get_mut() = self.client.hyper.request(req);
                             continue;
                         }
-                        redirect::Action::Stop => {
+                        redirect::ActionKind::Stop => {
                             debug!("redirect_policy disallowed redirection to '{}'", loc);
                         }
-                        redirect::Action::LoopDetected => {
-                            return Poll::Ready(Err(crate::error::loop_detected(self.url.clone())));
-                        }
-                        redirect::Action::TooManyRedirects => {
-                            return Poll::Ready(Err(crate::error::too_many_redirects(
+                        redirect::ActionKind::Error(err) => {
+                            return Poll::Ready(Err(crate::error::redirect(
+                                err,
                                 self.url.clone(),
                             )));
                         }

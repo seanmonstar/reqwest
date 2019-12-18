@@ -220,7 +220,6 @@ impl Response {
     pub fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
         wait::timeout(self.inner.json(), self.timeout).map_err(|e| match e {
             wait::Waited::TimedOut(e) => crate::error::decode(e),
-            wait::Waited::Executor(e) => crate::error::decode(e),
             wait::Waited::Inner(e) => e,
         })
     }
@@ -269,7 +268,6 @@ impl Response {
         wait::timeout(self.inner.text_with_charset(default_encoding), self.timeout).map_err(|e| {
             match e {
                 wait::Waited::TimedOut(e) => crate::error::decode(e),
-                wait::Waited::Executor(e) => crate::error::decode(e),
                 wait::Waited::Inner(e) => e,
             }
         })
@@ -375,7 +373,6 @@ impl Read for Response {
         let timeout = self.timeout;
         wait::timeout(self.body_mut().read(buf), timeout).map_err(|e| match e {
             wait::Waited::TimedOut(e) => crate::error::decode(e).into_io(),
-            wait::Waited::Executor(e) => crate::error::decode(e).into_io(),
             wait::Waited::Inner(e) => e,
         })
     }

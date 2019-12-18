@@ -119,9 +119,9 @@
 //!
 //! ## Redirect Policies
 //!
-//! By default, a `Client` will automatically handle HTTP redirects, detecting
-//! loops, and having a maximum redirect chain of 10 hops. To customize this
-//! behavior, a [`RedirectPolicy`][redirect] can used with a `ClientBuilder`.
+//! By default, a `Client` will automatically handle HTTP redirects, having a
+//! maximum redirect chain of 10 hops. To customize this behavior, a
+//! [`redirect::Policy`][redirect] can be used with a `ClientBuilder`.
 //!
 //! ## Cookies
 //!
@@ -130,7 +130,7 @@
 //!
 //! ## Proxies
 //!
-//! ** NOTE ** Proxies are enabled by default.
+//! **NOTE**: System proxies are enabled by default.
 //!
 //! System proxies look in environment variables to set HTTP or HTTPS proxies.
 //!
@@ -166,7 +166,7 @@
 //! - **cookies**: Provides cookie session support.
 //! - **gzip**: Provides response body gzip decompression.
 //! - **json**: Provides serialization and deserialization for JSON bodies.
-//! - **unstable-stream** *(unstable)*: Adds support for `futures::Stream`.
+//! - **stream**: Adds support for `futures::Stream`.
 //!
 //!
 //! [hyper]: http://hyper.rs
@@ -175,7 +175,7 @@
 //! [get]: ./fn.get.html
 //! [builder]: ./struct.RequestBuilder.html
 //! [serde]: http://serde.rs
-//! [redirect]: ./struct.RedirectPolicy.html
+//! [redirect]: crate::redirect
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
 
@@ -237,7 +237,6 @@ pub use self::into_url::IntoUrl;
 /// - native TLS backend cannot be initialized
 /// - supplied `Url` cannot be parsed
 /// - there was an error while sending request
-/// - redirect loop was detected
 /// - redirect limit was exhausted
 pub async fn get<T: IntoUrl>(url: T) -> crate::Result<Response> {
     Client::builder().build()?.get(url).send().await
@@ -276,10 +275,9 @@ if_hyper! {
     doctest!("../README.md");
 
     pub use self::async_impl::{
-        multipart, Body, Client, ClientBuilder, Request, RequestBuilder, Response,
+        multipart, Body, Client, ClientBuilder, Request, RequestBuilder, Response, ResponseBuilderExt,
     };
     pub use self::proxy::Proxy;
-    pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
     #[cfg(feature = "tls")]
     pub use self::tls::{Certificate, Identity};
 
@@ -293,17 +291,9 @@ if_hyper! {
     //#[cfg(feature = "trust-dns")]
     //mod dns;
     mod proxy;
-    mod redirect;
+    pub mod redirect;
     #[cfg(feature = "tls")]
     mod tls;
-
-    #[doc(hidden)]
-    #[deprecated(note = "types moved to top of crate")]
-    pub mod r#async {
-        pub use crate::async_impl::{
-            multipart, Body, Client, ClientBuilder, Request, RequestBuilder, Response,
-        };
-    }
 }
 
 if_wasm! {

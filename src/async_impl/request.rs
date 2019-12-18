@@ -1,10 +1,10 @@
+use std::convert::TryFrom;
 use std::fmt;
 use std::future::Future;
 use std::io::Write;
 
 use base64;
 use base64::write::EncoderWriter as Base64Encoder;
-use bytes::Bytes;
 use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
@@ -16,7 +16,6 @@ use super::multipart;
 use super::response::Response;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
 use crate::{Method, Url};
-use http::HttpTryFrom;
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -113,19 +112,33 @@ impl Request {
 
 impl RequestBuilder {
     pub(super) fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
-        RequestBuilder { client, request }
+        let mut builder = RequestBuilder { client, request };
+
+        let auth = builder
+            .request
+            .as_mut()
+            .ok()
+            .and_then(|req| extract_authority(&mut req.url));
+
+        if let Some((username, password)) = auth {
+            builder.basic_auth(username, password)
+        } else {
+            builder
+        }
     }
 
     /// Add a `Header` to this Request.
     pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
     where
-        HeaderName: HttpTryFrom<K>,
-        HeaderValue: HttpTryFrom<V>,
+        HeaderName: TryFrom<K>,
+        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
+        HeaderValue: TryFrom<V>,
+        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
         let mut error = None;
         if let Ok(ref mut req) = self.request {
-            match <HeaderName as HttpTryFrom<K>>::try_from(key) {
-                Ok(key) => match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
+            match <HeaderName as TryFrom<K>>::try_from(key) {
+                Ok(key) => match <HeaderValue as TryFrom<V>>::try_from(value) {
                     Ok(value) => {
                         req.headers_mut().append(key, value);
                     }
@@ -166,7 +179,7 @@ impl RequestBuilder {
             }
         }
 
-        self.header(crate::header::AUTHORIZATION, Bytes::from(header_value))
+        self.header(crate::header::AUTHORIZATION, header_value)
     }
 
     /// Enable HTTP bearer authentication.
@@ -429,6 +442,37 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
     }
 }
 
+
+/// Check the request URL for a "username:password" type authority, and if
+/// found, remove it from the URL and return it.
+pub(crate) fn extract_authority(url: &mut Url) -> Option<(String, Option<String>)> {
+    use percent_encoding::percent_decode;
+
+    if url.has_authority() {
+        let username: String = percent_decode(url.username().as_bytes())
+            .decode_utf8()
+            .ok()?
+            .into();
+        let password = url.password().and_then(|pass| {
+            percent_decode(pass.as_bytes())
+                .decode_utf8()
+                .ok()
+                .map(String::from)
+        });
+        if !username.is_empty() || password.is_some() {
+            url
+                .set_username("")
+                .expect("has_authority means set_username shouldn't fail");
+            url
+                .set_password(None)
+                .expect("has_authority means set_password shouldn't fail");
+            return Some((username, password))
+        }
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::Client;
@@ -572,7 +616,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "unstable-stream")]
+    #[cfg(feature = "stream")]
     fn try_clone_stream() {
         let chunks: Vec<Result<_, ::std::io::Error>> = vec![
             Ok("hello"),
@@ -585,6 +629,20 @@ mod tests {
             .body(super::Body::wrap_stream(stream));
         let clone = builder.try_clone();
         assert!(clone.is_none());
+    }
+
+    #[test]
+    fn convert_url_authority_into_basic_auth() {
+        let client = Client::new();
+        let some_url = "https://Aladdin:open sesame@localhost/";
+
+        let req = client
+            .get(some_url)
+            .build()
+            .expect("request build");
+
+        assert_eq!(req.url().as_str(), "https://localhost/");
+        assert_eq!(req.headers()["authorization"], "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
     }
 
     /*
