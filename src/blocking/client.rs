@@ -13,7 +13,7 @@ use log::{error, trace};
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::wait;
-use crate::{async_impl, header, IntoUrl, Method, Proxy, RedirectPolicy};
+use crate::{async_impl, header, IntoUrl, Method, Proxy, redirect};
 #[cfg(feature = "tls")]
 use crate::{Certificate, Identity};
 
@@ -176,10 +176,10 @@ impl ClientBuilder {
 
     // Redirect options
 
-    /// Set a `RedirectPolicy` for this client.
+    /// Set a `redirect::Policy` for this client.
     ///
     /// Default will follow redirects up to a maximum of 10.
-    pub fn redirect(self, policy: RedirectPolicy) -> ClientBuilder {
+    pub fn redirect(self, policy: redirect::Policy) -> ClientBuilder {
         self.with_inner(move |inner| inner.redirect(policy))
     }
 
@@ -541,7 +541,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails if there was an error while sending request,
-    /// redirect loop was detected or redirect limit was exhausted.
+    /// or redirect limit was exhausted.
     pub fn execute(&self, request: Request) -> crate::Result<Response> {
         self.inner.execute_request(request)
     }

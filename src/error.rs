@@ -212,12 +212,8 @@ pub(crate) fn request<E: Into<BoxError>>(e: E) -> Error {
     Error::new(Kind::Request, Some(e))
 }
 
-pub(crate) fn loop_detected(url: Url) -> Error {
-    Error::new(Kind::Redirect, Some("infinite redirect loop detected")).with_url(url)
-}
-
-pub(crate) fn too_many_redirects(url: Url) -> Error {
-    Error::new(Kind::Redirect, Some("too many redirects")).with_url(url)
+pub(crate) fn redirect<E: Into<BoxError>>(e: E, url: Url) -> Error {
+    Error::new(Kind::Redirect, Some(e)).with_url(url)
 }
 
 pub(crate) fn status_code(url: Url, status: StatusCode) -> Error {
