@@ -23,7 +23,7 @@ tls = []
 default-tls = ["hyper-tls", "native-tls", "tls", "tokio-tls"]
 default-tls-vendored = ["default-tls", "native-tls/vendored"]
 
-#rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
+rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
 
 blocking = ["futures-channel", "futures-util/io", "tokio/rt-threaded", "tokio/rt-core"]
 
@@ -77,11 +77,11 @@ hyper-tls = { version = "0.4", optional = true }
 native-tls = { version = "0.2", optional = true }
 tokio-tls = { version = "0.3.0", optional = true }
 
-## rustls-tls
-#hyper-rustls = { version = "=0.18.0-alpha.1", optional = true }
-#rustls = { version = "0.16", features = ["dangerous_configuration"], optional = true }
-#tokio-rustls = { version = "=0.12.0-alpha.2", optional = true }
-#webpki-roots = { version = "0.17", optional = true }
+# rustls-tls
+hyper-rustls = { version = "0.19", optional = true }
+rustls = { version = "0.16", features = ["dangerous_configuration"], optional = true }
+tokio-rustls = { version = "0.12", optional = true }
+webpki-roots = { version = "0.17", optional = true }
 
 ## blocking
 futures-channel = { version = "0.3.0", optional = true }
