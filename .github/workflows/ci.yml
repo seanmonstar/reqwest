@@ -54,8 +54,8 @@ jobs:
           - windows / stable-x86_64-gnu
           - windows / stable-i686-gnu
           - "feat.: default-tls disabled"
-          # - "feat.: rustls-tls"
-          # - "feat.: default-tls and rustls-tls"
+          - "feat.: rustls-tls"
+          - "feat.: default-tls and rustls-tls"
           - "feat.: cookies"
           - "feat.: blocking"
           - "feat.: gzip"
@@ -98,10 +98,10 @@ jobs:
 
           - name: "feat.: default-tls disabled"
             features: "--no-default-features"
-          # - name: "feat.: rustls-tls
-          #   features: "--no-default-features --features rustls-tls"
-          # - name: "feat.: default-tls and rustls-tls"
-          #   features: "--features rustls-tls"
+          - name: "feat.: rustls-tls"
+            features: "--no-default-features --features rustls-tls"
+          - name: "feat.: default-tls and rustls-tls"
+            features: "--features rustls-tls"
           - name: "feat.: cookies"
             features: "--features cookies"
           - name: "feat.: blocking"
