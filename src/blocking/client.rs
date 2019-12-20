@@ -14,7 +14,7 @@ use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::wait;
 use crate::{async_impl, header, IntoUrl, Method, Proxy, redirect};
-#[cfg(feature = "tls")]
+#[cfg(feature = "__tls")]
 use crate::{Certificate, Identity};
 
 /// A `Client` to make Requests with.
@@ -331,45 +331,15 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `default-tls` or `rustls-tls` feature to be
-    /// enabled.
-    #[cfg(feature = "tls")]
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
     pub fn add_root_certificate(self, cert: Certificate) -> ClientBuilder {
         self.with_inner(move |inner| inner.add_root_certificate(cert))
     }
 
     /// Sets the identity to be used for client certificate authentication.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use std::fs::File;
-    /// # use std::io::Read;
-    /// # fn build_client() -> Result<(), Box<std::error::Error>> {
-    /// // read a local PKCS12 bundle
-    /// let mut buf = Vec::new();
-    ///
-    /// #[cfg(feature = "default-tls")]
-    /// File::open("my-ident.pfx")?.read_to_end(&mut buf)?;
-    /// #[cfg(feature = "rustls-tls")]
-    /// File::open("my-ident.pem")?.read_to_end(&mut buf)?;
-    ///
-    /// #[cfg(feature = "default-tls")]
-    /// // create an Identity from the PKCS#12 archive
-    /// let pkcs12 = reqwest::Identity::from_pkcs12_der(&buf, "my-privkey-password")?;
-    /// #[cfg(feature = "rustls-tls")]
-    /// // create an Identity from the PEM file
-    /// let pkcs12 = reqwest::Identity::from_pem(&buf)?;
-    ///
-    /// // get a client builder
-    /// let client = reqwest::blocking::Client::builder()
-    ///     .identity(pkcs12)
-    ///     .build()?;
-    /// # drop(client);
-    /// # Ok(())
-    /// # }
-    /// ```
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "__tls")]
     pub fn identity(self, identity: Identity) -> ClientBuilder {
         self.with_inner(move |inner| inner.identity(identity))
     }
@@ -384,7 +354,11 @@ impl ClientBuilder {
     /// hostname verification is not used, any valid certificate for any
     /// site will be trusted for use from any other. This introduces a
     /// significant vulnerability to man-in-the-middle attacks.
-    #[cfg(feature = "default-tls")]
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `native-tls` feature to be enabled.
+    #[cfg(feature = "native-tls")]
     pub fn danger_accept_invalid_hostnames(self, accept_invalid_hostname: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.danger_accept_invalid_hostnames(accept_invalid_hostname))
     }
@@ -400,7 +374,7 @@ impl ClientBuilder {
     /// will be trusted for use. This includes expired certificates. This
     /// introduces significant vulnerabilities, and should only be used
     /// as a last resort.
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "__tls")]
     pub fn danger_accept_invalid_certs(self, accept_invalid_certs: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.danger_accept_invalid_certs(accept_invalid_certs))
     }
@@ -412,10 +386,10 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `default-tls` feature to be enabled.
-    #[cfg(feature = "default-tls")]
-    pub fn use_default_tls(self) -> ClientBuilder {
-        self.with_inner(move |inner| inner.use_default_tls())
+    /// This requires the optional `native-tls` feature to be enabled.
+    #[cfg(feature = "native-tls")]
+    pub fn use_native_tls(self) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_native_tls())
     }
 
     /// Force using the Rustls TLS backend.

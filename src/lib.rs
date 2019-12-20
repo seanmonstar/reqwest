@@ -159,9 +159,11 @@
 //! The following are a list of [Cargo features][cargo-features] that can be
 //! enabled or disabled:
 //!
-//! - **default-tls** *(enabled by default)*: Provides TLS support via the
-//!   `native-tls` library to connect over HTTPS.
-//! - **default-tls-vendored**: Enables the `vendored` feature of `native-tls`.
+//! - **default-tls** *(enabled by default)*: Provides TLS support to connect
+//!   over HTTPS.
+//! - **native-tls**: Enables TLS functionality provided by `native-tls`.
+//! - **native-tls-vendored**: Enables the `vendored` feature of `native-tls`.
+//! - **rustls-tls**: Enables TLS functionality provided by `rustls`.
 //! - **blocking**: Provides the [blocking][] client API.
 //! - **cookies**: Provides cookie session support.
 //! - **gzip**: Provides response body gzip decompression.
@@ -179,7 +181,6 @@
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
 
-////! - **rustls-tls**: Provides TLS support via the `rustls` library.
 ////! - **socks**: Provides SOCKS5 proxy support.
 ////! - **trust-dns**: Enables a trust-dns async resolver instead of default
 ////!   threadpool using `getaddrinfo`.
@@ -278,7 +279,7 @@ if_hyper! {
         multipart, Body, Client, ClientBuilder, Request, RequestBuilder, Response, ResponseBuilderExt,
     };
     pub use self::proxy::Proxy;
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "__tls")]
     pub use self::tls::{Certificate, Identity};
 
 
@@ -292,7 +293,7 @@ if_hyper! {
     //mod dns;
     mod proxy;
     pub mod redirect;
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "__tls")]
     mod tls;
 }
 

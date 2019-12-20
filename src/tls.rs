@@ -4,11 +4,11 @@ use std::fmt;
 #[cfg(feature = "rustls-tls")]
 use tokio_rustls::webpki::DNSNameRef;
 
-/// Represent a server X509 certificate.
+/// Represents a server X509 certificate.
 #[derive(Clone)]
 pub struct Certificate {
-    #[cfg(feature = "default-tls")]
-    native: native_tls::Certificate,
+    #[cfg(feature = "native-tls-crate")]
+    native: native_tls_crate::Certificate,
     #[cfg(feature = "rustls-tls")]
     original: Cert,
 }
@@ -20,14 +20,18 @@ enum Cert {
     Pem(Vec<u8>),
 }
 
-/// Represent a private key and X509 cert as a client certificate.
+/// Represents a private key and X509 cert as a client certificate.
 pub struct Identity {
+    #[cfg_attr(
+        not(any(feature = "native-tls", feature = "rustls-tls")),
+        allow(unused)
+    )]
     inner: ClientCert,
 }
 
 enum ClientCert {
-    #[cfg(feature = "default-tls")]
-    Pkcs12(native_tls::Identity),
+    #[cfg(feature = "native-tls")]
+    Pkcs12(native_tls_crate::Identity),
     #[cfg(feature = "rustls-tls")]
     Pem {
         key: rustls::PrivateKey,
@@ -54,8 +58,8 @@ impl Certificate {
     /// ```
     pub fn from_der(der: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
-            #[cfg(feature = "default-tls")]
-            native: native_tls::Certificate::from_der(der).map_err(crate::error::builder)?,
+            #[cfg(feature = "native-tls-crate")]
+            native: native_tls_crate::Certificate::from_der(der).map_err(crate::error::builder)?,
             #[cfg(feature = "rustls-tls")]
             original: Cert::Der(der.to_owned()),
         })
@@ -79,15 +83,15 @@ impl Certificate {
     /// ```
     pub fn from_pem(pem: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
-            #[cfg(feature = "default-tls")]
-            native: native_tls::Certificate::from_pem(pem).map_err(crate::error::builder)?,
+            #[cfg(feature = "native-tls-crate")]
+            native: native_tls_crate::Certificate::from_pem(pem).map_err(crate::error::builder)?,
             #[cfg(feature = "rustls-tls")]
             original: Cert::Pem(pem.to_owned()),
         })
     }
 
-    #[cfg(feature = "default-tls")]
-    pub(crate) fn add_to_native_tls(self, tls: &mut native_tls::TlsConnectorBuilder) {
+    #[cfg(feature = "native-tls-crate")]
+    pub(crate) fn add_to_native_tls(self, tls: &mut native_tls_crate::TlsConnectorBuilder) {
         tls.add_root_certificate(self.native);
     }
 
@@ -147,11 +151,15 @@ impl Identity {
     /// # Ok(())
     /// # }
     /// ```
-    #[cfg(feature = "default-tls")]
+    ///
+    /// # Optional
+    ///
+    /// This requires the `native-tls` Cargo feature enabled.
+    #[cfg(feature = "native-tls")]
     pub fn from_pkcs12_der(der: &[u8], password: &str) -> crate::Result<Identity> {
         Ok(Identity {
             inner: ClientCert::Pkcs12(
-                native_tls::Identity::from_pkcs12(der, password).map_err(crate::error::builder)?,
+                native_tls_crate::Identity::from_pkcs12(der, password).map_err(crate::error::builder)?,
             ),
         })
     }
@@ -175,6 +183,10 @@ impl Identity {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Optional
+    ///
+    /// This requires the `rustls-tls` Cargo feature enabled.
     #[cfg(feature = "rustls-tls")]
     pub fn from_pem(buf: &[u8]) -> crate::Result<Identity> {
         use rustls::internal::pemfile;
@@ -214,10 +226,10 @@ impl Identity {
         })
     }
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "native-tls")]
     pub(crate) fn add_to_native_tls(
         self,
-        tls: &mut native_tls::TlsConnectorBuilder,
+        tls: &mut native_tls_crate::TlsConnectorBuilder,
     ) -> crate::Result<()> {
         match self.inner {
             ClientCert::Pkcs12(id) => {
@@ -236,7 +248,7 @@ impl Identity {
                 tls.set_single_client_cert(certs, key);
                 Ok(())
             }
-            #[cfg(feature = "default-tls")]
+            #[cfg(feature = "native-tls")]
             ClientCert::Pkcs12(..) => Err(crate::error::builder("incompatible TLS identity type")),
         }
     }
@@ -308,7 +320,7 @@ mod tests {
         Certificate::from_pem(b"not pem").unwrap_err();
     }
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "native-tls")]
     #[test]
     fn identity_from_pkcs12_der_invalid() {
         Identity::from_pkcs12_der(b"not der", "nope").unwrap_err();

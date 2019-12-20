@@ -18,12 +18,15 @@ all-features = true
 [features]
 default = ["default-tls"]
 
-tls = []
+# Note: this doesn't enable the 'native-tls' feature, which adds specific
+# functionality for it.
+default-tls = ["hyper-tls", "native-tls-crate", "__tls", "tokio-tls"]
 
-default-tls = ["hyper-tls", "native-tls", "tls", "tokio-tls"]
-default-tls-vendored = ["default-tls", "native-tls/vendored"]
+# Enables native-tls specific functionality not available by default.
+native-tls = ["default-tls"]
+native-tls-vendored = ["native-tls", "native-tls-crate/vendored"]
 
-rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "tls"]
+rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "__tls"]
 
 blocking = ["futures-channel", "futures-util/io", "tokio/rt-threaded", "tokio/rt-core"]
 
@@ -39,6 +42,9 @@ stream = []
 
 # Internal (PRIVATE!) features used to aid testing.
 # Don't rely on these whatsoever. They may disappear at anytime.
+
+# Enables common types used for TLS. Useless on its own.
+__tls = []
 
 # When enabled, disable using the cached SYS_PROXIES.
 __internal_proxy_sys_no_cache = []
@@ -74,7 +80,7 @@ serde_urlencoded = "0.6.1"
 
 ## default-tls
 hyper-tls = { version = "0.4", optional = true }
-native-tls = { version = "0.2", optional = true }
+native-tls-crate = { version = "0.2", optional = true, package = "native-tls" }
 tokio-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
