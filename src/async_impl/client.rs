@@ -13,8 +13,8 @@ use http::header::{
 use http::Uri;
 use http::uri::Scheme;
 use hyper::client::ResponseFuture;
-#[cfg(feature = "default-tls")]
-use native_tls::TlsConnector;
+#[cfg(feature = "native-tls-crate")]
+use native_tls_crate::TlsConnector;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -30,9 +30,9 @@ use crate::connect::Connector;
 use crate::cookie;
 use crate::into_url::{expect_uri, try_uri};
 use crate::redirect::{self, remove_sensitive_headers};
-#[cfg(feature = "tls")]
+#[cfg(feature = "__tls")]
 use crate::tls::TlsBackend;
-#[cfg(feature = "tls")]
+#[cfg(feature = "__tls")]
 use crate::{Certificate, Identity};
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
 
@@ -60,22 +60,22 @@ struct Config {
     // NOTE: When adding a new field, update `fmt::Debug for ClientBuilder`
     gzip: bool,
     headers: HeaderMap,
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "native-tls")]
     hostname_verification: bool,
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "__tls")]
     certs_verification: bool,
     connect_timeout: Option<Duration>,
     max_idle_per_host: usize,
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "__tls")]
     identity: Option<Identity>,
     proxies: Vec<Proxy>,
     auto_sys_proxy: bool,
     redirect_policy: redirect::Policy,
     referer: bool,
     timeout: Option<Duration>,
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "__tls")]
     root_certs: Vec<Certificate>,
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "__tls")]
     tls: TlsBackend,
     http2_only: bool,
     http1_title_case_headers: bool,
@@ -106,9 +106,9 @@ impl ClientBuilder {
             config: Config {
                 gzip: cfg!(feature = "gzip"),
                 headers,
-                #[cfg(feature = "default-tls")]
+                #[cfg(feature = "native-tls")]
                 hostname_verification: true,
-                #[cfg(feature = "tls")]
+                #[cfg(feature = "__tls")]
                 certs_verification: true,
                 connect_timeout: None,
                 max_idle_per_host: std::usize::MAX,
@@ -117,11 +117,11 @@ impl ClientBuilder {
                 redirect_policy: redirect::Policy::default(),
                 referer: true,
                 timeout: None,
-                #[cfg(feature = "tls")]
+                #[cfg(feature = "__tls")]
                 root_certs: Vec::new(),
-                #[cfg(feature = "tls")]
+                #[cfg(feature = "__tls")]
                 identity: None,
-                #[cfg(feature = "tls")]
+                #[cfg(feature = "__tls")]
                 tls: TlsBackend::default(),
                 http2_only: false,
                 http1_title_case_headers: false,
@@ -150,25 +150,34 @@ impl ClientBuilder {
         let proxies = Arc::new(proxies);
 
         let mut connector = {
-            #[cfg(feature = "tls")]
+            #[cfg(feature = "__tls")]
             fn user_agent(headers: &HeaderMap) -> HeaderValue {
                 headers[USER_AGENT].clone()
             }
 
-            #[cfg(feature = "tls")]
+            #[cfg(feature = "__tls")]
             match config.tls {
                 #[cfg(feature = "default-tls")]
                 TlsBackend::Default => {
                     let mut tls = TlsConnector::builder();
-                    tls.danger_accept_invalid_hostnames(!config.hostname_verification);
+
+                    #[cfg(feature = "native-tls")]
+                    {
+                        tls.danger_accept_invalid_hostnames(!config.hostname_verification);
+                    }
+
                     tls.danger_accept_invalid_certs(!config.certs_verification);
 
                     for cert in config.root_certs {
                         cert.add_to_native_tls(&mut tls);
                     }
 
-                    if let Some(id) = config.identity {
-                        id.add_to_native_tls(&mut tls)?;
+
+                    #[cfg(feature = "native-tls")]
+                    {
+                        if let Some(id) = config.identity {
+                            id.add_to_native_tls(&mut tls)?;
+                        }
                     }
 
                     Connector::new_default_tls(
@@ -215,7 +224,7 @@ impl ClientBuilder {
                 }
             }
 
-            #[cfg(not(feature = "tls"))]
+            #[cfg(not(feature = "__tls"))]
             Connector::new(proxies.clone(), config.local_address, config.nodelay)?
         };
 
@@ -511,9 +520,9 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `default-tls` or `rustls-tls` feature to be
-    /// enabled.
-    #[cfg(feature = "tls")]
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
     pub fn add_root_certificate(mut self, cert: Certificate) -> ClientBuilder {
         self.config.root_certs.push(cert);
         self
@@ -523,9 +532,9 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `default-tls` or `rustls-tls` feature to be
+    /// This requires the optional `native-tls` or `rustls-tls` feature to be
     /// enabled.
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "__tls")]
     pub fn identity(mut self, identity: Identity) -> ClientBuilder {
         self.config.identity = Some(identity);
         self
@@ -544,8 +553,8 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `default-tls` feature to be enabled.
-    #[cfg(feature = "default-tls")]
+    /// This requires the optional `native-tls` feature to be enabled.
+    #[cfg(feature = "native-tls")]
     pub fn danger_accept_invalid_hostnames(
         mut self,
         accept_invalid_hostname: bool,
@@ -568,9 +577,9 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `default-tls` or `rustls-tls` feature to be
-    /// enabled.
-    #[cfg(feature = "tls")]
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
     pub fn danger_accept_invalid_certs(mut self, accept_invalid_certs: bool) -> ClientBuilder {
         self.config.certs_verification = !accept_invalid_certs;
         self
@@ -583,9 +592,9 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `default-tls` feature to be enabled.
-    #[cfg(feature = "default-tls")]
-    pub fn use_default_tls(mut self) -> ClientBuilder {
+    /// This requires the optional `native-tls` feature to be enabled.
+    #[cfg(feature = "native-tls")]
+    pub fn use_native_tls(mut self) -> ClientBuilder {
         self.config.tls = TlsBackend::Default;
         self
     }
@@ -888,21 +897,21 @@ impl Config {
             f.field("tcp_nodelay", &true);
         }
 
-        #[cfg(feature = "default-tls")]
+        #[cfg(feature = "native-tls")]
         {
             if !self.hostname_verification {
                 f.field("danger_accept_invalid_hostnames", &true);
             }
         }
 
-        #[cfg(feature = "tls")]
+        #[cfg(feature = "__tls")]
         {
             if !self.certs_verification {
                 f.field("danger_accept_invalid_certs", &true);
             }
         }
 
-        #[cfg(all(feature = "default-tls", feature = "rustls-tls"))]
+        #[cfg(all(feature = "native-tls-crate", feature = "rustls-tls"))]
         {
             f.field("tls_backend", &self.tls);
         }

@@ -1,4 +1,4 @@
-#[cfg(feature = "tls")]
+#[cfg(feature = "__tls")]
 #[tokio::test]
 async fn test_badssl_modern() {
     let text = reqwest::get("https://mozilla-modern.badssl.com/")
@@ -29,7 +29,7 @@ async fn test_rustls_badssl_modern() {
     assert!(text.contains("<title>mozilla-modern.badssl.com</title>"));
 }
 
-#[cfg(feature = "tls")]
+#[cfg(feature = "__tls")]
 #[tokio::test]
 async fn test_badssl_self_signed() {
     let text = reqwest::Client::builder()
@@ -47,7 +47,7 @@ async fn test_badssl_self_signed() {
     assert!(text.contains("<title>self-signed.badssl.com</title>"));
 }
 
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "native-tls")]
 #[tokio::test]
 async fn test_badssl_wrong_host() {
     let text = reqwest::Client::builder()

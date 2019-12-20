@@ -3,9 +3,9 @@ use http::uri::{Scheme, Authority};
 use http::Uri;
 use hyper::client::connect::{Connected, Connection};
 use tokio::io::{AsyncRead, AsyncWrite};
-#[cfg(feature = "default-tls")]
-use native_tls::{TlsConnector, TlsConnectorBuilder};
-#[cfg(feature = "tls")]
+#[cfg(feature = "native-tls-crate")]
+use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
+#[cfg(feature = "__tls")]
 use http::header::HeaderValue;
 use bytes::{Buf, BufMut};
 
@@ -38,15 +38,15 @@ pub(crate) struct Connector {
     inner: Inner,
     proxies: Arc<Vec<Proxy>>,
     timeout: Option<Duration>,
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "__tls")]
     nodelay: bool,
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "__tls")]
     user_agent: HeaderValue,
 }
 
 #[derive(Clone)]
 enum Inner {
-    #[cfg(not(feature = "tls"))]
+    #[cfg(not(feature = "__tls"))]
     Http(HttpConnector),
     #[cfg(feature = "default-tls")]
     DefaultTls(HttpConnector, TlsConnector),
@@ -59,7 +59,7 @@ enum Inner {
 }
 
 impl Connector {
-    #[cfg(not(feature = "tls"))]
+    #[cfg(not(feature = "__tls"))]
     pub(crate) fn new<T>(
         proxies: Arc<Vec<Proxy>>,
         local_addr: T,
@@ -199,7 +199,7 @@ impl Connector {
                     Ok((Box::new(io) as Conn, connected))
                 }
             }
-            #[cfg(not(feature = "tls"))]
+            #[cfg(not(feature = "__tls"))]
             Inner::Http(_) => socks::connect(proxy, dst, dns),
         }
     }
@@ -210,7 +210,7 @@ impl Connector {
         is_proxy: bool,
     ) -> Result<Conn, BoxError> {
         match self.inner {
-            #[cfg(not(feature = "tls"))]
+            #[cfg(not(feature = "__tls"))]
             Inner::Http(mut http) => {
                 let io = http.call(dst).await?;
                 Ok(Conn {
@@ -281,7 +281,7 @@ impl Connector {
         };
 
 
-        #[cfg(feature = "tls")]
+        #[cfg(feature = "__tls")]
         let auth = _auth;
 
         match &self.inner {
@@ -352,7 +352,7 @@ impl Connector {
                     });
                 }
             }
-            #[cfg(not(feature = "tls"))]
+            #[cfg(not(feature = "__tls"))]
             Inner::Http(_) => (),
         }
 
@@ -510,7 +510,7 @@ impl AsyncWrite for Conn {
 pub(crate) type Connecting =
     Pin<Box<dyn Future<Output = Result<Conn, BoxError>> + Send>>;
 
-#[cfg(feature = "tls")]
+#[cfg(feature = "__tls")]
 async fn tunnel<T>(
     mut conn: T,
     host: String,
@@ -586,7 +586,7 @@ where
     }
 }
 
-#[cfg(feature = "tls")]
+#[cfg(feature = "__tls")]
 fn tunnel_eof() -> io::Error {
     io::Error::new(
         io::ErrorKind::UnexpectedEof,
@@ -834,7 +834,7 @@ mod socks {
     }
 }
 
-#[cfg(feature = "tls")]
+#[cfg(feature = "__tls")]
 #[cfg(test)]
 mod tests {
     use super::tunnel;
