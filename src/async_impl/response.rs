@@ -292,6 +292,33 @@ impl Response {
         }
     }
 
+    /// Convert the response into a `Stream` of `Bytes` from the body.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use futures_util::StreamExt;
+    ///
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut stream = reqwest::get("http://httpbin.org/ip")
+    ///     .await?
+    ///     .bytes_stream();
+    ///
+    /// while let Some(item) = stream.next().await {
+    ///     println!("Chunk: {:?}", item?);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `stream` feature to be enabled.
+    #[cfg(feature = "stream")]
+    pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
+        self.body
+    }
+
     // util methods
 
     /// Turn a response into an error if the server returned an error.
