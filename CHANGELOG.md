@@ -1,29 +1,35 @@
-# v0.10.0-alpha.2
-
-- Add `Request::try_clone()` method.
-- Add HTTP2 window size configuration to `ClientBuilder`.
-- Add `Body::as_bytes()` method.
-- Add `Response::bytes()` method for WASM target.
-- Add `RequestBuilder::body()` method for WASM target.
-- Change to enable system/environment proxy detection by default.
-- Fix checking `HTTP_PROXY` environment variable if it the environment is from a CGI script.
-- Fix removal of username/password of parsed proxy URL.
-- Fix pinning `async-compression` dependency to last alpha.
-
-# v0.10.0-alpha.1
+# v0.10.0
 
 - Add `std::future::Future` support.
 - Add `wasm32-unknown-unknown` support (with fewer features).
 - Add ability to pass async `Response` as the `body` of another `Request`.
+- Add `Body::as_bytes()` method.
+- Add `Response::bytes_stream()` method to get body as an `impl Stream`.
+- Add `Request::try_clone()` method.
+
 - Change default `Client` API to async. The previous blocking client API is avaialble at `reqwest::blocking`.
+- Change to no longer send a default `User-Agent` header. Add one via `ClientBuilder::user_agent()`.
+- Change to enable system/environment proxy detection by default.
+- Change `default-tls` feature to only include `ClientBuilder` options that both `native-tls` and `rustls` support.
 - Change default feature set to reduce unnecessary dependencies. Most features are disabled by default:
   - `blocking`: The `reqwest::blocking` (synchronous) client API.
   - `cookies`: Cookie store support.
   - `gzip`: Automatic response body decompression.
   - `json`: Request and response JSON body methods.
-- Change `futures::Stream` support to a disabled-by-default `unstable-stream` feature.
+  - `stream`: `futures::Stream` support.
 - Change `Error` internal design, removing several `Error::is_*` inspector methods.
+- Change Redirect API:
+  - Renamed types to be part of the `redirect` module (for example, `reqwest::RedirectPolicy` is now `reqwest::redirect::Policy`).
+  - Removed `loop_detected` and `too_many_redirect` methods from `redirect::Attempt`, replaced with a generic `error` method.
+  - The default policy no longer specifically looks for redirect loops (but they should be caught by the maximum limit).
+
+- Fix checking `HTTP_PROXY` environment variable if it the environment is from a CGI script.
+- Fix removal of username/password of parsed proxy URL.
+
 - Update `url` to v2.0.
+- Update `hyper` to v0.13.
+- Update `http` to v0.2.
+
 
 ## v0.9.19
 
