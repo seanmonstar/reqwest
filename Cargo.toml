@@ -28,7 +28,7 @@ native-tls-vendored = ["native-tls", "native-tls-crate/vendored"]
 
 rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "__tls"]
 
-blocking = ["futures-channel", "futures-util/io", "tokio/rt-threaded", "tokio/rt-core"]
+blocking = ["futures-util/io", "tokio/rt-threaded", "tokio/rt-core", "tokio/sync"]
 
 cookies = ["cookie_crate", "cookie_store"]
 
@@ -88,9 +88,6 @@ hyper-rustls = { version = "0.19", optional = true }
 rustls = { version = "0.16", features = ["dangerous_configuration"], optional = true }
 tokio-rustls = { version = "0.12", optional = true }
 webpki-roots = { version = "0.17", optional = true }
-
-## blocking
-futures-channel = { version = "0.3.0", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.12", package = "cookie", optional = true }

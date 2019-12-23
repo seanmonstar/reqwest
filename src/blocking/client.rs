@@ -5,10 +5,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use futures_channel::{mpsc, oneshot};
-use futures_util::{StreamExt, TryFutureExt};
-
 use log::{error, trace};
+use tokio::sync::{mpsc, oneshot};
 
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
@@ -562,7 +560,7 @@ impl ClientHandle {
     fn new(builder: ClientBuilder) -> crate::Result<ClientHandle> {
         let timeout = builder.timeout;
         let builder = builder.inner;
-        let (tx, rx) = mpsc::unbounded::<(async_impl::Request, OneshotResponse)>();
+        let (tx, rx) = mpsc::unbounded_channel::<(async_impl::Request, OneshotResponse)>();
         let (spawn_tx, spawn_rx) = oneshot::channel::<crate::Result<()>>();
         let handle = thread::Builder::new()
             .name("reqwest-internal-sync-runtime".into())
@@ -595,7 +593,7 @@ impl ClientHandle {
 
                     let mut rx = rx;
 
-                    while let Some((req, req_tx)) = rx.next().await {
+                    while let Some((req, req_tx)) = rx.recv().await {
                         let req_fut = client.execute(req);
                         tokio::spawn(forward(req_fut, req_tx));
                     }
@@ -633,7 +631,7 @@ impl ClientHandle {
             .tx
             .as_ref()
             .expect("core thread exited early")
-            .unbounded_send((req, tx))
+            .send((req, tx))
             .expect("core thread panicked");
 
         let result: Result<crate::Result<async_impl::Response>, wait::Waited<crate::Error>> =
@@ -644,10 +642,10 @@ impl ClientHandle {
                 };
                 wait::timeout(f, self.timeout.0)
             } else {
-                wait::timeout(
-                    rx.map_err(|_canceled| event_loop_panicked()),
-                    self.timeout.0,
-                )
+                let f = async move {
+                    rx.await.map_err(|_canceled| event_loop_panicked())
+                };
+                wait::timeout(f, self.timeout.0)
             };
 
         match result {
@@ -677,7 +675,7 @@ where
             Poll::Ready(val) => Poll::Ready(Some(val)),
             Poll::Pending => {
                 // check if the callback is canceled
-                futures_core::ready!(tx.poll_canceled(cx));
+                futures_core::ready!(tx.poll_closed(cx));
                 Poll::Ready(None)
             }
         }
