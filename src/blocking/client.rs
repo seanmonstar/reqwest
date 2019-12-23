@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::fmt;
 use std::future::Future;
 use std::net::IpAddr;
@@ -5,6 +6,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use http::header::HeaderValue;
 use log::{error, trace};
 use tokio::sync::{mpsc, oneshot};
 
@@ -84,6 +86,35 @@ impl ClientBuilder {
 
 
     // Higher-level options
+
+
+    /// Sets the `User-Agent` header to be used by this client.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # fn doc() -> Result<(), reqwest::Error> {
+    /// // Name your user agent after your app?
+    /// static APP_USER_AGENT: &str = concat!(
+    ///     env!("CARGO_PKG_NAME"),
+    ///     "/",
+    ///     env!("CARGO_PKG_VERSION"),
+    /// );
+    ///
+    /// let client = reqwest::blocking::Client::builder()
+    ///     .user_agent(APP_USER_AGENT)
+    ///     .build()?;
+    /// let res = client.get("https://www.rust-lang.org").send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn user_agent<V>(self, value: V) -> ClientBuilder
+    where
+        V: TryInto<HeaderValue>,
+        V::Error: Into<http::Error>,
+    {
+        self.with_inner(move |inner| inner.user_agent(value))
+    }
 
     /// Sets the default headers for every request.
     ///

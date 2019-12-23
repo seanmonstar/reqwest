@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::net::IpAddr;
 use std::sync::Arc;
 #[cfg(feature = "cookies")]
@@ -35,8 +36,6 @@ use crate::tls::TlsBackend;
 #[cfg(feature = "__tls")]
 use crate::{Certificate, Identity};
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
-
-static DEFAULT_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 /// An asynchronous `Client` to make Requests with.
 ///
@@ -85,6 +84,7 @@ struct Config {
     nodelay: bool,
     #[cfg(feature = "cookies")]
     cookie_store: Option<cookie::CookieStore>,
+    error: Option<crate::Error>,
 }
 
 impl Default for ClientBuilder {
@@ -99,11 +99,11 @@ impl ClientBuilder {
     /// This is the same as `Client::builder()`.
     pub fn new() -> ClientBuilder {
         let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(2);
-        headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
         headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
 
         ClientBuilder {
             config: Config {
+                error: None,
                 gzip: cfg!(feature = "gzip"),
                 headers,
                 #[cfg(feature = "native-tls")]
@@ -143,6 +143,11 @@ impl ClientBuilder {
     /// cannot load the system configuration.
     pub fn build(self) -> crate::Result<Client> {
         let config = self.config;
+
+        if let Some(err) = config.error {
+            return Err(err);
+        }
+
         let mut proxies = config.proxies;
         if config.auto_sys_proxy {
             proxies.push(Proxy::system());
@@ -151,8 +156,8 @@ impl ClientBuilder {
 
         let mut connector = {
             #[cfg(feature = "__tls")]
-            fn user_agent(headers: &HeaderMap) -> HeaderValue {
-                headers[USER_AGENT].clone()
+            fn user_agent(headers: &HeaderMap) -> Option<HeaderValue> {
+                headers.get(USER_AGENT).cloned()
             }
 
             #[cfg(feature = "__tls")]
@@ -270,6 +275,42 @@ impl ClientBuilder {
 
     // Higher-level options
 
+
+    /// Sets the `User-Agent` header to be used by this client.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # async fn doc() -> Result<(), reqwest::Error> {
+    /// // Name your user agent after your app?
+    /// static APP_USER_AGENT: &str = concat!(
+    ///     env!("CARGO_PKG_NAME"),
+    ///     "/",
+    ///     env!("CARGO_PKG_VERSION"),
+    /// );
+    ///
+    /// let client = reqwest::Client::builder()
+    ///     .user_agent(APP_USER_AGENT)
+    ///     .build()?;
+    /// let res = client.get("https://www.rust-lang.org").send().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn user_agent<V>(mut self, value: V) -> ClientBuilder
+    where
+        V: TryInto<HeaderValue>,
+        V::Error: Into<http::Error>,
+    {
+        match value.try_into() {
+            Ok(value) => {
+                self.config.headers.insert(USER_AGENT, value);
+            }
+            Err(e) => {
+                self.config.error = Some(crate::error::builder(e.into()));
+            }
+        };
+        self
+    }
     /// Sets the default headers for every request.
     ///
     /// # Example
