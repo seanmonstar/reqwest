@@ -14,10 +14,6 @@ An ergonomic, batteries-included HTTP Client for Rust.
 - Cookie Store
 - [Changelog](CHANGELOG.md)
 
-> *NOTE*: reqwest's [master](https://github.com/seanmonstar/reqwest) branch is currently
-preparing breaking changes, for most recently released code, look to the
-[0.9.x](https://github.com/seanmonstar/reqwest/tree/0.9.x) branch.
-
 ## Example
 
 Async:
