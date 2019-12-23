@@ -41,7 +41,7 @@ pub(crate) struct Connector {
     #[cfg(feature = "__tls")]
     nodelay: bool,
     #[cfg(feature = "__tls")]
-    user_agent: HeaderValue,
+    user_agent: Option<HeaderValue>,
 }
 
 #[derive(Clone)]
@@ -82,7 +82,7 @@ impl Connector {
     pub(crate) fn new_default_tls<T>(
         tls: TlsConnectorBuilder,
         proxies: Arc<Vec<Proxy>>,
-        user_agent: HeaderValue,
+        user_agent: Option<HeaderValue>,
         local_addr: T,
         nodelay: bool,
     ) -> crate::Result<Connector>
@@ -108,7 +108,7 @@ impl Connector {
     pub(crate) fn new_rustls_tls<T>(
         tls: rustls::ClientConfig,
         proxies: Arc<Vec<Proxy>>,
-        user_agent: HeaderValue,
+        user_agent: Option<HeaderValue>,
         local_addr: T,
         nodelay: bool,
     ) -> crate::Result<Connector>
@@ -515,7 +515,7 @@ async fn tunnel<T>(
     mut conn: T,
     host: String,
     port: u16,
-    user_agent: HeaderValue,
+    user_agent: Option<HeaderValue>,
     auth: Option<HeaderValue>,
 ) -> Result<T, io::Error>
 where
@@ -534,9 +534,11 @@ where
 
 
     // user-agent
-    buf.extend_from_slice(b"User-Agent: ");
-    buf.extend_from_slice(user_agent.as_bytes());
-    buf.extend_from_slice(b"\r\n");
+    if let Some(user_agent) = user_agent {
+        buf.extend_from_slice(b"User-Agent: ");
+        buf.extend_from_slice(user_agent.as_bytes());
+        buf.extend_from_slice(b"\r\n");
+    }
 
 
     // proxy-authorization
@@ -888,8 +890,8 @@ mod tests {
         }};
     }
 
-    fn ua() -> http::header::HeaderValue {
-        http::header::HeaderValue::from_static(TUNNEL_UA)
+    fn ua() -> Option<http::header::HeaderValue> {
+        Some(http::header::HeaderValue::from_static(TUNNEL_UA))
     }
 
     #[test]

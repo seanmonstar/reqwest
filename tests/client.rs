@@ -11,7 +11,7 @@ async fn auto_headers() {
             assert_eq!(req.method(), "GET");
 
             assert_eq!(req.headers()["accept"], "*/*");
-            assert_eq!(req.headers()["user-agent"], DEFAULT_USER_AGENT);
+            assert_eq!(req.headers().get("user-agent"), None);
             if cfg!(feature = "gzip") {
                 assert_eq!(req.headers()["accept-encoding"], "gzip");
             }
@@ -26,6 +26,28 @@ async fn auto_headers() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.remote_addr(), Some(server.addr()));
+}
+
+#[tokio::test]
+async fn user_agent() {
+    let server = server::http(move |req| {
+        async move {
+            assert_eq!(req.headers()["user-agent"], "reqwest-test-agent");
+            http::Response::default()
+        }
+    });
+
+    let url = format!("http://{}/ua", server.addr());
+    let res = reqwest::Client::builder()
+        .user_agent("reqwest-test-agent")
+        .build()
+        .expect("client builder")
+        .get(&url)
+        .send()
+        .await
+        .expect("request");
+
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
 #[tokio::test]
