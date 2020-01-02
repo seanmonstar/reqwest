@@ -14,32 +14,49 @@ An ergonomic, batteries-included HTTP Client for Rust.
 - Cookie Store
 - [Changelog](CHANGELOG.md)
 
+
 ## Example
 
-Async:
+This asynchronous example uses [Tokio](https://tokio.rs) and enables some
+optional features, so your `Cargo.toml` could look like this:
+
+```toml
+[dependencies]
+reqwest = { version = "0.10", features = ["json"] }
+tokio = { version = "0.2", features = ["full"] }
+```
+
+And then the code:
 
 ```rust,no_run
 use std::collections::HashMap;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let resp: HashMap<String, String> = reqwest::get("https://httpbin.org/ip")
+    let resp = reqwest::get("https://httpbin.org/ip")
         .await?
-        .json()
+        .json::<HashMap<String, String>>()
         .await?;
     println!("{:#?}", resp);
     Ok(())
 }
 ```
 
-Blocking:
+## Blocking Client
+
+There is an optional "blocking" client API that can be enabled:
+
+```toml
+[dependencies]
+reqwest = { version = "0.10", features = ["blocking", "json"] }
+```
 
 ```rust,no_run
 use std::collections::HashMap;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let resp: HashMap<String, String> = reqwest::blocking::get("https://httpbin.org/ip")?
-        .json()?;
+    let resp = reqwest::blocking::get("https://httpbin.org/ip")?
+        .json::<HashMap<String, String>>()?;
     println!("{:#?}", resp);
     Ok(())
 }
@@ -55,7 +72,9 @@ On Windows and macOS:
 
 - Nothing.
 
-Reqwest uses [rust-native-tls](https://github.com/sfackler/rust-native-tls), which will use the operating system TLS framework if available, meaning Windows and macOS. On Linux, it will use OpenSSL 1.1.
+Reqwest uses [rust-native-tls](https://github.com/sfackler/rust-native-tls),
+which will use the operating system TLS framework if available, meaning Windows
+and macOS. On Linux, it will use OpenSSL 1.1.
 
 
 ## License
@@ -67,4 +86,6 @@ Licensed under either of
 
 ### Contribution
 
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall
+be dual licensed as above, without any additional terms or conditions.
