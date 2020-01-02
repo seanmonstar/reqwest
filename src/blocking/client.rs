@@ -582,8 +582,16 @@ struct InnerClientHandle {
 
 impl Drop for InnerClientHandle {
     fn drop(&mut self) {
+        let id = self.thread
+            .as_ref()
+            .map(|h| h.thread().id())
+            .expect("thread not dropped yet");
+
+        trace!("closing runtime thread ({:?})", id);
         self.tx.take();
+        trace!("signaled close for runtime thread ({:?})", id);
         self.thread.take().map(|h| h.join());
+        trace!("closed runtime thread ({:?})", id);
     }
 }
 
@@ -629,10 +637,14 @@ impl ClientHandle {
                         tokio::spawn(forward(req_fut, req_tx));
                     }
 
-                    trace!("Receiver is shutdown");
+                    trace!("({:?}) Receiver is shutdown", thread::current().id());
                 };
 
-                rt.block_on(f)
+                trace!("({:?}) start runtime::block_on", thread::current().id());
+                rt.block_on(f);
+                trace!("({:?}) end runtime::block_on", thread::current().id());
+                drop(rt);
+                trace!("({:?}) finished", thread::current().id());
             })
             .map_err(crate::error::builder)?;
 

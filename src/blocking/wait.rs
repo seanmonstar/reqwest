@@ -40,9 +40,10 @@ where
                 return Err(Waited::TimedOut(crate::error::TimedOut));
             }
 
-            log::trace!("park timeout {:?}", deadline - now);
+            log::trace!("({:?}) park timeout {:?}", thread::current().id(), deadline - now);
             thread::park_timeout(deadline - now);
         } else {
+            log::trace!("({:?}) park without timeout", thread::current().id());
             thread::park();
         }
     }
