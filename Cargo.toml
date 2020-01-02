@@ -15,6 +15,13 @@ autotests = true
 [package.metadata.docs.rs]
 all-features = true
 
+[package.metadata.playground]
+features = [
+    "blocking",
+    "cookies",
+    "json",
+]
+
 [features]
 default = ["default-tls"]
 
