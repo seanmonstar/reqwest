@@ -46,18 +46,6 @@ impl Request {
         }
     }
 
-    /// Constructs a new request with timeout.
-    #[inline]
-    pub fn new_with_timeout(method: Method, url: Url, timeout: Duration) -> Self {
-        Request {
-            method,
-            url,
-            headers: HeaderMap::new(),
-            body: None,
-            timeout: Some(timeout)
-        }
-    }
-
     /// Get the method.
     #[inline]
     pub fn method(&self) -> &Method {
@@ -227,7 +215,11 @@ impl RequestBuilder {
         self
     }
 
-    /// Sets the request timeout.
+    /// Enables a request timeout.
+    ///
+    /// The timeout is applied from the when the request starts connecting
+    /// until the response body has finished. It affects only this request
+    /// and overrides the timeout configured using `ClientBuilder::timeout()`.
     pub fn timeout(mut self, timeout: Duration) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             *req.timeout_mut() = Some(timeout);
