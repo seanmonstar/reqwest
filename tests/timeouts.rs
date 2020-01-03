@@ -124,9 +124,7 @@ fn timeout_blocking_request() {
 
     // Make Client drop *after* the Server, so the background doesn't
     // close too early.
-    let client = reqwest::blocking::Client::builder()
-        .build()
-        .unwrap();
+    let client = reqwest::blocking::Client::builder().build().unwrap();
 
     let server = server::http(move |_req| {
         async {
@@ -137,7 +135,11 @@ fn timeout_blocking_request() {
     });
 
     let url = format!("http://{}/closes", server.addr());
-    let err = client.get(&url).timeout(Duration::from_millis(500)).send().unwrap_err();
+    let err = client
+        .get(&url)
+        .timeout(Duration::from_millis(500))
+        .send()
+        .unwrap_err();
 
     assert!(err.is_timeout());
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
