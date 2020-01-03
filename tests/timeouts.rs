@@ -4,7 +4,7 @@ use support::*;
 use std::time::Duration;
 
 #[tokio::test]
-async fn request_timeout() {
+async fn client_timeout() {
     let _ = env_logger::try_init();
 
     let server = server::http(move |_req| {
@@ -23,6 +23,36 @@ async fn request_timeout() {
     let url = format!("http://{}/slow", server.addr());
 
     let res = client.get(&url).send().await;
+
+    let err = res.unwrap_err();
+
+    assert!(err.is_timeout());
+    assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
+}
+
+#[tokio::test]
+async fn request_timeout() {
+    let _ = env_logger::try_init();
+
+    let server = server::http(move |_req| {
+        async {
+            // delay returning the response
+            tokio::time::delay_for(Duration::from_secs(2)).await;
+            http::Response::default()
+        }
+    });
+
+    let client = reqwest::Client::builder()
+        .build()
+        .unwrap();
+
+    let url = format!("http://{}/slow", server.addr());
+
+    let res = client
+        .get(&url)
+        .timeout(Duration::from_millis(500))
+        .send()
+        .await;
 
     let err = res.unwrap_err();
 
