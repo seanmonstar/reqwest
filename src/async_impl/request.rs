@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::future::Future;
 use std::io::Write;
+use std::time::Duration;
 
 use base64;
 use base64::write::EncoderWriter as Base64Encoder;
@@ -23,6 +24,7 @@ pub struct Request {
     url: Url,
     headers: HeaderMap,
     body: Option<Body>,
+    timeout: Option<Duration>,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -40,6 +42,19 @@ impl Request {
             url,
             headers: HeaderMap::new(),
             body: None,
+            timeout: None
+        }
+    }
+
+    /// Constructs a new request with timeout.
+    #[inline]
+    pub fn new_with_timeout(method: Method, url: Url, timeout: Duration) -> Self {
+        Request {
+            method,
+            url,
+            headers: HeaderMap::new(),
+            body: None,
+            timeout: Some(timeout)
         }
     }
 
@@ -91,6 +106,18 @@ impl Request {
         &mut self.body
     }
 
+    /// Get the timeout.
+    #[inline]
+    pub fn timeout(&self) -> Option<&Duration> {
+        self.timeout.as_ref()
+    }
+
+    /// Get a mutable reference to the timeout.
+    #[inline]
+    pub fn timeout_mut(&mut self) -> &mut Option<Duration> {
+        &mut self.timeout
+    }
+
     /// Attempt to clone the request.
     ///
     /// `None` is returned if the request can not be cloned, i.e. if the body is a stream.
@@ -100,13 +127,14 @@ impl Request {
             None => None,
         };
         let mut req = Request::new(self.method().clone(), self.url().clone());
+        *req.timeout_mut() = self.timeout().cloned();
         *req.headers_mut() = self.headers().clone();
         req.body = body;
         Some(req)
     }
 
-    pub(super) fn pieces(self) -> (Method, Url, HeaderMap, Option<Body>) {
-        (self.method, self.url, self.headers, self.body)
+    pub(super) fn pieces(self) -> (Method, Url, HeaderMap, Option<Body>, Option<Duration>) {
+        (self.method, self.url, self.headers, self.body, self.timeout)
     }
 }
 
@@ -195,6 +223,14 @@ impl RequestBuilder {
     pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             *req.body_mut() = Some(body.into());
+        }
+        self
+    }
+
+    /// Sets the request timeout.
+    pub fn timeout(mut self, timeout: Duration) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *req.timeout_mut() = Some(timeout);
         }
         self
     }
