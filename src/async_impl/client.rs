@@ -772,7 +772,7 @@ impl Client {
     }
 
     pub(super) fn execute_request(&self, req: Request) -> Pending {
-        let (method, url, mut headers, body) = req.pieces();
+        let (method, url, mut headers, body, timeout) = req.pieces();
 
         // insert default headers in the request headers
         // without overwriting already appended headers.
@@ -816,14 +816,14 @@ impl Client {
             .body(body.into_stream())
             .expect("valid request parts");
 
+        let timeout = timeout
+            .or(self.inner.request_timeout)
+            .map(|dur| tokio::time::delay_for(dur));
+
+
         *req.headers_mut() = headers.clone();
 
         let in_flight = self.inner.hyper.request(req);
-
-        let timeout = self
-            .inner
-            .request_timeout
-            .map(|dur| tokio::time::delay_for(dur));
 
         Pending {
             inner: PendingInner::Request(PendingRequest {
