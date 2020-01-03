@@ -119,6 +119,32 @@ fn timeout_closes_connection() {
 
 #[cfg(feature = "blocking")]
 #[test]
+fn timeout_blocking_request() {
+    let _ = env_logger::try_init();
+
+    // Make Client drop *after* the Server, so the background doesn't
+    // close too early.
+    let client = reqwest::blocking::Client::builder()
+        .build()
+        .unwrap();
+
+    let server = server::http(move |_req| {
+        async {
+            // delay returning the response
+            tokio::time::delay_for(Duration::from_secs(2)).await;
+            http::Response::default()
+        }
+    });
+
+    let url = format!("http://{}/closes", server.addr());
+    let err = client.get(&url).timeout(Duration::from_millis(500)).send().unwrap_err();
+
+    assert!(err.is_timeout());
+    assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
+}
+
+#[cfg(feature = "blocking")]
+#[test]
 fn write_timeout_large_body() {
     let _ = env_logger::try_init();
     let body = vec![b'x'; 20_000];

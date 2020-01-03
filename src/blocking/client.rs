@@ -670,6 +670,8 @@ impl ClientHandle {
         let (tx, rx) = oneshot::channel();
         let (req, body) = req.into_async();
         let url = req.url().clone();
+        let timeout = req.timeout().copied().or(self.timeout.0);
+
         self.inner
             .tx
             .as_ref()
@@ -683,12 +685,12 @@ impl ClientHandle {
                     body.send().await?;
                     rx.await.map_err(|_canceled| event_loop_panicked())
                 };
-                wait::timeout(f, self.timeout.0)
+                wait::timeout(f, timeout)
             } else {
                 let f = async move {
                     rx.await.map_err(|_canceled| event_loop_panicked())
                 };
-                wait::timeout(f, self.timeout.0)
+                wait::timeout(f, timeout)
             };
 
         match result {
