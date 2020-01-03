@@ -42,9 +42,7 @@ async fn request_timeout() {
         }
     });
 
-    let client = reqwest::Client::builder()
-        .build()
-        .unwrap();
+    let client = reqwest::Client::builder().build().unwrap();
 
     let url = format!("http://{}/slow", server.addr());
 
