@@ -5,6 +5,7 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::time::Duration;
 
+use bytes::Bytes;
 use http;
 use hyper::header::HeaderMap;
 #[cfg(feature = "json")]
@@ -219,6 +220,25 @@ impl Response {
     #[cfg(feature = "json")]
     pub fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
         wait::timeout(self.inner.json(), self.timeout).map_err(|e| match e {
+            wait::Waited::TimedOut(e) => crate::error::decode(e),
+            wait::Waited::Inner(e) => e,
+        })
+    }
+
+    /// Get the full response body as `Bytes`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// let bytes = reqwest::blocking::get("http://httpbin.org/ip")?.bytes()?;
+    ///
+    /// println!("bytes: {:?}", bytes);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn bytes(self) -> crate::Result<Bytes> {
+        wait::timeout(self.inner.bytes(), self.timeout).map_err(|e| match e {
             wait::Waited::TimedOut(e) => crate::error::decode(e),
             wait::Waited::Inner(e) => e,
         })
