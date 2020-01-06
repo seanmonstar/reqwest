@@ -120,6 +120,14 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     }
     init.headers(&js_headers.into());
 
+    if let Some(mode) = req.fetch_mode() {
+        init.mode(mode.clone());
+    }
+
+    if let Some(mode) = req.cache_mode() {
+        init.cache(mode.clone());
+    }
+
     if let Some(body) = req.body() {
         let body_bytes: &[u8] = body.bytes();
         let body_array: Uint8Array = body_bytes.into();
