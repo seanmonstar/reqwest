@@ -148,9 +148,9 @@ impl Connector {
     #[cfg(feature = "socks")]
     async fn connect_socks(
         &self,
-        dst: Destination,
+        dst: Uri,
         proxy: ProxyScheme,
-    ) -> Result<(Conn, Connected), io::Error> {
+    ) -> Result<Conn, BoxError> {
         let dns = match proxy {
             ProxyScheme::Socks5 {
                 remote_dns: false, ..
@@ -158,37 +158,43 @@ impl Connector {
             ProxyScheme::Socks5 {
                 remote_dns: true, ..
             } => socks::DnsResolve::Proxy,
-            ProxyScheme::Http { .. } => {
+            ProxyScheme::Http { .. } | ProxyScheme::Https { .. } => {
                 unreachable!("connect_socks is only called for socks proxies");
-            }
+            },
         };
 
         match &self.inner {
             #[cfg(feature = "default-tls")]
             Inner::DefaultTls(_http, tls) => {
-                if dst.scheme() == "https" {
-                    use self::native_tls_async::TlsConnectorExt;
-
-                    let host = dst.host().to_owned();
-                    let socks_connecting = socks::connect(proxy, dst, dns);
-                    let (conn, connected) = socks::connect(proxy, dst, dns).await?;
+                if dst.scheme() == Some(&Scheme::HTTPS) {
+                    let host = dst
+                        .host()
+                        .ok_or(io::Error::new(io::ErrorKind::Other, "no host in url"))?
+                        .to_string();
+                    let conn = socks::connect(proxy, dst, dns).await?;
                     let tls_connector = tokio_tls::TlsConnector::from(tls.clone());
                     let io = tls_connector
                         .connect(&host, conn)
                         .await
                         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-                    Ok((Box::new(io) as Conn, connected))
+                    return Ok(Conn {
+                        inner: Box::new(NativeTlsConn { inner: io }),
+                        is_proxy: false,
+                    });
                 }
             }
             #[cfg(feature = "rustls-tls")]
             Inner::RustlsTls { tls_proxy, .. } => {
-                if dst.scheme() == "https" {
+                if dst.scheme() == Some(&Scheme::HTTPS) {
                     use tokio_rustls::webpki::DNSNameRef;
                     use tokio_rustls::TlsConnector as RustlsConnector;
 
                     let tls = tls_proxy.clone();
-                    let host = dst.host().to_owned();
-                    let (conn, connected) = socks::connect(proxy, dst, dns);
+                    let host = dst
+                        .host()
+                        .ok_or(io::Error::new(io::ErrorKind::Other, "no host in url"))?
+                        .to_string();
+                    let conn = socks::connect(proxy, dst, dns).await?;
                     let dnsname = DNSNameRef::try_from_ascii_str(&host)
                         .map(|dnsname| dnsname.to_owned())
                         .map_err(|_| io::Error::new(io::ErrorKind::Other, "Invalid DNS Name"))?;
@@ -196,12 +202,17 @@ impl Connector {
                         .connect(dnsname.as_ref(), conn)
                         .await
                         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-                    Ok((Box::new(io) as Conn, connected))
+                    return Ok(Conn {
+                        inner: Box::new(RustlsTlsConn { inner: io }),
+                        is_proxy: false,
+                    });
                 }
             }
             #[cfg(not(feature = "__tls"))]
-            Inner::Http(_) => socks::connect(proxy, dst, dns),
+            Inner::Http(_) => ()
         }
+
+        socks::connect(proxy, dst, dns).await
     }
 
     async fn connect_with_maybe_proxy(
@@ -277,7 +288,7 @@ impl Connector {
             ProxyScheme::Http { host, auth } => (into_uri(Scheme::HTTP, host), auth),
             ProxyScheme::Https { host, auth } => (into_uri(Scheme::HTTPS, host), auth),
             #[cfg(feature = "socks")]
-            ProxyScheme::Socks5 { .. } => return this.connect_socks(dst, proxy_scheme),
+            ProxyScheme::Socks5 { .. } => return self.connect_socks(dst, proxy_scheme).await,
         };
 
 
@@ -326,7 +337,8 @@ impl Connector {
                     use tokio_rustls::webpki::DNSNameRef;
                     use tokio_rustls::TlsConnector as RustlsConnector;
 
-                    let host = dst.host()
+                    let host = dst
+                        .host()
                         .ok_or(io::Error::new(io::ErrorKind::Other, "no host in url"))?
                         .to_string();
                     let port = dst.port().map(|r| r.as_u16()).unwrap_or(443);
@@ -430,6 +442,10 @@ pub(crate) trait AsyncConn: AsyncRead + AsyncWrite + Connection {}
 impl<T: AsyncRead + AsyncWrite + Connection> AsyncConn for T {}
 
 pin_project! {
+    /// Note: the `is_proxy` member means *is plain text HTTP proxy*.
+    /// This tells hyper whether the URI should be written in
+    /// * origin-form (`GET /just/a/path HTTP/1.1`), when `is_proxy == false`, or
+    /// * absolute-form (`GET http://foo.bar/and/a/path HTTP/1.1`), otherwise.
     pub(crate) struct Conn {
         #[pin]
         inner: Box<dyn AsyncConn + Send + Sync + Unpin + 'static>,
@@ -779,15 +795,12 @@ mod rustls_tls_conn {
 
 #[cfg(feature = "socks")]
 mod socks {
+    use http::Uri;
+    use tokio_socks::tcp::Socks5Stream;
     use std::io;
-
-    use futures::{future, Future};
-    use hyper::client::connect::{Connected, Destination};
-    use socks::Socks5Stream;
     use std::net::ToSocketAddrs;
-    use tokio::{net::TcpStream, reactor};
 
-    use super::Connecting;
+    use super::{BoxError, Scheme};
     use crate::proxy::ProxyScheme;
 
     pub(super) enum DnsResolve {
@@ -797,13 +810,19 @@ mod socks {
 
     pub(super) async fn connect(
         proxy: ProxyScheme,
-        dst: Destination,
+        dst: Uri,
         dns: DnsResolve,
     ) -> Result<super::Conn, BoxError> {
         let https = dst.scheme() == Some(&Scheme::HTTPS);
-        let original_host = dst.host().to_owned();
-        let mut host = original_host.clone();
-        let port = dst.port().unwrap_or_else(|| if https { 443 } else { 80 });
+        let original_host = dst
+            .host()
+            .ok_or(io::Error::new(io::ErrorKind::Other, "no host in url"))?;
+        let mut host = original_host.to_owned();
+        let port = match dst.port() {
+            Some(p) => p.as_u16(),
+            None if https => 443u16,
+            _ => 80u16,
+        };
 
         if let DnsResolve::Local = dns {
             let maybe_new_target = (host.as_str(), port).to_socket_addrs()?.next();
@@ -826,13 +845,17 @@ mod socks {
                 &password,
             )
             .await
+            .map_err(|e| format!("socks connect error: {}", e))?
         } else {
-            let s = Socks5Stream::connect(socket_addr, (host.as_str(), port)).await;
-            TcpStream::from_std(s.into_inner(), &reactor::Handle::default())
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?
+            Socks5Stream::connect(socket_addr, (host.as_str(), port))
+                .await
+                .map_err(|e| format!("socks connect error: {}", e))?
         };
 
-        Ok((Box::new(s) as super::Conn, Connected::new()))
+        Ok(super::Conn {
+            inner: Box::new( stream.into_inner() ),
+            is_proxy: false,
+        })
     }
 }
 

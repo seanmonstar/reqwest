@@ -383,14 +383,15 @@ impl ProxyScheme {
         // Resolve URL to a host and port
         #[cfg(feature = "socks")]
         let to_addr = || {
-            let addrs = try_!(url.socket_addrs(|| match url.scheme() {
+            let addrs = url.socket_addrs(|| match url.scheme() {
                 "socks5" | "socks5h" => Some(1080),
                 _ => None,
-            }));
+            })
+                .map_err(crate::error::builder)?;
             addrs
                 .into_iter()
                 .next()
-                .ok_or_else(crate::error::unknown_proxy_scheme)
+                .ok_or_else(|| crate::error::builder("unknown proxy scheme"))
         };
 
         let mut scheme = match url.scheme() {
@@ -418,7 +419,7 @@ impl ProxyScheme {
             ProxyScheme::Http { .. } => "http",
             ProxyScheme::Https { .. } => "https",
             #[cfg(feature = "socks")]
-            ProxyScheme::Socks5 => "socks5",
+            ProxyScheme::Socks5 { .. } => "socks5",
         }
     }
 
@@ -428,7 +429,7 @@ impl ProxyScheme {
             ProxyScheme::Http { host, .. } => host.as_str(),
             ProxyScheme::Https { host, .. } => host.as_str(),
             #[cfg(feature = "socks")]
-            ProxyScheme::Socks5 => panic!("socks5"),
+            ProxyScheme::Socks5 { .. } => panic!("socks5"),
         }
     }
 }

@@ -62,7 +62,8 @@ jobs:
           - "feat.: gzip"
           - "feat.: json"
           - "feat.: stream"
-          # - "feat.: socks"
+          - "feat.: socks/default-tls"
+          - "feat.: socks/rustls-tls"
           # - "feat.: trust-dns"
 
         include:
@@ -115,8 +116,10 @@ jobs:
             features: "--features json"
           - name: "feat.: stream"
             features: "--features stream"
-          # - name: "feat.: socks"
-          #   features: "--features socks"
+          - name: "feat.: socks/default-tls"
+            features: "--features socks"
+          - name: "feat.: socks/rustls-tls"
+            features: "--features socks,rustls-tls"
           # - name: "feat.: trust-dns"
           #   features: "--features trust-dns"
 

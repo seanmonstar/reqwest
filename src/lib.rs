@@ -169,6 +169,7 @@
 //! - **gzip**: Provides response body gzip decompression.
 //! - **json**: Provides serialization and deserialization for JSON bodies.
 //! - **stream**: Adds support for `futures::Stream`.
+//! - **socks**: Provides SOCKS5 proxy support.
 //!
 //!
 //! [hyper]: http://hyper.rs
@@ -180,8 +181,6 @@
 //! [redirect]: crate::redirect
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
-
-////! - **socks**: Provides SOCKS5 proxy support.
 ////! - **trust-dns**: Enables a trust-dns async resolver instead of default
 ////!   threadpool using `getaddrinfo`.
 
