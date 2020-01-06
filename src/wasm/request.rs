@@ -13,6 +13,7 @@ pub struct Request {
     url: Url,
     headers: HeaderMap,
     body: Option<Body>,
+    pub(super) cors: bool,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -28,6 +29,7 @@ impl Request {
             url,
             headers: HeaderMap::new(),
             body: None,
+            cors: true,
         }
     }
 
@@ -115,6 +117,22 @@ impl RequestBuilder {
         }
         if let Some(err) = error {
             self.request = Err(err);
+        }
+        self
+    }
+
+    /// Disable CORS on fetching the request.
+    ///
+    /// # WASM
+    ///
+    /// This option is only effective with WebAssembly target.
+    ///
+    /// The [request mode][mdn] will be set to 'no-cors'.
+    ///
+    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/mode
+    pub fn fetch_mode_no_cors(mut self) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.cors = false;
         }
         self
     }

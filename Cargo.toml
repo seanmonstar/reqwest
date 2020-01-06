@@ -136,6 +136,7 @@ features = [
     "Headers",
     "Request",
     "RequestInit",
+    "RequestMode",
     "Response",
     "Window",
 ]

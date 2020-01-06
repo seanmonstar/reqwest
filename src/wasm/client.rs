@@ -120,6 +120,11 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     }
     init.headers(&js_headers.into());
 
+    // When req.cors is true, do nothing because the default mode is 'cors'
+    if !req.cors {
+        init.mode(web_sys::RequestMode::NoCors);
+    }
+
     if let Some(body) = req.body() {
         let body_bytes: &[u8] = body.bytes();
         let body_array: Uint8Array = body_bytes.into();
