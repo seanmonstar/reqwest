@@ -135,7 +135,6 @@ version = "0.3.25"
 features = [
     "Headers",
     "Request",
-    "RequestCache",
     "RequestInit",
     "RequestMode",
     "Response",

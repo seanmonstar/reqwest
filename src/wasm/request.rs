@@ -3,7 +3,6 @@ use std::fmt;
 
 use http::Method;
 use url::Url;
-pub use web_sys::{RequestMode, RequestCache};
 
 use super::{Body, Client, Response};
 use crate::header::{HeaderMap, HeaderName, HeaderValue};
@@ -14,8 +13,7 @@ pub struct Request {
     url: Url,
     headers: HeaderMap,
     body: Option<Body>,
-    fetch_mode: Option<RequestMode>,
-    cache_mode: Option<RequestCache>,
+    pub(super) cors: bool,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -31,8 +29,7 @@ impl Request {
             url,
             headers: HeaderMap::new(),
             body: None,
-            fetch_mode: None,
-            cache_mode: None,
+            cors: true,
         }
     }
 
@@ -83,34 +80,6 @@ impl Request {
     pub fn body_mut(&mut self) -> &mut Option<Body> {
         &mut self.body
     }
-
-    /// Get the request fetch mode.
-    /// To know the mode, refer https://developer.mozilla.org/en-US/docs/Web/API/Request/mode
-    #[inline]
-    pub fn fetch_mode(&self) -> Option<&RequestMode> {
-        self.fetch_mode.as_ref()
-    }
-
-    /// Get a mutable reference to the request fetch mode.
-    /// To know the mode, refer https://developer.mozilla.org/en-US/docs/Web/API/Request/mode
-    #[inline]
-    pub fn fetch_mode_mut(&mut self) -> &mut Option<RequestMode> {
-        &mut self.fetch_mode
-    }
-
-    /// Get the cache mode.
-    /// To know the mode, refer https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
-    #[inline]
-    pub fn cache_mode(&self) -> Option<&RequestCache> {
-        self.cache_mode.as_ref()
-    }
-
-    /// Get a mutable reference to the cache mode.
-    /// To know the mode, refer https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
-    #[inline]
-    pub fn cache_mode_mut(&mut self) -> &mut Option<RequestCache> {
-        &mut self.cache_mode
-    }
 }
 
 impl RequestBuilder {
@@ -152,20 +121,12 @@ impl RequestBuilder {
         self
     }
 
-    /// Set a request fetch mode to this request.
-    /// To know the mode, refer https://developer.mozilla.org/en-US/docs/Web/API/Request/mode
-    pub fn fetch_mode(mut self, mode: RequestMode) -> RequestBuilder {
+    /// Disable CORS on fetching the request. This option is only effective with WebAssembly target.
+    /// A request mode will be set to 'no-cors'.
+    /// To know the details, refer https://developer.mozilla.org/en-US/docs/Web/API/Request/mode
+    pub fn fetch_mode_no_cors(mut self) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            req.fetch_mode = Some(mode);
-        }
-        self
-    }
-
-    /// Set a request cache mode to this request.
-    /// To know the mode, refer https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
-    pub fn cache_mode(mut self, mode: RequestCache) -> RequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            req.cache_mode = Some(mode);
+            req.cors = false;
         }
         self
     }

@@ -353,6 +353,13 @@ impl RequestBuilder {
         self
     }
 
+    /// Disable CORS on fetching the request. This option is only effective with WebAssembly target.
+    /// A request mode will be set to 'no-cors'.
+    /// To know the details, refer https://developer.mozilla.org/en-US/docs/Web/API/Request/mode
+    pub fn fetch_mode_no_cors(self) -> RequestBuilder {
+        self
+    }
+
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
     pub fn build(self) -> crate::Result<Request> {

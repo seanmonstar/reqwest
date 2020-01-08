@@ -120,12 +120,9 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     }
     init.headers(&js_headers.into());
 
-    if let Some(mode) = req.fetch_mode() {
-        init.mode(mode.clone());
-    }
-
-    if let Some(mode) = req.cache_mode() {
-        init.cache(mode.clone());
+    // When req.cors is true, do nothing because the default mode is 'cors'
+    if !req.cors {
+        init.mode(web_sys::RequestMode::NoCors);
     }
 
     if let Some(body) = req.body() {
