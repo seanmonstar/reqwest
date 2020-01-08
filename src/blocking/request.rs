@@ -1,5 +1,6 @@
 use std::fmt;
 use std::convert::TryFrom;
+use std::time::Duration;
 
 use base64::encode;
 use serde::Serialize;
@@ -82,6 +83,18 @@ impl Request {
     #[inline]
     pub fn body_mut(&mut self) -> &mut Option<Body> {
         &mut self.body
+    }
+
+    /// Get the timeout.
+    #[inline]
+    pub fn timeout(&self) -> Option<&Duration> {
+        self.inner.timeout()
+    }
+
+    /// Get a mutable reference to the timeout.
+    #[inline]
+    pub fn timeout_mut(&mut self) -> &mut Option<Duration> {
+        self.inner.timeout_mut()
     }
 
     /// Attempts to clone the `Request`.
@@ -296,6 +309,18 @@ impl RequestBuilder {
     pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             *req.body_mut() = Some(body.into());
+        }
+        self
+    }
+
+    /// Enables a request timeout.
+    ///
+    /// The timeout is applied from the when the request starts connecting
+    /// until the response body has finished. It affects only this request
+    /// and overrides the timeout configured using `ClientBuilder::timeout()`.
+    pub fn timeout(mut self, timeout: Duration) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *req.timeout_mut() = Some(timeout);
         }
         self
     }
