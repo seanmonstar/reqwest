@@ -64,6 +64,7 @@ struct Config {
     #[cfg(feature = "__tls")]
     certs_verification: bool,
     connect_timeout: Option<Duration>,
+    connection_verbose: bool,
     max_idle_per_host: usize,
     #[cfg(feature = "__tls")]
     identity: Option<Identity>,
@@ -111,6 +112,7 @@ impl ClientBuilder {
                 #[cfg(feature = "__tls")]
                 certs_verification: true,
                 connect_timeout: None,
+                connection_verbose: false,
                 max_idle_per_host: std::usize::MAX,
                 proxies: Vec::new(),
                 auto_sys_proxy: true,
@@ -234,6 +236,7 @@ impl ClientBuilder {
         };
 
         connector.set_timeout(config.connect_timeout);
+        connector.set_verbose(config.connection_verbose);
 
         let mut builder = hyper::Client::builder();
         if config.http2_only {
@@ -486,6 +489,17 @@ impl ClientBuilder {
     /// a tokio timer enabled.
     pub fn connect_timeout(mut self, timeout: Duration) -> ClientBuilder {
         self.config.connect_timeout = Some(timeout);
+        self
+    }
+
+    /// Set whether connections should emit verbose logs.
+    ///
+    /// Enabling this option will emit [log][] messages at the `TRACE` level
+    /// for read and write operations on connections.
+    ///
+    /// [log]: https://crates.io/crates/log
+    pub fn connection_verbose(mut self, verbose: bool) -> ClientBuilder {
+        self.config.connection_verbose = verbose;
         self
     }
 
