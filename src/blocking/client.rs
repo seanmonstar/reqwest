@@ -273,6 +273,16 @@ impl ClientBuilder {
         }
     }
 
+    /// Set whether connections should emit verbose logs.
+    ///
+    /// Enabling this option will emit [log][] messages at the `TRACE` level
+    /// for read and write operations on connections.
+    ///
+    /// [log]: https://crates.io/crates/log
+    pub fn connection_verbose(self, verbose: bool) -> ClientBuilder {
+        self.with_inner(move |inner| inner.connection_verbose(verbose))
+    }
+
     // HTTP options
 
     /// Sets the maximum idle connection per host allowed in the pool.

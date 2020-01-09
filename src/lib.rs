@@ -294,6 +294,7 @@ if_hyper! {
     pub mod redirect;
     #[cfg(feature = "__tls")]
     mod tls;
+    mod util;
 }
 
 if_wasm! {
