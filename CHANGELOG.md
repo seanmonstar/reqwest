@@ -1,3 +1,11 @@
+## v0.10.1
+
+- Add `socks` optional feature to support SOCKS5 proxies.
+- Add `RequestBuilder::timeout()` to configure a timeout for a single request, instead of using the client's timeout.
+- Add `ClientBuilder::connection_verbose()` option to enable verbose IO logs.
+- (wasm) Add `RequestBuilder::fetch_mode_no_cors()` option.
+- (wasm) Add `Response::url()` getter method.
+
 # v0.10.0
 
 - Add `std::future::Future` support.
