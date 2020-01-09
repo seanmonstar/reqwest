@@ -47,6 +47,8 @@ json = ["serde_json"]
 
 stream = []
 
+socks = ["tokio-socks"]
+
 # Internal (PRIVATE!) features used to aid testing.
 # Don't rely on these whatsoever. They may disappear at anytime.
 
@@ -107,7 +109,7 @@ async-compression = { version = "0.2.0", default-features = false, features = ["
 serde_json = { version = "1.0", optional = true }
 
 ## socks
-#socks = { version = "0.3.2", optional = true }
+tokio-socks = { version = "0.2", optional = true }
 
 ## trust-dns
 #trust-dns-resolver = { version = "0.11", optional = true }
@@ -155,6 +157,11 @@ required-features = ["json"]
 name = "json_typed"
 path = "examples/json_typed.rs"
 required-features = ["json"]
+
+[[example]]
+name = "tor_socks"
+path = "examples/tor_socks.rs"
+required-features = ["socks"]
 
 [[test]]
 name = "blocking"
