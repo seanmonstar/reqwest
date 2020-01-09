@@ -3,19 +3,24 @@ use std::fmt;
 use bytes::Bytes;
 use js_sys::Uint8Array;
 use http::{HeaderMap, StatusCode};
+use url::Url;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
     http: http::Response<web_sys::Response>,
+    // Boxed to save space (11 words to 1 word), and it's not accessed
+    // frequently internally.
+    url: Box<Url>,
 }
 
 impl Response {
     pub(super) fn new(
         res: http::Response<web_sys::Response>,
-        //url: Url,
+        url: Url,
     ) -> Response {
         Response {
             http: res,
+            url: Box::new(url),
         }
     }
 
@@ -35,6 +40,12 @@ impl Response {
     #[inline]
     pub fn headers_mut(&mut self) -> &mut HeaderMap {
         self.http.headers_mut()
+    }
+
+    /// Get the final `Url` of this `Response`.
+    #[inline]
+    pub fn url(&self) -> &Url {
+        &self.url
     }
 
     /* It might not be possible to detect this in JS?
