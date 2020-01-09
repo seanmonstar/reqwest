@@ -2,6 +2,7 @@ use http::Method;
 use js_sys::Uint8Array;
 use std::future::Future;
 use wasm_bindgen::UnwrapThrowExt as _;
+use url::Url;
 
 use super::{Request, RequestBuilder, Response};
 use crate::IntoUrl;
@@ -147,6 +148,8 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     let mut resp = http::Response::builder()
         .status(js_resp.status());
 
+    let url = Url::parse(&js_resp.url()).expect_throw("url parse");
+
     let js_headers = js_resp.headers();
     let js_iter = js_sys::try_iter(&js_headers)
         .expect_throw("headers try_iter")
@@ -162,7 +165,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     }
 
     resp.body(js_resp)
-        .map(Response::new)
+        .map(|resp| Response::new(resp, url))
         .map_err(crate::error::request)
 }
 
