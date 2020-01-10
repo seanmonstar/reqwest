@@ -89,6 +89,28 @@ impl Response {
         buffer.copy_to(&mut bytes);
         Ok(bytes.into())
     }
+
+    // util methods
+
+    /// Turn a response into an error if the server returned an error.
+    pub fn error_for_status(self) -> crate::Result<Self> {
+        let status = self.status();
+        if status.is_client_error() || status.is_server_error() {
+            Err(crate::error::status_code(*self.url, status))
+        } else {
+            Ok(self)
+        }
+    }
+
+    /// Turn a reference to a response into an error if the server returned an error.
+    pub fn error_for_status_ref(&self) -> crate::Result<&Self> {
+        let status = self.status();
+        if status.is_client_error() || status.is_server_error() {
+            Err(crate::error::status_code(*self.url.clone(), status))
+        } else {
+            Ok(self)
+        }
+    }
 }
 
 impl fmt::Debug for Response {
