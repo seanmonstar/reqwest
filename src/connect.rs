@@ -242,17 +242,23 @@ impl Connector {
             Inner::DefaultTls(http, tls) => {
                 let mut http = http.clone();
 
-                http.set_nodelay(self.nodelay || (dst.scheme() == Some(&Scheme::HTTPS)));
+
+                // Disable Nagle's algorithm for TLS handshake
+                //
+                // https://www.openssl.org/docs/man1.1.1/man3/SSL_connect.html#NOTES
+                if !self.nodelay && (dst.scheme() == Some(&Scheme::HTTPS)) {
+                    http.set_nodelay(true);
+                }
 
                 let tls_connector = tokio_tls::TlsConnector::from(tls.clone());
                 let mut http = hyper_tls::HttpsConnector::from((http, tls_connector));
                 let io = http.call(dst).await?;
-                //TODO: where's this at now?
-                //if let hyper_tls::MaybeHttpsStream::Https(_stream) = &io {
-                //    if !no_delay {
-                //        stream.set_nodelay(false)?;
-                //    }
-                //}
+
+                if let hyper_tls::MaybeHttpsStream::Https(stream) = &io {
+                    if !self.nodelay {
+                        stream.get_ref().set_nodelay(false)?;
+                    }
+                }
 
                 Ok(Conn {
                     inner: self.verbose.wrap(io),
@@ -266,7 +272,9 @@ impl Connector {
                 // Disable Nagle's algorithm for TLS handshake
                 //
                 // https://www.openssl.org/docs/man1.1.1/man3/SSL_connect.html#NOTES
-                http.set_nodelay(self.nodelay || (dst.scheme() == Some(&Scheme::HTTPS)));
+                if !self.nodelay && (dst.scheme() == Some(&Scheme::HTTPS)) {
+                    http.set_nodelay(true);
+                }
 
                 let mut http = hyper_rustls::HttpsConnector::from((http, tls.clone()));
                 let io = http.call(dst).await?;
@@ -310,8 +318,7 @@ impl Connector {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     let host = dst.host().to_owned();
                     let port = dst.port().map(|p| p.as_u16()).unwrap_or(443);
-                    let mut http = http.clone();
-                    http.set_nodelay(self.nodelay);
+                    let http = http.clone();
                     let tls_connector = tokio_tls::TlsConnector::from(tls.clone());
                     let mut http = hyper_tls::HttpsConnector::from((http, tls_connector));
                     let conn = http.call(proxy_dst).await?;
@@ -350,8 +357,7 @@ impl Connector {
                         .ok_or("no host in url")?
                         .to_string();
                     let port = dst.port().map(|r| r.as_u16()).unwrap_or(443);
-                    let mut http = http.clone();
-                    http.set_nodelay(self.nodelay);
+                    let http = http.clone();
                     let mut http = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
                     let tls = tls.clone();
                     let conn = http.call(proxy_dst).await?;
