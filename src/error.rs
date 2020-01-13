@@ -82,7 +82,16 @@ impl Error {
 
     /// Returns true if the error is related to a timeout.
     pub fn is_timeout(&self) -> bool {
-        self.source().map(|e| e.is::<TimedOut>()).unwrap_or(false)
+        let mut source = self.source();
+
+        while let Some(err) = source {
+            if err.is::<TimedOut>() {
+                return true;
+            }
+            source = err.source();
+        }
+
+        false
     }
 
     /// Returns the status code, if the error was generated from a response.
@@ -308,5 +317,15 @@ mod tests {
             Kind::Decode => (),
             _ => panic!("{:?}", err),
         }
+    }
+
+    #[test]
+    fn is_timeout() {
+        let err = super::request(super::TimedOut);
+        assert!(err.is_timeout());
+
+        let io = io::Error::new(io::ErrorKind::Other, err);
+        let nested = super::request(io);
+        assert!(nested.is_timeout());
     }
 }
