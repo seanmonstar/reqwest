@@ -9,7 +9,6 @@ use http;
 use hyper::client::connect::HttpInfo;
 use hyper::header::CONTENT_LENGTH;
 use hyper::{HeaderMap, StatusCode, Version};
-use log::debug;
 use mime::Mime;
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
@@ -50,7 +49,6 @@ impl Response {
         let mut headers = parts.headers;
         let decoder = Decoder::detect(&mut headers, Body::response(body, timeout), gzip);
 
-        debug!("Response: '{}' for {}", status, url);
         Response {
             status,
             headers,

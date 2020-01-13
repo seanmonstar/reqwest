@@ -293,7 +293,7 @@ impl Connector {
         dst: Uri,
         proxy_scheme: ProxyScheme,
     ) -> Result<Conn, BoxError> {
-        log::trace!("proxy({:?}) intercepts {:?}", proxy_scheme, dst);
+        log::debug!("proxy({:?}) intercepts '{:?}'", proxy_scheme, dst);
 
         let (proxy_dst, _auth) = match proxy_scheme {
             ProxyScheme::Http { host, auth } => (into_uri(Scheme::HTTP, host), auth),
@@ -421,8 +421,7 @@ where
     }
 }
 
-impl Service<Uri> for Connector
-{
+impl Service<Uri> for Connector {
     type Response = Conn;
     type Error = BoxError;
     type Future = Connecting;
@@ -432,6 +431,7 @@ impl Service<Uri> for Connector
     }
 
     fn call(&mut self, dst: Uri) -> Self::Future {
+        log::debug!("starting new connection: {:?}", dst);
         let timeout = self.timeout;
         for prox in self.proxies.iter() {
             if let Some(proxy_scheme) = prox.intercept(&dst) {

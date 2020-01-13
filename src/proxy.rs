@@ -55,7 +55,7 @@ pub struct Proxy {
 /// A particular scheme used for proxying requests.
 ///
 /// For example, HTTP vs SOCKS5
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum ProxyScheme {
     Http {
         auth: Option<HeaderValue>,
@@ -430,6 +430,38 @@ impl ProxyScheme {
             ProxyScheme::Https { host, .. } => host.as_str(),
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => panic!("socks5"),
+        }
+    }
+}
+
+impl fmt::Debug for ProxyScheme {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ProxyScheme::Http {
+                auth: _auth,
+                host,
+            } => {
+                write!(f, "http://{}", host)
+            },
+            ProxyScheme::Https {
+                auth: _auth,
+                host,
+            } => {
+                write!(f, "https://{}", host)
+            },
+            #[cfg(feature = "socks")]
+            ProxyScheme::Socks5 {
+                addr,
+                auth: _auth,
+                remote_dns,
+            } => {
+                let h = if *remote_dns {
+                    "h"
+                } else {
+                    ""
+                };
+                write!(f, "socks5{}://{}", h, addr)
+            }
         }
     }
 }

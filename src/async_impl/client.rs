@@ -1189,13 +1189,13 @@ impl Future for PendingRequest {
 
                     match action {
                         redirect::ActionKind::Follow => {
+                            debug!("redirecting '{}' to '{}'", self.url, loc);
                             self.url = loc;
 
                             let mut headers =
                                 std::mem::replace(self.as_mut().headers(), HeaderMap::new());
 
                             remove_sensitive_headers(&mut headers, &self.url, &self.urls);
-                            debug!("redirecting to {:?} '{}'", self.method, self.url);
                             let uri = expect_uri(&self.url);
                             let body = match self.body {
                                 Some(Some(ref body)) => Body::reusable(body.clone()),
@@ -1224,7 +1224,7 @@ impl Future for PendingRequest {
                             continue;
                         }
                         redirect::ActionKind::Stop => {
-                            debug!("redirect_policy disallowed redirection to '{}'", loc);
+                            debug!("redirect policy disallowed redirection to '{}'", loc);
                         }
                         redirect::ActionKind::Error(err) => {
                             return Poll::Ready(Err(crate::error::redirect(
@@ -1235,6 +1235,8 @@ impl Future for PendingRequest {
                     }
                 }
             }
+
+            debug!("response '{}' for {}", res.status(), self.url);
             let res = Response::new(res, self.url.clone(), self.client.gzip, self.timeout.take());
             return Poll::Ready(Ok(res));
         }
