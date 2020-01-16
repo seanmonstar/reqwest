@@ -177,6 +177,8 @@
 //! - **json**: Provides serialization and deserialization for JSON bodies.
 //! - **stream**: Adds support for `futures::Stream`.
 //! - **socks**: Provides SOCKS5 proxy support.
+//! - **trust-dns**: Enables a trust-dns async resolver instead of default
+//!   threadpool using `getaddrinfo`.
 //!
 //!
 //! [hyper]: http://hyper.rs
@@ -188,8 +190,6 @@
 //! [redirect]: crate::redirect
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
-////! - **trust-dns**: Enables a trust-dns async resolver instead of default
-////!   threadpool using `getaddrinfo`.
 
 macro_rules! if_wasm {
     ($($item:item)*) => {$(
@@ -295,8 +295,8 @@ if_hyper! {
     mod connect;
     #[cfg(feature = "cookies")]
     pub mod cookie;
-    //#[cfg(feature = "trust-dns")]
-    //mod dns;
+    #[cfg(feature = "trust-dns")]
+    mod dns;
     mod proxy;
     pub mod redirect;
     #[cfg(feature = "__tls")]
