@@ -1,7 +1,6 @@
 mod support;
+use std::io::Read;
 use support::*;
-
-use std::io::Write;
 
 #[tokio::test]
 async fn brotli_response() {
@@ -15,16 +14,14 @@ async fn brotli_single_byte_chunks() {
 
 #[tokio::test]
 async fn test_brotli_empty_body() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.method(), "HEAD");
+    let server = server::http(move |req| async move {
+        assert_eq!(req.method(), "HEAD");
 
-            http::Response::builder()
-                .header("content-encoding", "br")
-                .header("content-length", 100)
-                .body(Default::default())
-                .unwrap()
-        }
+        http::Response::builder()
+            .header("content-encoding", "br")
+            .header("content-length", 100)
+            .body(Default::default())
+            .unwrap()
     });
 
     let client = reqwest::Client::new();
@@ -41,12 +38,13 @@ async fn test_brotli_empty_body() {
 
 #[tokio::test]
 async fn test_accept_header_is_not_changed_if_set() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.headers()["accept"], "application/json");
-            assert_eq!(req.headers()["accept-encoding"], "br");
-            http::Response::default()
-        }
+    let server = server::http(move |req| async move {
+        assert_eq!(req.headers()["accept"], "application/json");
+        assert!(req.headers()["accept-encoding"]
+            .to_str()
+            .unwrap()
+            .contains("br"));
+        http::Response::default()
     });
 
     let client = reqwest::Client::new();
@@ -66,12 +64,10 @@ async fn test_accept_header_is_not_changed_if_set() {
 
 #[tokio::test]
 async fn test_accept_encoding_header_is_not_changed_if_set() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.headers()["accept"], "*/*");
-            assert_eq!(req.headers()["accept-encoding"], "identity");
-            http::Response::default()
-        }
+    let server = server::http(move |req| async move {
+        assert_eq!(req.headers()["accept"], "*/*");
+        assert_eq!(req.headers()["accept-encoding"], "identity");
+        http::Response::default()
     });
 
     let client = reqwest::Client::new();
@@ -96,44 +92,43 @@ async fn brotli_case(response_size: usize, chunk_size: usize) {
         .into_iter()
         .map(|i| format!("test {}", i))
         .collect();
-    let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
-    match encoder.write(content.as_bytes()) {
-        Ok(n) => assert!(n > 0, "Failed to write to encoder."),
-        _ => panic!("Failed to gzip encode string."),
-    };
 
-    let gzipped_content = encoder.finish().into_result().unwrap();
+    let mut encoder = brotli2::bufread::BrotliEncoder::new(content.as_ref(), 9);
+    let mut brotlied_content = Vec::new();
+    encoder.read_to_end(&mut brotlied_content).unwrap();
 
     let mut response = format!(
         "\
          HTTP/1.1 200 OK\r\n\
          Server: test-accept\r\n\
-         Content-Encoding: gzip\r\n\
+         Content-Encoding: br\r\n\
          Content-Length: {}\r\n\
          \r\n",
-        &gzipped_content.len()
+        &brotlied_content.len()
     )
     .into_bytes();
-    response.extend(&gzipped_content);
+    response.extend(&brotlied_content);
 
     let server = server::http(move |req| {
-        assert_eq!(req.headers()["accept-encoding"], "gzip");
+        assert!(req.headers()["accept-encoding"]
+            .to_str()
+            .unwrap()
+            .contains("br"));
 
-        let gzipped = gzipped_content.clone();
+        let brotlied = brotlied_content.clone();
         async move {
-            let len = gzipped.len();
-            let stream = futures_util::stream::unfold((gzipped, 0), move |(gzipped, pos)| {
-                async move {
-                    let chunk = gzipped.chunks(chunk_size).nth(pos)?.to_vec();
+            let len = brotlied.len();
+            let stream =
+                futures_util::stream::unfold((brotlied, 0), move |(brotlied, pos)| async move {
+                    let chunk = brotlied.chunks(chunk_size).nth(pos)?.to_vec();
 
-                    Some((chunk, (gzipped, pos + 1)))
-                }
-            });
+                    Some((chunk, (brotlied, pos + 1)))
+                });
 
             let body = hyper::Body::wrap_stream(stream.map(Ok::<_, std::convert::Infallible>));
 
             http::Response::builder()
-                .header("content-encoding", "gzip")
+                .header("content-encoding", "br")
                 .header("content-length", len)
                 .body(body)
                 .unwrap()
@@ -143,7 +138,7 @@ async fn brotli_case(response_size: usize, chunk_size: usize) {
     let client = reqwest::Client::new();
 
     let res = client
-        .get(&format!("http://{}/gzip", server.addr()))
+        .get(&format!("http://{}/brotli", server.addr()))
         .send()
         .await
         .expect("response");

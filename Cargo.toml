@@ -121,6 +121,7 @@ env_logger = "0.6"
 hyper = { version = "0.13", default-features = false, features = ["tcp", "stream"] }
 serde = { version = "1.0", features = ["derive"] }
 libflate = "0.1"
+brotli2 = "0.3.2"
 doc-comment = "0.3"
 tokio = { version = "0.2.0", default-features = false, features = ["macros"] }
 

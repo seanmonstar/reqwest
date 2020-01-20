@@ -27,9 +27,10 @@ mod imp {
         inner: Inner,
     }
 
-    #[allow(dead_code)]
     enum DecoderType {
+        #[cfg(feature = "gzip")]
         Gzip,
+        #[cfg(feature = "brotli")]
         Brotli,
     }
 
@@ -269,15 +270,12 @@ mod imp {
                 IoStream(Body::empty().into_stream()).peekable(),
             );
 
-            let decoder = match self.1 {
+            match self.1 {
                 #[cfg(feature = "brotli")]
-                DecoderType::Brotli => Inner::Brotli(BrotliDecoder::new(_body)),
+                DecoderType::Brotli => Poll::Ready(Ok(Inner::Brotli(BrotliDecoder::new(_body)))),
                 #[cfg(feature = "gzip")]
-                DecoderType::Gzip => Inner::Gzip(GzipDecoder::new(_body)),
-                _ => Inner::PlainText(Body::empty().into_stream()),
-            };
-
-            Poll::Ready(Ok(decoder))
+                DecoderType::Gzip => Poll::Ready(Ok(Inner::Gzip(GzipDecoder::new(_body)))),
+            }
         }
     }
 
