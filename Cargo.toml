@@ -41,6 +41,8 @@ cookies = ["cookie_crate", "cookie_store"]
 
 gzip = ["async-compression"]
 
+brotli = ["async-compression"]
+
 json = ["serde_json"]
 
 #trust-dns = ["trust-dns-resolver"]
@@ -105,7 +107,7 @@ cookie_crate = { version = "0.12", package = "cookie", optional = true }
 cookie_store = { version = "0.10", optional = true }
 
 ## gzip
-async-compression = { version = "0.2.0", default-features = false, features = ["gzip", "stream"], optional = true }
+async-compression = { version = "0.2.0", default-features = false, features = ["gzip", "brotli", "stream"], optional = true }
 
 
 ## socks
@@ -177,3 +179,8 @@ required-features = ["cookies"]
 name = "gzip"
 path = "tests/gzip.rs"
 required-features = ["gzip"]
+
+[[test]]
+name = "brotli"
+path = "tests/brotli.rs"
+required-features = ["brotli"]

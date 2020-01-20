@@ -1,62 +1,21 @@
 pub(crate) use self::imp::Decoder;
 
-#[cfg(not(feature = "gzip"))]
 mod imp {
-    use std::pin::Pin;
-    use std::task::{Context, Poll};
-
-    use bytes::Bytes;
-    use futures_core::Stream;
-    use http::HeaderMap;
-
-    use super::super::Body;
-    pub(crate) struct Decoder {
-        inner: super::super::body::ImplStream,
-    }
-
-    impl Decoder {
-        #[cfg(feature = "blocking")]
-        pub(crate) fn empty() -> Decoder {
-            Decoder::plain_text(Body::empty())
-        }
-
-        /// A plain text decoder.
-        ///
-        /// This decoder will emit the underlying chunks as-is.
-        fn plain_text(body: Body) -> Decoder {
-            Decoder {
-                inner: body.into_stream(),
-            }
-        }
-
-        pub(crate) fn detect(_: &mut HeaderMap, body: Body, _: bool) -> Decoder {
-            Decoder::plain_text(body)
-        }
-    }
-
-    impl Stream for Decoder {
-        type Item = crate::Result<Bytes>;
-
-        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-            Pin::new(&mut self.inner).poll_next(cx)
-        }
-    }
-}
-
-#[cfg(feature = "gzip")]
-mod imp {
+    use std::fmt;
     use std::future::Future;
     use std::pin::Pin;
     use std::task::{Context, Poll};
-    use std::{fmt, mem};
 
+    #[cfg(feature = "gzip")]
     use async_compression::stream::GzipDecoder;
+
+    #[cfg(feature = "brotli")]
+    use async_compression::stream::BrotliDecoder;
+
     use bytes::Bytes;
     use futures_core::Stream;
     use futures_util::stream::Peekable;
-    use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
     use http::HeaderMap;
-    use log::warn;
 
     use super::super::Body;
     use crate::error;
@@ -68,17 +27,31 @@ mod imp {
         inner: Inner,
     }
 
+    #[allow(dead_code)]
+    enum DecoderType {
+        Gzip,
+        Brotli,
+    }
+
     enum Inner {
         /// A `PlainText` decoder just returns the response content as is.
         PlainText(super::super::body::ImplStream),
+
         /// A `Gzip` decoder will uncompress the gzipped response content before returning it.
+        #[cfg(feature = "gzip")]
         Gzip(GzipDecoder<Peekable<IoStream>>),
+
+        /// A `Brotli` decoder will uncompress the brotlied response content before returning it.
+        #[cfg(feature = "brotli")]
+        Brotli(BrotliDecoder<Peekable<IoStream>>),
+
         /// A decoder that doesn't have a value yet.
+        #[allow(dead_code)]
         Pending(Pending),
     }
 
     /// A future attempt to poll the response body for EOF so we know whether to use gzip or not.
-    struct Pending(Peekable<IoStream>);
+    struct Pending(Peekable<IoStream>, DecoderType);
 
     struct IoStream(super::super::body::ImplStream);
 
@@ -108,24 +81,38 @@ mod imp {
         /// A gzip decoder.
         ///
         /// This decoder will buffer and decompress chunks that are gzipped.
+        #[cfg(feature = "gzip")]
         fn gzip(body: Body) -> Decoder {
             use futures_util::StreamExt;
 
             Decoder {
-                inner: Inner::Pending(Pending(IoStream(body.into_stream()).peekable())),
+                inner: Inner::Pending(Pending(
+                    IoStream(body.into_stream()).peekable(),
+                    DecoderType::Gzip,
+                )),
             }
         }
 
-        /// Constructs a Decoder from a hyper request.
+        /// A brotli decoder.
         ///
-        /// A decoder is just a wrapper around the hyper request that knows
-        /// how to decode the content body of the request.
-        ///
-        /// Uses the correct variant by inspecting the Content-Encoding header.
-        pub(crate) fn detect(headers: &mut HeaderMap, body: Body, check_gzip: bool) -> Decoder {
-            if !check_gzip {
-                return Decoder::plain_text(body);
+        /// This decoder will buffer and decompress chunks that are brotlied.
+        #[cfg(feature = "brotli")]
+        fn brotli(body: Body) -> Decoder {
+            use futures_util::StreamExt;
+
+            Decoder {
+                inner: Inner::Pending(Pending(
+                    IoStream(body.into_stream()).peekable(),
+                    DecoderType::Brotli,
+                )),
             }
+        }
+
+        #[cfg(feature = "gzip")]
+        fn detect_gzip(headers: &mut HeaderMap) -> bool {
+            use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
+            use log::warn;
+
             let content_encoding_gzip: bool;
             let mut is_gzip = {
                 content_encoding_gzip = headers
@@ -146,15 +133,76 @@ mod imp {
                     }
                 }
             }
-            if content_encoding_gzip {
+            if is_gzip {
                 headers.remove(CONTENT_ENCODING);
                 headers.remove(CONTENT_LENGTH);
             }
-            if is_gzip {
-                Decoder::gzip(body)
-            } else {
-                Decoder::plain_text(body)
+            is_gzip
+        }
+
+        #[cfg(feature = "brotli")]
+        fn detect_brotli(headers: &mut HeaderMap) -> bool {
+            use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
+            use log::warn;
+
+            let content_encoding_gzip: bool;
+            let mut is_brotli = {
+                content_encoding_gzip = headers
+                    .get_all(CONTENT_ENCODING)
+                    .iter()
+                    .any(|enc| enc == "br");
+                content_encoding_gzip
+                    || headers
+                        .get_all(TRANSFER_ENCODING)
+                        .iter()
+                        .any(|enc| enc == "br")
+            };
+            if is_brotli {
+                if let Some(content_length) = headers.get(CONTENT_LENGTH) {
+                    if content_length == "0" {
+                        warn!("brotli response with content-length of 0");
+                        is_brotli = false;
+                    }
+                }
             }
+            if is_brotli {
+                headers.remove(CONTENT_ENCODING);
+                headers.remove(CONTENT_LENGTH);
+            }
+            is_brotli
+        }
+
+        /// Constructs a Decoder from a hyper request.
+        ///
+        /// A decoder is just a wrapper around the hyper request that knows
+        /// how to decode the content body of the request.
+        ///
+        /// Uses the correct variant by inspecting the Content-Encoding header.
+        pub(crate) fn detect(
+            _headers: &mut HeaderMap,
+            body: Body,
+            check_gzip: bool,
+            check_brotli: bool,
+        ) -> Decoder {
+            if !check_gzip && !check_brotli {
+                return Decoder::plain_text(body);
+            }
+
+            #[cfg(feature = "gzip")]
+            {
+                if Decoder::detect_gzip(_headers) {
+                    return Decoder::gzip(body);
+                }
+            }
+
+            #[cfg(feature = "brotli")]
+            {
+                if Decoder::detect_brotli(_headers) {
+                    return Decoder::brotli(body);
+                }
+            }
+
+            Decoder::plain_text(body)
         }
     }
 
@@ -167,17 +215,26 @@ mod imp {
                 Inner::Pending(ref mut future) => match Pin::new(future).poll(cx) {
                     Poll::Ready(Ok(inner)) => inner,
                     Poll::Ready(Err(e)) => {
-                        return Poll::Ready(Some(Err(crate::error::decode_io(e))))
+                        return Poll::Ready(Some(Err(crate::error::decode_io(e))));
                     }
                     Poll::Pending => return Poll::Pending,
                 },
                 Inner::PlainText(ref mut body) => return Pin::new(body).poll_next(cx),
+                #[cfg(feature = "gzip")]
                 Inner::Gzip(ref mut decoder) => {
                     return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                         Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes))),
                         Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                         None => Poll::Ready(None),
-                    }
+                    };
+                }
+                #[cfg(feature = "brotli")]
+                Inner::Brotli(ref mut decoder) => {
+                    return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
+                        Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes))),
+                        Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
+                        None => Poll::Ready(None),
+                    };
                 }
             };
 
@@ -207,11 +264,20 @@ mod imp {
                 None => return Poll::Ready(Ok(Inner::PlainText(Body::empty().into_stream()))),
             };
 
-            let body = mem::replace(
+            let _body = std::mem::replace(
                 &mut self.0,
                 IoStream(Body::empty().into_stream()).peekable(),
             );
-            Poll::Ready(Ok(Inner::Gzip(GzipDecoder::new(body))))
+
+            let decoder = match self.1 {
+                #[cfg(feature = "brotli")]
+                DecoderType::Brotli => Inner::Brotli(BrotliDecoder::new(_body)),
+                #[cfg(feature = "gzip")]
+                DecoderType::Gzip => Inner::Gzip(GzipDecoder::new(_body)),
+                _ => Inner::PlainText(Body::empty().into_stream()),
+            };
+
+            Poll::Ready(Ok(decoder))
         }
     }
 

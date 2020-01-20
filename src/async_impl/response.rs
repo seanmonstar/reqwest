@@ -39,6 +39,7 @@ impl Response {
         res: hyper::Response<hyper::Body>,
         url: Url,
         gzip: bool,
+        brotli: bool,
         timeout: Option<Delay>,
     ) -> Response {
         let (parts, body) = res.into_parts();
@@ -47,7 +48,7 @@ impl Response {
         let extensions = parts.extensions;
 
         let mut headers = parts.headers;
-        let decoder = Decoder::detect(&mut headers, Body::response(body, timeout), gzip);
+        let decoder = Decoder::detect(&mut headers, Body::response(body, timeout), gzip, brotli);
 
         Response {
             status,
@@ -404,7 +405,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
     fn from(r: http::Response<T>) -> Response {
         let (mut parts, body) = r.into_parts();
         let body = body.into();
-        let body = Decoder::detect(&mut parts.headers, body, false);
+        let body = Decoder::detect(&mut parts.headers, body, false, false);
         let url = parts
             .extensions
             .remove::<ResponseUrl>()
@@ -439,7 +440,6 @@ pub trait ResponseBuilderExt {
     /// to the `http::Response`
     fn url(self, url: Url) -> Self;
 }
-
 
 impl ResponseBuilderExt for http::response::Builder {
     fn url(self, url: Url) -> Self {
