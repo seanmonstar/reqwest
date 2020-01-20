@@ -141,6 +141,12 @@
 //! i.e. `let proxy = reqwest::Proxy::http("https://secure.example")?;`
 //! or disabled by calling `ClientBuilder::no_proxy()`.
 //!
+//! `socks` feature is required if you have configured socks proxy like this:
+//!
+//! ```bash
+//! export https_proxy=socks5://127.0.0.1:1086
+//! ```
+//!
 //! ## TLS
 //!
 //! By default, a `Client` will make use of system-native transport layer
