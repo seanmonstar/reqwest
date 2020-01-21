@@ -47,6 +47,7 @@ mod imp {
         Brotli(BrotliDecoder<Peekable<IoStream>>),
 
         /// A decoder that doesn't have a value yet.
+        /// If gzip and brotli are not enabled, dead code will be triggered
         #[allow(dead_code)]
         Pending(Pending),
     }

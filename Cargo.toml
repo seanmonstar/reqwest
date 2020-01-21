@@ -39,9 +39,9 @@ blocking = ["futures-util/io", "tokio/rt-threaded", "tokio/rt-core", "tokio/sync
 
 cookies = ["cookie_crate", "cookie_store"]
 
-gzip = ["async-compression"]
+gzip = ["async-compression", "async-compression/gzip"]
 
-brotli = ["async-compression"]
+brotli = ["async-compression", "async-compression/brotli"]
 
 json = ["serde_json"]
 
@@ -107,7 +107,7 @@ cookie_crate = { version = "0.12", package = "cookie", optional = true }
 cookie_store = { version = "0.10", optional = true }
 
 ## gzip
-async-compression = { version = "0.2.0", default-features = false, features = ["gzip", "brotli", "stream"], optional = true }
+async-compression = { version = "0.2.0", default-features = false, features = ["stream"], optional = true }
 
 
 ## socks
