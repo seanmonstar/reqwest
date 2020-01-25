@@ -47,8 +47,7 @@ mod imp {
         Brotli(BrotliDecoder<Peekable<IoStream>>),
 
         /// A decoder that doesn't have a value yet.
-        /// If gzip and brotli are not enabled, dead code will be triggered
-        #[allow(dead_code)]
+        #[cfg(any(feature = "brotli", feature = "gzip"))]
         Pending(Pending),
     }
 
@@ -213,9 +212,13 @@ mod imp {
 
         fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
             // Do a read or poll for a pending decoder value.
-            let new_value = match self.inner {
+            match self.inner {
+                #[cfg(any(feature = "brotli", feature = "gzip"))]
                 Inner::Pending(ref mut future) => match Pin::new(future).poll(cx) {
-                    Poll::Ready(Ok(inner)) => inner,
+                    Poll::Ready(Ok(inner)) => {
+                        self.inner = inner;
+                        return self.poll_next(cx);
+                    }
                     Poll::Ready(Err(e)) => {
                         return Poll::Ready(Some(Err(crate::error::decode_io(e))));
                     }
@@ -239,9 +242,6 @@ mod imp {
                     };
                 }
             };
-
-            self.inner = new_value;
-            self.poll_next(cx)
         }
     }
 
