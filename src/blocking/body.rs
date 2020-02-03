@@ -80,6 +80,38 @@ impl Body {
         }
     }
 
+    /// Returns the body as a byte slice if the body is already buffered in
+    /// memory. For streamed requests this method returns `None`.
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        match self.kind {
+            Kind::Reader(_, _) => None,
+            Kind::Bytes(ref bytes) => Some(bytes.as_ref()),
+        }
+    }
+
+    /// Converts streamed requests to their buffered equivalent and
+    /// returns a reference to the buffer. If the request is already
+    /// buffered, this has no effect.
+    /// 
+    /// Be aware that for large requests this method is expensive
+    /// and may cause your program to run out of memory.
+    pub fn buffer(&mut self) -> Result<&[u8], crate::Error> {
+        match self.kind {
+            Kind::Reader(ref mut reader, maybe_len) => {
+                let mut bytes = if let Some(len) = maybe_len {
+                    Vec::with_capacity(len as usize)
+                } else {
+                    Vec::new()
+                };
+                io::copy(reader, &mut bytes)
+                    .map_err(crate::error::builder)?;
+                self.kind = Kind::Bytes(bytes.into());
+                self.buffer()
+            },
+            Kind::Bytes(ref bytes) => Ok(bytes.as_ref()),
+        }
+    }
+
     pub(crate) fn len(&self) -> Option<u64> {
         match self.kind {
             Kind::Reader(_, len) => len,
