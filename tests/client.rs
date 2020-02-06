@@ -6,18 +6,16 @@ use reqwest::Client;
 
 #[tokio::test]
 async fn auto_headers() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.method(), "GET");
+    let server = server::http(move |req| async move {
+        assert_eq!(req.method(), "GET");
 
-            assert_eq!(req.headers()["accept"], "*/*");
-            assert_eq!(req.headers().get("user-agent"), None);
-            if cfg!(feature = "gzip") {
-                assert_eq!(req.headers()["accept-encoding"], "gzip");
-            }
-
-            http::Response::default()
+        assert_eq!(req.headers()["accept"], "*/*");
+        assert_eq!(req.headers().get("user-agent"), None);
+        if cfg!(feature = "gzip") {
+            assert_eq!(req.headers()["accept-encoding"], "gzip");
         }
+
+        http::Response::default()
     });
 
     let url = format!("http://{}/1", server.addr());
@@ -30,11 +28,9 @@ async fn auto_headers() {
 
 #[tokio::test]
 async fn user_agent() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.headers()["user-agent"], "reqwest-test-agent");
-            http::Response::default()
-        }
+    let server = server::http(move |req| async move {
+        assert_eq!(req.headers()["user-agent"], "reqwest-test-agent");
+        http::Response::default()
     });
 
     let url = format!("http://{}/ua", server.addr());
@@ -89,23 +85,21 @@ async fn response_json() {
 async fn body_pipe_response() {
     let _ = env_logger::try_init();
 
-    let server = server::http(move |mut req| {
-        async move {
-            if req.uri() == "/get" {
-                http::Response::new("pipe me".into())
-            } else {
-                assert_eq!(req.uri(), "/pipe");
-                assert_eq!(req.headers()["transfer-encoding"], "chunked");
+    let server = server::http(move |mut req| async move {
+        if req.uri() == "/get" {
+            http::Response::new("pipe me".into())
+        } else {
+            assert_eq!(req.uri(), "/pipe");
+            assert_eq!(req.headers()["transfer-encoding"], "chunked");
 
-                let mut full: Vec<u8> = Vec::new();
-                while let Some(item) = req.body_mut().next().await {
-                    full.extend(&*item.unwrap());
-                }
-
-                assert_eq!(full, b"pipe me");
-
-                http::Response::default()
+            let mut full: Vec<u8> = Vec::new();
+            while let Some(item) = req.body_mut().next().await {
+                full.extend(&*item.unwrap());
             }
+
+            assert_eq!(full, b"pipe me");
+
+            http::Response::default()
         }
     });
 

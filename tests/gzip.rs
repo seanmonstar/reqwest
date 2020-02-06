@@ -15,16 +15,14 @@ async fn gzip_single_byte_chunks() {
 
 #[tokio::test]
 async fn test_gzip_empty_body() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.method(), "HEAD");
+    let server = server::http(move |req| async move {
+        assert_eq!(req.method(), "HEAD");
 
-            http::Response::builder()
-                .header("content-encoding", "gzip")
-                .header("content-length", 100)
-                .body(Default::default())
-                .unwrap()
-        }
+        http::Response::builder()
+            .header("content-encoding", "gzip")
+            .header("content-length", 100)
+            .body(Default::default())
+            .unwrap()
     });
 
     let client = reqwest::Client::new();
@@ -41,12 +39,10 @@ async fn test_gzip_empty_body() {
 
 #[tokio::test]
 async fn test_accept_header_is_not_changed_if_set() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.headers()["accept"], "application/json");
-            assert_eq!(req.headers()["accept-encoding"], "gzip");
-            http::Response::default()
-        }
+    let server = server::http(move |req| async move {
+        assert_eq!(req.headers()["accept"], "application/json");
+        assert_eq!(req.headers()["accept-encoding"], "gzip");
+        http::Response::default()
     });
 
     let client = reqwest::Client::new();
@@ -66,12 +62,10 @@ async fn test_accept_header_is_not_changed_if_set() {
 
 #[tokio::test]
 async fn test_accept_encoding_header_is_not_changed_if_set() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.headers()["accept"], "*/*");
-            assert_eq!(req.headers()["accept-encoding"], "identity");
-            http::Response::default()
-        }
+    let server = server::http(move |req| async move {
+        assert_eq!(req.headers()["accept"], "*/*");
+        assert_eq!(req.headers()["accept-encoding"], "identity");
+        http::Response::default()
     });
 
     let client = reqwest::Client::new();
@@ -122,13 +116,12 @@ async fn gzip_case(response_size: usize, chunk_size: usize) {
         let gzipped = gzipped_content.clone();
         async move {
             let len = gzipped.len();
-            let stream = futures_util::stream::unfold((gzipped, 0), move |(gzipped, pos)| {
-                async move {
+            let stream =
+                futures_util::stream::unfold((gzipped, 0), move |(gzipped, pos)| async move {
                     let chunk = gzipped.chunks(chunk_size).nth(pos)?.to_vec();
 
                     Some((chunk, (gzipped, pos + 1)))
-                }
-            });
+                });
 
             let body = hyper::Body::wrap_stream(stream.map(Ok::<_, std::convert::Infallible>));
 
