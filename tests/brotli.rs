@@ -93,7 +93,7 @@ async fn brotli_case(response_size: usize, chunk_size: usize) {
         .map(|i| format!("test {}", i))
         .collect();
 
-    let mut encoder = brotli2::bufread::BrotliEncoder::new(content.as_ref(), 9);
+    let mut encoder = brotli::CompressorReader::new(content.as_bytes(), 4096, 5, 20);
     let mut brotlied_content = Vec::new();
     encoder.read_to_end(&mut brotlied_content).unwrap();
 

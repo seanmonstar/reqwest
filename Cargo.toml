@@ -39,9 +39,9 @@ blocking = ["futures-util/io", "tokio/rt-threaded", "tokio/rt-core", "tokio/sync
 
 cookies = ["cookie_crate", "cookie_store"]
 
-gzip = ["async-compression", "async-compression/gzip"]
+compression-gzip = ["async-compression", "async-compression/gzip"]
 
-brotli = ["async-compression", "async-compression/brotli"]
+compression-brotli = ["async-compression", "async-compression/brotli"]
 
 json = ["serde_json"]
 
@@ -106,8 +106,8 @@ webpki-roots = { version = "0.17", optional = true }
 cookie_crate = { version = "0.12", package = "cookie", optional = true }
 cookie_store = { version = "0.10", optional = true }
 
-## gzip
-async-compression = { version = "0.2.0", default-features = false, features = ["stream"], optional = true }
+## compression
+async-compression = { version = "0.3.0", default-features = false, features = ["stream"], optional = true }
 
 
 ## socks
@@ -121,7 +121,7 @@ env_logger = "0.6"
 hyper = { version = "0.13", default-features = false, features = ["tcp", "stream"] }
 serde = { version = "1.0", features = ["derive"] }
 libflate = "0.1"
-brotli2 = "0.3.2"
+brotli = "3.3.0"
 doc-comment = "0.3"
 tokio = { version = "0.2.0", default-features = false, features = ["macros"] }
 
@@ -179,9 +179,9 @@ required-features = ["cookies"]
 [[test]]
 name = "gzip"
 path = "tests/gzip.rs"
-required-features = ["gzip"]
+required-features = ["compression-gzip"]
 
 [[test]]
 name = "brotli"
 path = "tests/brotli.rs"
-required-features = ["brotli"]
+required-features = ["compression-brotli"]
