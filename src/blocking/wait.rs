@@ -68,6 +68,7 @@ fn enter() {
     #[cfg(debug_assertions)]
     {
         tokio::runtime::Builder::new()
+            .core_threads(1)
             .build()
             .expect("build shell runtime")
             .enter(|| {});
