@@ -239,6 +239,7 @@ pub(crate) fn url_bad_scheme(url: Url) -> Error {
     Error::new(Kind::Builder, Some("URL scheme is not allowed")).with_url(url)
 }
 
+#[cfg(feature = "__tls")]
 pub(crate) fn unknown_preconfigured_tls() -> Error {
     Error::new(Kind::UnknownPreconfiguredTls, None::<Error>)
 }

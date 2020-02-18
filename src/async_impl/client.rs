@@ -1,3 +1,4 @@
+#[cfg(feature = "__tls")]
 use std::any::Any;
 use std::convert::TryInto;
 use std::net::IpAddr;
