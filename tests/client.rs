@@ -11,13 +11,13 @@ async fn auto_headers() {
 
         assert_eq!(req.headers()["accept"], "*/*");
         assert_eq!(req.headers().get("user-agent"), None);
-        if cfg!(feature = "compression-gzip") {
+        if cfg!(feature = "gzip") {
             assert!(req.headers()["accept-encoding"]
                 .to_str()
                 .unwrap()
                 .contains("gzip"));
         }
-        if cfg!(feature = "compression-brotli") {
+        if cfg!(feature = "brotli") {
             assert!(req.headers()["accept-encoding"]
                 .to_str()
                 .unwrap()

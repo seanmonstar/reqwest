@@ -106,8 +106,8 @@ impl ClientBuilder {
         ClientBuilder {
             config: Config {
                 error: None,
-                gzip: cfg!(feature = "compression-gzip"),
-                brotli: cfg!(feature = "compression-brotli"),
+                gzip: cfg!(feature = "gzip"),
+                brotli: cfg!(feature = "brotli"),
                 headers,
                 #[cfg(feature = "native-tls")]
                 hostname_verification: true,
@@ -394,12 +394,12 @@ impl ClientBuilder {
     ///   equals to `gzip`, both values `Content-Encoding` and `Content-Length` are removed from the
     ///   headers' set. The response body is automatically decompressed.
     ///
-    /// If the `compression-gzip` feature is turned on, the default option is enabled.
+    /// If the `gzip` feature is turned on, the default option is enabled.
     ///
     /// # Optional
     ///
     /// This requires the optional `gzip` feature to be enabled
-    #[cfg(feature = "compression-gzip")]
+    #[cfg(feature = "gzip")]
     pub fn gzip(mut self, enable: bool) -> ClientBuilder {
         self.config.gzip = enable;
         self
@@ -416,12 +416,12 @@ impl ClientBuilder {
     ///   equals to `br`, both values `Content-Encoding` and `Content-Length` are removed from the
     ///   headers' set. The response body is automatically decompressed.
     ///
-    /// If the `compression-brotli` feature is turned on, the default option is enabled.
+    /// If the `brotli` feature is turned on, the default option is enabled.
     ///
     /// # Optional
     ///
     /// This requires the optional `brotli` feature to be enabled
-    #[cfg(feature = "compression-brotli")]
+    #[cfg(feature = "brotli")]
     pub fn brotli(mut self, enable: bool) -> ClientBuilder {
         self.config.brotli = enable;
         self
@@ -429,16 +429,16 @@ impl ClientBuilder {
 
     /// Disable auto response body gzip decompression.
     ///
-    /// This method exists even if the optional `compression-gzip` feature is not enabled.
+    /// This method exists even if the optional `gzip` feature is not enabled.
     /// This can be used to ensure a `Client` doesn't use gzip decompression
-    /// even if another dependency were to enable the optional `compression-gzip` feature.
+    /// even if another dependency were to enable the optional `gzip` feature.
     pub fn no_gzip(self) -> ClientBuilder {
-        #[cfg(feature = "compression-gzip")]
+        #[cfg(feature = "gzip")]
         {
             self.gzip(false)
         }
 
-        #[cfg(not(feature = "compression-gzip"))]
+        #[cfg(not(feature = "gzip"))]
         {
             self
         }
@@ -446,16 +446,16 @@ impl ClientBuilder {
 
     /// Disable auto response body brotli decompression.
     ///
-    /// This method exists even if the optional `compression-brotli` feature is not enabled.
+    /// This method exists even if the optional `brotli` feature is not enabled.
     /// This can be used to ensure a `Client` doesn't use brotli decompression
-    /// even if another dependency were to enable the optional `compression-brotli` feature.
+    /// even if another dependency were to enable the optional `brotli` feature.
     pub fn no_brotli(self) -> ClientBuilder {
-        #[cfg(feature = "compression-brotli")]
+        #[cfg(feature = "brotli")]
         {
             self.brotli(false)
         }
 
-        #[cfg(not(feature = "compression-brotli"))]
+        #[cfg(not(feature = "brotli"))]
         {
             self
         }

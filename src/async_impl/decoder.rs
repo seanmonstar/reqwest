@@ -6,10 +6,10 @@ mod imp {
     use std::pin::Pin;
     use std::task::{Context, Poll};
 
-    #[cfg(feature = "compression-gzip")]
+    #[cfg(feature = "gzip")]
     use async_compression::stream::GzipDecoder;
 
-    #[cfg(feature = "compression-brotli")]
+    #[cfg(feature = "brotli")]
     use async_compression::stream::BrotliDecoder;
 
     use bytes::Bytes;
@@ -28,9 +28,9 @@ mod imp {
     }
 
     enum DecoderType {
-        #[cfg(feature = "compression-gzip")]
+        #[cfg(feature = "gzip")]
         Gzip,
-        #[cfg(feature = "compression-brotli")]
+        #[cfg(feature = "brotli")]
         Brotli,
     }
 
@@ -39,15 +39,15 @@ mod imp {
         PlainText(super::super::body::ImplStream),
 
         /// A `Gzip` decoder will uncompress the gzipped response content before returning it.
-        #[cfg(feature = "compression-gzip")]
+        #[cfg(feature = "gzip")]
         Gzip(GzipDecoder<Peekable<IoStream>>),
 
         /// A `Brotli` decoder will uncompress the brotlied response content before returning it.
-        #[cfg(feature = "compression-brotli")]
+        #[cfg(feature = "brotli")]
         Brotli(BrotliDecoder<Peekable<IoStream>>),
 
         /// A decoder that doesn't have a value yet.
-        #[cfg(any(feature = "compression-brotli", feature = "compression-gzip"))]
+        #[cfg(any(feature = "brotli", feature = "gzip"))]
         Pending(Pending),
     }
 
@@ -82,7 +82,7 @@ mod imp {
         /// A gzip decoder.
         ///
         /// This decoder will buffer and decompress chunks that are gzipped.
-        #[cfg(feature = "compression-gzip")]
+        #[cfg(feature = "gzip")]
         fn gzip(body: Body) -> Decoder {
             use futures_util::StreamExt;
 
@@ -97,7 +97,7 @@ mod imp {
         /// A brotli decoder.
         ///
         /// This decoder will buffer and decompress chunks that are brotlied.
-        #[cfg(feature = "compression-brotli")]
+        #[cfg(feature = "brotli")]
         fn brotli(body: Body) -> Decoder {
             use futures_util::StreamExt;
 
@@ -109,7 +109,7 @@ mod imp {
             }
         }
 
-        #[cfg(feature = "compression-gzip")]
+        #[cfg(feature = "gzip")]
         fn detect_gzip(headers: &mut HeaderMap) -> bool {
             use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
             use log::warn;
@@ -141,7 +141,7 @@ mod imp {
             is_gzip
         }
 
-        #[cfg(feature = "compression-brotli")]
+        #[cfg(feature = "brotli")]
         fn detect_brotli(headers: &mut HeaderMap) -> bool {
             use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
             use log::warn;
@@ -189,14 +189,14 @@ mod imp {
                 return Decoder::plain_text(body);
             }
 
-            #[cfg(feature = "compression-gzip")]
+            #[cfg(feature = "gzip")]
             {
                 if Decoder::detect_gzip(_headers) {
                     return Decoder::gzip(body);
                 }
             }
 
-            #[cfg(feature = "compression-brotli")]
+            #[cfg(feature = "brotli")]
             {
                 if Decoder::detect_brotli(_headers) {
                     return Decoder::brotli(body);
@@ -213,7 +213,7 @@ mod imp {
         fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
             // Do a read or poll for a pending decoder value.
             match self.inner {
-                #[cfg(any(feature = "compression-brotli", feature = "compression-gzip"))]
+                #[cfg(any(feature = "brotli", feature = "gzip"))]
                 Inner::Pending(ref mut future) => match Pin::new(future).poll(cx) {
                     Poll::Ready(Ok(inner)) => {
                         self.inner = inner;
@@ -225,7 +225,7 @@ mod imp {
                     Poll::Pending => return Poll::Pending,
                 },
                 Inner::PlainText(ref mut body) => return Pin::new(body).poll_next(cx),
-                #[cfg(feature = "compression-gzip")]
+                #[cfg(feature = "gzip")]
                 Inner::Gzip(ref mut decoder) => {
                     return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                         Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes))),
@@ -233,7 +233,7 @@ mod imp {
                         None => Poll::Ready(None),
                     };
                 }
-                #[cfg(feature = "compression-brotli")]
+                #[cfg(feature = "brotli")]
                 Inner::Brotli(ref mut decoder) => {
                     return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                         Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes))),
@@ -272,9 +272,9 @@ mod imp {
             );
 
             match self.1 {
-                #[cfg(feature = "compression-brotli")]
+                #[cfg(feature = "brotli")]
                 DecoderType::Brotli => Poll::Ready(Ok(Inner::Brotli(BrotliDecoder::new(_body)))),
-                #[cfg(feature = "compression-gzip")]
+                #[cfg(feature = "gzip")]
                 DecoderType::Gzip => Poll::Ready(Ok(Inner::Gzip(GzipDecoder::new(_body)))),
             }
         }
