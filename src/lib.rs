@@ -173,6 +173,7 @@
 //! - **blocking**: Provides the [blocking][] client API.
 //! - **cookies**: Provides cookie session support.
 //! - **gzip**: Provides response body gzip decompression.
+//! - **brotli**: Provides response body brotli decompression.
 //! - **json**: Provides serialization and deserialization for JSON bodies.
 //! - **stream**: Adds support for `futures::Stream`.
 //! - **socks**: Provides SOCKS5 proxy support.

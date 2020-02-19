@@ -60,6 +60,7 @@ jobs:
           - "feat.: cookies"
           - "feat.: blocking"
           - "feat.: gzip"
+          - "feat.: brotli"
           - "feat.: json"
           - "feat.: stream"
           - "feat.: socks/default-tls"
@@ -82,21 +83,21 @@ jobs:
           - name: windows / stable-x86_64-msvc
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            features: "--features blocking,gzip,json"
+            features: "--features blocking,gzip,brotli,json"
           - name: windows / stable-i686-msvc
             os: windows-latest
             target: i686-pc-windows-msvc
-            features: "--features blocking,gzip,json"
+            features: "--features blocking,gzip,brotli,json"
           - name: windows / stable-x86_64-gnu
             os: windows-latest
             rust: stable-x86_64-pc-windows-gnu
             target: x86_64-pc-windows-gnu
-            features: "--features blocking,gzip,json"
+            features: "--features blocking,gzip,brotli,json"
           - name: windows / stable-i686-gnu
             os: windows-latest
             rust: stable-i686-pc-windows-gnu
             target: i686-pc-windows-gnu
-            features: "--features blocking,gzip,json"
+            features: "--features blocking,gzip,brotli,json"
 
           - name: "feat.: default-tls disabled"
             features: "--no-default-features"
@@ -112,6 +113,8 @@ jobs:
             features: "--features blocking"
           - name: "feat.: gzip"
             features: "--features gzip"
+          - name: "feat.: brotli"
+            features: "--features brotli"
           - name: "feat.: json"
             features: "--features json"
           - name: "feat.: stream"
