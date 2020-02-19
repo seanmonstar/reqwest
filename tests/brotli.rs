@@ -1,25 +1,24 @@
 mod support;
+use std::io::Read;
 use support::*;
 
-use std::io::Write;
-
 #[tokio::test]
-async fn gzip_response() {
-    gzip_case(10_000, 4096).await;
+async fn brotli_response() {
+    brotli_case(10_000, 4096).await;
 }
 
 #[tokio::test]
-async fn gzip_single_byte_chunks() {
-    gzip_case(10, 1).await;
+async fn brotli_single_byte_chunks() {
+    brotli_case(10, 1).await;
 }
 
 #[tokio::test]
-async fn test_gzip_empty_body() {
+async fn test_brotli_empty_body() {
     let server = server::http(move |req| async move {
         assert_eq!(req.method(), "HEAD");
 
         http::Response::builder()
-            .header("content-encoding", "gzip")
+            .header("content-encoding", "br")
             .header("content-length", 100)
             .body(Default::default())
             .unwrap()
@@ -27,7 +26,7 @@ async fn test_gzip_empty_body() {
 
     let client = reqwest::Client::new();
     let res = client
-        .head(&format!("http://{}/gzip", server.addr()))
+        .head(&format!("http://{}/brotli", server.addr()))
         .send()
         .await
         .unwrap();
@@ -44,7 +43,7 @@ async fn test_accept_header_is_not_changed_if_set() {
         assert!(req.headers()["accept-encoding"]
             .to_str()
             .unwrap()
-            .contains("gzip"));
+            .contains("br"));
         http::Response::default()
     });
 
@@ -86,53 +85,50 @@ async fn test_accept_encoding_header_is_not_changed_if_set() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
-async fn gzip_case(response_size: usize, chunk_size: usize) {
+async fn brotli_case(response_size: usize, chunk_size: usize) {
     use futures_util::stream::StreamExt;
 
     let content: String = (0..response_size)
         .into_iter()
         .map(|i| format!("test {}", i))
         .collect();
-    let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
-    match encoder.write(content.as_bytes()) {
-        Ok(n) => assert!(n > 0, "Failed to write to encoder."),
-        _ => panic!("Failed to gzip encode string."),
-    };
 
-    let gzipped_content = encoder.finish().into_result().unwrap();
+    let mut encoder = brotli_crate::CompressorReader::new(content.as_bytes(), 4096, 5, 20);
+    let mut brotlied_content = Vec::new();
+    encoder.read_to_end(&mut brotlied_content).unwrap();
 
     let mut response = format!(
         "\
          HTTP/1.1 200 OK\r\n\
          Server: test-accept\r\n\
-         Content-Encoding: gzip\r\n\
+         Content-Encoding: br\r\n\
          Content-Length: {}\r\n\
          \r\n",
-        &gzipped_content.len()
+        &brotlied_content.len()
     )
     .into_bytes();
-    response.extend(&gzipped_content);
+    response.extend(&brotlied_content);
 
     let server = server::http(move |req| {
         assert!(req.headers()["accept-encoding"]
             .to_str()
             .unwrap()
-            .contains("gzip"));
+            .contains("br"));
 
-        let gzipped = gzipped_content.clone();
+        let brotlied = brotlied_content.clone();
         async move {
-            let len = gzipped.len();
+            let len = brotlied.len();
             let stream =
-                futures_util::stream::unfold((gzipped, 0), move |(gzipped, pos)| async move {
-                    let chunk = gzipped.chunks(chunk_size).nth(pos)?.to_vec();
+                futures_util::stream::unfold((brotlied, 0), move |(brotlied, pos)| async move {
+                    let chunk = brotlied.chunks(chunk_size).nth(pos)?.to_vec();
 
-                    Some((chunk, (gzipped, pos + 1)))
+                    Some((chunk, (brotlied, pos + 1)))
                 });
 
             let body = hyper::Body::wrap_stream(stream.map(Ok::<_, std::convert::Infallible>));
 
             http::Response::builder()
-                .header("content-encoding", "gzip")
+                .header("content-encoding", "br")
                 .header("content-length", len)
                 .body(body)
                 .unwrap()
@@ -142,7 +138,7 @@ async fn gzip_case(response_size: usize, chunk_size: usize) {
     let client = reqwest::Client::new();
 
     let res = client
-        .get(&format!("http://{}/gzip", server.addr()))
+        .get(&format!("http://{}/brotli", server.addr()))
         .send()
         .await
         .expect("response");

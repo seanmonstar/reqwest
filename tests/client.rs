@@ -12,7 +12,16 @@ async fn auto_headers() {
         assert_eq!(req.headers()["accept"], "*/*");
         assert_eq!(req.headers().get("user-agent"), None);
         if cfg!(feature = "gzip") {
-            assert_eq!(req.headers()["accept-encoding"], "gzip");
+            assert!(req.headers()["accept-encoding"]
+                .to_str()
+                .unwrap()
+                .contains("gzip"));
+        }
+        if cfg!(feature = "brotli") {
+            assert!(req.headers()["accept-encoding"]
+                .to_str()
+                .unwrap()
+                .contains("br"));
         }
 
         http::Response::default()

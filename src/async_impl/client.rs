@@ -11,8 +11,8 @@ use http::header::{
     Entry, HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_LENGTH,
     CONTENT_TYPE, LOCATION, PROXY_AUTHORIZATION, RANGE, REFERER, TRANSFER_ENCODING, USER_AGENT,
 };
-use http::Uri;
 use http::uri::Scheme;
+use http::Uri;
 use hyper::client::ResponseFuture;
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::TlsConnector;
@@ -58,6 +58,7 @@ pub struct ClientBuilder {
 struct Config {
     // NOTE: When adding a new field, update `fmt::Debug for ClientBuilder`
     gzip: bool,
+    brotli: bool,
     headers: HeaderMap,
     #[cfg(feature = "native-tls")]
     hostname_verification: bool,
@@ -106,6 +107,7 @@ impl ClientBuilder {
             config: Config {
                 error: None,
                 gzip: cfg!(feature = "gzip"),
+                brotli: cfg!(feature = "brotli"),
                 headers,
                 #[cfg(feature = "native-tls")]
                 hostname_verification: true,
@@ -179,7 +181,6 @@ impl ClientBuilder {
                         cert.add_to_native_tls(&mut tls);
                     }
 
-
                     #[cfg(feature = "native-tls")]
                     {
                         if let Some(id) = config.identity {
@@ -246,7 +247,9 @@ impl ClientBuilder {
         if let Some(http2_initial_stream_window_size) = config.http2_initial_stream_window_size {
             builder.http2_initial_stream_window_size(http2_initial_stream_window_size);
         }
-        if let Some(http2_initial_connection_window_size) = config.http2_initial_connection_window_size {
+        if let Some(http2_initial_connection_window_size) =
+            config.http2_initial_connection_window_size
+        {
             builder.http2_initial_connection_window_size(http2_initial_connection_window_size);
         }
 
@@ -265,6 +268,7 @@ impl ClientBuilder {
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store.map(RwLock::new),
                 gzip: config.gzip,
+                brotli: config.brotli,
                 hyper: hyper_client,
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
@@ -277,7 +281,6 @@ impl ClientBuilder {
     }
 
     // Higher-level options
-
 
     /// Sets the `User-Agent` header to be used by this client.
     ///
@@ -360,7 +363,6 @@ impl ClientBuilder {
         self
     }
 
-
     /// Enable a persistent cookie store for the client.
     ///
     /// Cookies received in responses will be preserved and included in
@@ -383,7 +385,7 @@ impl ClientBuilder {
 
     /// Enable auto gzip decompression by checking the `Content-Encoding` response header.
     ///
-    /// If auto gzip decompresson is turned on:
+    /// If auto gzip decompression is turned on:
     ///
     /// - When sending a request and if the request's headers do not already contain
     ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `gzip`.
@@ -403,6 +405,28 @@ impl ClientBuilder {
         self
     }
 
+    /// Enable auto brotli decompression by checking the `Content-Encoding` response header.
+    ///
+    /// If auto brotli decompression is turned on:
+    ///
+    /// - When sending a request and if the request's headers do not already contain
+    ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `br`.
+    ///   The request body is **not** automatically compressed.
+    /// - When receiving a response, if it's headers contain a `Content-Encoding` value that
+    ///   equals to `br`, both values `Content-Encoding` and `Content-Length` are removed from the
+    ///   headers' set. The response body is automatically decompressed.
+    ///
+    /// If the `brotli` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `brotli` feature to be enabled
+    #[cfg(feature = "brotli")]
+    pub fn brotli(mut self, enable: bool) -> ClientBuilder {
+        self.config.brotli = enable;
+        self
+    }
+
     /// Disable auto response body gzip decompression.
     ///
     /// This method exists even if the optional `gzip` feature is not enabled.
@@ -415,6 +439,23 @@ impl ClientBuilder {
         }
 
         #[cfg(not(feature = "gzip"))]
+        {
+            self
+        }
+    }
+
+    /// Disable auto response body brotli decompression.
+    ///
+    /// This method exists even if the optional `brotli` feature is not enabled.
+    /// This can be used to ensure a `Client` doesn't use brotli decompression
+    /// even if another dependency were to enable the optional `brotli` feature.
+    pub fn no_brotli(self) -> ClientBuilder {
+        #[cfg(feature = "brotli")]
+        {
+            self.brotli(false)
+        }
+
+        #[cfg(not(feature = "brotli"))]
         {
             self
         }
@@ -534,7 +575,10 @@ impl ClientBuilder {
     /// Sets the max connection-level flow control for HTTP2
     ///
     /// Default is currently 65,535 but may change internally to optimize for common uses.
-    pub fn http2_initial_connection_window_size(mut self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+    pub fn http2_initial_connection_window_size(
+        mut self,
+        sz: impl Into<Option<u32>>,
+    ) -> ClientBuilder {
         self.config.http2_initial_connection_window_size = sz.into();
         self
     }
@@ -653,7 +697,6 @@ impl ClientBuilder {
         self.config.tls = TlsBackend::Default;
         self
     }
-
 
     /// Force using the Rustls TLS backend.
     ///
@@ -807,9 +850,21 @@ impl Client {
             }
         }
 
-        if self.inner.gzip && !headers.contains_key(ACCEPT_ENCODING) && !headers.contains_key(RANGE)
+        let accept_encoding = match (self.inner.gzip, self.inner.brotli) {
+            (true, true) => Some("gzip, br"),
+            (true, false) => Some("gzip"),
+            (false, true) => Some("br"),
+            _ => None,
+        };
+
+        if accept_encoding.is_some()
+            && !headers.contains_key(ACCEPT_ENCODING)
+            && !headers.contains_key(RANGE)
         {
-            headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip"));
+            headers.insert(
+                ACCEPT_ENCODING,
+                HeaderValue::from_static(accept_encoding.unwrap()),
+            );
         }
 
         let uri = expect_uri(&url);
@@ -833,7 +888,6 @@ impl Client {
         let timeout = timeout
             .or(self.inner.request_timeout)
             .map(|dur| tokio::time::delay_for(dur));
-
 
         *req.headers_mut() = headers.clone();
 
@@ -913,6 +967,7 @@ impl Config {
         }
 
         f.field("gzip", &self.gzip);
+        f.field("brotli", &self.brotli);
 
         if !self.proxies.is_empty() {
             f.field("proxies", &self.proxies);
@@ -977,6 +1032,7 @@ struct ClientRef {
     #[cfg(feature = "cookies")]
     cookie_store: Option<RwLock<cookie::CookieStore>>,
     gzip: bool,
+    brotli: bool,
     headers: HeaderMap,
     hyper: HyperClient,
     redirect_policy: redirect::Policy,
@@ -999,6 +1055,7 @@ impl ClientRef {
         }
 
         f.field("gzip", &self.gzip);
+        f.field("brotli", &self.brotli);
 
         if !self.proxies.is_empty() {
             f.field("proxies", &self.proxies);
@@ -1014,14 +1071,11 @@ impl ClientRef {
 
         f.field("default_headers", &self.headers);
 
-
         if let Some(ref d) = self.request_timeout {
             f.field("timeout", d);
         }
     }
 }
-
-
 
 pub(super) struct Pending {
     inner: PendingInner,
@@ -1227,17 +1281,20 @@ impl Future for PendingRequest {
                             debug!("redirect policy disallowed redirection to '{}'", loc);
                         }
                         redirect::ActionKind::Error(err) => {
-                            return Poll::Ready(Err(crate::error::redirect(
-                                err,
-                                self.url.clone(),
-                            )));
+                            return Poll::Ready(Err(crate::error::redirect(err, self.url.clone())));
                         }
                     }
                 }
             }
 
             debug!("response '{}' for {}", res.status(), self.url);
-            let res = Response::new(res, self.url.clone(), self.client.gzip, self.timeout.take());
+            let res = Response::new(
+                res,
+                self.url.clone(),
+                self.client.gzip,
+                self.client.brotli,
+                self.timeout.take(),
+            );
             return Poll::Ready(Ok(res));
         }
     }
