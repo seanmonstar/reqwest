@@ -251,7 +251,9 @@ impl ClientBuilder {
                     )?
                 },
                 TlsBackend::UnknownPreconfigured => {
-                    return Err(crate::error::unknown_preconfigured_tls());
+                    return Err(crate::error::builder(
+                        "Unknown TLS backend passed to `use_preconfigured_tls`"
+                    ));
                 },
             }
 

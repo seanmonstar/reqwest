@@ -161,10 +161,6 @@ impl fmt::Display for Error {
                 };
                 write!(f, "{} ({})", prefix, code)?;
             }
-            #[cfg(feature = "__tls")]
-            Kind::UnknownPreconfiguredTls => {
-                f.write_str("Unknown TLS backend passed to `use_preconfigured_tls`")?
-            }
         };
 
         ForUrl(self.inner.url.as_ref()).fmt(f)?;
@@ -205,8 +201,6 @@ pub(crate) enum Kind {
     Status(StatusCode),
     Body,
     Decode,
-    #[cfg(feature = "__tls")]
-    UnknownPreconfiguredTls,
 }
 
 // constructors
@@ -237,11 +231,6 @@ pub(crate) fn status_code(url: Url, status: StatusCode) -> Error {
 
 pub(crate) fn url_bad_scheme(url: Url) -> Error {
     Error::new(Kind::Builder, Some("URL scheme is not allowed")).with_url(url)
-}
-
-#[cfg(feature = "__tls")]
-pub(crate) fn unknown_preconfigured_tls() -> Error {
-    Error::new(Kind::UnknownPreconfiguredTls, None::<Error>)
 }
 
 if_wasm! {
