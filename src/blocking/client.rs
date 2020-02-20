@@ -63,6 +63,12 @@ pub struct ClientBuilder {
     timeout: Timeout,
 }
 
+impl Default for ClientBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClientBuilder {
     /// Constructs a new `ClientBuilder`.
     ///
@@ -452,6 +458,12 @@ impl ClientBuilder {
     {
         self.inner = func(self.inner);
         self
+    }
+}
+
+impl Default for Client {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
