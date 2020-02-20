@@ -3,9 +3,13 @@ use std::fmt;
 
 use http::Method;
 use url::Url;
+#[cfg(feature = "json")]
+use serde::Serialize;
 
 use super::{Body, Client, Response};
 use crate::header::{HeaderMap, HeaderName, HeaderValue};
+#[cfg(feature = "json")]
+use crate::header::CONTENT_TYPE;
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -85,6 +89,26 @@ impl Request {
 impl RequestBuilder {
     pub(super) fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
         RequestBuilder { client, request }
+    }
+
+    #[cfg(feature = "json")]
+    /// Set the request json
+    pub fn json<T: Serialize + ?Sized>(mut self, json: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
+            match serde_json::to_vec(json) {
+                Ok(body) => {
+                    req.headers_mut()
+                        .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+                    *req.body_mut() = Some(body.into());
+                }
+                Err(err) => error = Some(crate::error::builder(err)),
+            }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
+        }
+        self
     }
 
     /// Set the request body.
