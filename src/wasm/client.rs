@@ -101,6 +101,12 @@ impl Client {
     }
 }
 
+impl Default for Client {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 async fn fetch(req: Request) -> crate::Result<Response> {
     // Build the js Request
     let mut init = web_sys::RequestInit::new();
@@ -180,5 +186,11 @@ impl ClientBuilder {
     /// dox
     pub fn build(self) -> Result<Client, crate::Error> {
         Ok(Client(()))
+    }
+}
+
+impl Default for ClientBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
