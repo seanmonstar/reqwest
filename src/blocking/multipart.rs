@@ -58,6 +58,12 @@ pub struct Part {
     value: Body,
 }
 
+impl Default for Form {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Form {
     /// Creates a new Form without any content.
     pub fn new() -> Form {
