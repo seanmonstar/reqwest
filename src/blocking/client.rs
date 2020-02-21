@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::convert::TryInto;
 use std::fmt;
 use std::future::Future;
@@ -448,6 +449,15 @@ impl ClientBuilder {
     #[cfg(feature = "rustls-tls")]
     pub fn use_rustls_tls(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.use_rustls_tls())
+    }
+
+    /// Use a preconfigured TLS backend.
+    ///
+    /// If the passed `Any` argument is not a TLS backend that reqwest
+    /// understands, the `ClientBuilder` will error when calling `build`.
+    #[cfg(feature = "__tls")]
+    pub fn use_preconfigured_tls(self, tls: impl Any) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_preconfigured_tls(tls))
     }
 
     // private

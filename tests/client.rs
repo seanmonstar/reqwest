@@ -133,3 +133,42 @@ async fn body_pipe_response() {
 
     assert_eq!(res2.status(), reqwest::StatusCode::OK);
 }
+
+#[cfg(feature = "__tls")]
+#[test]
+fn use_preconfigured_tls_with_bogus_backend() {
+    struct DefinitelyNotTls;
+
+    reqwest::Client::builder()
+        .use_preconfigured_tls(DefinitelyNotTls)
+        .build()
+        .expect_err("definitely is not TLS");
+}
+
+#[cfg(feature = "default-tls")]
+#[test]
+fn use_preconfigured_native_tls_default() {
+    extern crate native_tls_crate;
+
+    let tls = native_tls_crate::TlsConnector::builder()
+        .build()
+        .expect("tls builder");
+
+    reqwest::Client::builder()
+        .use_preconfigured_tls(tls)
+        .build()
+        .expect("preconfigured default tls");
+}
+
+#[cfg(feature = "rustls-tls")]
+#[test]
+fn use_preconfigured_rustls_default() {
+    extern crate rustls;
+
+    let tls = rustls::ClientConfig::new();
+
+    reqwest::Client::builder()
+        .use_preconfigured_tls(tls)
+        .build()
+        .expect("preconfigured rustls tls");
+}
