@@ -134,7 +134,7 @@ async fn body_pipe_response() {
     assert_eq!(res2.status(), reqwest::StatusCode::OK);
 }
 
-#[cfg(feature = "__tls")]
+#[cfg(any(feature = "native-tls", feature = "rustls-tls",))]
 #[test]
 fn use_preconfigured_tls_with_bogus_backend() {
     struct DefinitelyNotTls;
@@ -145,7 +145,7 @@ fn use_preconfigured_tls_with_bogus_backend() {
         .expect_err("definitely is not TLS");
 }
 
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "native-tls")]
 #[test]
 fn use_preconfigured_native_tls_default() {
     extern crate native_tls_crate;
