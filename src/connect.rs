@@ -92,23 +92,17 @@ impl Connector {
         T: Into<Option<IpAddr>>,
     {
         let tls = tls.build().map_err(crate::error::builder)?;
-
-        let mut http = http_connector()?;
-        http.set_local_address(local_addr.into());
-        http.enforce_http(false);
-
-        Ok(Connector {
-            inner: Inner::DefaultTls(http, tls),
+        Self::from_built_default_tls(
+            tls,
             proxies,
-            verbose: verbose::OFF,
-            timeout: None,
-            nodelay,
             user_agent,
-        })
+            local_addr,
+            nodelay,
+        )
     }
 
     #[cfg(feature = "default-tls")]
-    pub(crate) fn from_built_default<T> (
+    pub(crate) fn from_built_default_tls<T> (
         tls: TlsConnector,
         proxies: Arc<Vec<Proxy>>,
         user_agent: Option<HeaderValue>,
@@ -117,7 +111,6 @@ impl Connector {
         where
             T: Into<Option<IpAddr>>,
     {
-
         let mut http = http_connector()?;
         http.set_local_address(local_addr.into());
         http.enforce_http(false);

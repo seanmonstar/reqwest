@@ -1,3 +1,7 @@
+#[cfg(any(
+    feature = "native-tls",
+    feature = "rustls-tls",
+))]
 use std::any::Any;
 use std::convert::TryInto;
 use std::fmt;
@@ -455,7 +459,15 @@ impl ClientBuilder {
     ///
     /// If the passed `Any` argument is not a TLS backend that reqwest
     /// understands, the `ClientBuilder` will error when calling `build`.
-    #[cfg(feature = "__tls")]
+    ///
+    /// # Optional
+    ///
+    /// This requires one of the optional features `native-tls` or
+    /// `rustls-tls` to be enabled.
+    #[cfg(any(
+        feature = "native-tls",
+        feature = "rustls-tls",
+    ))]
     pub fn use_preconfigured_tls(self, tls: impl Any) -> ClientBuilder {
         self.with_inner(move |inner| inner.use_preconfigured_tls(tls))
     }

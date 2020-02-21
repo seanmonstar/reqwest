@@ -1,4 +1,7 @@
-#[cfg(feature = "__tls")]
+#[cfg(any(
+    feature = "native-tls",
+    feature = "rustls-tls",
+))]
 use std::any::Any;
 use std::convert::TryInto;
 use std::net::IpAddr;
@@ -199,9 +202,9 @@ impl ClientBuilder {
                         config.nodelay,
                     )?
                 },
-                #[cfg(feature = "default-tls")]
-                TlsBackend::BuiltDefault(conn) => {
-                    Connector::from_built_default(
+                #[cfg(feature = "native-tls")]
+                TlsBackend::BuiltNativeTls(conn) => {
+                    Connector::from_built_default_tls(
                         conn,
                         proxies.clone(),
                         user_agent(&config.headers),
@@ -251,6 +254,10 @@ impl ClientBuilder {
                         config.nodelay,
                     )?
                 },
+                #[cfg(any(
+                    feature = "native-tls",
+                    feature = "rustls-tls",
+                ))]
                 TlsBackend::UnknownPreconfigured => {
                     return Err(crate::error::builder(
                         "Unknown TLS backend passed to `use_preconfigured_tls`"
@@ -742,14 +749,22 @@ impl ClientBuilder {
     ///
     /// If the passed `Any` argument is not a TLS backend that reqwest
     /// understands, the `ClientBuilder` will error when calling `build`.
-    #[cfg(feature = "__tls")]
+    ///
+    /// # Optional
+    ///
+    /// This requires one of the optional features `native-tls` or
+    /// `rustls-tls` to be enabled.
+    #[cfg(any(
+        feature = "native-tls",
+        feature = "rustls-tls",
+    ))]
     pub fn use_preconfigured_tls(mut self, tls: impl Any) -> ClientBuilder {
         let mut tls = Some(tls);
-        #[cfg(feature = "default-tls")]
+        #[cfg(feature = "native-tls")]
         {
             if let Some(conn) = (&mut tls as &mut dyn Any).downcast_mut::<Option<native_tls_crate::TlsConnector>>() {
                 let tls = conn.take().expect("is definitely Some");
-                let tls = crate::tls::TlsBackend::BuiltDefault(tls);
+                let tls = crate::tls::TlsBackend::BuiltNativeTls(tls);
                 self.config.tls = tls;
                 return self;
             }
