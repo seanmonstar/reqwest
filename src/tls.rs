@@ -245,7 +245,7 @@ impl Identity {
     pub(crate) fn add_to_rustls(self, tls: &mut rustls::ClientConfig) -> crate::Result<()> {
         match self.inner {
             ClientCert::Pem { key, certs } => {
-                tls.set_single_client_cert(certs, key);
+                tls.set_single_client_cert(certs, key).map_err(|e| crate::error::builder(e))?;
                 Ok(())
             }
             #[cfg(feature = "native-tls")]
