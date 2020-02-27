@@ -68,8 +68,27 @@ async fn response_text() {
         .send()
         .await
         .expect("Failed to get");
+    assert_eq!(res.content_length(), Some(5));
     let text = res.text().await.expect("Failed to get text");
     assert_eq!("Hello", text);
+}
+
+#[tokio::test]
+async fn response_bytes() {
+    let _ = env_logger::try_init();
+
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
+
+    let client = Client::new();
+
+    let res = client
+        .get(&format!("http://{}/bytes", server.addr()))
+        .send()
+        .await
+        .expect("Failed to get");
+    assert_eq!(res.content_length(), Some(5));
+    let bytes = res.bytes().await.expect("res.bytes()");
+    assert_eq!("Hello", bytes);
 }
 
 #[tokio::test]
