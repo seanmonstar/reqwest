@@ -12,6 +12,7 @@ An ergonomic, batteries-included HTTP Client for Rust.
 - HTTP Proxies
 - HTTPS via system-native TLS (or optionally, rustls)
 - Cookie Store
+- WASM
 - [Changelog](CHANGELOG.md)
 
 

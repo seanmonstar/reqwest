@@ -3,12 +3,12 @@ name = "reqwest"
 version = "0.10.3" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
+categories = ["web-programming::http-client", "wasm"]
 repository = "https://github.com/seanmonstar/reqwest"
 documentation = "https://docs.rs/reqwest"
 authors = ["Sean McArthur <sean@seanmonstar.com>"]
 readme = "README.md"
 license = "MIT/Apache-2.0"
-categories = ["web-programming::http-client"]
 edition = "2018"
 autotests = true
 
