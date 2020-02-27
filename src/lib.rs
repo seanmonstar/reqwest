@@ -210,6 +210,9 @@ pub use http::Method;
 pub use http::{StatusCode, Version};
 pub use url::Url;
 
+/// UrlParseError is the error type returned from various Url parsing functions.
+pub type UrlParseError = url::ParseError;
+
 // universal mods
 #[macro_use]
 mod error;
