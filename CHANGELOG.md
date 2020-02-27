@@ -1,3 +1,7 @@
+## v0.10.3
+
+- Upgrade internal `rustls` version.
+
 ## v0.10.2
 
 - Add Brotli support, enabled with the optional `brotli` feature.
