@@ -2,12 +2,11 @@ use std::borrow::Cow;
 use std::fmt;
 use std::net::SocketAddr;
 
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
 use futures_util::stream::StreamExt;
 use http;
 use hyper::client::connect::HttpInfo;
-use hyper::header::CONTENT_LENGTH;
 use hyper::{HeaderMap, StatusCode, Version};
 use mime::Mime;
 #[cfg(feature = "json")]
@@ -89,13 +88,12 @@ impl Response {
     /// Reasons it may not be known:
     ///
     /// - The server didn't send a `content-length` header.
-    /// - The response is gzipped and automatically decoded (thus changing
+    /// - The response is compressed and automatically decoded (thus changing
     ///   the actual decoded length).
     pub fn content_length(&self) -> Option<u64> {
-        self.headers()
-            .get(CONTENT_LENGTH)
-            .and_then(|ct_len| ct_len.to_str().ok())
-            .and_then(|ct_len| ct_len.parse().ok())
+        use hyper::body::HttpBody;
+
+        HttpBody::size_hint(&self.body).exact()
     }
 
     /// Retrieve the cookies contained in the response.
@@ -259,12 +257,8 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn bytes(mut self) -> crate::Result<Bytes> {
-        let mut buf = BytesMut::new();
-        while let Some(chunk) = self.body.next().await {
-            buf.extend(chunk?);
-        }
-        Ok(buf.freeze())
+    pub async fn bytes(self) -> crate::Result<Bytes> {
+        hyper::body::to_bytes(self.body).await
     }
 
     /// Stream a chunk of the response body.
