@@ -19,8 +19,8 @@ use std::time::Duration;
 use std::mem::MaybeUninit;
 use pin_project_lite::pin_project;
 
-//#[cfg(feature = "trust-dns")]
-//use crate::dns::TrustDnsResolver;
+#[cfg(feature = "trust-dns")]
+use crate::dns::TrustDnsResolver;
 use crate::proxy::{Proxy, ProxyScheme};
 use crate::error::BoxError;
 #[cfg(feature = "default-tls")]
@@ -28,9 +28,9 @@ use self::native_tls_conn::NativeTlsConn;
 #[cfg(feature = "rustls-tls")]
 use self::rustls_tls_conn::RustlsTlsConn;
 
-//#[cfg(feature = "trust-dns")]
-//type HttpConnector = hyper::client::HttpConnector<TrustDnsResolver>;
-//#[cfg(not(feature = "trust-dns"))]
+#[cfg(feature = "trust-dns")]
+type HttpConnector = hyper::client::HttpConnector<TrustDnsResolver>;
+#[cfg(not(feature = "trust-dns"))]
 type HttpConnector = hyper::client::HttpConnector;
 
 #[derive(Clone)]
@@ -413,14 +413,14 @@ fn into_uri(scheme: Scheme, host: Authority) -> Uri {
         .expect("scheme and authority is valid Uri")
 }
 
-//#[cfg(feature = "trust-dns")]
-//fn http_connector() -> crate::Result<HttpConnector> {
-//    TrustDnsResolver::new()
-//        .map(HttpConnector::new_with_resolver)
-//        .map_err(crate::error::dns_system_conf)
-//}
+#[cfg(feature = "trust-dns")]
+fn http_connector() -> crate::Result<HttpConnector> {
+    TrustDnsResolver::new()
+        .map(HttpConnector::new_with_resolver)
+        .map_err(crate::error::builder)
+}
 
-//#[cfg(not(feature = "trust-dns"))]
+#[cfg(not(feature = "trust-dns"))]
 fn http_connector() -> crate::Result<HttpConnector> {
     Ok(HttpConnector::new())
 }

@@ -45,7 +45,7 @@ brotli = ["async-compression", "async-compression/brotli"]
 
 json = ["serde_json"]
 
-#trust-dns = ["trust-dns-resolver"]
+trust-dns = ["trust-dns-resolver"]
 
 stream = []
 
@@ -113,7 +113,7 @@ async-compression = { version = "0.3.0", default-features = false, features = ["
 tokio-socks = { version = "0.2", optional = true }
 
 ## trust-dns
-#trust-dns-resolver = { version = "0.11", optional = true }
+trust-dns-resolver = { version = "0.19", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.6"
