@@ -196,6 +196,7 @@ impl Response {
     /// # use reqwest::Error;
     /// # use serde::Deserialize;
     /// #
+    /// // This `derive` requires the `serde` dependency.
     /// #[derive(Deserialize)]
     /// struct Ip {
     ///     origin: String,
