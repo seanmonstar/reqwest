@@ -750,6 +750,15 @@ impl ClientBuilder {
     /// If the passed `Any` argument is not a TLS backend that reqwest
     /// understands, the `ClientBuilder` will error when calling `build`.
     ///
+    /// # Advanced
+    ///
+    /// This is an advanced option, and can be somewhat brittle. Usage requires
+    /// keeping the preconfigured TLS argument version in sync with reqwest,
+    /// since version mismatches will result in an "unknown" TLS backend.
+    ///
+    /// If possible, it's preferable to use the methods on `ClientBuilder`
+    /// to configure reqwest's TLS.
+    ///
     /// # Optional
     ///
     /// This requires one of the optional features `native-tls` or
