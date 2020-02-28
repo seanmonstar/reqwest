@@ -65,7 +65,7 @@ jobs:
           - "feat.: stream"
           - "feat.: socks/default-tls"
           - "feat.: socks/rustls-tls"
-          # - "feat.: trust-dns"
+          - "feat.: trust-dns"
 
         include:
           - name: linux / stable
@@ -123,8 +123,8 @@ jobs:
             features: "--features socks"
           - name: "feat.: socks/rustls-tls"
             features: "--features socks,rustls-tls"
-          # - name: "feat.: trust-dns"
-          #   features: "--features trust-dns"
+          - name: "feat.: trust-dns"
+            features: "--features trust-dns"
 
     steps:
       - name: Checkout

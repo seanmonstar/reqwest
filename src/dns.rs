@@ -18,7 +18,7 @@ use crate::error::BoxError;
 type SharedResolver = Arc<AsyncResolver<TokioConnection, TokioConnectionProvider>>;
 
 lazy_static! {
-    static ref SYSTEM_CONF: io::Result<(ResolverConfig, ResolverOpts)> = system_conf::read_system_conf();
+    static ref SYSTEM_CONF: io::Result<(ResolverConfig, ResolverOpts)> = system_conf::read_system_conf().map_err(io::Error::from);
 }
 
 #[derive(Clone)]
