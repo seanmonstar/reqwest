@@ -137,18 +137,18 @@ impl Connector {
         proxies: Arc<Vec<Proxy>>,
         local_addr: T,
         nodelay: bool,
-    ) -> crate::Result<Connector>
+    ) -> Connector
     where
         T: Into<Option<IpAddr>>,
     {
         http.set_local_address(local_addr.into());
         http.set_nodelay(nodelay);
-        Ok(Connector {
+        Connector {
             inner: Inner::Http(http),
             verbose: verbose::OFF,
             proxies,
             timeout: None,
-        })
+        }
     }
 
     #[cfg(feature = "default-tls")]
@@ -164,14 +164,14 @@ impl Connector {
         T: Into<Option<IpAddr>>,
     {
         let tls = tls.build().map_err(crate::error::builder)?;
-        Self::from_built_default_tls(
+        Ok(Self::from_built_default_tls(
             http,
             tls,
             proxies,
             user_agent,
             local_addr,
             nodelay,
-        )
+        ))
     }
 
     #[cfg(feature = "default-tls")]
@@ -181,21 +181,21 @@ impl Connector {
         proxies: Arc<Vec<Proxy>>,
         user_agent: Option<HeaderValue>,
         local_addr: T,
-        nodelay: bool) -> crate::Result<Connector>
+        nodelay: bool) -> Connector
         where
             T: Into<Option<IpAddr>>,
     {
         http.set_local_address(local_addr.into());
         http.enforce_http(false);
 
-        Ok(Connector {
+        Connector {
             inner: Inner::DefaultTls(http, tls),
             proxies,
             verbose: verbose::OFF,
             timeout: None,
             nodelay,
             user_agent,
-        })
+        }
     }
 
     #[cfg(feature = "rustls-tls")]
@@ -206,7 +206,7 @@ impl Connector {
         user_agent: Option<HeaderValue>,
         local_addr: T,
         nodelay: bool,
-    ) -> crate::Result<Connector>
+    ) -> Connector
     where
         T: Into<Option<IpAddr>>,
     {
@@ -222,7 +222,7 @@ impl Connector {
             (Arc::new(tls), Arc::new(tls_proxy))
         };
 
-        Ok(Connector {
+        Connector {
             inner: Inner::RustlsTls {
                 http,
                 tls,
@@ -233,7 +233,7 @@ impl Connector {
             timeout: None,
             nodelay,
             user_agent,
-        })
+        }
     }
 
     pub(crate) fn set_timeout(&mut self, timeout: Option<Duration>) {
