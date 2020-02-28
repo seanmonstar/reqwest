@@ -221,7 +221,7 @@ impl ClientBuilder {
                         proxies.clone(),
                         user_agent(&config.headers),
                         config.local_address,
-                        config.nodelay)?
+                        config.nodelay)
                 },
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::BuiltRustls(conn) => {
@@ -231,7 +231,7 @@ impl ClientBuilder {
                         proxies.clone(),
                         user_agent(&config.headers),
                         config.local_address,
-                        config.nodelay)?
+                        config.nodelay)
                 },
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::Rustls => {
@@ -266,7 +266,7 @@ impl ClientBuilder {
                         user_agent(&config.headers),
                         config.local_address,
                         config.nodelay,
-                    )?
+                    )
                 },
                 #[cfg(any(
                     feature = "native-tls",
@@ -280,7 +280,7 @@ impl ClientBuilder {
             }
 
             #[cfg(not(feature = "__tls"))]
-            Connector::new(http, proxies.clone(), config.local_address, config.nodelay)?
+            Connector::new(http, proxies.clone(), config.local_address, config.nodelay)
         };
 
         connector.set_timeout(config.connect_timeout);
