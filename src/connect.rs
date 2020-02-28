@@ -7,6 +7,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
 #[cfg(feature = "__tls")]
 use http::header::HeaderValue;
+use futures_util::future::Either;
 use bytes::{Buf, BufMut};
 
 use std::future::Future;
@@ -28,10 +29,80 @@ use self::native_tls_conn::NativeTlsConn;
 #[cfg(feature = "rustls-tls")]
 use self::rustls_tls_conn::RustlsTlsConn;
 
-#[cfg(feature = "trust-dns")]
-type HttpConnector = hyper::client::HttpConnector<TrustDnsResolver>;
-#[cfg(not(feature = "trust-dns"))]
-type HttpConnector = hyper::client::HttpConnector;
+#[derive(Clone)]
+pub(crate) enum HttpConnector {
+    Gai(hyper::client::HttpConnector),
+    #[cfg(feature = "trust-dns")]
+    TrustDns(hyper::client::HttpConnector<TrustDnsResolver>),
+}
+
+impl HttpConnector {
+    pub(crate) fn new_gai() -> Self {
+        Self::Gai(hyper::client::HttpConnector::new())
+    }
+
+    #[cfg(feature = "trust-dns")]
+    pub(crate) fn new_trust_dns() -> crate::Result<HttpConnector> {
+        TrustDnsResolver::new()
+            .map(hyper::client::HttpConnector::new_with_resolver)
+            .map(Self::TrustDns)
+            .map_err(crate::error::builder)
+    }
+}
+
+macro_rules! impl_http_connector {
+    ($(fn $name:ident(&mut self, $($par_name:ident: $par_type:ty),*)$( -> $return:ty)?;)+) => {
+        #[allow(dead_code)]
+        impl HttpConnector {
+            $(
+                fn $name(&mut self, $($par_name: $par_type),*)$( -> $return)? {
+                    match self {
+                        Self::Gai(resolver) => resolver.$name($($par_name),*),
+                        #[cfg(feature = "trust-dns")]
+                        Self::TrustDns(resolver) => resolver.$name($($par_name),*),
+                    }
+                }
+            )+
+        }
+    };
+}
+
+impl_http_connector! {
+    fn set_local_address(&mut self, addr: Option<IpAddr>);
+    fn enforce_http(&mut self, is_enforced: bool);
+    fn set_nodelay(&mut self, nodelay: bool);
+}
+
+impl Service<Uri> for HttpConnector {
+    type Response = <hyper::client::HttpConnector as Service<Uri>>::Response;
+    type Error = <hyper::client::HttpConnector as Service<Uri>>::Error;
+    #[cfg(feature = "trust-dns")]
+    type Future = Either<
+        <hyper::client::HttpConnector as Service<Uri>>::Future,
+        <hyper::client::HttpConnector<TrustDnsResolver> as Service<Uri>>::Future,
+    >;
+    #[cfg(not(feature = "trust-dns"))]
+    type Future = Either<
+        <hyper::client::HttpConnector as Service<Uri>>::Future,
+        <hyper::client::HttpConnector as Service<Uri>>::Future,
+    >;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        match self {
+            Self::Gai(resolver) => resolver.poll_ready(cx),
+            #[cfg(feature = "trust-dns")]
+            Self::TrustDns(resolver) => resolver.poll_ready(cx),
+        }
+    }
+
+    fn call(&mut self, dst: Uri) -> Self::Future {
+        match self {
+            Self::Gai(resolver) => Either::Left(resolver.call(dst)),
+            #[cfg(feature = "trust-dns")]
+            Self::TrustDns(resolver) => Either::Right(resolver.call(dst)),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct Connector {
@@ -62,6 +133,7 @@ enum Inner {
 impl Connector {
     #[cfg(not(feature = "__tls"))]
     pub(crate) fn new<T>(
+        mut http: HttpConnector,
         proxies: Arc<Vec<Proxy>>,
         local_addr: T,
         nodelay: bool,
@@ -69,7 +141,6 @@ impl Connector {
     where
         T: Into<Option<IpAddr>>,
     {
-        let mut http = http_connector()?;
         http.set_local_address(local_addr.into());
         http.set_nodelay(nodelay);
         Ok(Connector {
@@ -82,6 +153,7 @@ impl Connector {
 
     #[cfg(feature = "default-tls")]
     pub(crate) fn new_default_tls<T>(
+        http: HttpConnector,
         tls: TlsConnectorBuilder,
         proxies: Arc<Vec<Proxy>>,
         user_agent: Option<HeaderValue>,
@@ -93,6 +165,7 @@ impl Connector {
     {
         let tls = tls.build().map_err(crate::error::builder)?;
         Self::from_built_default_tls(
+            http,
             tls,
             proxies,
             user_agent,
@@ -103,6 +176,7 @@ impl Connector {
 
     #[cfg(feature = "default-tls")]
     pub(crate) fn from_built_default_tls<T> (
+        mut http: HttpConnector,
         tls: TlsConnector,
         proxies: Arc<Vec<Proxy>>,
         user_agent: Option<HeaderValue>,
@@ -111,7 +185,6 @@ impl Connector {
         where
             T: Into<Option<IpAddr>>,
     {
-        let mut http = http_connector()?;
         http.set_local_address(local_addr.into());
         http.enforce_http(false);
 
@@ -127,6 +200,7 @@ impl Connector {
 
     #[cfg(feature = "rustls-tls")]
     pub(crate) fn new_rustls_tls<T>(
+        mut http: HttpConnector,
         tls: rustls::ClientConfig,
         proxies: Arc<Vec<Proxy>>,
         user_agent: Option<HeaderValue>,
@@ -136,7 +210,6 @@ impl Connector {
     where
         T: Into<Option<IpAddr>>,
     {
-        let mut http = http_connector()?;
         http.set_local_address(local_addr.into());
         http.enforce_http(false);
 
@@ -412,19 +485,6 @@ fn into_uri(scheme: Scheme, host: Authority) -> Uri {
         .build()
         .expect("scheme and authority is valid Uri")
 }
-
-#[cfg(feature = "trust-dns")]
-fn http_connector() -> crate::Result<HttpConnector> {
-    TrustDnsResolver::new()
-        .map(HttpConnector::new_with_resolver)
-        .map_err(crate::error::builder)
-}
-
-#[cfg(not(feature = "trust-dns"))]
-fn http_connector() -> crate::Result<HttpConnector> {
-    Ok(HttpConnector::new())
-}
-
 
 async fn with_timeout<T, F>(f: F, timeout: Option<Duration>) -> Result<T, BoxError>
 where

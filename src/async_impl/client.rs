@@ -31,7 +31,7 @@ use log::debug;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
-use crate::connect::Connector;
+use crate::connect::{Connector, HttpConnector};
 #[cfg(feature = "cookies")]
 use crate::cookie;
 use crate::into_url::{expect_uri, try_uri};
@@ -91,6 +91,7 @@ struct Config {
     nodelay: bool,
     #[cfg(feature = "cookies")]
     cookie_store: Option<cookie::CookieStore>,
+    trust_dns: bool,
     error: Option<crate::Error>,
 }
 
@@ -138,6 +139,7 @@ impl ClientBuilder {
                 http2_initial_connection_window_size: None,
                 local_address: None,
                 nodelay: false,
+                trust_dns: cfg!(feature = "trust-dns"),
                 #[cfg(feature = "cookies")]
                 cookie_store: None,
             },
@@ -169,6 +171,14 @@ impl ClientBuilder {
                 headers.get(USER_AGENT).cloned()
             }
 
+            let http = match config.trust_dns {
+                false => HttpConnector::new_gai(),
+                #[cfg(feature = "trust-dns")]
+                true => HttpConnector::new_trust_dns()?,
+                #[cfg(not(feature = "trust-dns"))]
+                true => unreachable!("trust-dns shouldn't be enabled unless the feature is"),
+            };
+
             #[cfg(feature = "__tls")]
             match config.tls {
                 #[cfg(feature = "default-tls")]
@@ -195,6 +205,7 @@ impl ClientBuilder {
 
 
                     Connector::new_default_tls(
+                        http,
                         tls,
                         proxies.clone(),
                         user_agent(&config.headers),
@@ -205,6 +216,7 @@ impl ClientBuilder {
                 #[cfg(feature = "native-tls")]
                 TlsBackend::BuiltNativeTls(conn) => {
                     Connector::from_built_default_tls(
+                        http,
                         conn,
                         proxies.clone(),
                         user_agent(&config.headers),
@@ -214,6 +226,7 @@ impl ClientBuilder {
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::BuiltRustls(conn) => {
                     Connector::new_rustls_tls(
+                        http,
                         conn,
                         proxies.clone(),
                         user_agent(&config.headers),
@@ -247,6 +260,7 @@ impl ClientBuilder {
                     }
 
                     Connector::new_rustls_tls(
+                        http,
                         tls,
                         proxies.clone(),
                         user_agent(&config.headers),
@@ -266,7 +280,7 @@ impl ClientBuilder {
             }
 
             #[cfg(not(feature = "__tls"))]
-            Connector::new(proxies.clone(), config.local_address, config.nodelay)?
+            Connector::new(http, proxies.clone(), config.local_address, config.nodelay)?
         };
 
         connector.set_timeout(config.connect_timeout);
@@ -792,6 +806,36 @@ impl ClientBuilder {
         // Otherwise, we don't recognize the TLS backend!
         self.config.tls = crate::tls::TlsBackend::UnknownPreconfigured;
         self
+    }
+
+    /// Enables the [trust-dns](trust_dns_resolver) async resolver instead of a default threadpool using `getaddrinfo`.
+    ///
+    /// If the `trust-dns` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `trust-dns` feature to be enabled
+    #[cfg(feature = "trust-dns")]
+    pub fn trust_dns(mut self, enable: bool) -> ClientBuilder {
+        self.config.trust_dns = enable;
+        self
+    }
+
+    /// Disables the trust-dns async resolver.
+    ///
+    /// This method exists even if the optional `trust-dns` feature is not enabled.
+    /// This can be used to ensure a `Client` doesn't use the trust-dns async resolver
+    /// even if another dependency were to enable the optional `trust-dns` feature.
+    pub fn no_trust_dns(self) -> ClientBuilder {
+        #[cfg(feature = "trust-dns")]
+        {
+            self.trust_dns(false)
+        }
+
+        #[cfg(not(feature = "trust-dns"))]
+        {
+            self
+        }
     }
 }
 
