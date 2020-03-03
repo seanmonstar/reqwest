@@ -300,7 +300,7 @@ impl ClientBuilder {
             builder.http2_initial_connection_window_size(http2_initial_connection_window_size);
         }
 
-        builder.max_idle_per_host(config.max_idle_per_host);
+        builder.pool_max_idle_per_host(config.max_idle_per_host);
 
         if config.http1_title_case_headers {
             builder.http1_title_case_headers(true);
