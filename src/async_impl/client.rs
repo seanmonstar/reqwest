@@ -28,6 +28,7 @@ use tokio::time::Delay;
 
 use log::debug;
 
+use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
@@ -62,8 +63,7 @@ pub struct ClientBuilder {
 
 struct Config {
     // NOTE: When adding a new field, update `fmt::Debug for ClientBuilder`
-    gzip: bool,
-    brotli: bool,
+    accepts: Accepts,
     headers: HeaderMap,
     #[cfg(feature = "native-tls")]
     hostname_verification: bool,
@@ -112,8 +112,7 @@ impl ClientBuilder {
         ClientBuilder {
             config: Config {
                 error: None,
-                gzip: cfg!(feature = "gzip"),
-                brotli: cfg!(feature = "brotli"),
+                accepts: Accepts::default(),
                 headers,
                 #[cfg(feature = "native-tls")]
                 hostname_verification: true,
@@ -312,10 +311,9 @@ impl ClientBuilder {
 
         Ok(Client {
             inner: Arc::new(ClientRef {
+                accepts: config.accepts,
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store.map(RwLock::new),
-                gzip: config.gzip,
-                brotli: config.brotli,
                 hyper: hyper_client,
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
@@ -448,7 +446,7 @@ impl ClientBuilder {
     /// This requires the optional `gzip` feature to be enabled
     #[cfg(feature = "gzip")]
     pub fn gzip(mut self, enable: bool) -> ClientBuilder {
-        self.config.gzip = enable;
+        self.config.accepts.gzip = enable;
         self
     }
 
@@ -470,7 +468,7 @@ impl ClientBuilder {
     /// This requires the optional `brotli` feature to be enabled
     #[cfg(feature = "brotli")]
     pub fn brotli(mut self, enable: bool) -> ClientBuilder {
-        self.config.brotli = enable;
+        self.config.accepts.brotli = enable;
         self
     }
 
@@ -976,12 +974,7 @@ impl Client {
             }
         }
 
-        let accept_encoding = match (self.inner.gzip, self.inner.brotli) {
-            (true, true) => Some("gzip, br"),
-            (true, false) => Some("gzip"),
-            (false, true) => Some("br"),
-            _ => None,
-        };
+        let accept_encoding = self.inner.accepts.as_str();
 
         if accept_encoding.is_some()
             && !headers.contains_key(ACCEPT_ENCODING)
@@ -1092,8 +1085,7 @@ impl Config {
             }
         }
 
-        f.field("gzip", &self.gzip);
-        f.field("brotli", &self.brotli);
+        f.field("accepts", &self.accepts);
 
         if !self.proxies.is_empty() {
             f.field("proxies", &self.proxies);
@@ -1155,10 +1147,9 @@ impl Config {
 }
 
 struct ClientRef {
+    accepts: Accepts,
     #[cfg(feature = "cookies")]
     cookie_store: Option<RwLock<cookie::CookieStore>>,
-    gzip: bool,
-    brotli: bool,
     headers: HeaderMap,
     hyper: HyperClient,
     redirect_policy: redirect::Policy,
@@ -1180,8 +1171,7 @@ impl ClientRef {
             }
         }
 
-        f.field("gzip", &self.gzip);
-        f.field("brotli", &self.brotli);
+        f.field("accepts", &self.accepts);
 
         if !self.proxies.is_empty() {
             f.field("proxies", &self.proxies);
@@ -1417,8 +1407,7 @@ impl Future for PendingRequest {
             let res = Response::new(
                 res,
                 self.url.clone(),
-                self.client.gzip,
-                self.client.brotli,
+                self.client.accepts,
                 self.timeout.take(),
             );
             return Poll::Ready(Ok(res));
