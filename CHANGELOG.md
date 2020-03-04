@@ -1,3 +1,10 @@
+## v0.10.4
+
+- Add `trust-dns` optional feature to change DNS resolver.
+- Add `bytes()` method to `reqwest::blocking::Response`.
+- Add `buffer()` method to `reqwest::blocking::Body`.
+- Implement `From<http::Request>` for `reqwest::Request`.
+
 ## v0.10.3
 
 - Upgrade internal `rustls` version.
