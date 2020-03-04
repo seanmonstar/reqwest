@@ -691,6 +691,8 @@ fn get_from_registry() -> SystemProxyMap {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+    use lazy_static::lazy_static;
 
     impl Dst for Url {
         fn scheme(&self) -> &str {
@@ -799,47 +801,75 @@ mod tests {
         }
     }
 
+    // Smallest possible content for a mutex
+    struct MutexInner;
+
+    lazy_static! {
+        static ref ENVLOCK: Mutex<MutexInner> = {
+            Mutex::new(MutexInner)
+        };
+    }
+
     #[test]
     fn test_get_sys_proxies_parsing() {
+        // Stop other threads from modifying process-global ENV while we are.
+        let _lock = ENVLOCK.lock();
         // save system setting first.
         let _g1 = env_guard("HTTP_PROXY");
         let _g2 = env_guard("http_proxy");
 
-        // empty
-        assert_eq!(get_sys_proxies().contains_key("http"), false);
-
+        // Mock ENV, get the results, before doing assertions
+        // to avoid assert! -> panic! -> Mutex Poisoned.
+        let baseline_proxies = get_sys_proxies();
         // the system proxy setting url is invalid.
         env::set_var("http_proxy", "123465");
-        assert_eq!(get_sys_proxies().contains_key("http"), false);
-
+        let invalid_proxies = get_sys_proxies();
         // set valid proxy
         env::set_var("http_proxy", "http://127.0.0.1/");
-        let proxies = get_sys_proxies();
-
-        let p = &proxies["http"];
-        assert_eq!(p.scheme(), "http");
-        assert_eq!(p.host(), "127.0.0.1");
+        let valid_proxies = get_sys_proxies();
 
         // reset user setting when guards drop
+        drop(_g1);
+        drop(_g2);
+        // Let other threads run now
+        drop(_lock);
+
+        assert_eq!(baseline_proxies.contains_key("http"), false);
+        assert_eq!(invalid_proxies.contains_key("http"), false);
+
+        let p = &valid_proxies["http"];
+        assert_eq!(p.scheme(), "http");
+        assert_eq!(p.host(), "127.0.0.1");
     }
 
     #[test]
     fn test_get_sys_proxies_in_cgi() {
+        // Stop other threads from modifying process-global ENV while we are.
+        let _lock = ENVLOCK.lock();
         // save system setting first.
         let _g1 = env_guard("REQUEST_METHOD");
         let _g2 = env_guard("HTTP_PROXY");
 
-
+        // Mock ENV, get the results, before doing assertions
+        // to avoid assert! -> panic! -> Mutex Poisoned.
         env::set_var("HTTP_PROXY", "http://evil/");
 
-        // not in CGI yet
-        assert_eq!(get_sys_proxies()["http"].host(), "evil");
-
+        let baseline_proxies = get_sys_proxies();
         // set like we're in CGI
         env::set_var("REQUEST_METHOD", "GET");
-        assert!(!get_sys_proxies().contains_key("http"));
+
+        let cgi_proxies = get_sys_proxies();
 
         // reset user setting when guards drop
+        drop(_g1);
+        drop(_g2);
+        // Let other threads run now
+        drop(_lock);
+
+        // not in CGI yet
+        assert_eq!(baseline_proxies["http"].host(), "evil");
+        // In CGI
+        assert!(!cgi_proxies.contains_key("http"));
     }
 
     /// Guard an environment variable, resetting it to the original value
