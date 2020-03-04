@@ -18,18 +18,19 @@ use hyper::body::HttpBody;
 use super::super::Body;
 use crate::error;
 
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Accepts {
+    #[cfg(feature = "gzip")]
+    pub(super) gzip: bool,
+    #[cfg(feature = "brotli")]
+    pub(super) brotli: bool,
+}
+
 /// A response decompressor over a non-blocking stream of chunks.
 ///
 /// The inner decoder may be constructed asynchronously.
 pub(crate) struct Decoder {
     inner: Inner,
-}
-
-enum DecoderType {
-    #[cfg(feature = "gzip")]
-    Gzip,
-    #[cfg(feature = "brotli")]
-    Brotli,
 }
 
 enum Inner {
@@ -53,6 +54,13 @@ enum Inner {
 struct Pending(Peekable<IoStream>, DecoderType);
 
 struct IoStream(super::body::ImplStream);
+
+enum DecoderType {
+    #[cfg(feature = "gzip")]
+    Gzip,
+    #[cfg(feature = "brotli")]
+    Brotli,
+}
 
 impl fmt::Debug for Decoder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -177,26 +185,21 @@ impl Decoder {
     /// how to decode the content body of the request.
     ///
     /// Uses the correct variant by inspecting the Content-Encoding header.
-    pub(crate) fn detect(
+    pub(super) fn detect(
         _headers: &mut HeaderMap,
         body: Body,
-        check_gzip: bool,
-        check_brotli: bool,
+        _accepts: Accepts,
     ) -> Decoder {
-        if !check_gzip && !check_brotli {
-            return Decoder::plain_text(body);
-        }
-
         #[cfg(feature = "gzip")]
         {
-            if Decoder::detect_gzip(_headers) {
+            if _accepts.gzip && Decoder::detect_gzip(_headers) {
                 return Decoder::gzip(body);
             }
         }
 
         #[cfg(feature = "brotli")]
         {
-            if Decoder::detect_brotli(_headers) {
+            if _accepts.brotli && Decoder::detect_brotli(_headers) {
                 return Decoder::brotli(body);
             }
         }
@@ -314,6 +317,63 @@ impl Stream for IoStream {
             Some(Ok(chunk)) => Poll::Ready(Some(Ok(chunk))),
             Some(Err(err)) => Poll::Ready(Some(Err(err.into_io()))),
             None => Poll::Ready(None),
+        }
+    }
+}
+
+// ===== impl Accepts =====
+
+impl Accepts {
+    pub(super) fn none() -> Self {
+        Accepts {
+            #[cfg(feature = "gzip")]
+            gzip: false,
+            #[cfg(feature = "brotli")]
+            brotli: false,
+        }
+    }
+
+    pub(super) fn as_str(&self) -> Option<&'static str> {
+        match (self.is_gzip(), self.is_brotli()) {
+            (true, true) => Some("gzip, br"),
+            (true, false) => Some("gzip"),
+            (false, true) => Some("br"),
+            _ => None,
+        }
+    }
+
+    fn is_gzip(&self) -> bool {
+        #[cfg(feature = "gzip")]
+        {
+            self.gzip
+        }
+
+        #[cfg(not(feature = "gzip"))]
+        {
+            false
+        }
+    }
+
+    fn is_brotli(&self) -> bool {
+        #[cfg(feature = "brotli")]
+        {
+            self.brotli
+        }
+
+        #[cfg(not(feature = "brotli"))]
+        {
+            false
+        }
+    }
+}
+
+impl Default for Accepts {
+    fn default() -> Accepts {
+        Accepts {
+            #[cfg(feature = "gzip")]
+            gzip: true,
+            #[cfg(feature = "brotli")]
+            brotli: true,
         }
     }
 }

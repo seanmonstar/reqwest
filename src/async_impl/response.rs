@@ -17,7 +17,7 @@ use tokio::time::Delay;
 use url::Url;
 
 use super::body::Body;
-use super::Decoder;
+use super::decoder::{Accepts, Decoder};
 #[cfg(feature = "cookies")]
 use crate::cookie;
 
@@ -37,8 +37,7 @@ impl Response {
     pub(super) fn new(
         res: hyper::Response<hyper::Body>,
         url: Url,
-        gzip: bool,
-        brotli: bool,
+        accepts: Accepts,
         timeout: Option<Delay>,
     ) -> Response {
         let (parts, body) = res.into_parts();
@@ -47,7 +46,7 @@ impl Response {
         let extensions = parts.extensions;
 
         let mut headers = parts.headers;
-        let decoder = Decoder::detect(&mut headers, Body::response(body, timeout), gzip, brotli);
+        let decoder = Decoder::detect(&mut headers, Body::response(body, timeout), accepts);
 
         Response {
             status,
@@ -400,7 +399,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
     fn from(r: http::Response<T>) -> Response {
         let (mut parts, body) = r.into_parts();
         let body = body.into();
-        let body = Decoder::detect(&mut parts.headers, body, false, false);
+        let body = Decoder::detect(&mut parts.headers, body, Accepts::none());
         let url = parts
             .extensions
             .remove::<ResponseUrl>()
