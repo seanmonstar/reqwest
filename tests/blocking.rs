@@ -274,6 +274,7 @@ fn test_appended_headers_not_overwritten() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
+#[cfg_attr(not(debug_assertions), ignore)]
 #[test]
 #[should_panic]
 fn test_blocking_inside_a_runtime() {
