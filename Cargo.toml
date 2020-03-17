@@ -37,7 +37,7 @@ rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "__tls"]
 
 blocking = ["futures-util/io", "tokio/rt-threaded", "tokio/rt-core", "tokio/sync"]
 
-cookies = ["cookie_crate", "cookie_store"]
+cookies = ["cookie_crate", "cookie_store", "time"]
 
 gzip = ["async-compression", "async-compression/gzip"]
 
@@ -81,7 +81,6 @@ mime = "0.3.7"
 mime_guess = "2.0"
 percent-encoding = "2.1"
 tokio = { version = "0.2.5", default-features = false, features = ["tcp", "time"] }
-time = "0.1.42"
 pin-project-lite = "0.1.1"
 
 # TODO: candidates for optional features
@@ -104,6 +103,7 @@ webpki-roots = { version = "0.18", optional = true }
 ## cookies
 cookie_crate = { version = "0.12", package = "cookie", optional = true }
 cookie_store = { version = "0.10", optional = true }
+time = { version = "0.1.42", optional = true }
 
 ## compression
 async-compression = { version = "0.3.0", default-features = false, features = ["stream"], optional = true }
