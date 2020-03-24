@@ -184,6 +184,22 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.cookie_store(enable))
     }
 
+    /// Enable cloning and tracking cookie store state as represented at the end of each response.
+    ///
+    /// This requires the `cookie_store` option on this `Client` to be enabled.
+    ///
+    /// By default, no tracking occurs.
+    /// 
+    /// If enabled, the cookies will be available through `Response::session_cookies()`.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled.
+    #[cfg(feature = "cookies")]
+    pub fn tracking_cookie_store(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.tracking_cookie_store(enable))
+    }
+
     /// Enable auto gzip decompression by checking the `Content-Encoding` response header.
     ///
     /// If auto gzip decompresson is turned on:
