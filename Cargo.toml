@@ -74,7 +74,7 @@ encoding_rs = "0.8"
 futures-core = { version = "0.3.0", default-features = false }
 futures-util = { version = "0.3.0", default-features = false }
 http-body = "0.3.0"
-hyper = { version = "0.13.3", default-features = false, features = ["tcp"] }
+hyper = { version = "0.13.4", default-features = false, features = ["tcp"] }
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3.7"
