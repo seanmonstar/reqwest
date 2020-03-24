@@ -233,11 +233,20 @@ async fn cookie_store_response() {
     let res1 = client.get(&url1).send().await.unwrap();
     assert_eq!(res1.url().as_str(), url1);
     assert_eq!(res1.status(), reqwest::StatusCode::OK);
-    assert_eq!(res1.session_cookies().unwrap().get("key1").unwrap().value, "value1");
+    assert_eq!(
+        res1.session_cookies().unwrap().get("key1").unwrap().value,
+        "value1"
+    );
 
     let res2 = client.get(&url2).send().await.unwrap();
     assert_eq!(res2.url().as_str(), url2);
     assert_eq!(res2.status(), reqwest::StatusCode::OK);
-    assert_eq!(res2.session_cookies().unwrap().get("key1").unwrap().value, "value1");
-    assert_eq!(res2.session_cookies().unwrap().get("key2").unwrap().value, "value2");
+    assert_eq!(
+        res2.session_cookies().unwrap().get("key1").unwrap().value,
+        "value1"
+    );
+    assert_eq!(
+        res2.session_cookies().unwrap().get("key2").unwrap().value,
+        "value2"
+    );
 }
