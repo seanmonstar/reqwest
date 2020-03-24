@@ -109,7 +109,7 @@ impl Response {
     ///
     /// # Optional
     ///
-    /// This requires the optional `cookies` feature to be enabled.
+    /// This requires the optional `cookies` feature to be enabledand the `cookie_store` option on the sourcing `Client` to be enabled.
     #[cfg(feature = "cookies")]
     pub fn cookies<'a>(&'a self) -> impl Iterator<Item = cookie::Cookie<'a>> + 'a {
         cookie::extract_response_cookies(&self.headers).filter_map(Result::ok)
@@ -121,7 +121,7 @@ impl Response {
     ///
     /// # Optional
     ///
-    /// This requires the optional `cookies` feature to be enabled.
+    /// This requires the optional `cookies` feature to be enabled and the `cookie_store` and `tracking_cookie_store` options on the sourcing `Client` to be enabled.
     #[cfg(feature = "cookies")]
     pub fn session_cookies(&self) -> Option<&HashMap<String, cookie::OwnedCookie>> {
         self.cookies.as_ref()
