@@ -91,6 +91,8 @@ struct Config {
     nodelay: bool,
     #[cfg(feature = "cookies")]
     cookie_store: Option<cookie::CookieStore>,
+    #[cfg(feature = "cookies")]
+    tracking_cookie_store: bool,
     trust_dns: bool,
     error: Option<crate::Error>,
 }
@@ -141,6 +143,8 @@ impl ClientBuilder {
                 trust_dns: cfg!(feature = "trust-dns"),
                 #[cfg(feature = "cookies")]
                 cookie_store: None,
+                #[cfg(feature = "cookies")]
+                tracking_cookie_store: false,
             },
         }
     }
@@ -314,6 +318,8 @@ impl ClientBuilder {
                 accepts: config.accepts,
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store.map(RwLock::new),
+                #[cfg(feature = "cookies")]
+                tracking_cookie_store: config.tracking_cookie_store,
                 hyper: hyper_client,
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
@@ -425,6 +431,23 @@ impl ClientBuilder {
         } else {
             None
         };
+        self
+    }
+
+    /// Enable cloning and tracking cookie store state as represented at the end of each response.
+    ///
+    /// This requires the `cookie_store` option on this `Client` to be enabled.
+    ///
+    /// By default, no tracking occurs.
+    /// 
+    /// If enabled, the cookies will be available through `Response::session_cookies()`.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled.
+    #[cfg(feature = "cookies")]
+    pub fn tracking_cookie_store(mut self, enable: bool) -> ClientBuilder {
+        self.config.tracking_cookie_store = enable;
         self
     }
 
@@ -1150,6 +1173,8 @@ struct ClientRef {
     accepts: Accepts,
     #[cfg(feature = "cookies")]
     cookie_store: Option<RwLock<cookie::CookieStore>>,
+    #[cfg(feature = "cookies")]
+    tracking_cookie_store: bool,
     headers: HeaderMap,
     hyper: HyperClient,
     redirect_policy: redirect::Policy,
@@ -1291,6 +1316,20 @@ impl Future for PendingRequest {
                     store.0.store_response_cookies(cookies, &self.url);
                 }
             }
+
+            #[cfg(feature = "cookies")]
+            let response_cookies =
+                if self.client.tracking_cookie_store {
+                    if let Some(store_wrapper) = self.client.cookie_store.as_ref() {
+                        let store = store_wrapper.read().unwrap();
+                        Some(store.exposed(&self.url))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+            
             let should_redirect = match res.status() {
                 StatusCode::MOVED_PERMANENTLY | StatusCode::FOUND | StatusCode::SEE_OTHER => {
                     self.body = None;
@@ -1409,6 +1448,8 @@ impl Future for PendingRequest {
                 self.url.clone(),
                 self.client.accepts,
                 self.timeout.take(),
+                #[cfg(feature = "cookies")]
+                response_cookies,
             );
             return Poll::Ready(Ok(res));
         }

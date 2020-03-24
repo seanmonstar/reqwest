@@ -201,3 +201,43 @@ async fn cookie_store_path() {
     let url = format!("http://{}/subpath", server.addr());
     client.get(&url).send().await.unwrap();
 }
+
+#[tokio::test]
+async fn cookie_store_response() {
+    let server = server::http(move |req| async move {
+        if req.uri() == "/1" {
+            http::Response::builder()
+                .status(200)
+                .header("set-cookie", "key1=value1")
+                .body(Default::default())
+                .unwrap()
+        } else if req.uri() == "/2" {
+            http::Response::builder()
+                .status(200)
+                .header("set-cookie", "key2=value2")
+                .body(Default::default())
+                .unwrap()
+        } else {
+            unreachable!();
+        }
+    });
+
+    let url1 = format!("http://{}/1", server.addr());
+    let url2 = format!("http://{}/2", server.addr());
+
+    let client = reqwest::ClientBuilder::new()
+        .cookie_store(true)
+        .tracking_cookie_store(true)
+        .build()
+        .unwrap();
+    let res1 = client.get(&url1).send().await.unwrap();
+    assert_eq!(res1.url().as_str(), url1);
+    assert_eq!(res1.status(), reqwest::StatusCode::OK);
+    assert_eq!(res1.session_cookies().unwrap().get("key1").unwrap().value, "value1");
+
+    let res2 = client.get(&url2).send().await.unwrap();
+    assert_eq!(res2.url().as_str(), url2);
+    assert_eq!(res2.status(), reqwest::StatusCode::OK);
+    assert_eq!(res2.session_cookies().unwrap().get("key1").unwrap().value, "value1");
+    assert_eq!(res2.session_cookies().unwrap().get("key2").unwrap().value, "value2");
+}
