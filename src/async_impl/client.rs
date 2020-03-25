@@ -137,7 +137,7 @@ impl ClientBuilder {
                 http2_initial_stream_window_size: None,
                 http2_initial_connection_window_size: None,
                 local_address: None,
-                nodelay: false,
+                nodelay: true,
                 trust_dns: cfg!(feature = "trust-dns"),
                 #[cfg(feature = "cookies")]
                 cookie_store: None,
@@ -630,9 +630,23 @@ impl ClientBuilder {
 
     // TCP options
 
-    /// Set that all sockets have `SO_NODELAY` set to `true`.
-    pub fn tcp_nodelay(mut self) -> ClientBuilder {
-        self.config.nodelay = true;
+    #[doc(hidden)]
+    #[deprecated(note = "tcp_nodelay is enabled by default, use `tcp_nodelay_` to disable")]
+    pub fn tcp_nodelay(self) -> ClientBuilder {
+        self.tcp_nodelay_(true)
+    }
+
+    /// Set whether sockets have `SO_NODELAY` enabled.
+    ///
+    /// Default is `true`.
+    // NOTE: Regarding naming (trailing underscore):
+    //
+    // Due to the original `tcp_nodelay()` not taking an argument, changing
+    // the default means a user has no way of *disabling* this feature.
+    //
+    // TODO(v0.11.x): Remove trailing underscore.
+    pub fn tcp_nodelay_(mut self, enabled: bool) -> ClientBuilder {
+        self.config.nodelay = enabled;
         self
     }
 

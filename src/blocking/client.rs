@@ -327,9 +327,23 @@ impl ClientBuilder {
 
     // TCP options
 
-    /// Set that all sockets have `SO_NODELAY` set to `true`.
+    #[doc(hidden)]
+    #[deprecated(note = "tcp_nodelay is enabled by default, use `tcp_nodelay_` to disable")]
     pub fn tcp_nodelay(self) -> ClientBuilder {
-        self.with_inner(move |inner| inner.tcp_nodelay())
+        self.tcp_nodelay_(true)
+    }
+
+    /// Set whether sockets have `SO_NODELAY` enabled.
+    ///
+    /// Default is `true`.
+    // NOTE: Regarding naming (trailing underscore):
+    //
+    // Due to the original `tcp_nodelay()` not taking an argument, changing
+    // the default means a user has no way of *disabling* this feature.
+    //
+    // TODO(v0.11.x): Remove trailing underscore.
+    pub fn tcp_nodelay_(self, enabled: bool) -> ClientBuilder {
+        self.with_inner(move |inner| inner.tcp_nodelay_(enabled))
     }
 
     /// Bind to a local IP Address.
