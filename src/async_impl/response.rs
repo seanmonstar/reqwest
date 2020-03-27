@@ -11,8 +11,10 @@ use hyper::{HeaderMap, StatusCode, Version};
 use mime::Mime;
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
-#[cfg(feature = "json")]
+#[cfg(all(feature = "json", not(feature = "simd-json")))]
 use serde_json;
+#[cfg(all(feature= "json", feature = "simd-json"))]
+use simd_json;
 use tokio::time::Delay;
 use url::Url;
 
@@ -237,10 +239,17 @@ impl Response {
     /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
     #[cfg(feature = "json")]
     pub async fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
-        let full = self.bytes().await?;
-
-        serde_json::from_slice(&full).map_err(crate::error::decode)
-    }
+        #[cfg(not(feature = "simd-json"))]
+        {
+            let full = self.bytes().await?;
+            serde_json::from_slice(&full).map_err(crate::error::decode)
+        }
+        #[cfg(feature = "simd-json")]
+        {
+            let mut full = self.bytes().await?.to_vec();
+            simd_json::from_slice(&mut full).map_err(crate::error::decode)
+        } 
+   }
 
     /// Get the full response body as `Bytes`.
     ///

@@ -117,6 +117,8 @@ jobs:
             features: "--features brotli"
           - name: "feat.: json"
             features: "--features json"
+          - name: "feat.: simd-json"
+            features: "--features json,simd-json"
           - name: "feat.: stream"
             features: "--features stream"
           - name: "feat.: socks/default-tls"
@@ -140,12 +142,16 @@ jobs:
 
       - name: Build
         uses: actions-rs/cargo@v1
+        env:
+          RUSTFLAGS: '-C target-cpu=native'
         with:
           command: build
           args: ${{ matrix.features }}
 
       - name: Test
         uses: actions-rs/cargo@v1
+        env:
+          RUSTFLAGS: '-C target-cpu=native'
         with:
           command: test
           args: ${{ matrix.features }} ${{ matrix.test-features }} -- --test-threads=1

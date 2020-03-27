@@ -17,7 +17,7 @@ use super::multipart;
 use super::response::Response;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
 use crate::{Method, Url};
-use http::{Request as HttpRequest, request::Parts};
+use http::{request::Parts, Request as HttpRequest};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -43,7 +43,7 @@ impl Request {
             url,
             headers: HeaderMap::new(),
             body: None,
-            timeout: None
+            timeout: None,
         }
     }
 
@@ -484,7 +484,6 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
     }
 }
 
-
 /// Check the request URL for a "username:password" type authority, and if
 /// found, remove it from the URL and return it.
 pub(crate) fn extract_authority(url: &mut Url) -> Option<(String, Option<String>)> {
@@ -502,20 +501,21 @@ pub(crate) fn extract_authority(url: &mut Url) -> Option<(String, Option<String>
                 .map(String::from)
         });
         if !username.is_empty() || password.is_some() {
-            url
-                .set_username("")
+            url.set_username("")
                 .expect("has_authority means set_username shouldn't fail");
-            url
-                .set_password(None)
+            url.set_password(None)
                 .expect("has_authority means set_password shouldn't fail");
-            return Some((username, password))
+            return Some((username, password));
         }
     }
 
     None
 }
 
-impl<T> From<HttpRequest<T>> for Request where T:Into<Body>{
+impl<T> From<HttpRequest<T>> for Request
+where
+    T: Into<Body>,
+{
     fn from(req: HttpRequest<T>) -> Self {
         let (parts, body) = req.into_parts();
         let Parts {
@@ -650,7 +650,8 @@ mod tests {
     #[test]
     fn try_clone_reusable() {
         let client = Client::new();
-        let builder = client.post("http://httpbin.org/post")
+        let builder = client
+            .post("http://httpbin.org/post")
             .header("foo", "bar")
             .body("from a &str!");
         let req = builder
@@ -680,14 +681,11 @@ mod tests {
     #[test]
     #[cfg(feature = "stream")]
     fn try_clone_stream() {
-        let chunks: Vec<Result<_, ::std::io::Error>> = vec![
-            Ok("hello"),
-            Ok(" "),
-            Ok("world"),
-        ];
+        let chunks: Vec<Result<_, ::std::io::Error>> = vec![Ok("hello"), Ok(" "), Ok("world")];
         let stream = futures_util::stream::iter(chunks);
         let client = Client::new();
-        let builder = client.get("http://httpbin.org/get")
+        let builder = client
+            .get("http://httpbin.org/get")
             .body(super::Body::wrap_stream(stream));
         let clone = builder.try_clone();
         assert!(clone.is_none());
@@ -698,18 +696,19 @@ mod tests {
         let client = Client::new();
         let some_url = "https://Aladdin:open sesame@localhost/";
 
-        let req = client
-            .get(some_url)
-            .build()
-            .expect("request build");
+        let req = client.get(some_url).build().expect("request build");
 
         assert_eq!(req.url().as_str(), "https://localhost/");
-        assert_eq!(req.headers()["authorization"], "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
+        assert_eq!(
+            req.headers()["authorization"],
+            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="
+        );
     }
 
     #[test]
     fn convert_from_http_request() {
-        let http_request = HttpRequest::builder().method("GET")
+        let http_request = HttpRequest::builder()
+            .method("GET")
             .uri("http://localhost/")
             .header("User-Agent", "my-awesome-agent/1.0")
             .body("test test test")
