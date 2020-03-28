@@ -296,6 +296,18 @@ impl ClientBuilder {
 
     // HTTP options
 
+    /// Set an optional timeout for idle sockets being kept-alive.
+    ///
+    /// Pass `None` to disable timeout.
+    ///
+    /// Default is 90 seconds.
+    pub fn pool_idle_timeout<D>(self, val: D) -> ClientBuilder
+    where
+        D: Into<Option<Duration>>,
+    {
+        self.with_inner(|inner| inner.pool_idle_timeout(val))
+    }
+
     /// Sets the maximum idle connection per host allowed in the pool.
     pub fn max_idle_per_host(self, max: usize) -> ClientBuilder {
         self.with_inner(move |inner| inner.max_idle_per_host(max))
