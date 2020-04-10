@@ -51,6 +51,11 @@ use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
 ///
 /// The `Client` holds a connection pool internally, so it is advised that
 /// you create one and **reuse** it.
+///
+/// You do **not** have to wrap the `Client` it in an [`Rc`] or [`Arc`] to **reuse** it,
+/// because it already uses an [`Arc`] internally.
+///
+/// [`Rc`]: std::rc::Rc
 #[derive(Clone)]
 pub struct Client {
     inner: Arc<ClientRef>,
