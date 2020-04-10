@@ -983,7 +983,9 @@ mod tests {
             ".foo.bar,bar.baz,10.42.1.1/24,::1,10.124.7.8,2001::/17",
         );
 
-        let p = Proxy::system();
+        // Manually construct this so we aren't use the cache
+        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies())));
+        p.no_proxy = NoProxy::new();
 
         assert_eq!(intercepted_uri(&p, "http://hyper.rs"), target);
         assert_eq!(intercepted_uri(&p, "http://foo.bar.baz"), target);
@@ -1014,7 +1016,9 @@ mod tests {
         let _g1 = env_guard("no_proxy");
         let domain = "lower.case";
         env::set_var("no_proxy", domain);
-        let p = Proxy::system();
+        // Manually construct this so we aren't use the cache
+        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies())));
+        p.no_proxy = NoProxy::new();
         assert_eq!(
             p.no_proxy.expect("should have a no proxy set").domains.0[0],
             domain
@@ -1024,7 +1028,9 @@ mod tests {
         let _g2 = env_guard("NO_PROXY");
         let domain = "upper.case";
         env::set_var("NO_PROXY", domain);
-        let p = Proxy::system();
+        // Manually construct this so we aren't use the cache
+        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies())));
+        p.no_proxy = NoProxy::new();
         assert_eq!(
             p.no_proxy.expect("should have a no proxy set").domains.0[0],
             domain
@@ -1036,7 +1042,9 @@ mod tests {
         let target = "http://example.domain/";
         env::set_var("HTTP_PROXY", target);
 
-        let p = Proxy::system();
+        // Manually construct this so we aren't use the cache
+        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies())));
+        p.no_proxy = NoProxy::new();
         assert!(p.no_proxy.is_none(), "NoProxy shouldn't have been created");
 
         assert_eq!(intercepted_uri(&p, "http://hyper.rs"), target);
