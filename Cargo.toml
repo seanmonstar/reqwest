@@ -82,6 +82,7 @@ mime_guess = "2.0"
 percent-encoding = "2.1"
 tokio = { version = "0.2.5", default-features = false, features = ["tcp", "time"] }
 pin-project-lite = "0.1.1"
+ipnet = "2.3"
 
 # TODO: candidates for optional features
 
