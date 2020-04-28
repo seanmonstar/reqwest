@@ -2,12 +2,11 @@ use std::borrow::Cow;
 use std::fmt;
 use std::net::SocketAddr;
 
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
 use futures_util::stream::StreamExt;
 use http;
 use hyper::client::connect::HttpInfo;
-use hyper::header::CONTENT_LENGTH;
 use hyper::{HeaderMap, StatusCode, Version};
 use mime::Mime;
 #[cfg(feature = "json")]
@@ -18,7 +17,7 @@ use tokio::time::Delay;
 use url::Url;
 
 use super::body::Body;
-use super::Decoder;
+use super::decoder::{Accepts, Decoder};
 #[cfg(feature = "cookies")]
 use crate::cookie;
 
@@ -38,7 +37,7 @@ impl Response {
     pub(super) fn new(
         res: hyper::Response<hyper::Body>,
         url: Url,
-        gzip: bool,
+        accepts: Accepts,
         timeout: Option<Delay>,
     ) -> Response {
         let (parts, body) = res.into_parts();
@@ -47,7 +46,7 @@ impl Response {
         let extensions = parts.extensions;
 
         let mut headers = parts.headers;
-        let decoder = Decoder::detect(&mut headers, Body::response(body, timeout), gzip);
+        let decoder = Decoder::detect(&mut headers, Body::response(body, timeout), accepts);
 
         Response {
             status,
@@ -88,13 +87,12 @@ impl Response {
     /// Reasons it may not be known:
     ///
     /// - The server didn't send a `content-length` header.
-    /// - The response is gzipped and automatically decoded (thus changing
+    /// - The response is compressed and automatically decoded (thus changing
     ///   the actual decoded length).
     pub fn content_length(&self) -> Option<u64> {
-        self.headers()
-            .get(CONTENT_LENGTH)
-            .and_then(|ct_len| ct_len.to_str().ok())
-            .and_then(|ct_len| ct_len.parse().ok())
+        use hyper::body::HttpBody;
+
+        HttpBody::size_hint(&self.body).exact()
     }
 
     /// Retrieve the cookies contained in the response.
@@ -211,6 +209,7 @@ impl Response {
     /// # use reqwest::Error;
     /// # use serde::Deserialize;
     /// #
+    /// // This `derive` requires the `serde` dependency.
     /// #[derive(Deserialize)]
     /// struct Ip {
     ///     origin: String,
@@ -258,12 +257,8 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn bytes(mut self) -> crate::Result<Bytes> {
-        let mut buf = BytesMut::new();
-        while let Some(chunk) = self.body.next().await {
-            buf.extend(chunk?);
-        }
-        Ok(buf.freeze())
+    pub async fn bytes(self) -> crate::Result<Bytes> {
+        hyper::body::to_bytes(self.body).await
     }
 
     /// Stream a chunk of the response body.
@@ -404,7 +399,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
     fn from(r: http::Response<T>) -> Response {
         let (mut parts, body) = r.into_parts();
         let body = body.into();
-        let body = Decoder::detect(&mut parts.headers, body, false);
+        let body = Decoder::detect(&mut parts.headers, body, Accepts::none());
         let url = parts
             .extensions
             .remove::<ResponseUrl>()
@@ -439,7 +434,6 @@ pub trait ResponseBuilderExt {
     /// to the `http::Response`
     fn url(self, url: Url) -> Self;
 }
-
 
 impl ResponseBuilderExt for http::response::Builder {
     fn url(self, url: Url) -> Self {

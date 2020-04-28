@@ -1,7 +1,7 @@
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
 #![cfg_attr(test, deny(warnings))]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.10.1")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.10.4")]
 
 //! # reqwest
 //!
@@ -173,9 +173,12 @@
 //! - **blocking**: Provides the [blocking][] client API.
 //! - **cookies**: Provides cookie session support.
 //! - **gzip**: Provides response body gzip decompression.
+//! - **brotli**: Provides response body brotli decompression.
 //! - **json**: Provides serialization and deserialization for JSON bodies.
 //! - **stream**: Adds support for `futures::Stream`.
 //! - **socks**: Provides SOCKS5 proxy support.
+//! - **trust-dns**: Enables a trust-dns async resolver instead of default
+//!   threadpool using `getaddrinfo`.
 //!
 //!
 //! [hyper]: http://hyper.rs
@@ -187,8 +190,6 @@
 //! [redirect]: crate::redirect
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
-////! - **trust-dns**: Enables a trust-dns async resolver instead of default
-////!   threadpool using `getaddrinfo`.
 
 macro_rules! if_wasm {
     ($($item:item)*) => {$(
@@ -294,8 +295,8 @@ if_hyper! {
     mod connect;
     #[cfg(feature = "cookies")]
     pub mod cookie;
-    //#[cfg(feature = "trust-dns")]
-    //mod dns;
+    #[cfg(feature = "trust-dns")]
+    mod dns;
     mod proxy;
     pub mod redirect;
     #[cfg(feature = "__tls")]

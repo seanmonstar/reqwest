@@ -5,6 +5,9 @@ use js_sys::Uint8Array;
 use http::{HeaderMap, StatusCode};
 use url::Url;
 
+#[cfg(feature = "json")]
+use serde::de::DeserializeOwned;
+
 /// A Response to a submitted `Request`.
 pub struct Response {
     http: http::Response<web_sys::Response>,
@@ -56,8 +59,13 @@ impl Response {
     }
     */
 
-    // pub async fn json()
+    /// Try to deserialize the response body as JSON.
+    #[cfg(feature = "json")]
+    pub async fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
+        let full = self.bytes().await?;
 
+        serde_json::from_slice(&full).map_err(crate::error::decode)
+    }
 
     /// Get the response text.
     pub async fn text(self) -> crate::Result<String> {

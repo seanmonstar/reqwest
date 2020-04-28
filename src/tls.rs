@@ -245,7 +245,7 @@ impl Identity {
     pub(crate) fn add_to_rustls(self, tls: &mut rustls::ClientConfig) -> crate::Result<()> {
         match self.inner {
             ClientCert::Pem { key, certs } => {
-                tls.set_single_client_cert(certs, key);
+                tls.set_single_client_cert(certs, key).map_err(|e| crate::error::builder(e))?;
                 Ok(())
             }
             #[cfg(feature = "native-tls")]
@@ -266,12 +266,40 @@ impl fmt::Debug for Identity {
     }
 }
 
-#[derive(Debug)]
 pub(crate) enum TlsBackend {
     #[cfg(feature = "default-tls")]
     Default,
+    #[cfg(feature = "native-tls")]
+    BuiltNativeTls(native_tls_crate::TlsConnector),
     #[cfg(feature = "rustls-tls")]
     Rustls,
+    #[cfg(feature = "rustls-tls")]
+    BuiltRustls(rustls::ClientConfig),
+    #[cfg(any(
+        feature = "native-tls",
+        feature = "rustls-tls",
+    ))]
+    UnknownPreconfigured,
+}
+
+impl fmt::Debug for TlsBackend {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            #[cfg(feature = "default-tls")]
+            TlsBackend::Default => write!(f, "Default"),
+            #[cfg(feature = "native-tls")]
+            TlsBackend::BuiltNativeTls(_) => write!(f, "BuiltNativeTls"),
+            #[cfg(feature = "rustls-tls")]
+            TlsBackend::Rustls => write!(f, "Rustls"),
+            #[cfg(feature = "rustls-tls")]
+            TlsBackend::BuiltRustls(_) => write!(f, "BuiltRustls"),
+            #[cfg(any(
+                feature = "native-tls",
+                feature = "rustls-tls",
+            ))]
+            TlsBackend::UnknownPreconfigured => write!(f, "UnknownPreconfigured"),
+        }
+    }
 }
 
 impl Default for TlsBackend {

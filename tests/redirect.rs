@@ -8,24 +8,22 @@ async fn test_redirect_301_and_302_and_303_changes_post_to_get() {
     let codes = [301u16, 302, 303];
 
     for &code in codes.iter() {
-        let redirect = server::http(move |req| {
-            async move {
-                if req.method() == "POST" {
-                    assert_eq!(req.uri(), &*format!("/{}", code));
-                    http::Response::builder()
-                        .status(code)
-                        .header("location", "/dst")
-                        .header("server", "test-redirect")
-                        .body(Default::default())
-                        .unwrap()
-                } else {
-                    assert_eq!(req.method(), "GET");
+        let redirect = server::http(move |req| async move {
+            if req.method() == "POST" {
+                assert_eq!(req.uri(), &*format!("/{}", code));
+                http::Response::builder()
+                    .status(code)
+                    .header("location", "/dst")
+                    .header("server", "test-redirect")
+                    .body(Default::default())
+                    .unwrap()
+            } else {
+                assert_eq!(req.method(), "GET");
 
-                    http::Response::builder()
-                        .header("server", "test-dst")
-                        .body(Default::default())
-                        .unwrap()
-                }
+                http::Response::builder()
+                    .header("server", "test-dst")
+                    .body(Default::default())
+                    .unwrap()
             }
         });
 
@@ -46,24 +44,22 @@ async fn test_redirect_307_and_308_tries_to_get_again() {
     let client = reqwest::Client::new();
     let codes = [307u16, 308];
     for &code in codes.iter() {
-        let redirect = server::http(move |req| {
-            async move {
-                assert_eq!(req.method(), "GET");
-                if req.uri() == &*format!("/{}", code) {
-                    http::Response::builder()
-                        .status(code)
-                        .header("location", "/dst")
-                        .header("server", "test-redirect")
-                        .body(Default::default())
-                        .unwrap()
-                } else {
-                    assert_eq!(req.uri(), "/dst");
+        let redirect = server::http(move |req| async move {
+            assert_eq!(req.method(), "GET");
+            if req.uri() == &*format!("/{}", code) {
+                http::Response::builder()
+                    .status(code)
+                    .header("location", "/dst")
+                    .header("server", "test-redirect")
+                    .body(Default::default())
+                    .unwrap()
+            } else {
+                assert_eq!(req.uri(), "/dst");
 
-                    http::Response::builder()
-                        .header("server", "test-dst")
-                        .body(Default::default())
-                        .unwrap()
-                }
+                http::Response::builder()
+                    .header("server", "test-dst")
+                    .body(Default::default())
+                    .unwrap()
             }
         });
 
@@ -85,29 +81,27 @@ async fn test_redirect_307_and_308_tries_to_post_again() {
     let client = reqwest::Client::new();
     let codes = [307u16, 308];
     for &code in codes.iter() {
-        let redirect = server::http(move |mut req| {
-            async move {
-                assert_eq!(req.method(), "POST");
-                assert_eq!(req.headers()["content-length"], "5");
+        let redirect = server::http(move |mut req| async move {
+            assert_eq!(req.method(), "POST");
+            assert_eq!(req.headers()["content-length"], "5");
 
-                let data = req.body_mut().next().await.unwrap().unwrap();
-                assert_eq!(&*data, b"Hello");
+            let data = req.body_mut().next().await.unwrap().unwrap();
+            assert_eq!(&*data, b"Hello");
 
-                if req.uri() == &*format!("/{}", code) {
-                    http::Response::builder()
-                        .status(code)
-                        .header("location", "/dst")
-                        .header("server", "test-redirect")
-                        .body(Default::default())
-                        .unwrap()
-                } else {
-                    assert_eq!(req.uri(), "/dst");
+            if req.uri() == &*format!("/{}", code) {
+                http::Response::builder()
+                    .status(code)
+                    .header("location", "/dst")
+                    .header("server", "test-redirect")
+                    .body(Default::default())
+                    .unwrap()
+            } else {
+                assert_eq!(req.uri(), "/dst");
 
-                    http::Response::builder()
-                        .header("server", "test-dst")
-                        .body(Default::default())
-                        .unwrap()
-                }
+                http::Response::builder()
+                    .header("server", "test-dst")
+                    .body(Default::default())
+                    .unwrap()
             }
         });
 
@@ -129,22 +123,20 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
     let client = reqwest::blocking::Client::new();
     let codes = [307u16, 308];
     for &code in codes.iter() {
-        let redirect = server::http(move |mut req| {
-            async move {
-                assert_eq!(req.method(), "POST");
-                assert_eq!(req.uri(), &*format!("/{}", code));
-                assert_eq!(req.headers()["transfer-encoding"], "chunked");
+        let redirect = server::http(move |mut req| async move {
+            assert_eq!(req.method(), "POST");
+            assert_eq!(req.uri(), &*format!("/{}", code));
+            assert_eq!(req.headers()["transfer-encoding"], "chunked");
 
-                let data = req.body_mut().next().await.unwrap().unwrap();
-                assert_eq!(&*data, b"Hello");
+            let data = req.body_mut().next().await.unwrap().unwrap();
+            assert_eq!(&*data, b"Hello");
 
-                http::Response::builder()
-                    .status(code)
-                    .header("location", "/dst")
-                    .header("server", "test-redirect")
-                    .body(Default::default())
-                    .unwrap()
-            }
+            http::Response::builder()
+                .status(code)
+                .header("location", "/dst")
+                .header("server", "test-redirect")
+                .body(Default::default())
+                .unwrap()
         });
 
         let url = format!("http://{}/{}", redirect.addr(), code);
@@ -180,15 +172,13 @@ async fn test_redirect_removes_sensitive_headers() {
 
     let end_addr = end_server.addr();
 
-    let mid_server = server::http(move |req| {
-        async move {
-            assert_eq!(req.headers()["cookie"], "foo=bar");
-            http::Response::builder()
-                .status(302)
-                .header("location", format!("http://{}/end", end_addr))
-                .body(Default::default())
-                .unwrap()
-        }
+    let mid_server = server::http(move |req| async move {
+        assert_eq!(req.headers()["cookie"], "foo=bar");
+        http::Response::builder()
+            .status(302)
+            .header("location", format!("http://{}/end", end_addr))
+            .body(Default::default())
+            .unwrap()
     });
 
     tx.broadcast(Some(mid_server.addr())).unwrap();
@@ -208,15 +198,13 @@ async fn test_redirect_removes_sensitive_headers() {
 
 #[tokio::test]
 async fn test_redirect_policy_can_return_errors() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.uri(), "/loop");
-            http::Response::builder()
-                .status(302)
-                .header("location", "/loop")
-                .body(Default::default())
-                .unwrap()
-        }
+    let server = server::http(move |req| async move {
+        assert_eq!(req.uri(), "/loop");
+        http::Response::builder()
+            .status(302)
+            .header("location", "/loop")
+            .body(Default::default())
+            .unwrap()
     });
 
     let url = format!("http://{}/loop", server.addr());
@@ -226,15 +214,13 @@ async fn test_redirect_policy_can_return_errors() {
 
 #[tokio::test]
 async fn test_redirect_policy_can_stop_redirects_without_an_error() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.uri(), "/no-redirect");
-            http::Response::builder()
-                .status(302)
-                .header("location", "/dont")
-                .body(Default::default())
-                .unwrap()
-        }
+    let server = server::http(move |req| async move {
+        assert_eq!(req.uri(), "/no-redirect");
+        http::Response::builder()
+            .status(302)
+            .header("location", "/dont")
+            .body(Default::default())
+            .unwrap()
     });
 
     let url = format!("http://{}/no-redirect", server.addr());
@@ -254,20 +240,18 @@ async fn test_redirect_policy_can_stop_redirects_without_an_error() {
 
 #[tokio::test]
 async fn test_referer_is_not_set_if_disabled() {
-    let server = server::http(move |req| {
-        async move {
-            if req.uri() == "/no-refer" {
-                http::Response::builder()
-                    .status(302)
-                    .header("location", "/dst")
-                    .body(Default::default())
-                    .unwrap()
-            } else {
-                assert_eq!(req.uri(), "/dst");
-                assert_eq!(req.headers().get("referer"), None);
+    let server = server::http(move |req| async move {
+        if req.uri() == "/no-refer" {
+            http::Response::builder()
+                .status(302)
+                .header("location", "/dst")
+                .body(Default::default())
+                .unwrap()
+        } else {
+            assert_eq!(req.uri(), "/dst");
+            assert_eq!(req.headers().get("referer"), None);
 
-                http::Response::default()
-            }
+            http::Response::default()
         }
     });
 
@@ -283,14 +267,12 @@ async fn test_referer_is_not_set_if_disabled() {
 
 #[tokio::test]
 async fn test_invalid_location_stops_redirect_gh484() {
-    let server = server::http(move |_req| {
-        async move {
-            http::Response::builder()
-                .status(302)
-                .header("location", "http://www.yikes{KABOOM}")
-                .body(Default::default())
-                .unwrap()
-        }
+    let server = server::http(move |_req| async move {
+        http::Response::builder()
+            .status(302)
+            .header("location", "http://www.yikes{KABOOM}")
+            .body(Default::default())
+            .unwrap()
     });
 
     let url = format!("http://{}/yikes", server.addr());
@@ -305,20 +287,18 @@ async fn test_invalid_location_stops_redirect_gh484() {
 #[tokio::test]
 async fn test_redirect_302_with_set_cookies() {
     let code = 302;
-    let server = server::http(move |req| {
-        async move {
-            if req.uri() == "/302" {
-                http::Response::builder()
-                    .status(302)
-                    .header("location", "/dst")
-                    .header("set-cookie", "key=value")
-                    .body(Default::default())
-                    .unwrap()
-            } else {
-                assert_eq!(req.uri(), "/dst");
-                assert_eq!(req.headers()["cookie"], "key=value");
-                http::Response::default()
-            }
+    let server = server::http(move |req| async move {
+        if req.uri() == "/302" {
+            http::Response::builder()
+                .status(302)
+                .header("location", "/dst")
+                .header("set-cookie", "key=value")
+                .body(Default::default())
+                .unwrap()
+        } else {
+            assert_eq!(req.uri(), "/dst");
+            assert_eq!(req.headers()["cookie"], "key=value");
+            http::Response::default()
         }
     });
 

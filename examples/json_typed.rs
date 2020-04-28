@@ -4,6 +4,7 @@
 //! Rust compile-time type system guaranties though it requires a little bit
 //! more code.
 
+// These require the `serde` dependency.
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]

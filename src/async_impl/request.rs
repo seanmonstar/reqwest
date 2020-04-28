@@ -17,6 +17,7 @@ use super::multipart;
 use super::response::Response;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
 use crate::{Method, Url};
+use http::{Request as HttpRequest, request::Parts};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -514,9 +515,29 @@ pub(crate) fn extract_authority(url: &mut Url) -> Option<(String, Option<String>
     None
 }
 
+impl<T> From<HttpRequest<T>> for Request where T:Into<Body>{
+    fn from(req: HttpRequest<T>) -> Self {
+        let (parts, body) = req.into_parts();
+        let Parts {
+            method,
+            uri,
+            headers,
+            ..
+        } = parts;
+        let url = Url::parse(&uri.to_string()).unwrap();
+        Request {
+            method,
+            url,
+            headers,
+            body: Some(body.into()),
+            timeout: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Client;
+    use super::{Client, HttpRequest, Request};
     use crate::Method;
     use serde::Serialize;
     use std::collections::BTreeMap;
@@ -684,6 +705,23 @@ mod tests {
 
         assert_eq!(req.url().as_str(), "https://localhost/");
         assert_eq!(req.headers()["authorization"], "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
+    }
+
+    #[test]
+    fn convert_from_http_request() {
+        let http_request = HttpRequest::builder().method("GET")
+            .uri("http://localhost/")
+            .header("User-Agent", "my-awesome-agent/1.0")
+            .body("test test test")
+            .unwrap();
+        let req: Request = http_request.into();
+        assert_eq!(req.body().is_none(), false);
+        let test_data = b"test test test";
+        assert_eq!(req.body().unwrap().as_bytes(), Some(&test_data[..]));
+        let headers = req.headers();
+        assert_eq!(headers.get("User-Agent").unwrap(), "my-awesome-agent/1.0");
+        assert_eq!(req.method(), Method::GET);
+        assert_eq!(req.url().as_str(), "http://localhost/");
     }
 
     /*

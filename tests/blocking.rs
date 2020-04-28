@@ -17,13 +17,11 @@ fn test_response_text() {
 
 #[test]
 fn test_response_non_utf_8_text() {
-    let server = server::http(move |_req| {
-        async {
-            http::Response::builder()
-                .header("content-type", "text/plain; charset=gbk")
-                .body(b"\xc4\xe3\xba\xc3"[..].into())
-                .unwrap()
-        }
+    let server = server::http(move |_req| async {
+        http::Response::builder()
+            .header("content-type", "text/plain; charset=gbk")
+            .body(b"\xc4\xe3\xba\xc3"[..].into())
+            .unwrap()
     });
 
     let url = format!("http://{}/text", server.addr());
@@ -82,16 +80,14 @@ fn test_get() {
 
 #[test]
 fn test_post() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.method(), "POST");
-            assert_eq!(req.headers()["content-length"], "5");
+    let server = server::http(move |req| async move {
+        assert_eq!(req.method(), "POST");
+        assert_eq!(req.headers()["content-length"], "5");
 
-            let data = hyper::body::to_bytes(req.into_body()).await.unwrap();
-            assert_eq!(&*data, b"Hello");
+        let data = hyper::body::to_bytes(req.into_body()).await.unwrap();
+        assert_eq!(&*data, b"Hello");
 
-            http::Response::default()
-        }
+        http::Response::default()
     });
 
     let url = format!("http://{}/2", server.addr());
@@ -107,20 +103,18 @@ fn test_post() {
 
 #[test]
 fn test_post_form() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.method(), "POST");
-            assert_eq!(req.headers()["content-length"], "24");
-            assert_eq!(
-                req.headers()["content-type"],
-                "application/x-www-form-urlencoded"
-            );
+    let server = server::http(move |req| async move {
+        assert_eq!(req.method(), "POST");
+        assert_eq!(req.headers()["content-length"], "24");
+        assert_eq!(
+            req.headers()["content-type"],
+            "application/x-www-form-urlencoded"
+        );
 
-            let data = hyper::body::to_bytes(req.into_body()).await.unwrap();
-            assert_eq!(&*data, b"hello=world&sean=monstar");
+        let data = hyper::body::to_bytes(req.into_body()).await.unwrap();
+        assert_eq!(&*data, b"hello=world&sean=monstar");
 
-            http::Response::default()
-        }
+        http::Response::default()
     });
 
     let form = &[("hello", "world"), ("sean", "monstar")];
@@ -140,13 +134,11 @@ fn test_post_form() {
 /// returns a error.
 #[test]
 fn test_error_for_status_4xx() {
-    let server = server::http(move |_req| {
-        async {
-            http::Response::builder()
-                .status(400)
-                .body(Default::default())
-                .unwrap()
-        }
+    let server = server::http(move |_req| async {
+        http::Response::builder()
+            .status(400)
+            .body(Default::default())
+            .unwrap()
     });
 
     let url = format!("http://{}/1", server.addr());
@@ -161,13 +153,11 @@ fn test_error_for_status_4xx() {
 /// returns a error.
 #[test]
 fn test_error_for_status_5xx() {
-    let server = server::http(move |_req| {
-        async {
-            http::Response::builder()
-                .status(500)
-                .body(Default::default())
-                .unwrap()
-        }
+    let server = server::http(move |_req| async {
+        http::Response::builder()
+            .status(500)
+            .body(Default::default())
+            .unwrap()
     });
 
     let url = format!("http://{}/1", server.addr());
@@ -183,11 +173,9 @@ fn test_error_for_status_5xx() {
 
 #[test]
 fn test_default_headers() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.headers()["reqwest-test"], "orly");
-            http::Response::default()
-        }
+    let server = server::http(move |req| async move {
+        assert_eq!(req.headers()["reqwest-test"], "orly");
+        http::Response::default()
     });
 
     let mut headers = http::HeaderMap::with_capacity(1);
@@ -240,15 +228,13 @@ fn test_override_default_headers() {
 
 #[test]
 fn test_appended_headers_not_overwritten() {
-    let server = server::http(move |req| {
-        async move {
-            let mut accepts = req.headers().get_all("accept").into_iter();
-            assert_eq!(accepts.next().unwrap(), "application/json");
-            assert_eq!(accepts.next().unwrap(), "application/json+hal");
-            assert_eq!(accepts.next(), None);
+    let server = server::http(move |req| async move {
+        let mut accepts = req.headers().get_all("accept").into_iter();
+        assert_eq!(accepts.next().unwrap(), "application/json");
+        assert_eq!(accepts.next().unwrap(), "application/json+hal");
+        assert_eq!(accepts.next(), None);
 
-            http::Response::default()
-        }
+        http::Response::default()
     });
 
     let client = reqwest::blocking::Client::new();

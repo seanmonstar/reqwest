@@ -6,18 +6,25 @@ use reqwest::Client;
 
 #[tokio::test]
 async fn auto_headers() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.method(), "GET");
+    let server = server::http(move |req| async move {
+        assert_eq!(req.method(), "GET");
 
-            assert_eq!(req.headers()["accept"], "*/*");
-            assert_eq!(req.headers().get("user-agent"), None);
-            if cfg!(feature = "gzip") {
-                assert_eq!(req.headers()["accept-encoding"], "gzip");
-            }
-
-            http::Response::default()
+        assert_eq!(req.headers()["accept"], "*/*");
+        assert_eq!(req.headers().get("user-agent"), None);
+        if cfg!(feature = "gzip") {
+            assert!(req.headers()["accept-encoding"]
+                .to_str()
+                .unwrap()
+                .contains("gzip"));
         }
+        if cfg!(feature = "brotli") {
+            assert!(req.headers()["accept-encoding"]
+                .to_str()
+                .unwrap()
+                .contains("br"));
+        }
+
+        http::Response::default()
     });
 
     let url = format!("http://{}/1", server.addr());
@@ -30,11 +37,9 @@ async fn auto_headers() {
 
 #[tokio::test]
 async fn user_agent() {
-    let server = server::http(move |req| {
-        async move {
-            assert_eq!(req.headers()["user-agent"], "reqwest-test-agent");
-            http::Response::default()
-        }
+    let server = server::http(move |req| async move {
+        assert_eq!(req.headers()["user-agent"], "reqwest-test-agent");
+        http::Response::default()
     });
 
     let url = format!("http://{}/ua", server.addr());
@@ -63,8 +68,27 @@ async fn response_text() {
         .send()
         .await
         .expect("Failed to get");
+    assert_eq!(res.content_length(), Some(5));
     let text = res.text().await.expect("Failed to get text");
     assert_eq!("Hello", text);
+}
+
+#[tokio::test]
+async fn response_bytes() {
+    let _ = env_logger::try_init();
+
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
+
+    let client = Client::new();
+
+    let res = client
+        .get(&format!("http://{}/bytes", server.addr()))
+        .send()
+        .await
+        .expect("Failed to get");
+    assert_eq!(res.content_length(), Some(5));
+    let bytes = res.bytes().await.expect("res.bytes()");
+    assert_eq!("Hello", bytes);
 }
 
 #[tokio::test]
@@ -89,23 +113,21 @@ async fn response_json() {
 async fn body_pipe_response() {
     let _ = env_logger::try_init();
 
-    let server = server::http(move |mut req| {
-        async move {
-            if req.uri() == "/get" {
-                http::Response::new("pipe me".into())
-            } else {
-                assert_eq!(req.uri(), "/pipe");
-                assert_eq!(req.headers()["transfer-encoding"], "chunked");
+    let server = server::http(move |mut req| async move {
+        if req.uri() == "/get" {
+            http::Response::new("pipe me".into())
+        } else {
+            assert_eq!(req.uri(), "/pipe");
+            assert_eq!(req.headers()["transfer-encoding"], "chunked");
 
-                let mut full: Vec<u8> = Vec::new();
-                while let Some(item) = req.body_mut().next().await {
-                    full.extend(&*item.unwrap());
-                }
-
-                assert_eq!(full, b"pipe me");
-
-                http::Response::default()
+            let mut full: Vec<u8> = Vec::new();
+            while let Some(item) = req.body_mut().next().await {
+                full.extend(&*item.unwrap());
             }
+
+            assert_eq!(full, b"pipe me");
+
+            http::Response::default()
         }
     });
 
@@ -129,4 +151,43 @@ async fn body_pipe_response() {
         .expect("res2");
 
     assert_eq!(res2.status(), reqwest::StatusCode::OK);
+}
+
+#[cfg(any(feature = "native-tls", feature = "rustls-tls",))]
+#[test]
+fn use_preconfigured_tls_with_bogus_backend() {
+    struct DefinitelyNotTls;
+
+    reqwest::Client::builder()
+        .use_preconfigured_tls(DefinitelyNotTls)
+        .build()
+        .expect_err("definitely is not TLS");
+}
+
+#[cfg(feature = "native-tls")]
+#[test]
+fn use_preconfigured_native_tls_default() {
+    extern crate native_tls_crate;
+
+    let tls = native_tls_crate::TlsConnector::builder()
+        .build()
+        .expect("tls builder");
+
+    reqwest::Client::builder()
+        .use_preconfigured_tls(tls)
+        .build()
+        .expect("preconfigured default tls");
+}
+
+#[cfg(feature = "rustls-tls")]
+#[test]
+fn use_preconfigured_rustls_default() {
+    extern crate rustls;
+
+    let tls = rustls::ClientConfig::new();
+
+    reqwest::Client::builder()
+        .use_preconfigured_tls(tls)
+        .build()
+        .expect("preconfigured rustls tls");
 }

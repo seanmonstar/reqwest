@@ -1,3 +1,23 @@
+## v0.10.4
+
+- Add `trust-dns` optional feature to change DNS resolver.
+- Add `bytes()` method to `reqwest::blocking::Response`.
+- Add `buffer()` method to `reqwest::blocking::Body`.
+- Implement `From<http::Request>` for `reqwest::Request`.
+
+## v0.10.3
+
+- Upgrade internal `rustls` version.
+
+## v0.10.2
+
+- Add Brotli support, enabled with the optional `brotli` feature.
+- Add `Client::use_preconfigured_tls(tls_connector)` allowing manual configuration of TLS options.
+- Implement `Default` for blocking `Client`, `ClientBuilder`, and `multipart::Form`.
+- (wasm) Add `Response::error_for_status()` method.
+- (wasm) Add `Response::json()` method.
+- (wasm) Implement `Default` for `Client` and `ClientBuilder`.
+
 ## v0.10.1
 
 - Add `socks` optional feature to support SOCKS5 proxies.

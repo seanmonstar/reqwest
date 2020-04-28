@@ -1,3 +1,8 @@
+#[cfg(any(
+    feature = "native-tls",
+    feature = "rustls-tls",
+))]
+use std::any::Any;
 use std::convert::TryInto;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -11,8 +16,8 @@ use http::header::{
     Entry, HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_LENGTH,
     CONTENT_TYPE, LOCATION, PROXY_AUTHORIZATION, RANGE, REFERER, TRANSFER_ENCODING, USER_AGENT,
 };
-use http::Uri;
 use http::uri::Scheme;
+use http::Uri;
 use hyper::client::ResponseFuture;
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::TlsConnector;
@@ -23,10 +28,11 @@ use tokio::time::Delay;
 
 use log::debug;
 
+use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
-use crate::connect::Connector;
+use crate::connect::{Connector, HttpConnector};
 #[cfg(feature = "cookies")]
 use crate::cookie;
 use crate::into_url::{expect_uri, try_uri};
@@ -57,7 +63,7 @@ pub struct ClientBuilder {
 
 struct Config {
     // NOTE: When adding a new field, update `fmt::Debug for ClientBuilder`
-    gzip: bool,
+    accepts: Accepts,
     headers: HeaderMap,
     #[cfg(feature = "native-tls")]
     hostname_verification: bool,
@@ -85,6 +91,7 @@ struct Config {
     nodelay: bool,
     #[cfg(feature = "cookies")]
     cookie_store: Option<cookie::CookieStore>,
+    trust_dns: bool,
     error: Option<crate::Error>,
 }
 
@@ -105,7 +112,7 @@ impl ClientBuilder {
         ClientBuilder {
             config: Config {
                 error: None,
-                gzip: cfg!(feature = "gzip"),
+                accepts: Accepts::default(),
                 headers,
                 #[cfg(feature = "native-tls")]
                 hostname_verification: true,
@@ -131,6 +138,7 @@ impl ClientBuilder {
                 http2_initial_connection_window_size: None,
                 local_address: None,
                 nodelay: false,
+                trust_dns: cfg!(feature = "trust-dns"),
                 #[cfg(feature = "cookies")]
                 cookie_store: None,
             },
@@ -162,6 +170,14 @@ impl ClientBuilder {
                 headers.get(USER_AGENT).cloned()
             }
 
+            let http = match config.trust_dns {
+                false => HttpConnector::new_gai(),
+                #[cfg(feature = "trust-dns")]
+                true => HttpConnector::new_trust_dns()?,
+                #[cfg(not(feature = "trust-dns"))]
+                true => unreachable!("trust-dns shouldn't be enabled unless the feature is"),
+            };
+
             #[cfg(feature = "__tls")]
             match config.tls {
                 #[cfg(feature = "default-tls")]
@@ -179,7 +195,6 @@ impl ClientBuilder {
                         cert.add_to_native_tls(&mut tls);
                     }
 
-
                     #[cfg(feature = "native-tls")]
                     {
                         if let Some(id) = config.identity {
@@ -187,14 +202,36 @@ impl ClientBuilder {
                         }
                     }
 
+
                     Connector::new_default_tls(
+                        http,
                         tls,
                         proxies.clone(),
                         user_agent(&config.headers),
                         config.local_address,
                         config.nodelay,
                     )?
-                }
+                },
+                #[cfg(feature = "native-tls")]
+                TlsBackend::BuiltNativeTls(conn) => {
+                    Connector::from_built_default_tls(
+                        http,
+                        conn,
+                        proxies.clone(),
+                        user_agent(&config.headers),
+                        config.local_address,
+                        config.nodelay)
+                },
+                #[cfg(feature = "rustls-tls")]
+                TlsBackend::BuiltRustls(conn) => {
+                    Connector::new_rustls_tls(
+                        http,
+                        conn,
+                        proxies.clone(),
+                        user_agent(&config.headers),
+                        config.local_address,
+                        config.nodelay)
+                },
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::Rustls => {
                     use crate::tls::NoVerifier;
@@ -222,17 +259,27 @@ impl ClientBuilder {
                     }
 
                     Connector::new_rustls_tls(
+                        http,
                         tls,
                         proxies.clone(),
                         user_agent(&config.headers),
                         config.local_address,
                         config.nodelay,
-                    )?
-                }
+                    )
+                },
+                #[cfg(any(
+                    feature = "native-tls",
+                    feature = "rustls-tls",
+                ))]
+                TlsBackend::UnknownPreconfigured => {
+                    return Err(crate::error::builder(
+                        "Unknown TLS backend passed to `use_preconfigured_tls`"
+                    ));
+                },
             }
 
             #[cfg(not(feature = "__tls"))]
-            Connector::new(proxies.clone(), config.local_address, config.nodelay)?
+            Connector::new(http, proxies.clone(), config.local_address, config.nodelay)
         };
 
         connector.set_timeout(config.connect_timeout);
@@ -246,11 +293,13 @@ impl ClientBuilder {
         if let Some(http2_initial_stream_window_size) = config.http2_initial_stream_window_size {
             builder.http2_initial_stream_window_size(http2_initial_stream_window_size);
         }
-        if let Some(http2_initial_connection_window_size) = config.http2_initial_connection_window_size {
+        if let Some(http2_initial_connection_window_size) =
+            config.http2_initial_connection_window_size
+        {
             builder.http2_initial_connection_window_size(http2_initial_connection_window_size);
         }
 
-        builder.max_idle_per_host(config.max_idle_per_host);
+        builder.pool_max_idle_per_host(config.max_idle_per_host);
 
         if config.http1_title_case_headers {
             builder.http1_title_case_headers(true);
@@ -262,9 +311,9 @@ impl ClientBuilder {
 
         Ok(Client {
             inner: Arc::new(ClientRef {
+                accepts: config.accepts,
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store.map(RwLock::new),
-                gzip: config.gzip,
                 hyper: hyper_client,
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
@@ -277,7 +326,6 @@ impl ClientBuilder {
     }
 
     // Higher-level options
-
 
     /// Sets the `User-Agent` header to be used by this client.
     ///
@@ -360,7 +408,6 @@ impl ClientBuilder {
         self
     }
 
-
     /// Enable a persistent cookie store for the client.
     ///
     /// Cookies received in responses will be preserved and included in
@@ -383,7 +430,7 @@ impl ClientBuilder {
 
     /// Enable auto gzip decompression by checking the `Content-Encoding` response header.
     ///
-    /// If auto gzip decompresson is turned on:
+    /// If auto gzip decompression is turned on:
     ///
     /// - When sending a request and if the request's headers do not already contain
     ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `gzip`.
@@ -399,7 +446,29 @@ impl ClientBuilder {
     /// This requires the optional `gzip` feature to be enabled
     #[cfg(feature = "gzip")]
     pub fn gzip(mut self, enable: bool) -> ClientBuilder {
-        self.config.gzip = enable;
+        self.config.accepts.gzip = enable;
+        self
+    }
+
+    /// Enable auto brotli decompression by checking the `Content-Encoding` response header.
+    ///
+    /// If auto brotli decompression is turned on:
+    ///
+    /// - When sending a request and if the request's headers do not already contain
+    ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `br`.
+    ///   The request body is **not** automatically compressed.
+    /// - When receiving a response, if it's headers contain a `Content-Encoding` value that
+    ///   equals to `br`, both values `Content-Encoding` and `Content-Length` are removed from the
+    ///   headers' set. The response body is automatically decompressed.
+    ///
+    /// If the `brotli` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `brotli` feature to be enabled
+    #[cfg(feature = "brotli")]
+    pub fn brotli(mut self, enable: bool) -> ClientBuilder {
+        self.config.accepts.brotli = enable;
         self
     }
 
@@ -415,6 +484,23 @@ impl ClientBuilder {
         }
 
         #[cfg(not(feature = "gzip"))]
+        {
+            self
+        }
+    }
+
+    /// Disable auto response body brotli decompression.
+    ///
+    /// This method exists even if the optional `brotli` feature is not enabled.
+    /// This can be used to ensure a `Client` doesn't use brotli decompression
+    /// even if another dependency were to enable the optional `brotli` feature.
+    pub fn no_brotli(self) -> ClientBuilder {
+        #[cfg(feature = "brotli")]
+        {
+            self.brotli(false)
+        }
+
+        #[cfg(not(feature = "brotli"))]
         {
             self
         }
@@ -534,7 +620,10 @@ impl ClientBuilder {
     /// Sets the max connection-level flow control for HTTP2
     ///
     /// Default is currently 65,535 but may change internally to optimize for common uses.
-    pub fn http2_initial_connection_window_size(mut self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+    pub fn http2_initial_connection_window_size(
+        mut self,
+        sz: impl Into<Option<u32>>,
+    ) -> ClientBuilder {
         self.config.http2_initial_connection_window_size = sz.into();
         self
     }
@@ -654,7 +743,6 @@ impl ClientBuilder {
         self
     }
 
-
     /// Force using the Rustls TLS backend.
     ///
     /// Since multiple TLS backends can be optionally enabled, this option will
@@ -667,6 +755,85 @@ impl ClientBuilder {
     pub fn use_rustls_tls(mut self) -> ClientBuilder {
         self.config.tls = TlsBackend::Rustls;
         self
+    }
+
+    /// Use a preconfigured TLS backend.
+    ///
+    /// If the passed `Any` argument is not a TLS backend that reqwest
+    /// understands, the `ClientBuilder` will error when calling `build`.
+    ///
+    /// # Advanced
+    ///
+    /// This is an advanced option, and can be somewhat brittle. Usage requires
+    /// keeping the preconfigured TLS argument version in sync with reqwest,
+    /// since version mismatches will result in an "unknown" TLS backend.
+    ///
+    /// If possible, it's preferable to use the methods on `ClientBuilder`
+    /// to configure reqwest's TLS.
+    ///
+    /// # Optional
+    ///
+    /// This requires one of the optional features `native-tls` or
+    /// `rustls-tls` to be enabled.
+    #[cfg(any(
+        feature = "native-tls",
+        feature = "rustls-tls",
+    ))]
+    pub fn use_preconfigured_tls(mut self, tls: impl Any) -> ClientBuilder {
+        let mut tls = Some(tls);
+        #[cfg(feature = "native-tls")]
+        {
+            if let Some(conn) = (&mut tls as &mut dyn Any).downcast_mut::<Option<native_tls_crate::TlsConnector>>() {
+                let tls = conn.take().expect("is definitely Some");
+                let tls = crate::tls::TlsBackend::BuiltNativeTls(tls);
+                self.config.tls = tls;
+                return self;
+            }
+        }
+        #[cfg(feature = "rustls-tls")]
+        {
+            if let Some(conn) = (&mut tls as &mut dyn Any).downcast_mut::<Option<rustls::ClientConfig>>() {
+
+                let tls = conn.take().expect("is definitely Some");
+                let tls = crate::tls::TlsBackend::BuiltRustls(tls);
+                self.config.tls = tls;
+                return self;
+            }
+        }
+
+        // Otherwise, we don't recognize the TLS backend!
+        self.config.tls = crate::tls::TlsBackend::UnknownPreconfigured;
+        self
+    }
+
+    /// Enables the [trust-dns](trust_dns_resolver) async resolver instead of a default threadpool using `getaddrinfo`.
+    ///
+    /// If the `trust-dns` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `trust-dns` feature to be enabled
+    #[cfg(feature = "trust-dns")]
+    pub fn trust_dns(mut self, enable: bool) -> ClientBuilder {
+        self.config.trust_dns = enable;
+        self
+    }
+
+    /// Disables the trust-dns async resolver.
+    ///
+    /// This method exists even if the optional `trust-dns` feature is not enabled.
+    /// This can be used to ensure a `Client` doesn't use the trust-dns async resolver
+    /// even if another dependency were to enable the optional `trust-dns` feature.
+    pub fn no_trust_dns(self) -> ClientBuilder {
+        #[cfg(feature = "trust-dns")]
+        {
+            self.trust_dns(false)
+        }
+
+        #[cfg(not(feature = "trust-dns"))]
+        {
+            self
+        }
     }
 }
 
@@ -807,9 +974,16 @@ impl Client {
             }
         }
 
-        if self.inner.gzip && !headers.contains_key(ACCEPT_ENCODING) && !headers.contains_key(RANGE)
+        let accept_encoding = self.inner.accepts.as_str();
+
+        if accept_encoding.is_some()
+            && !headers.contains_key(ACCEPT_ENCODING)
+            && !headers.contains_key(RANGE)
         {
-            headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip"));
+            headers.insert(
+                ACCEPT_ENCODING,
+                HeaderValue::from_static(accept_encoding.unwrap()),
+            );
         }
 
         let uri = expect_uri(&url);
@@ -833,7 +1007,6 @@ impl Client {
         let timeout = timeout
             .or(self.inner.request_timeout)
             .map(|dur| tokio::time::delay_for(dur));
-
 
         *req.headers_mut() = headers.clone();
 
@@ -912,7 +1085,7 @@ impl Config {
             }
         }
 
-        f.field("gzip", &self.gzip);
+        f.field("accepts", &self.accepts);
 
         if !self.proxies.is_empty() {
             f.field("proxies", &self.proxies);
@@ -974,9 +1147,9 @@ impl Config {
 }
 
 struct ClientRef {
+    accepts: Accepts,
     #[cfg(feature = "cookies")]
     cookie_store: Option<RwLock<cookie::CookieStore>>,
-    gzip: bool,
     headers: HeaderMap,
     hyper: HyperClient,
     redirect_policy: redirect::Policy,
@@ -998,7 +1171,7 @@ impl ClientRef {
             }
         }
 
-        f.field("gzip", &self.gzip);
+        f.field("accepts", &self.accepts);
 
         if !self.proxies.is_empty() {
             f.field("proxies", &self.proxies);
@@ -1014,14 +1187,11 @@ impl ClientRef {
 
         f.field("default_headers", &self.headers);
 
-
         if let Some(ref d) = self.request_timeout {
             f.field("timeout", d);
         }
     }
 }
-
-
 
 pub(super) struct Pending {
     inner: PendingInner,
@@ -1227,17 +1397,19 @@ impl Future for PendingRequest {
                             debug!("redirect policy disallowed redirection to '{}'", loc);
                         }
                         redirect::ActionKind::Error(err) => {
-                            return Poll::Ready(Err(crate::error::redirect(
-                                err,
-                                self.url.clone(),
-                            )));
+                            return Poll::Ready(Err(crate::error::redirect(err, self.url.clone())));
                         }
                     }
                 }
             }
 
             debug!("response '{}' for {}", res.status(), self.url);
-            let res = Response::new(res, self.url.clone(), self.client.gzip, self.timeout.take());
+            let res = Response::new(
+                res,
+                self.url.clone(),
+                self.client.accepts,
+                self.timeout.take(),
+            );
             return Poll::Ready(Ok(res));
         }
     }

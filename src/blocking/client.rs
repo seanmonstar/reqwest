@@ -1,3 +1,8 @@
+#[cfg(any(
+    feature = "native-tls",
+    feature = "rustls-tls",
+))]
+use std::any::Any;
 use std::convert::TryInto;
 use std::fmt;
 use std::future::Future;
@@ -61,6 +66,12 @@ pub struct Client {
 pub struct ClientBuilder {
     inner: async_impl::ClientBuilder,
     timeout: Timeout,
+}
+
+impl Default for ClientBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ClientBuilder {
@@ -444,6 +455,53 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.use_rustls_tls())
     }
 
+    /// Use a preconfigured TLS backend.
+    ///
+    /// If the passed `Any` argument is not a TLS backend that reqwest
+    /// understands, the `ClientBuilder` will error when calling `build`.
+    ///
+    /// # Advanced
+    ///
+    /// This is an advanced option, and can be somewhat brittle. Usage requires
+    /// keeping the preconfigured TLS argument version in sync with reqwest,
+    /// since version mismatches will result in an "unknown" TLS backend.
+    ///
+    /// If possible, it's preferable to use the methods on `ClientBuilder`
+    /// to configure reqwest's TLS.
+    ///
+    /// # Optional
+    ///
+    /// This requires one of the optional features `native-tls` or
+    /// `rustls-tls` to be enabled.
+    #[cfg(any(
+        feature = "native-tls",
+        feature = "rustls-tls",
+    ))]
+    pub fn use_preconfigured_tls(self, tls: impl Any) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_preconfigured_tls(tls))
+    }
+
+    /// Enables the [trust-dns](trust_dns_resolver) async resolver instead of a default threadpool using `getaddrinfo`.
+    ///
+    /// If the `trust-dns` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `trust-dns` feature to be enabled
+    #[cfg(feature = "trust-dns")]
+    pub fn trust_dns(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.trust_dns(enable))
+    }
+
+    /// Disables the trust-dns async resolver.
+    ///
+    /// This method exists even if the optional `trust-dns` feature is not enabled.
+    /// This can be used to ensure a `Client` doesn't use the trust-dns async resolver
+    /// even if another dependency were to enable the optional `trust-dns` feature.
+    pub fn no_trust_dns(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.no_trust_dns())
+    }
+
     // private
 
     fn with_inner<F>(mut self, func: F) -> ClientBuilder
@@ -452,6 +510,12 @@ impl ClientBuilder {
     {
         self.inner = func(self.inner);
         self
+    }
+}
+
+impl Default for Client {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

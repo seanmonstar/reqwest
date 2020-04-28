@@ -1,8 +1,10 @@
 pub use self::body::Body;
 pub use self::client::{Client, ClientBuilder};
-pub(crate) use self::decoder::Decoder;
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::{Response, ResponseBuilderExt};
+
+#[cfg(feature = "blocking")]
+pub(crate) use self::decoder::Decoder;
 
 pub mod body;
 pub mod client;

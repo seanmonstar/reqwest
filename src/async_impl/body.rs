@@ -259,30 +259,8 @@ impl HttpBody for ImplStream {
 impl Stream for ImplStream {
     type Item = Result<Bytes, crate::Error>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let opt_try_chunk = match self.0.inner {
-            Inner::Streaming {
-                ref mut body,
-                ref mut timeout,
-            } => {
-                if let Some(ref mut timeout) = timeout {
-                    if let Poll::Ready(()) = Pin::new(timeout).poll(cx) {
-                        return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
-                    }
-                }
-                futures_core::ready!(Pin::new(body).poll_data(cx))
-                    .map(|opt_chunk| opt_chunk.map(Into::into).map_err(crate::error::body))
-            }
-            Inner::Reusable(ref mut bytes) => {
-                if bytes.is_empty() {
-                    None
-                } else {
-                    Some(Ok(std::mem::replace(bytes, Bytes::new())))
-                }
-            }
-        };
-
-        Poll::Ready(opt_try_chunk)
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        self.poll_data(cx)
     }
 }
 
