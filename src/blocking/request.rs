@@ -578,6 +578,17 @@ impl RequestBuilder {
     }
 }
 
+impl<T> From<HttpRequest<T>> for Request where T:Into<Body>{
+    fn from(req: HttpRequest<T>) -> Self {
+        let inner = req.into();
+        let body = inner.body.take();
+        Request {
+            body,
+            inner,
+        }
+    }
+}
+
 impl fmt::Debug for Request {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt_request_fields(&mut f.debug_struct("Request"), self).finish()
@@ -922,5 +933,22 @@ mod tests {
 
         assert_eq!(req.url().as_str(), "https://localhost/");
         assert_eq!(req.headers()["authorization"], "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
+    }
+
+    #[test]
+    fn convert_from_http_request() {
+        let http_request = HttpRequest::builder().method("GET")
+            .uri("http://localhost/")
+            .header("User-Agent", "my-awesome-agent/1.0")
+            .body("test test test")
+            .unwrap();
+        let req: Request = http_request.into();
+        assert_eq!(req.body().is_none(), false);
+        let test_data = b"test test test";
+        assert_eq!(req.body().unwrap().as_bytes(), Some(&test_data[..]));
+        let headers = req.headers();
+        assert_eq!(headers.get("User-Agent").unwrap(), "my-awesome-agent/1.0");
+        assert_eq!(req.method(), Method::GET);
+        assert_eq!(req.url().as_str(), "http://localhost/");
     }
 }
