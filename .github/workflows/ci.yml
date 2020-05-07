@@ -69,16 +69,16 @@ jobs:
 
         include:
           - name: linux / stable
-            test-features: "--features __internal_proxy_sys_no_cache"
+            test-features: "--features '__internal_proxy_sys_no_cache,blocking,json'"
           - name: linux / beta
             rust: beta
-            test-features: "--features __internal_proxy_sys_no_cache"
+            test-features: "--features '__internal_proxy_sys_no_cache,blocking,json'"
           # - name: linux / nightly
           #   rust: nightly
-          #   test-features: "--features __internal_proxy_sys_no_cache"
+          #   test-features: "--features '__internal_proxy_sys_no_cache,blocking,json'"
           - name: macOS / stable
             os: macOS-latest
-            test-features: "--features __internal_proxy_sys_no_cache"
+            test-features: "--features '__internal_proxy_sys_no_cache,blocking,json'"
 
           - name: windows / stable-x86_64-msvc
             os: windows-latest
