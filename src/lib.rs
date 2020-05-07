@@ -271,14 +271,14 @@ fn _assert_impls() {
 }
 
 if_hyper! {
-    #[cfg(test)]
+    #[cfg(doctest)]
     #[macro_use]
     extern crate doc_comment;
 
     #[macro_use]
     extern crate lazy_static;
 
-    #[cfg(test)]
+    #[cfg(doctest)]
     doctest!("../README.md");
 
     pub use self::async_impl::{
