@@ -13,7 +13,7 @@ use super::body::{self, Body};
 use super::multipart;
 use super::Client;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
-use crate::{async_impl, Method, Url};
+use crate::{async_impl, Method, ParseError, Url};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -579,8 +579,10 @@ impl RequestBuilder {
     }
 }
 
-impl<T> From<HttpRequest<T>> for Request where T:Into<Body> {
-    fn from(req: HttpRequest<T>) -> Self {
+impl<T> TryFrom<HttpRequest<T>> for Request where T:Into<Body> {
+    type Error = ParseError;
+
+    fn try_from(req: HttpRequest<T>) -> Result<Self, Self::Error> {
         let (parts, body) = req.into_parts();
         let Parts {
             method,
@@ -588,13 +590,13 @@ impl<T> From<HttpRequest<T>> for Request where T:Into<Body> {
             headers,
             ..
         } = parts;
-        let url = Url::parse(&uri.to_string()).unwrap();
+        let url = Url::parse(&uri.to_string())?;
         let mut inner = async_impl::Request::new(method, url);
         async_impl::request::replace_headers(inner.headers_mut(), headers);
-        Request {
+        Ok(Request {
             body: Some(body.into()),
             inner,
-        }
+        })
     }
 }
 
@@ -624,6 +626,7 @@ mod tests {
     use serde_json;
     use serde_urlencoded;
     use std::collections::{BTreeMap, HashMap};
+    use std::convert::TryFrom;
 
     #[test]
     fn basic_get_request() {
@@ -952,7 +955,7 @@ mod tests {
             .header("User-Agent", "my-awesome-agent/1.0")
             .body("test test test")
             .unwrap();
-        let req: Request = http_request.into();
+        let req: Request = Request::try_from(http_request).unwrap();
         assert_eq!(req.body().is_none(), false);
         let test_data = b"test test test";
         assert_eq!(req.body().unwrap().as_bytes(), Some(&test_data[..]));
