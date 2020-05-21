@@ -16,7 +16,7 @@ use super::client::{Client, Pending};
 use super::multipart;
 use super::response::Response;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
-use crate::{Method, ParseError, Url};
+use crate::{Method, Url};
 use http::{Request as HttpRequest, request::Parts};
 
 /// A request which can be executed with `Client::execute()`.
@@ -516,9 +516,9 @@ pub(crate) fn extract_authority(url: &mut Url) -> Option<(String, Option<String>
 }
 
 impl<T> TryFrom<HttpRequest<T>> for Request where T:Into<Body>{
-    type Error = ParseError;
+    type Error = crate::Error;
 
-    fn try_from(req: HttpRequest<T>) -> Result<Self, Self::Error> {
+    fn try_from(req: HttpRequest<T>) -> crate::Result<Self> {
         let (parts, body) = req.into_parts();
         let Parts {
             method,
@@ -526,7 +526,8 @@ impl<T> TryFrom<HttpRequest<T>> for Request where T:Into<Body>{
             headers,
             ..
         } = parts;
-        let url = Url::parse(&uri.to_string())?;
+        let url = Url::parse(&uri.to_string())
+            .map_err(crate::error::builder)?;
         Ok(Request {
             method,
             url,

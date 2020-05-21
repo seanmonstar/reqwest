@@ -13,7 +13,7 @@ use super::body::{self, Body};
 use super::multipart;
 use super::Client;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
-use crate::{async_impl, Method, ParseError, Url};
+use crate::{async_impl, Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -580,9 +580,9 @@ impl RequestBuilder {
 }
 
 impl<T> TryFrom<HttpRequest<T>> for Request where T:Into<Body> {
-    type Error = ParseError;
+    type Error = crate::Error;
 
-    fn try_from(req: HttpRequest<T>) -> Result<Self, Self::Error> {
+    fn try_from(req: HttpRequest<T>) -> crate::Result<Self> {
         let (parts, body) = req.into_parts();
         let Parts {
             method,
@@ -590,7 +590,8 @@ impl<T> TryFrom<HttpRequest<T>> for Request where T:Into<Body> {
             headers,
             ..
         } = parts;
-        let url = Url::parse(&uri.to_string())?;
+        let url = Url::parse(&uri.to_string())
+            .map_err(crate::error::builder)?;
         let mut inner = async_impl::Request::new(method, url);
         async_impl::request::replace_headers(inner.headers_mut(), headers);
         Ok(Request {
