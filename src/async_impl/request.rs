@@ -515,8 +515,10 @@ pub(crate) fn extract_authority(url: &mut Url) -> Option<(String, Option<String>
     None
 }
 
-impl<T> From<HttpRequest<T>> for Request where T:Into<Body>{
-    fn from(req: HttpRequest<T>) -> Self {
+impl<T> TryFrom<HttpRequest<T>> for Request where T:Into<Body>{
+    type Error = crate::Error;
+
+    fn try_from(req: HttpRequest<T>) -> crate::Result<Self> {
         let (parts, body) = req.into_parts();
         let Parts {
             method,
@@ -524,14 +526,15 @@ impl<T> From<HttpRequest<T>> for Request where T:Into<Body>{
             headers,
             ..
         } = parts;
-        let url = Url::parse(&uri.to_string()).unwrap();
-        Request {
+        let url = Url::parse(&uri.to_string())
+            .map_err(crate::error::builder)?;
+        Ok(Request {
             method,
             url,
             headers,
             body: Some(body.into()),
             timeout: None,
-        }
+        })
     }
 }
 
@@ -541,6 +544,7 @@ mod tests {
     use crate::Method;
     use serde::Serialize;
     use std::collections::BTreeMap;
+    use std::convert::TryFrom;
 
     #[test]
     fn add_query_append() {
@@ -714,7 +718,7 @@ mod tests {
             .header("User-Agent", "my-awesome-agent/1.0")
             .body("test test test")
             .unwrap();
-        let req: Request = http_request.into();
+        let req: Request = Request::try_from(http_request).unwrap();
         assert_eq!(req.body().is_none(), false);
         let test_data = b"test test test";
         assert_eq!(req.body().unwrap().as_bytes(), Some(&test_data[..]));
