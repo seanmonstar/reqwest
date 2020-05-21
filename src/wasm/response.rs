@@ -45,6 +45,22 @@ impl Response {
         self.http.headers_mut()
     }
 
+    /// Get the content-length of this response, if known.
+    ///
+    /// Reasons it may not be known:
+    ///
+    /// - The server didn't send a `content-length` header.
+    /// - The response is compressed and automatically decoded (thus changing
+    //   the actual decoded length).
+    pub fn content_length(&self) -> Option<u64> {
+        self.headers()
+            .get(http::header::CONTENT_LENGTH)?
+            .to_str()
+            .ok()?
+            .parse()
+            .ok()
+    }
+
     /// Get the final `Url` of this `Response`.
     #[inline]
     pub fn url(&self) -> &Url {
