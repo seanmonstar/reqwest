@@ -3,6 +3,7 @@ use std::convert::TryFrom;
 use std::time::Duration;
 
 use base64::encode;
+use http::{Request as HttpRequest, request::Parts};
 use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
@@ -578,6 +579,28 @@ impl RequestBuilder {
     }
 }
 
+impl<T> TryFrom<HttpRequest<T>> for Request where T:Into<Body> {
+    type Error = crate::Error;
+
+    fn try_from(req: HttpRequest<T>) -> crate::Result<Self> {
+        let (parts, body) = req.into_parts();
+        let Parts {
+            method,
+            uri,
+            headers,
+            ..
+        } = parts;
+        let url = Url::parse(&uri.to_string())
+            .map_err(crate::error::builder)?;
+        let mut inner = async_impl::Request::new(method, url);
+        async_impl::request::replace_headers(inner.headers_mut(), headers);
+        Ok(Request {
+            body: Some(body.into()),
+            inner,
+        })
+    }
+}
+
 impl fmt::Debug for Request {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt_request_fields(&mut f.debug_struct("Request"), self).finish()
@@ -595,6 +618,7 @@ fn fmt_request_fields<'a, 'b>(
 
 #[cfg(test)]
 mod tests {
+    use super::{HttpRequest, Request};
     use super::super::{body, Client};
     use crate::header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE, HOST};
     use crate::Method;
@@ -603,6 +627,7 @@ mod tests {
     use serde_json;
     use serde_urlencoded;
     use std::collections::{BTreeMap, HashMap};
+    use std::convert::TryFrom;
 
     #[test]
     fn basic_get_request() {
@@ -922,5 +947,22 @@ mod tests {
 
         assert_eq!(req.url().as_str(), "https://localhost/");
         assert_eq!(req.headers()["authorization"], "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
+    }
+
+    #[test]
+    fn convert_from_http_request() {
+        let http_request = HttpRequest::builder().method("GET")
+            .uri("http://localhost/")
+            .header("User-Agent", "my-awesome-agent/1.0")
+            .body("test test test")
+            .unwrap();
+        let req: Request = Request::try_from(http_request).unwrap();
+        assert_eq!(req.body().is_none(), false);
+        let test_data = b"test test test";
+        assert_eq!(req.body().unwrap().as_bytes(), Some(&test_data[..]));
+        let headers = req.headers();
+        assert_eq!(headers.get("User-Agent").unwrap(), "my-awesome-agent/1.0");
+        assert_eq!(req.method(), Method::GET);
+        assert_eq!(req.url().as_str(), "http://localhost/");
     }
 }
