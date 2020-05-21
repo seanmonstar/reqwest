@@ -102,7 +102,7 @@ webpki-roots = { version = "0.19", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.12", package = "cookie", optional = true }
-cookie_store = { version = "0.10", optional = true }
+cookie_store = { version = "0.11", optional = true }
 time = { version = "0.1.42", optional = true }
 
 ## compression
@@ -119,7 +119,7 @@ trust-dns-resolver = { version = "0.19", optional = true }
 env_logger = "0.7"
 hyper = { version = "0.13", default-features = false, features = ["tcp", "stream"] }
 serde = { version = "1.0", features = ["derive"] }
-libflate = "0.1"
+libflate = "1.0"
 brotli_crate = { package = "brotli", version = "3.3.0" }
 doc-comment = "0.3"
 tokio = { version = "0.2.0", default-features = false, features = ["macros"] }
