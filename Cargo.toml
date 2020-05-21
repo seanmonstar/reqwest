@@ -98,7 +98,7 @@ tokio-tls = { version = "0.3.0", optional = true }
 hyper-rustls = { version = "0.20", default-features = false, features = ["webpki-tokio"], optional = true }
 rustls = { version = "0.17", features = ["dangerous_configuration"], optional = true }
 tokio-rustls = { version = "0.13", optional = true }
-webpki-roots = { version = "0.18", optional = true }
+webpki-roots = { version = "0.19", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.12", package = "cookie", optional = true }
@@ -116,7 +116,7 @@ tokio-socks = { version = "0.2", optional = true }
 trust-dns-resolver = { version = "0.19", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-env_logger = "0.6"
+env_logger = "0.7"
 hyper = { version = "0.13", default-features = false, features = ["tcp", "stream"] }
 serde = { version = "1.0", features = ["derive"] }
 libflate = "1.0"
@@ -125,7 +125,7 @@ doc-comment = "0.3"
 tokio = { version = "0.2.0", default-features = false, features = ["macros"] }
 
 [target.'cfg(windows)'.dependencies]
-winreg = "0.6"
+winreg = "0.7"
 
 # wasm
 
