@@ -309,8 +309,14 @@ impl ClientBuilder {
     }
 
     /// Sets the maximum idle connection per host allowed in the pool.
+    pub fn pool_max_idle_per_host(self, max: usize) -> ClientBuilder {
+        self.with_inner(move |inner| inner.pool_max_idle_per_host(max))
+    }
+
+    #[doc(hidden)]
+    #[deprecated(note = "use pool_max_idle_per_host instead")]
     pub fn max_idle_per_host(self, max: usize) -> ClientBuilder {
-        self.with_inner(move |inner| inner.max_idle_per_host(max))
+        self.pool_max_idle_per_host(max)
     }
 
     /// Enable case sensitive headers.

@@ -77,7 +77,7 @@ struct Config {
     connect_timeout: Option<Duration>,
     connection_verbose: bool,
     pool_idle_timeout: Option<Duration>,
-    max_idle_per_host: usize,
+    pool_max_idle_per_host: usize,
     #[cfg(feature = "__tls")]
     identity: Option<Identity>,
     proxies: Vec<Proxy>,
@@ -127,7 +127,7 @@ impl ClientBuilder {
                 connect_timeout: None,
                 connection_verbose: false,
                 pool_idle_timeout: Some(Duration::from_secs(90)),
-                max_idle_per_host: std::usize::MAX,
+                pool_max_idle_per_host: std::usize::MAX,
                 proxies: Vec::new(),
                 auto_sys_proxy: true,
                 redirect_policy: redirect::Policy::default(),
@@ -307,7 +307,7 @@ impl ClientBuilder {
         }
 
         builder.pool_idle_timeout(config.pool_idle_timeout);
-        builder.pool_max_idle_per_host(config.max_idle_per_host);
+        builder.pool_max_idle_per_host(config.pool_max_idle_per_host);
 
         if config.http1_title_case_headers {
             builder.http1_title_case_headers(true);
@@ -613,9 +613,15 @@ impl ClientBuilder {
     }
 
     /// Sets the maximum idle connection per host allowed in the pool.
-    pub fn max_idle_per_host(mut self, max: usize) -> ClientBuilder {
-        self.config.max_idle_per_host = max;
+    pub fn pool_max_idle_per_host(mut self, max: usize) -> ClientBuilder {
+        self.config.pool_max_idle_per_host = max;
         self
+    }
+
+    #[doc(hidden)]
+    #[deprecated(note = "renamed to `pool_max_idle_per_host`")]
+    pub fn max_idle_per_host(self, max: usize) -> ClientBuilder {
+        self.pool_max_idle_per_host(max)
     }
 
     /// Enable case sensitive headers.
