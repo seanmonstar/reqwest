@@ -76,6 +76,7 @@ struct Config {
     certs_verification: bool,
     connect_timeout: Option<Duration>,
     connection_verbose: bool,
+    pool_idle_timeout: Option<Duration>,
     max_idle_per_host: usize,
     #[cfg(feature = "__tls")]
     identity: Option<Identity>,
@@ -125,6 +126,7 @@ impl ClientBuilder {
                 certs_verification: true,
                 connect_timeout: None,
                 connection_verbose: false,
+                pool_idle_timeout: Some(Duration::from_secs(90)),
                 max_idle_per_host: std::usize::MAX,
                 proxies: Vec::new(),
                 auto_sys_proxy: true,
@@ -304,6 +306,7 @@ impl ClientBuilder {
             builder.http2_initial_connection_window_size(http2_initial_connection_window_size);
         }
 
+        builder.pool_idle_timeout(config.pool_idle_timeout);
         builder.pool_max_idle_per_host(config.max_idle_per_host);
 
         if config.http1_title_case_headers {
@@ -595,6 +598,19 @@ impl ClientBuilder {
     }
 
     // HTTP options
+
+    /// Set an optional timeout for idle sockets being kept-alive.
+    ///
+    /// Pass `None` to disable timeout.
+    ///
+    /// Default is 90 seconds.
+    pub fn pool_idle_timeout<D>(mut self, val: D) -> ClientBuilder
+    where
+        D: Into<Option<Duration>>,
+    {
+        self.config.pool_idle_timeout = val.into();
+        self
+    }
 
     /// Sets the maximum idle connection per host allowed in the pool.
     pub fn max_idle_per_host(mut self, max: usize) -> ClientBuilder {
