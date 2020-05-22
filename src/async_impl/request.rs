@@ -145,7 +145,18 @@ impl RequestBuilder {
     }
 
     /// Add a `Header` to this Request.
-    pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
+    pub fn header<K, V>(self, key: K, value: V) -> RequestBuilder
+    where
+        HeaderName: TryFrom<K>,
+        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
+        HeaderValue: TryFrom<V>,
+        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>, 
+    {
+        self.header_sensitive(key, value, false)
+    }
+
+    /// Add a `Header` to this Request with ability to define if header_value is sensitive.
+    fn header_sensitive<K, V>(mut self, key: K, value: V, sensitive: bool) -> RequestBuilder
     where
         HeaderName: TryFrom<K>,
         <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
@@ -156,7 +167,8 @@ impl RequestBuilder {
         if let Ok(ref mut req) = self.request {
             match <HeaderName as TryFrom<K>>::try_from(key) {
                 Ok(key) => match <HeaderValue as TryFrom<V>>::try_from(value) {
-                    Ok(value) => {
+                    Ok(mut value) => {
+                        value.set_sensitive(sensitive);
                         req.headers_mut().append(key, value);
                     }
                     Err(e) => error = Some(crate::error::builder(e.into())),
@@ -196,7 +208,7 @@ impl RequestBuilder {
             }
         }
 
-        self.header(crate::header::AUTHORIZATION, header_value)
+        self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
     }
 
     /// Enable HTTP bearer authentication.
@@ -205,7 +217,7 @@ impl RequestBuilder {
         T: fmt::Display,
     {
         let header_value = format!("Bearer {}", token);
-        self.header(crate::header::AUTHORIZATION, header_value)
+        self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
     }
 
     /// Set the request body.
@@ -710,6 +722,40 @@ mod tests {
         assert_eq!(req.url().as_str(), "https://localhost/");
         assert_eq!(req.headers()["authorization"], "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
     }
+
+    #[test]
+    fn test_basic_auth_sensitive_header() {
+        let client = Client::new();
+        let some_url = "https://localhost/";
+
+        let req = client
+            .get(some_url)
+            .basic_auth("Aladdin", Some("open sesame"))
+            .build()
+            .expect("request build");
+
+        assert_eq!(req.url().as_str(), "https://localhost/");
+        assert_eq!(req.headers()["authorization"], "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
+        assert_eq!(req.headers()["authorization"].is_sensitive(), true);
+    }
+
+    #[test]
+    fn test_bearer_auth_sensitive_header() {
+        let client = Client::new();
+        let some_url = "https://localhost/";
+
+        let req = client
+            .get(some_url)
+            .bearer_auth("Hold my bear")
+            .build()
+            .expect("request build");
+
+        assert_eq!(req.url().as_str(), "https://localhost/");
+        assert_eq!(req.headers()["authorization"], "Bearer Hold my bear");
+        assert_eq!(req.headers()["authorization"].is_sensitive(), true);
+    }
+
+    
 
     #[test]
     fn convert_from_http_request() {
