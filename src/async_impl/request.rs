@@ -156,7 +156,7 @@ impl RequestBuilder {
     }
 
     /// Add a `Header` to this Request with ability to define if header_value is sensitive.
-    pub fn header_sensitive<K, V>(mut self, key: K, value: V, sensitive: bool) -> RequestBuilder
+    fn header_sensitive<K, V>(mut self, key: K, value: V, sensitive: bool) -> RequestBuilder
     where
         HeaderName: TryFrom<K>,
         <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
