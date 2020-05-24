@@ -10,15 +10,15 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// The Errors that may occur when processing a `Request`.
 pub struct Error {
-    inner: Box<Inner>,
+    pub(crate) inner: Box<Inner>,
 }
 
 pub(crate) type BoxError = Box<dyn StdError + Send + Sync>;
 
-struct Inner {
-    kind: Kind,
+pub(crate) struct Inner {
+    pub(crate) kind: Kind,
     source: Option<BoxError>,
-    url: Option<Url>,
+    pub(crate) url: Option<Url>,
 }
 
 impl Error {
@@ -193,7 +193,7 @@ impl From<crate::error::Error> for js_sys::Error {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Kind {
     Builder,
     Request,

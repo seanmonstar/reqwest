@@ -35,6 +35,7 @@ use super::Body;
 use crate::connect::{Connector, HttpConnector};
 #[cfg(feature = "cookies")]
 use crate::cookie;
+use crate::error;
 use crate::into_url::{expect_uri, try_uri};
 use crate::redirect::{self, remove_sensitive_headers};
 #[cfg(feature = "__tls")]
@@ -995,6 +996,9 @@ impl Client {
 
     pub(super) fn execute_request(&self, req: Request) -> Pending {
         let (method, url, mut headers, body, timeout) = req.pieces();
+        if url.scheme() != "http" && url.scheme() != "https" {
+            return Pending::new_err(error::url_bad_scheme(url));
+        }
 
         // insert default headers in the request headers
         // without overwriting already appended headers.
@@ -1494,5 +1498,21 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &cookie::CookieStore
             crate::header::COOKIE,
             HeaderValue::from_bytes(header.as_bytes()).unwrap(),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[tokio::test]
+    async fn execute_request_rejects_invald_urls() {
+        let url = url::Url::parse("hxxps://www.rust-lang.org/").unwrap();
+        let result = crate::get(url.clone()).await;
+
+        let expected = crate::error::url_bad_scheme(url);
+
+        assert_eq!(result.is_err(), true);
+        let actual = result.unwrap_err();
+        assert_eq!(actual.inner.kind, expected.inner.kind);
+        assert_eq!(actual.inner.url, expected.inner.url);
     }
 }
