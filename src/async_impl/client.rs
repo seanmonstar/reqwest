@@ -1,7 +1,4 @@
-#[cfg(any(
-    feature = "native-tls",
-    feature = "rustls-tls",
-))]
+#[cfg(any(feature = "native-tls", feature = "rustls-tls",))]
 use std::any::Any;
 use std::convert::TryInto;
 use std::net::IpAddr;
@@ -210,7 +207,6 @@ impl ClientBuilder {
                         }
                     }
 
-
                     Connector::new_default_tls(
                         http,
                         tls,
@@ -219,27 +215,25 @@ impl ClientBuilder {
                         config.local_address,
                         config.nodelay,
                     )?
-                },
+                }
                 #[cfg(feature = "native-tls")]
-                TlsBackend::BuiltNativeTls(conn) => {
-                    Connector::from_built_default_tls(
-                        http,
-                        conn,
-                        proxies.clone(),
-                        user_agent(&config.headers),
-                        config.local_address,
-                        config.nodelay)
-                },
+                TlsBackend::BuiltNativeTls(conn) => Connector::from_built_default_tls(
+                    http,
+                    conn,
+                    proxies.clone(),
+                    user_agent(&config.headers),
+                    config.local_address,
+                    config.nodelay,
+                ),
                 #[cfg(feature = "rustls-tls")]
-                TlsBackend::BuiltRustls(conn) => {
-                    Connector::new_rustls_tls(
-                        http,
-                        conn,
-                        proxies.clone(),
-                        user_agent(&config.headers),
-                        config.local_address,
-                        config.nodelay)
-                },
+                TlsBackend::BuiltRustls(conn) => Connector::new_rustls_tls(
+                    http,
+                    conn,
+                    proxies.clone(),
+                    user_agent(&config.headers),
+                    config.local_address,
+                    config.nodelay,
+                ),
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::Rustls => {
                     use crate::tls::NoVerifier;
@@ -274,16 +268,13 @@ impl ClientBuilder {
                         config.local_address,
                         config.nodelay,
                     )
-                },
-                #[cfg(any(
-                    feature = "native-tls",
-                    feature = "rustls-tls",
-                ))]
+                }
+                #[cfg(any(feature = "native-tls", feature = "rustls-tls",))]
                 TlsBackend::UnknownPreconfigured => {
                     return Err(crate::error::builder(
-                        "Unknown TLS backend passed to `use_preconfigured_tls`"
+                        "Unknown TLS backend passed to `use_preconfigured_tls`",
                     ));
-                },
+                }
             }
 
             #[cfg(not(feature = "__tls"))]
@@ -817,15 +808,14 @@ impl ClientBuilder {
     ///
     /// This requires one of the optional features `native-tls` or
     /// `rustls-tls` to be enabled.
-    #[cfg(any(
-        feature = "native-tls",
-        feature = "rustls-tls",
-    ))]
+    #[cfg(any(feature = "native-tls", feature = "rustls-tls",))]
     pub fn use_preconfigured_tls(mut self, tls: impl Any) -> ClientBuilder {
         let mut tls = Some(tls);
         #[cfg(feature = "native-tls")]
         {
-            if let Some(conn) = (&mut tls as &mut dyn Any).downcast_mut::<Option<native_tls_crate::TlsConnector>>() {
+            if let Some(conn) =
+                (&mut tls as &mut dyn Any).downcast_mut::<Option<native_tls_crate::TlsConnector>>()
+            {
                 let tls = conn.take().expect("is definitely Some");
                 let tls = crate::tls::TlsBackend::BuiltNativeTls(tls);
                 self.config.tls = tls;
@@ -834,8 +824,9 @@ impl ClientBuilder {
         }
         #[cfg(feature = "rustls-tls")]
         {
-            if let Some(conn) = (&mut tls as &mut dyn Any).downcast_mut::<Option<rustls::ClientConfig>>() {
-
+            if let Some(conn) =
+                (&mut tls as &mut dyn Any).downcast_mut::<Option<rustls::ClientConfig>>()
+            {
                 let tls = conn.take().expect("is definitely Some");
                 let tls = crate::tls::TlsBackend::BuiltRustls(tls);
                 self.config.tls = tls;
@@ -1505,14 +1496,13 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &cookie::CookieStore
 mod tests {
     #[tokio::test]
     async fn execute_request_rejects_invald_urls() {
-        let url = url::Url::parse("hxxps://www.rust-lang.org/").unwrap();
+        let url_str = "hxxps://www.rust-lang.org/";
+        let url = url::Url::parse(url_str).unwrap();
         let result = crate::get(url.clone()).await;
 
-        let expected = crate::error::url_bad_scheme(url);
-
-        assert_eq!(result.is_err(), true);
-        let actual = result.unwrap_err();
-        assert_eq!(actual.inner.kind, expected.inner.kind);
-        assert_eq!(actual.inner.url, expected.inner.url);
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        assert!(err.is_builder());
+        assert_eq!(url_str, err.url().unwrap().as_str());
     }
 }
