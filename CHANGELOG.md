@@ -1,3 +1,8 @@
+## v0.10.6
+
+- Changed handling of URLs that don't have `http:` or `https:` schemes, returning an error instead.
+- Fixed a potential hyper-rustls feature conflict.
+
 ## v0.10.5
 
 - Add `ClientBuilder::pool_idle_timeout` option.
