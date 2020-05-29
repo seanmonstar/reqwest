@@ -1,3 +1,14 @@
+## v0.10.5
+
+- Add `ClientBuilder::pool_idle_timeout` option.
+- Add `ClientBuilder::pool_max_idle_per_host` option, deprecate `max_idle_per_host`.
+- Add `Response::content_length` for WASM target.
+- Enable TCP_NODELAY by default.
+- Implement `TryFrom<http::Request>` for `blocking::Request`.
+- Implement `TryFrom<http::Request>` for `Request`.
+  - Removes `From<http::Request>` for `Request`.
+  - This is technically a breaking change, but was a mistake. It was not valid to convert from an `http::Request` to a `reqwest::Request` in an infallible fashion. It would panic if the conversion was not possible. Instead, the implementation has been changed to `TryFrom` to indicate it could fail.
+
 ## v0.10.4
 
 - Add `trust-dns` optional feature to change DNS resolver.
