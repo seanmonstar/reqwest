@@ -222,7 +222,7 @@ impl ClientBuilder {
                 },
                 #[cfg(feature = "native-tls")]
                 TlsBackend::BuiltNativeTls(conn) => {
-                        Connector::from_built_default_tls(
+                    Connector::from_built_default_tls(
                         http,
                         conn,
                         proxies.clone(),
@@ -232,7 +232,7 @@ impl ClientBuilder {
                 },
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::BuiltRustls(conn) => {
-                        Connector::new_rustls_tls(
+                    Connector::new_rustls_tls(
                         http,
                         conn,
                         proxies.clone(),
