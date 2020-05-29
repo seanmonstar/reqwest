@@ -219,25 +219,25 @@ impl ClientBuilder {
                         config.local_address,
                         config.nodelay,
                     )?
-                }
+                },
                 #[cfg(feature = "native-tls")]
                 TlsBackend::BuiltNativeTls(conn) => {
-                    Connector::from_built_default_tls(
-                    http,
-                    conn,
-                    proxies.clone(),
-                    user_agent(&config.headers),
-                    config.local_address,
+                        Connector::from_built_default_tls(
+                        http,
+                        conn,
+                        proxies.clone(),
+                        user_agent(&config.headers),
+                        config.local_address,
                         config.nodelay)
                 },
                 #[cfg(feature = "rustls-tls")]
                 TlsBackend::BuiltRustls(conn) => {
-                    Connector::new_rustls_tls(
-                    http,
-                    conn,
-                    proxies.clone(),
-                    user_agent(&config.headers),
-                    config.local_address,
+                        Connector::new_rustls_tls(
+                        http,
+                        conn,
+                        proxies.clone(),
+                        user_agent(&config.headers),
+                        config.local_address,
                         config.nodelay)
                 },
                 #[cfg(feature = "rustls-tls")]
