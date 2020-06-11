@@ -308,7 +308,7 @@ impl Response {
     ///
     /// This requires the optional `stream` feature to be enabled.
     #[cfg(feature = "stream")]
-    pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
+    pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> + Unpin {
         self.body
     }
 
