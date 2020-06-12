@@ -94,6 +94,30 @@ impl Error {
         false
     }
 
+    /// Returns true if the error is related to the request
+    pub fn is_request(&self) -> bool {
+        match self.inner.kind {
+            Kind::Request => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if the error is related to the request or response body
+    pub fn is_body(&self) -> bool {
+        match self.inner.kind {
+            Kind::Body => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if the error is related to decoding the response's body
+    pub fn is_decode(&self) -> bool {
+        match self.inner.kind {
+            Kind::Decode => true,
+            _ => false,
+        }
+    }
+
     /// Returns the status code, if the error was generated from a response.
     pub fn status(&self) -> Option<StatusCode> {
         match self.inner.kind {
