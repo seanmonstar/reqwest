@@ -4,12 +4,12 @@ use std::fmt;
 use http::Method;
 use url::Url;
 #[cfg(feature = "json")]
+use serde_json;
 use serde::Serialize;
+use serde_urlencoded;
 
 use super::{Body, Client, Response};
-use crate::header::{HeaderMap, HeaderName, HeaderValue};
-#[cfg(feature = "json")]
-use crate::header::CONTENT_TYPE;
+use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -89,6 +89,67 @@ impl Request {
 impl RequestBuilder {
     pub(super) fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
         RequestBuilder { client, request }
+    }
+
+    /// Modify the query string of the URL.
+    ///
+    /// Modifies the URL of this request, adding the parameters provided.
+    /// This method appends and does not overwrite. This means that it can
+    /// be called multiple times and that existing query parameters are not
+    /// overwritten if the same key is used. The key will simply show up
+    /// twice in the query string.
+    /// Calling `.query([("foo", "a"), ("foo", "b")])` gives `"foo=a&foo=b"`.
+    ///
+    /// # Note
+    /// This method does not support serializing a single key-value
+    /// pair. Instead of using `.query(("key", "val"))`, use a sequence, such
+    /// as `.query(&[("key", "val")])`. It's also possible to serialize structs
+    /// and maps into a key-value pair.
+    ///
+    /// # Errors
+    /// This method will fail if the object you provide cannot be serialized
+    /// into a query string.
+    pub fn query<T: Serialize + ?Sized>(mut self, query: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
+            let url = req.url_mut();
+            let mut pairs = url.query_pairs_mut();
+            let serializer = serde_urlencoded::Serializer::new(&mut pairs);
+
+            if let Err(err) = query.serialize(serializer) {
+                error = Some(crate::error::builder(err));
+            }
+        }
+        if let Ok(ref mut req) = self.request {
+            if let Some("") = req.url().query() {
+                req.url_mut().set_query(None);
+            }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
+        }
+        self
+    }
+
+    /// Send a form body.
+    pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
+            match serde_urlencoded::to_string(form) {
+                Ok(body) => {
+                    req.headers_mut().insert(
+                        CONTENT_TYPE,
+                        HeaderValue::from_static("application/x-www-form-urlencoded"),
+                    );
+                    *req.body_mut() = Some(body.into());
+                }
+                Err(err) => error = Some(crate::error::builder(err)),
+            }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
+        }
+        self
     }
 
     #[cfg(feature = "json")]
