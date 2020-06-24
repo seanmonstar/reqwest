@@ -99,9 +99,9 @@ tokio-rustls = { version = "0.13", optional = true }
 webpki-roots = { version = "0.19", optional = true }
 
 ## cookies
-cookie_crate = { version = "0.12", package = "cookie", optional = true }
-cookie_store = { version = "0.11", optional = true }
-time = { version = "0.1.42", optional = true }
+cookie_crate = { version = "0.14", package = "cookie", optional = true }
+cookie_store = { version = "0.12", optional = true }
+time = { version = "0.2.11", optional = true }
 
 ## compression
 async-compression = { version = "0.3.0", default-features = false, features = ["stream"], optional = true }

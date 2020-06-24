@@ -1,5 +1,7 @@
 //! HTTP Cookies
 
+use std::convert::TryInto;
+
 use crate::header;
 use std::fmt;
 use std::time::SystemTime;
@@ -64,12 +66,12 @@ impl<'a> Cookie<'a> {
     pub fn max_age(&self) -> Option<std::time::Duration> {
         self.0
             .max_age()
-            .map(|d| std::time::Duration::new(d.num_seconds() as u64, 0))
+            .map(|d| d.try_into().expect("time::Duration into std::time::Duration"))
     }
 
     /// The cookie expiration time.
     pub fn expires(&self) -> Option<SystemTime> {
-        self.0.expires().map(tm_to_systemtime)
+        self.0.expires().map(SystemTime::from)
     }
 }
 
@@ -95,17 +97,6 @@ pub(crate) struct CookieStore(pub(crate) cookie_store::CookieStore);
 impl<'a> fmt::Debug for CookieStore {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.0.fmt(f)
-    }
-}
-
-/// Convert a time::Tm time to SystemTime.
-fn tm_to_systemtime(tm: time::Tm) -> SystemTime {
-    let seconds = tm.to_timespec().sec;
-    let duration = std::time::Duration::from_secs(seconds.abs() as u64);
-    if seconds > 0 {
-        SystemTime::UNIX_EPOCH + duration
-    } else {
-        SystemTime::UNIX_EPOCH - duration
     }
 }
 
