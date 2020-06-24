@@ -122,6 +122,12 @@ impl Response {
         self.inner.headers()
     }
 
+    /// Get a mutable reference to the `Headers` of this `Response`.
+    #[inline]
+    pub fn headers_mut(&mut self) -> &mut HeaderMap {
+        self.inner.headers_mut()
+    }
+
     /// Retrieve the cookies contained in the response.
     ///
     /// Note that invalid 'Set-Cookie' headers will be ignored.
