@@ -1329,11 +1329,14 @@ impl Future for PendingRequest {
             #[cfg(feature = "cookies")]
             {
                 if let Some(store_wrapper) = self.client.cookie_store.as_ref() {
-                    let mut store = store_wrapper.write().unwrap();
-                    let cookies = cookie::extract_response_cookies(&res.headers())
+                    let mut cookies = cookie::extract_response_cookies(&res.headers())
                         .filter_map(|res| res.ok())
-                        .map(|cookie| cookie.into_inner().into_owned());
-                    store.0.store_response_cookies(cookies, &self.url);
+                        .map(|cookie| cookie.into_inner().into_owned())
+                        .peekable();
+                    if cookies.peek().is_some() {
+                      let mut store = store_wrapper.write().unwrap();
+                      store.0.store_response_cookies(cookies, &self.url);
+                    }
                 }
             }
             let should_redirect = match res.status() {
