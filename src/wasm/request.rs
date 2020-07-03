@@ -190,6 +190,14 @@ impl RequestBuilder {
         self
     }
 
+    /// TODO
+    pub fn multipart(mut self, multipart: super::multipart::Form) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *req.body_mut() = Some(multipart.into())
+        }
+        self
+    }
+
     /// Add a `Header` to this Request.
     pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
     where

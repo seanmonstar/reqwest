@@ -1,7 +1,9 @@
+use super::multipart::Form;
 /// dox
 use bytes::Bytes;
 use std::fmt;
 use js_sys::Uint8Array;
+use wasm_bindgen::JsValue;
 
 /// The body of a `Request`.
 ///
@@ -11,20 +13,27 @@ use js_sys::Uint8Array;
 ///
 /// [builder]: ./struct.RequestBuilder.html#method.body
 pub struct Body {
-    inner: Inner
+    inner: Inner,
 }
 
 enum Inner {
     Bytes(Bytes),
+    Multipart(Form),
 }
 
 impl Body {
-    pub(crate) fn to_js_value(&self) -> wasm_bindgen::JsValue {
+    pub(crate) fn to_js_value(&self) -> crate::Result<JsValue> {
         match &self.inner {
             Inner::Bytes(body_bytes) => {
                 let body_bytes: &[u8] = body_bytes.as_ref();
                 let body_array: Uint8Array = body_bytes.into();
-                body_array.into()
+                let js_value: &JsValue = body_array.as_ref();
+                Ok(js_value.to_owned())
+            }
+            Inner::Multipart(form) => {
+                let form_data = form.to_form_data()?;
+                let js_value: &JsValue = form_data.as_ref();
+                Ok(js_value.to_owned())
             }
         }
     }
@@ -33,28 +42,36 @@ impl Body {
 impl From<Bytes> for Body {
     #[inline]
     fn from(bytes: Bytes) -> Body {
-        Body { inner: Inner::Bytes(bytes) }
+        Body {
+            inner: Inner::Bytes(bytes),
+        }
     }
 }
 
 impl From<Vec<u8>> for Body {
     #[inline]
     fn from(vec: Vec<u8>) -> Body {
-        Body { inner: Inner::Bytes(vec.into()) }
+        Body {
+            inner: Inner::Bytes(vec.into()),
+        }
     }
 }
 
 impl From<&'static [u8]> for Body {
     #[inline]
     fn from(s: &'static [u8]) -> Body {
-        Body { inner: Inner::Bytes(Bytes::from_static(s)) }
+        Body {
+            inner: Inner::Bytes(Bytes::from_static(s)),
+        }
     }
 }
 
 impl From<String> for Body {
     #[inline]
     fn from(s: String) -> Body {
-        Body{ inner: Inner::Bytes(s.into()) }
+        Body {
+            inner: Inner::Bytes(s.into()),
+        }
     }
 }
 
@@ -62,6 +79,15 @@ impl From<&'static str> for Body {
     #[inline]
     fn from(s: &'static str) -> Body {
         s.as_bytes().into()
+    }
+}
+
+impl From<Form> for Body {
+    #[inline]
+    fn from(f: Form) -> Body {
+        Self {
+            inner: Inner::Multipart(f),
+        }
     }
 }
 
