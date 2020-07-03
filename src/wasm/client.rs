@@ -1,5 +1,4 @@
 use http::Method;
-use js_sys::Uint8Array;
 use std::future::Future;
 use wasm_bindgen::UnwrapThrowExt as _;
 use url::Url;
@@ -133,9 +132,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     }
 
     if let Some(body) = req.body() {
-        let body_bytes: &[u8] = body.bytes();
-        let body_array: Uint8Array = body_bytes.into();
-        init.body(Some(&body_array.into()));
+        init.body(Some(&body.to_js_value()));
     }
 
     let js_req = web_sys::Request::new_with_str_and_init(req.url().as_str(), &init)
