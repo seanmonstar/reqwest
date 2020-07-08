@@ -37,6 +37,13 @@ impl Body {
             }
         }
     }
+
+    #[inline]
+    pub(crate) fn from_form(f: Form) -> Body {
+        Self {
+            inner: Inner::Multipart(f),
+        }
+    }
 }
 
 impl From<Bytes> for Body {
@@ -79,15 +86,6 @@ impl From<&'static str> for Body {
     #[inline]
     fn from(s: &'static str) -> Body {
         s.as_bytes().into()
-    }
-}
-
-impl From<Form> for Body {
-    #[inline]
-    fn from(f: Form) -> Body {
-        Self {
-            inner: Inner::Multipart(f),
-        }
     }
 }
 
