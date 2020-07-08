@@ -307,5 +307,5 @@ if_hyper! {
 if_wasm! {
     mod wasm;
 
-    pub use self::wasm::{Body, Client, ClientBuilder, Request, RequestBuilder, Response};
+    pub use self::wasm::{multipart, Body, Client, ClientBuilder, Request, RequestBuilder, Response};
 }
