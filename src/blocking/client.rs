@@ -545,6 +545,15 @@ impl ClientBuilder {
     }
 }
 
+impl From<async_impl::ClientBuilder> for ClientBuilder {
+    fn from(builder: async_impl::ClientBuilder) -> Self {
+        Self {
+            inner: builder,
+            timeout: Timeout::default(),
+        }
+    }
+}
+
 impl Default for Client {
     fn default() -> Self {
         Self::new()
