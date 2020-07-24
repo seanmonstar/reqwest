@@ -1,3 +1,11 @@
+## v0.10.7
+
+- Add `NO_PROXY` environment variable support.
+- Add more `Error::{is_request, is_body, is_decode}` getters.
+- Add conversion of `reqwest::ClientBuilder` to `reqwest::blocking::ClientBuilder`.
+- Add `headers_mut()` to `reqwest::blocking::Response`.
+- (wasm) Add `form()`, `query()`, `multipart` and `bearer_auth()` to `RequestBuilder`.
+
 ## v0.10.6
 
 - Changed handling of URLs that don't have `http:` or `https:` schemes, returning an error instead.
