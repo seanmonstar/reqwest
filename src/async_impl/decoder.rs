@@ -225,7 +225,7 @@ impl Stream for Decoder {
                 }
                 Poll::Pending => return Poll::Pending,
             },
-            Inner::PlainText(ref mut body) => return Pin::new(body).poll_next(cx),
+            Inner::PlainText(ref mut body) => Pin::new(body).poll_next(cx),
             #[cfg(feature = "gzip")]
             Inner::Gzip(ref mut decoder) => {
                 return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
@@ -242,7 +242,7 @@ impl Stream for Decoder {
                     None => Poll::Ready(None),
                 };
             }
-        };
+        }
     }
 }
 

@@ -1045,7 +1045,7 @@ impl Client {
 
         let mut req = hyper::Request::builder()
             .method(method.clone())
-            .uri(uri.clone())
+            .uri(uri)
             .body(body.into_stream())
             .expect("valid request parts");
 
