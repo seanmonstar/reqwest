@@ -1021,14 +1021,10 @@ impl Client {
 
         let accept_encoding = self.inner.accepts.as_str();
 
-        if accept_encoding.is_some()
-            && !headers.contains_key(ACCEPT_ENCODING)
-            && !headers.contains_key(RANGE)
-        {
-            headers.insert(
-                ACCEPT_ENCODING,
-                HeaderValue::from_static(accept_encoding.unwrap()),
-            );
+        if let Some(accept_encoding) = accept_encoding {
+            if !headers.contains_key(ACCEPT_ENCODING) && !headers.contains_key(RANGE) {
+                headers.insert(ACCEPT_ENCODING, HeaderValue::from_static(accept_encoding));
+            }
         }
 
         let uri = expect_uri(&url);
