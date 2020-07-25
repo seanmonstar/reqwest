@@ -1051,7 +1051,7 @@ impl Client {
 
         let timeout = timeout
             .or(self.inner.request_timeout)
-            .map(|dur| tokio::time::delay_for(dur));
+            .map(tokio::time::delay_for);
 
         *req.headers_mut() = headers.clone();
 
