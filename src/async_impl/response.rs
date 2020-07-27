@@ -5,7 +5,6 @@ use std::net::SocketAddr;
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
 use futures_util::stream::StreamExt;
-use http;
 use hyper::client::connect::HttpInfo;
 use hyper::{HeaderMap, StatusCode, Version};
 use mime::Mime;

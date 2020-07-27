@@ -1021,14 +1021,10 @@ impl Client {
 
         let accept_encoding = self.inner.accepts.as_str();
 
-        if accept_encoding.is_some()
-            && !headers.contains_key(ACCEPT_ENCODING)
-            && !headers.contains_key(RANGE)
-        {
-            headers.insert(
-                ACCEPT_ENCODING,
-                HeaderValue::from_static(accept_encoding.unwrap()),
-            );
+        if let Some(accept_encoding) = accept_encoding {
+            if !headers.contains_key(ACCEPT_ENCODING) && !headers.contains_key(RANGE) {
+                headers.insert(ACCEPT_ENCODING, HeaderValue::from_static(accept_encoding));
+            }
         }
 
         let uri = expect_uri(&url);
@@ -1045,13 +1041,13 @@ impl Client {
 
         let mut req = hyper::Request::builder()
             .method(method.clone())
-            .uri(uri.clone())
+            .uri(uri)
             .body(body.into_stream())
             .expect("valid request parts");
 
         let timeout = timeout
             .or(self.inner.request_timeout)
-            .map(|dur| tokio::time::delay_for(dur));
+            .map(tokio::time::delay_for);
 
         *req.headers_mut() = headers.clone();
 

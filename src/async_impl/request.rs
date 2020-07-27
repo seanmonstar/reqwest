@@ -4,12 +4,10 @@ use std::future::Future;
 use std::io::Write;
 use std::time::Duration;
 
-use base64;
 use base64::write::EncoderWriter as Base64Encoder;
 use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
-use serde_urlencoded;
 
 use super::body::Body;
 use super::client::{Client, Pending};

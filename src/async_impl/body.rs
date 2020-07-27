@@ -222,7 +222,7 @@ impl HttpBody for ImplStream {
                 if bytes.is_empty() {
                     None
                 } else {
-                    Some(Ok(std::mem::replace(bytes, Bytes::new()).into()))
+                    Some(Ok(std::mem::replace(bytes, Bytes::new())))
                 }
             }
         };
