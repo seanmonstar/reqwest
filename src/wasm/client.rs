@@ -92,6 +92,25 @@ impl Client {
         RequestBuilder::new(self.clone(), req)
     }
 
+    /// Executes a `Request`.
+    ///
+    /// A `Request` can be built manually with `Request::new()` or obtained
+    /// from a RequestBuilder with `RequestBuilder::build()`.
+    ///
+    /// You should prefer to use the `RequestBuilder` and
+    /// `RequestBuilder::send()`.
+    ///
+    /// # Errors
+    ///
+    /// This method fails if there was an error while sending request,
+    /// redirect loop was detected or redirect limit was exhausted.
+    pub fn execute(
+        &self,
+        request: Request,
+    ) -> impl Future<Output = Result<Response, crate::Error>> {
+        self.execute_request(request)
+    }
+
     pub(super) fn execute_request(
         &self,
         req: Request,
