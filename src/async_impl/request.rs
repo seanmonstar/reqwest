@@ -185,7 +185,7 @@ impl RequestBuilder {
     /// The headers will be merged in to any already set.
     pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            replace_headers(req.headers_mut(), headers);
+            crate::util::replace_headers(req.headers_mut(), headers);
         }
         self
     }
@@ -465,33 +465,6 @@ fn fmt_request_fields<'a, 'b>(
     f.field("method", &req.method)
         .field("url", &req.url)
         .field("headers", &req.headers)
-}
-
-pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
-    // IntoIter of HeaderMap yields (Option<HeaderName>, HeaderValue).
-    // The first time a name is yielded, it will be Some(name), and if
-    // there are more values with the same name, the next yield will be
-    // None.
-    //
-    // TODO: a complex exercise would be to optimize this to only
-    // require 1 hash/lookup of the key, but doing something fancy
-    // with header::Entry...
-
-    let mut prev_name = None;
-    for (key, value) in src {
-        match key {
-            Some(key) => {
-                dst.insert(key.clone(), value);
-                prev_name = Some(key);
-            }
-            None => match prev_name {
-                Some(ref key) => {
-                    dst.append(key.clone(), value);
-                }
-                None => unreachable!("HeaderMap::into_iter yielded None first"),
-            },
-        }
-    }
 }
 
 
