@@ -1,10 +1,17 @@
 use http::Method;
 use std::future::Future;
-use wasm_bindgen::UnwrapThrowExt as _;
+use wasm_bindgen::prelude::{wasm_bindgen, UnwrapThrowExt as _};
+use js_sys::Promise;
 use url::Url;
 
 use super::{Request, RequestBuilder, Response};
 use crate::IntoUrl;
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_name = fetch)]
+    fn fetch_with_request(input: &web_sys::Request) -> Promise;
+}
 
 /// dox
 #[derive(Clone, Debug)]
@@ -159,9 +166,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         .map_err(crate::error::builder)?;
 
     // Await the fetch() promise
-    let p = web_sys::window()
-        .expect("window should exist")
-        .fetch_with_request(&js_req);
+    let p = fetch_with_request(&js_req);
     let js_resp = super::promise::<web_sys::Response>(p)
         .await
         .map_err(crate::error::request)?;
