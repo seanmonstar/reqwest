@@ -228,7 +228,7 @@ impl RequestBuilder {
     /// ```
     pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            async_impl::request::replace_headers(req.headers_mut(), headers);
+            crate::util::replace_headers(req.headers_mut(), headers);
         }
         self
     }
@@ -605,7 +605,7 @@ impl<T> TryFrom<HttpRequest<T>> for Request where T:Into<Body> {
         let url = Url::parse(&uri.to_string())
             .map_err(crate::error::builder)?;
         let mut inner = async_impl::Request::new(method, url);
-        async_impl::request::replace_headers(inner.headers_mut(), headers);
+        crate::util::replace_headers(inner.headers_mut(), headers);
         Ok(Request {
             body: Some(body.into()),
             inner,

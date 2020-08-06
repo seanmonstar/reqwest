@@ -224,6 +224,16 @@ impl RequestBuilder {
         self
     }
 
+    /// Add a set of Headers to the existing ones on this Request.
+    ///
+    /// The headers will be merged in to any already set.
+    pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            crate::util::replace_headers(req.headers_mut(), headers);
+        }
+        self
+    }
+
     /// Disable CORS on fetching the request.
     ///
     /// # WASM
