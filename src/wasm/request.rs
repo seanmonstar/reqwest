@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 use std::fmt;
 
-use http::Method;
+use http::{request::Parts, Method, Request as HttpRequest};
 use url::Url;
 #[cfg(feature = "json")]
 use serde_json;
@@ -299,4 +299,29 @@ fn fmt_request_fields<'a, 'b>(
     f.field("method", &req.method)
         .field("url", &req.url)
         .field("headers", &req.headers)
+}
+
+impl<T> TryFrom<HttpRequest<T>> for Request
+where
+    T: Into<Body>,
+{
+    type Error = crate::Error;
+
+    fn try_from(req: HttpRequest<T>) -> crate::Result<Self> {
+        let (parts, body) = req.into_parts();
+        let Parts {
+            method,
+            uri,
+            headers,
+            ..
+        } = parts;
+        let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
+        Ok(Request {
+            method,
+            url,
+            headers,
+            body: Some(body.into()),
+            cors: true,
+        })
+    }
 }
