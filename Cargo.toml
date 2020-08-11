@@ -14,6 +14,7 @@ autotests = true
 
 [package.metadata.docs.rs]
 all-features = true
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [package.metadata.playground]
 features = [
