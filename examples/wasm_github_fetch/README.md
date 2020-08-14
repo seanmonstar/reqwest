@@ -1,6 +1,10 @@
 ## Example usage of Reqwest from WASM
 
-You can build the example locally with:
+Install wasm-pack with
+
+    npm install
+
+Then you can build the example locally with:
 
 
     npm run serve
