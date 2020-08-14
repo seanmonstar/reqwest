@@ -158,11 +158,14 @@ impl<Client, Body: From<Vec<u8>> + From<String>> RequestBuilder<Client, Body> {
     /// ```rust
     /// use reqwest::header::USER_AGENT;
     ///
-    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = reqwest::blocking::Client::new();
+    /// # use reqwest::Error;
+    /// #
+    /// # async fn run() -> Result<(), Error> {
+    /// let client = reqwest::Client::new();
     /// let res = client.get("https://www.rust-lang.org")
     ///     .header(USER_AGENT, "foo")
-    ///     .send()?;
+    ///     .send()
+    ///     .await?;
     /// # Ok(())
     /// # }
     /// ```
@@ -211,28 +214,31 @@ impl<Client, Body: From<Vec<u8>> + From<String>> RequestBuilder<Client, Body> {
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
-    ///
-    /// ```rust
-    /// use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT, CONTENT_TYPE};
-    /// # use std::fs;
-    ///
-    /// fn construct_headers() -> HeaderMap {
-    ///     let mut headers = HeaderMap::new();
-    ///     headers.insert(USER_AGENT, HeaderValue::from_static("reqwest"));
-    ///     headers.insert(CONTENT_TYPE, HeaderValue::from_static("image/png"));
-    ///     headers
-    /// }
-    ///
-    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
-    /// let file = fs::File::open("much_beauty.png")?;
-    /// let client = reqwest::blocking::Client::new();
-    /// let res = client.post("http://httpbin.org/post")
-    ///     .headers(construct_headers())
-    ///     .body(file)
-    ///     .send()?;
-    /// # Ok(())
-    /// # }
-    /// ```
+    // Temporarily remove example using file, because it is only available for the blocking client
+    // ```rust
+    // use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT, CONTENT_TYPE};
+    // # use std::fs;
+    //
+    // fn construct_headers() -> HeaderMap {
+    //     let mut headers = HeaderMap::new();
+    //     headers.insert(USER_AGENT, HeaderValue::from_static("reqwest"));
+    //     headers.insert(CONTENT_TYPE, HeaderValue::from_static("image/png"));
+    //     headers
+    // }
+    //
+    // # use reqwest::Error;
+    // #
+    // # async fn run() -> Result<(), Error> {
+    // let file = fs::File::open("much_beauty.png")?;
+    // let client = reqwest::Client::new();
+    // let res = client.post("http://httpbin.org/post")
+    //     .headers(construct_headers())
+    //     .body(file)
+    //     .send()
+    //     .await?;
+    // # Ok(())
+    // # }
+    // ```
     pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder<Client, Body> {
         if let Ok(ref mut req) = self.request {
             crate::util::replace_headers(req.headers_mut(), headers);
@@ -243,11 +249,14 @@ impl<Client, Body: From<Vec<u8>> + From<String>> RequestBuilder<Client, Body> {
     /// Enable HTTP basic authentication.
     ///
     /// ```rust
-    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = reqwest::blocking::Client::new();
+    /// # use reqwest::Error;
+    /// #
+    /// # async fn run() -> Result<(), Error> {
+    /// let client = reqwest::Client::new();
     /// let resp = client.delete("http://httpbin.org/delete")
     ///     .basic_auth("admin", Some("good password"))
-    ///     .send()?;
+    ///     .send()
+    ///     .await?;
     /// # Ok(())
     /// # }
     /// ```
@@ -267,11 +276,14 @@ impl<Client, Body: From<Vec<u8>> + From<String>> RequestBuilder<Client, Body> {
     /// Enable HTTP bearer authentication.
     ///
     /// ```rust
-    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = reqwest::blocking::Client::new();
+    /// # use reqwest::Error;
+    /// #
+    /// # async fn run() -> Result<(), Error> {
+    /// let client = reqwest::Client::new();
     /// let resp = client.delete("http://httpbin.org/delete")
     ///     .bearer_auth("token")
-    ///     .send()?;
+    ///     .send()
+    ///     .await?;
     /// # Ok(())
     /// # }
     /// ```
@@ -290,39 +302,48 @@ impl<Client, Body: From<Vec<u8>> + From<String>> RequestBuilder<Client, Body> {
     /// Using a string:
     ///
     /// ```rust
-    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = reqwest::blocking::Client::new();
+    /// # use reqwest::Error;
+    /// #
+    /// # async fn run() -> Result<(), Error> {
+    /// let client = reqwest::Client::new();
     /// let res = client.post("http://httpbin.org/post")
     ///     .body("from a &str!")
-    ///     .send()?;
+    ///     .send()
+    ///     .await?;
     /// # Ok(())
     /// # }
     /// ```
-    ///
-    /// Using a `File`:
-    ///
-    /// ```rust
-    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
-    /// let file = std::fs::File::open("from_a_file.txt")?;
-    /// let client = reqwest::blocking::Client::new();
-    /// let res = client.post("http://httpbin.org/post")
-    ///     .body(file)
-    ///     .send()?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
+    // Temporarily remove example using file, because it is only available for the blocking client
+    // Using a `File`:
+    //
+    // ```rust
+    // # use reqwest::Error;
+    // #
+    // # async fn run() -> Result<(), Error> {
+    // let file = std::fs::File::open("from_a_file.txt")?;
+    // let client = reqwest::Client::new();
+    // let res = client.post("http://httpbin.org/post")
+    //     .body(file)
+    //     .send()
+    //     .await?;
+    // # Ok(())
+    // # }
+    // ```
+    //
     /// Using arbitrary bytes:
     ///
     /// ```rust
     /// # use std::fs;
-    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use reqwest::Error;
+    /// #
+    /// # async fn run() -> Result<(), Error> {
     /// // from bytes!
     /// let bytes: Vec<u8> = vec![1, 10, 100];
-    /// let client = reqwest::blocking::Client::new();
+    /// let client = reqwest::Client::new();
     /// let res = client.post("http://httpbin.org/post")
     ///     .body(bytes)
-    ///     .send()?;
+    ///     .send()
+    ///     .await?;
     /// # Ok(())
     /// # }
     /// ```
@@ -357,11 +378,12 @@ impl<Client, Body: From<Vec<u8>> + From<String>> RequestBuilder<Client, Body> {
     /// ```rust
     /// # use reqwest::Error;
     /// #
-    /// # fn run() -> Result<(), Error> {
-    /// let client = reqwest::blocking::Client::new();
+    /// # async fn run() -> Result<(), Error> {
+    /// let client = reqwest::Client::new();
     /// let res = client.get("http://httpbin.org")
     ///     .query(&[("lang", "rust")])
-    ///     .send()?;
+    ///     .send()
+    ///     .await?;
     /// # Ok(())
     /// # }
     /// ```
@@ -407,14 +429,15 @@ impl<Client, Body: From<Vec<u8>> + From<String>> RequestBuilder<Client, Body> {
     /// # use reqwest::Error;
     /// # use std::collections::HashMap;
     /// #
-    /// # fn run() -> Result<(), Error> {
+    /// # async fn run() -> Result<(), Error> {
     /// let mut params = HashMap::new();
     /// params.insert("lang", "rust");
     ///
-    /// let client = reqwest::blocking::Client::new();
+    /// let client = reqwest::Client::new();
     /// let res = client.post("http://httpbin.org")
     ///     .form(&params)
-    ///     .send()?;
+    ///     .send()
+    ///     .await?;
     /// # Ok(())
     /// # }
     /// ```
@@ -458,14 +481,15 @@ impl<Client, Body: From<Vec<u8>> + From<String>> RequestBuilder<Client, Body> {
     /// # use reqwest::Error;
     /// # use std::collections::HashMap;
     /// #
-    /// # fn run() -> Result<(), Error> {
+    /// # async fn run() -> Result<(), Error> {
     /// let mut map = HashMap::new();
     /// map.insert("lang", "rust");
     ///
-    /// let client = reqwest::blocking::Client::new();
+    /// let client = reqwest::Client::new();
     /// let res = client.post("http://httpbin.org")
     ///     .json(&map)
-    ///     .send()?;
+    ///     .send()
+    ///     .await?;
     /// # Ok(())
     /// # }
     /// ```
