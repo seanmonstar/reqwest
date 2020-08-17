@@ -6,7 +6,7 @@
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
     // Make sure you are running tor and this is your socks port
-    let proxy = reqwest::Proxy::all("socks5://127.0.0.1:9050").expect("tor proxy should be there");
+    let proxy = reqwest::Proxy::all("socks5h://127.0.0.1:9050").expect("tor proxy should be there");
     let client = reqwest::Client::builder()
         .proxy(proxy)
         .build()
