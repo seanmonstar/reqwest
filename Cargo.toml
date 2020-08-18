@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.10.7" # remember to update html_root_url
+version = "0.11.0-pre.0" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -11,6 +11,8 @@ readme = "README.md"
 license = "MIT/Apache-2.0"
 edition = "2018"
 autotests = true
+
+publish = false # 0.11.0 pre!
 
 [package.metadata.docs.rs]
 all-features = true
