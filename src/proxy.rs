@@ -7,6 +7,8 @@ use crate::{IntoUrl, Url};
 use http::{header::HeaderValue, Uri};
 use ipnet::IpNet;
 use percent_encoding::percent_decode;
+#[cfg(target_os = "windows")]
+use regex::Regex;
 use std::collections::HashMap;
 use std::env;
 #[cfg(target_os = "windows")]
@@ -212,7 +214,7 @@ impl Proxy {
 
     pub(crate) fn system() -> Proxy {
         let mut proxy = if cfg!(feature = "__internal_proxy_sys_no_cache") {
-            Proxy::new(Intercept::System(Arc::new(get_sys_proxies())))
+            Proxy::new(Intercept::System(Arc::new(get_sys_proxies(get_from_registry()))))
         } else {
             Proxy::new(Intercept::System(SYS_PROXIES.clone()))
         };
@@ -578,6 +580,7 @@ impl fmt::Debug for ProxyScheme {
 }
 
 type SystemProxyMap = HashMap<String, ProxyScheme>;
+type RegistryProxyValues = (u32, String);
 
 #[derive(Clone, Debug)]
 enum Intercept {
@@ -667,7 +670,7 @@ impl Dst for Uri {
 }
 
 lazy_static! {
-    static ref SYS_PROXIES: Arc<SystemProxyMap> = Arc::new(get_sys_proxies());
+    static ref SYS_PROXIES: Arc<SystemProxyMap> = Arc::new(get_sys_proxies(get_from_registry()));
 }
 
 /// Get system proxies information.
@@ -679,7 +682,7 @@ lazy_static! {
 /// Returns:
 ///     System proxies information as a hashmap like
 ///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}
-fn get_sys_proxies() -> SystemProxyMap {
+fn get_sys_proxies(registry_values: Option<RegistryProxyValues>) -> SystemProxyMap {
     let proxies = get_from_environment();
 
     // TODO: move the following #[cfg] to `if expression` when attributes on `if` expressions allowed
@@ -687,7 +690,9 @@ fn get_sys_proxies() -> SystemProxyMap {
     {
         if proxies.is_empty() {
             // don't care errors if can't get proxies from registry, just return an empty HashMap.
-            return get_from_registry();
+            if let Some(registry_values) = registry_values {
+                return parse_registry_values(registry_values);
+            }
         }
     }
     proxies
@@ -737,13 +742,30 @@ fn is_cgi() -> bool {
 }
 
 #[cfg(target_os = "windows")]
-fn get_from_registry_impl() -> Result<SystemProxyMap, Box<dyn Error>> {
+fn get_from_registry_impl() -> Result<RegistryProxyValues, Box<dyn Error>> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let internet_setting: RegKey =
         hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")?;
     // ensure the proxy is enable, if the value doesn't exist, an error will returned.
     let proxy_enable: u32 = internet_setting.get_value("ProxyEnable")?;
     let proxy_server: String = internet_setting.get_value("ProxyServer")?;
+
+    Ok((proxy_enable, proxy_server))
+}
+
+#[cfg(target_os = "windows")]
+fn get_from_registry() -> Option<RegistryProxyValues> {
+    get_from_registry_impl().ok()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_from_registry() -> Option<RegistryProxyValues> {
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn parse_registry_values_impl(registry_values: RegistryProxyValues) -> Result<SystemProxyMap, Box<dyn Error>> {
+    let (proxy_enable, proxy_server) = registry_values;
 
     if proxy_enable == 0 {
         return Ok(HashMap::new());
@@ -756,7 +778,19 @@ fn get_from_registry_impl() -> Result<SystemProxyMap, Box<dyn Error>> {
             let protocol_parts: Vec<&str> = p.split("=").collect();
             match protocol_parts.as_slice() {
                 [protocol, address] => {
-                    insert_proxy(&mut proxies, *protocol, String::from(*address));
+                    lazy_static! {
+                        static ref RE: Regex = Regex::new("(?:[^/:]+)://").unwrap();
+                    }
+
+                    // See if address has a type:// prefix
+                    let address = if !RE.is_match(*address) {
+                        format!("{}://{}", protocol, address)
+                    }
+                    else {
+                        String::from(*address)
+                    };
+
+                    insert_proxy(&mut proxies, *protocol, address);
                 }
                 _ => {
                     // Contains invalid protocol setting, just break the loop
@@ -779,8 +813,8 @@ fn get_from_registry_impl() -> Result<SystemProxyMap, Box<dyn Error>> {
 }
 
 #[cfg(target_os = "windows")]
-fn get_from_registry() -> SystemProxyMap {
-    get_from_registry_impl().unwrap_or(HashMap::new())
+fn parse_registry_values(registry_values: RegistryProxyValues) -> SystemProxyMap {
+    parse_registry_values_impl(registry_values).unwrap_or(HashMap::new())
 }
 
 #[cfg(test)]
@@ -913,13 +947,13 @@ mod tests {
 
         // Mock ENV, get the results, before doing assertions
         // to avoid assert! -> panic! -> Mutex Poisoned.
-        let baseline_proxies = get_sys_proxies();
+        let baseline_proxies = get_sys_proxies(None);
         // the system proxy setting url is invalid.
         env::set_var("http_proxy", "123465");
-        let invalid_proxies = get_sys_proxies();
+        let invalid_proxies = get_sys_proxies(None);
         // set valid proxy
         env::set_var("http_proxy", "http://127.0.0.1/");
-        let valid_proxies = get_sys_proxies();
+        let valid_proxies = get_sys_proxies(None);
 
         // reset user setting when guards drop
         drop(_g1);
@@ -947,11 +981,11 @@ mod tests {
         // to avoid assert! -> panic! -> Mutex Poisoned.
         env::set_var("HTTP_PROXY", "http://evil/");
 
-        let baseline_proxies = get_sys_proxies();
+        let baseline_proxies = get_sys_proxies(None);
         // set like we're in CGI
         env::set_var("REQUEST_METHOD", "GET");
 
-        let cgi_proxies = get_sys_proxies();
+        let cgi_proxies = get_sys_proxies(None);
 
         // reset user setting when guards drop
         drop(_g1);
@@ -982,7 +1016,7 @@ mod tests {
         );
 
         // Manually construct this so we aren't use the cache
-        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies())));
+        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
         p.no_proxy = NoProxy::new();
 
         assert_eq!(intercepted_uri(&p, "http://hyper.rs"), target);
@@ -1015,7 +1049,7 @@ mod tests {
         let domain = "lower.case";
         env::set_var("no_proxy", domain);
         // Manually construct this so we aren't use the cache
-        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies())));
+        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
         p.no_proxy = NoProxy::new();
         assert_eq!(
             p.no_proxy.expect("should have a no proxy set").domains.0[0],
@@ -1027,7 +1061,7 @@ mod tests {
         let domain = "upper.case";
         env::set_var("NO_PROXY", domain);
         // Manually construct this so we aren't use the cache
-        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies())));
+        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
         p.no_proxy = NoProxy::new();
         assert_eq!(
             p.no_proxy.expect("should have a no proxy set").domains.0[0],
@@ -1041,7 +1075,7 @@ mod tests {
         env::set_var("HTTP_PROXY", target);
 
         // Manually construct this so we aren't use the cache
-        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies())));
+        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
         p.no_proxy = NoProxy::new();
         assert!(p.no_proxy.is_none(), "NoProxy shouldn't have been created");
 
