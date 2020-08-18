@@ -7,8 +7,6 @@ use crate::{IntoUrl, Url};
 use http::{header::HeaderValue, Uri};
 use ipnet::IpNet;
 use percent_encoding::percent_decode;
-#[cfg(target_os = "windows")]
-use regex::Regex;
 use std::collections::HashMap;
 use std::env;
 #[cfg(target_os = "windows")]
@@ -683,8 +681,7 @@ lazy_static! {
 ///     System proxies information as a hashmap like
 ///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}
 fn get_sys_proxies(
-    #[cfg(target_os = "windows")] registry_values: Option<RegistryProxyValues>,
-    #[cfg(not(target_os = "windows"))] _registry_values: Option<RegistryProxyValues>,
+    #[allow(unused_variables)] registry_values: Option<RegistryProxyValues>,
 ) -> SystemProxyMap {
     let proxies = get_from_environment();
 
@@ -781,12 +778,8 @@ fn parse_registry_values_impl(registry_values: RegistryProxyValues) -> Result<Sy
             let protocol_parts: Vec<&str> = p.split("=").collect();
             match protocol_parts.as_slice() {
                 [protocol, address] => {
-                    lazy_static! {
-                        static ref RE: Regex = Regex::new("(?:[^/:]+)://").unwrap();
-                    }
-
                     // See if address has a type:// prefix
-                    let address = if !RE.is_match(*address) {
+                    let address = if !contains_type_prefix(*address) {
                         format!("{}://{}", protocol, address)
                     }
                     else {
@@ -813,6 +806,24 @@ fn parse_registry_values_impl(registry_values: RegistryProxyValues) -> Result<Sy
         }
     }
     Ok(proxies)
+}
+
+#[cfg(target_os = "windows")]
+fn contains_type_prefix(address: &str) -> bool {
+    if let Some(indice) = address.find("://") {
+        if indice == 0 {
+            false
+        }
+        else {
+            let prefix = &address[..indice];
+            let contains_banned = prefix.contains(|c| c == ':' || c == '/');
+
+            !contains_banned
+        }
+    }
+    else {
+        false
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -1130,6 +1141,18 @@ mod tests {
         drop(_g3);
         // Let other threads run now
         drop(_lock);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_type_prefix_detection() {
+        assert!(!contains_type_prefix("test"));
+        assert!(!contains_type_prefix("://test"));
+        assert!(!contains_type_prefix("some:prefix://test"));
+        assert!(!contains_type_prefix("some/prefix://test"));
+
+        assert!(contains_type_prefix("http://test"));
+        assert!(contains_type_prefix("a://test"));
     }
 
     /// Guard an environment variable, resetting it to the original value
