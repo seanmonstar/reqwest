@@ -76,6 +76,7 @@ async fn response_timeout() {
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_millis(500))
+        .no_proxy()
         .build()
         .unwrap();
 

@@ -28,7 +28,14 @@ async fn auto_headers() {
     });
 
     let url = format!("http://{}/1", server.addr());
-    let res = reqwest::get(&url).await.unwrap();
+    let res = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap()
+        .get(&url)
+        .send()
+        .await
+        .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
