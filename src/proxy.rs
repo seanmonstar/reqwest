@@ -972,6 +972,7 @@ mod tests {
         assert_eq!(p.host(), "127.0.0.1");
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn test_get_sys_proxies_registry_parsing() {
         // Stop other threads from modifying process-global ENV while we are.
