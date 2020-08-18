@@ -970,6 +970,45 @@ mod tests {
     }
 
     #[test]
+    fn test_get_sys_proxies_registry_parsing() {
+        // Stop other threads from modifying process-global ENV while we are.
+        let _lock = ENVLOCK.lock();
+        // save system setting first.
+        let _g1 = env_guard("HTTP_PROXY");
+        let _g2 = env_guard("http_proxy");
+
+        // Mock ENV, get the results, before doing assertions
+        // to avoid assert! -> panic! -> Mutex Poisoned.
+        let baseline_proxies = get_sys_proxies(None);
+        // the system proxy in the registry has been disabled
+        let disabled_proxies = get_sys_proxies(Some((0, String::from("http://127.0.0.1/"))));
+        // set valid proxy
+        let valid_proxies = get_sys_proxies(Some((1, String::from("http://127.0.0.1/"))));
+        let multiple_proxies = get_sys_proxies(Some((1, String::from("http=127.0.0.1:8888;https=127.0.0.2:8888"))));
+
+        // reset user setting when guards drop
+        drop(_g1);
+        drop(_g2);
+        // Let other threads run now
+        drop(_lock);
+
+        assert_eq!(baseline_proxies.contains_key("http"), false);
+        assert_eq!(disabled_proxies.contains_key("http"), false);
+
+        let p = &valid_proxies["http"];
+        assert_eq!(p.scheme(), "http");
+        assert_eq!(p.host(), "127.0.0.1");
+
+        let p = &multiple_proxies["http"];
+        assert_eq!(p.scheme(), "http");
+        assert_eq!(p.host(), "127.0.0.1:8888");
+
+        let p = &multiple_proxies["https"];
+        assert_eq!(p.scheme(), "https");
+        assert_eq!(p.host(), "127.0.0.2:8888");
+    }
+
+    #[test]
     fn test_get_sys_proxies_in_cgi() {
         // Stop other threads from modifying process-global ENV while we are.
         let _lock = ENVLOCK.lock();
