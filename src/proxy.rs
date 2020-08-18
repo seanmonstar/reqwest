@@ -682,7 +682,10 @@ lazy_static! {
 /// Returns:
 ///     System proxies information as a hashmap like
 ///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}
-fn get_sys_proxies(registry_values: Option<RegistryProxyValues>) -> SystemProxyMap {
+fn get_sys_proxies(
+    #[cfg(target_os = "windows")] registry_values: Option<RegistryProxyValues>,
+    #[cfg(not(target_os = "windows"))] _registry_values: Option<RegistryProxyValues>,
+) -> SystemProxyMap {
     let proxies = get_from_environment();
 
     // TODO: move the following #[cfg] to `if expression` when attributes on `if` expressions allowed
