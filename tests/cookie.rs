@@ -91,6 +91,11 @@ async fn cookie_store_simple() {
     let url = format!("http://{}/", server.addr());
     client.get(&url).send().await.unwrap();
 
+    {
+        let cookies = client.get_cookies().unwrap();
+        assert_eq!(cookies.get("127.0.0.1", "/", "key").unwrap().value(), "val")
+    }
+
     let url = format!("http://{}/2", server.addr());
     client.get(&url).send().await.unwrap();
 }
@@ -124,8 +129,18 @@ async fn cookie_store_overwrite_existing() {
     let url = format!("http://{}/", server.addr());
     client.get(&url).send().await.unwrap();
 
+    {
+        let cookies = client.get_cookies().unwrap();
+        assert_eq!(cookies.get("127.0.0.1", "/", "key").unwrap().value(), "val")
+    }
+
     let url = format!("http://{}/2", server.addr());
     client.get(&url).send().await.unwrap();
+
+    {
+        let cookies = client.get_cookies().unwrap();
+        assert_eq!(cookies.get("127.0.0.1", "/", "key").unwrap().value(), "val2")
+    }
 
     let url = format!("http://{}/3", server.addr());
     client.get(&url).send().await.unwrap();
