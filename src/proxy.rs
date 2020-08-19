@@ -681,7 +681,7 @@ lazy_static! {
 ///     System proxies information as a hashmap like
 ///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}
 fn get_sys_proxies(
-    #[allow(unused_variables)] registry_values: Option<RegistryProxyValues>,
+    #[cfg_attr(not(target_os), allow(unused_variables))] registry_values: Option<RegistryProxyValues>,
 ) -> SystemProxyMap {
     let proxies = get_from_environment();
 
