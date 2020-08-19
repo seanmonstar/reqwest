@@ -1096,6 +1096,10 @@ impl Client {
             }
         }
     }
+
+    pub(crate) fn get_inner(&self) -> Arc<ClientRef> {
+        Arc::clone(&self.inner)
+    }
 }
 
 #[cfg(feature = "cookies")]
@@ -1213,10 +1217,10 @@ impl Config {
     }
 }
 
-struct ClientRef {
+pub(crate) struct ClientRef {
     accepts: Accepts,
     #[cfg(feature = "cookies")]
-    cookie_store: Option<RwLock<cookie::CookieStore>>,
+    pub(crate) cookie_store: Option<RwLock<cookie::CookieStore>>,
     headers: HeaderMap,
     hyper: HyperClient,
     redirect_policy: redirect::Policy,

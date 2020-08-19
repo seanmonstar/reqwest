@@ -675,6 +675,32 @@ impl fmt::Debug for Client {
     }
 }
 
+#[cfg(feature = "cookies")]
+impl Client {
+    /// Returns a reader lock on the `CookieStore` (immutable access).
+    /// Requests will be blocked until the lock is dropped.
+    pub fn get_cookies(
+        &self,
+        _url: &crate::Url
+    ) -> Option<std::sync::RwLockReadGuard<'_, crate::cookie::CookieStore>> {
+        match self.inner.inner.inner.cookie_store.as_ref()?.read() {
+            Ok(cookies) => Some(cookies),
+            Err(e) => Some(e.into_inner()),
+        }
+    }
+
+    /// Returns a writer lock on the `CookieStore` (mutable access).
+    /// Requests will be blocked until the lock is dropped.
+    pub fn get_cookies_mut(
+        &mut self
+    ) -> Option<std::sync::RwLockWriteGuard<'_, crate::cookie::CookieStore>> {
+        match self.inner.inner.inner.cookie_store.as_ref()?.write() {
+            Ok(cookies) => Some(cookies),
+            Err(e) => Some(e.into_inner()),
+        }
+    }
+}
+
 impl fmt::Debug for ClientBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.inner.fmt(f)
@@ -693,6 +719,8 @@ type ThreadSender = mpsc::UnboundedSender<(async_impl::Request, OneshotResponse)
 struct InnerClientHandle {
     tx: Option<ThreadSender>,
     thread: Option<thread::JoinHandle<()>>,
+    #[cfg(feature = "cookies")] // this field is required only to get access to the cookies for now
+    inner: Arc<async_impl::client::ClientRef>,
 }
 
 impl Drop for InnerClientHandle {
@@ -716,6 +744,19 @@ impl ClientHandle {
         let builder = builder.inner;
         let (tx, rx) = mpsc::unbounded_channel::<(async_impl::Request, OneshotResponse)>();
         let (spawn_tx, spawn_rx) = oneshot::channel::<crate::Result<()>>();
+
+        let client = match builder.build() {
+            Err(e) => {
+                /*if let Err(e) = spawn_tx.send(Err(e)) {
+                    error!("Failed to communicate client creation failure: {:?}", e);
+                }*/
+                return Err(e);
+            }
+            Ok(v) => v,
+        };
+        #[cfg(feature = "cookies")]
+        let inner = client.get_inner();
+
         let handle = thread::Builder::new()
             .name("reqwest-internal-sync-runtime".into())
             .spawn(move || {
@@ -731,15 +772,6 @@ impl ClientHandle {
                 };
 
                 let f = async move {
-                    let client = match builder.build() {
-                        Err(e) => {
-                            if let Err(e) = spawn_tx.send(Err(e)) {
-                                error!("Failed to communicate client creation failure: {:?}", e);
-                            }
-                            return;
-                        }
-                        Ok(v) => v,
-                    };
                     if let Err(e) = spawn_tx.send(Ok(())) {
                         error!("Failed to communicate successful startup: {:?}", e);
                         return;
@@ -773,6 +805,8 @@ impl ClientHandle {
         let inner_handle = Arc::new(InnerClientHandle {
             tx: Some(tx),
             thread: Some(handle),
+            #[cfg(feature = "cookies")]
+            inner,
         });
 
         Ok(ClientHandle {
