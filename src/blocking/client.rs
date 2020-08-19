@@ -755,7 +755,7 @@ impl ClientHandle {
             Ok(v) => v,
         };
         #[cfg(feature = "cookies")]
-        let inner = client.get_inner();
+        let inner = Arc::clone(&client.inner);
 
         let handle = thread::Builder::new()
             .name("reqwest-internal-sync-runtime".into())

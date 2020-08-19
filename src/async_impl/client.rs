@@ -59,7 +59,7 @@ use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
 /// [`Rc`]: std::rc::Rc
 #[derive(Clone)]
 pub struct Client {
-    inner: Arc<ClientRef>,
+    pub(crate) inner: Arc<ClientRef>,
 }
 
 /// A `ClientBuilder` can be used to create a `Client` with  custom configuration.
@@ -1095,10 +1095,6 @@ impl Client {
                 break;
             }
         }
-    }
-
-    pub(crate) fn get_inner(&self) -> Arc<ClientRef> {
-        Arc::clone(&self.inner)
     }
 }
 
