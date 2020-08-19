@@ -1098,6 +1098,30 @@ impl Client {
     }
 }
 
+#[cfg(feature = "cookies")]
+impl Client {
+    /// TODO
+    pub fn get_request_cookies(
+        &self,
+        _url: &Url
+    ) -> Option<std::sync::RwLockReadGuard<'_, cookie::CookieStore>> {
+        match self.inner.cookie_store.as_ref()?.read() {
+            Ok(cookies) => Some(cookies),
+            Err(e) => Some(e.into_inner()),
+        }
+    }
+
+    /// TODO
+    pub fn get_cookies_mut(
+        &mut self
+    ) -> Option<std::sync::RwLockWriteGuard<'_, cookie::CookieStore>> {
+        match self.inner.cookie_store.as_ref()?.write() {
+            Ok(cookies) => Some(cookies),
+            Err(e) => Some(e.into_inner()),
+        }
+    }
+}
+
 impl fmt::Debug for Client {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut builder = f.debug_struct("Client");
