@@ -1100,8 +1100,9 @@ impl Client {
 
 #[cfg(feature = "cookies")]
 impl Client {
-    /// TODO
-    pub fn get_request_cookies(
+    /// Returns a reader lock on the `CookieStore` (immutable access).
+    /// Requests will be blocked until the lock is dropped.
+    pub fn get_cookies(
         &self,
         _url: &Url
     ) -> Option<std::sync::RwLockReadGuard<'_, cookie::CookieStore>> {
@@ -1111,7 +1112,8 @@ impl Client {
         }
     }
 
-    /// TODO
+    /// Returns a writer lock on the `CookieStore` (mutable access).
+    /// Requests will be blocked until the lock is dropped.
     pub fn get_cookies_mut(
         &mut self
     ) -> Option<std::sync::RwLockWriteGuard<'_, cookie::CookieStore>> {
