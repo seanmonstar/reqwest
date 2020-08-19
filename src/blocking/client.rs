@@ -680,8 +680,7 @@ impl Client {
     /// Returns a reader lock on the `CookieStore` (immutable access).
     /// Requests will be blocked until the lock is dropped.
     pub fn get_cookies(
-        &self,
-        _url: &crate::Url
+        &self
     ) -> Option<std::sync::RwLockReadGuard<'_, crate::cookie::CookieStore>> {
         match self.inner.inner.inner.cookie_store.as_ref()?.read() {
             Ok(cookies) => Some(cookies),
