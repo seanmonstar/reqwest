@@ -63,6 +63,7 @@ pub struct Client {
 /// # Ok(())
 /// # }
 /// ```
+#[must_use]
 pub struct ClientBuilder {
     inner: async_impl::ClientBuilder,
     timeout: Timeout,

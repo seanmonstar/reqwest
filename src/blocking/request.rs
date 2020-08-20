@@ -23,6 +23,7 @@ pub struct Request {
 
 /// A builder to construct the properties of a `Request`.
 #[derive(Debug)]
+#[must_use = "RequestBuilder does nothing until you 'send' it"]
 pub struct RequestBuilder {
     client: Client,
     request: crate::Result<Request>,

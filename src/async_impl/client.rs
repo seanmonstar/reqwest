@@ -63,6 +63,7 @@ pub struct Client {
 }
 
 /// A `ClientBuilder` can be used to create a `Client` with  custom configuration.
+#[must_use]
 pub struct ClientBuilder {
     config: Config,
 }
