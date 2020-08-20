@@ -13,6 +13,12 @@ pub struct Form {
     inner: FormParts<Part>,
 }
 
+impl Form {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.inner.fields.is_empty()
+    }
+}
+
 /// A field in a multipart form.
 pub struct Part {
     meta: PartMetadata,
