@@ -44,6 +44,13 @@ impl Body {
             inner: Inner::Multipart(f),
         }
     }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        match &self.inner {
+            Inner::Bytes(bytes) => bytes.is_empty(),
+            Inner::Multipart(form) => form.is_empty(),
+        }
+    }
 }
 
 impl From<Bytes> for Body {
