@@ -1,3 +1,13 @@
+## v0.10.8
+
+- Add `must_use` to `RequestBuilder` and `ClientBuilder`.
+- Fix Windows system proxy detection of Fiddler proxies.
+- (wasm) Add `headers` method to `RequestBuilder`.
+- (wasm) Add `execute` method to `Client`.
+- (wasm) Add `TryFrom<http::Request>` for `Request`.
+- (wasm) Fix checking for global `window` to work in non-browser environments.
+- (wasm) Fix sending of an empty body when not required.
+
 ## v0.10.7
 
 - Add `NO_PROXY` environment variable support.
