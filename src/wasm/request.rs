@@ -250,6 +250,12 @@ impl RequestBuilder {
         self
     }
 
+    /// Build a `Request`, which can be inspected, modified and executed with
+    /// `Client::execute()`.
+    pub fn build(self) -> crate::Result<Request> {
+        self.request
+    }
+
     /// Constructs the Request and sends it to the target URL, returning a
     /// future Response.
     ///
