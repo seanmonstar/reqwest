@@ -59,7 +59,7 @@ use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
 /// [`Rc`]: std::rc::Rc
 #[derive(Clone)]
 pub struct Client {
-    pub(crate) inner: Arc<ClientRef>,
+    inner: Arc<ClientRef>,
 }
 
 /// A `ClientBuilder` can be used to create a `Client` with  custom configuration.
@@ -1098,31 +1098,6 @@ impl Client {
     }
 }
 
-#[cfg(feature = "cookies")]
-impl Client {
-    /// Returns a reader lock on the `CookieStore` (immutable access).
-    /// Requests will be blocked until the lock is dropped.
-    pub fn get_cookies(
-        &self
-    ) -> Option<std::sync::RwLockReadGuard<'_, cookie::CookieStore>> {
-        match self.inner.cookie_store.as_ref()?.read() {
-            Ok(cookies) => Some(cookies),
-            Err(e) => Some(e.into_inner()),
-        }
-    }
-
-    /// Returns a writer lock on the `CookieStore` (mutable access).
-    /// Requests will be blocked until the lock is dropped.
-    pub fn get_cookies_mut(
-        &mut self
-    ) -> Option<std::sync::RwLockWriteGuard<'_, cookie::CookieStore>> {
-        match self.inner.cookie_store.as_ref()?.write() {
-            Ok(cookies) => Some(cookies),
-            Err(e) => Some(e.into_inner()),
-        }
-    }
-}
-
 impl fmt::Debug for Client {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut builder = f.debug_struct("Client");
@@ -1212,10 +1187,10 @@ impl Config {
     }
 }
 
-pub(crate) struct ClientRef {
+struct ClientRef {
     accepts: Accepts,
     #[cfg(feature = "cookies")]
-    pub(crate) cookie_store: Option<RwLock<cookie::CookieStore>>,
+    cookie_store: Option<RwLock<cookie::CookieStore>>,
     headers: HeaderMap,
     hyper: HyperClient,
     redirect_policy: redirect::Policy,
