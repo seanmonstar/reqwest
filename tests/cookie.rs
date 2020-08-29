@@ -139,10 +139,7 @@ async fn cookie_store_overwrite_existing() {
 
     {
         let cookies = client.get_cookies().unwrap();
-        assert_eq!(
-            cookies.get("127.0.0.1", "/", "key").unwrap().value(),
-            "val2"
-        )
+        assert_eq!(cookies.get("127.0.0.1", "/", "key").unwrap().value(), "val2")
     }
 
     let url = format!("http://{}/3", server.addr());
