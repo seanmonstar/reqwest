@@ -331,7 +331,7 @@ if_wasm! {
     #[cfg(any(
         feature = "default-tls",
         feature = "native-tls",
-        feature = "native-tls-ventored",
+        feature = "native-tls-vendored",
         feature = "rustls-tls"))]
     std::compile_error! {
         "TLS is not configurable in the browser. Refer to the crate documentation WASM Features section."
