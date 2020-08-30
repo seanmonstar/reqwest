@@ -326,7 +326,7 @@ if_wasm! {
     }
     #[cfg(any(feature = "gzip", feature = "brotli"))]
     std::compile_error! {
-        "The gzip and brotli features not not available in the browser, as decoding is handled by default. Refer to the crate documentation WASM Features section."
+        "The gzip and brotli features are not available in the browser, as decoding is handled by default. Refer to the crate documentation WASM Features section."
     }
     #[cfg(any(
         feature = "default-tls",
