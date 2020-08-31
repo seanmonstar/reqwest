@@ -212,7 +212,9 @@ impl Proxy {
 
     pub(crate) fn system() -> Proxy {
         let mut proxy = if cfg!(feature = "__internal_proxy_sys_no_cache") {
-            Proxy::new(Intercept::System(Arc::new(get_sys_proxies(get_from_registry()))))
+            Proxy::new(Intercept::System(Arc::new(get_sys_proxies(
+                get_from_registry(),
+            ))))
         } else {
             Proxy::new(Intercept::System(SYS_PROXIES.clone()))
         };
@@ -247,10 +249,20 @@ impl Proxy {
 
     pub(crate) fn maybe_has_http_auth(&self) -> bool {
         match self.intercept {
-            Intercept::All(ProxyScheme::Http { auth: Some(..), .. }) |
-            Intercept::Http(ProxyScheme::Http { auth: Some(..), .. }) |
+            Intercept::All(ProxyScheme::Http { auth: Some(..), .. })
+            | Intercept::Http(ProxyScheme::Http { auth: Some(..), .. })
             // Custom *may* match 'http', so assume so.
-            Intercept::Custom(_) => true,
+            | Intercept::Custom(_) => true,
+            Intercept::System(ref system) => {
+                if let Some(proxy) = system.get("http") {
+                    match proxy {
+                        ProxyScheme::Http { auth, .. } => auth.is_some(),
+                        _ => false,
+                    }
+                } else {
+                    false
+                }
+            }
             _ => false,
         }
     }
@@ -259,6 +271,16 @@ impl Proxy {
         match self.intercept {
             Intercept::All(ProxyScheme::Http { ref auth, .. })
             | Intercept::Http(ProxyScheme::Http { ref auth, .. }) => auth.clone(),
+            Intercept::System(ref system) => {
+                if let Some(proxy) = system.get("http") {
+                    match proxy {
+                        ProxyScheme::Http { auth, .. } => auth.clone(),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
             Intercept::Custom(ref custom) => custom.call(uri).and_then(|scheme| match scheme {
                 ProxyScheme::Http { auth, .. } => auth,
                 ProxyScheme::Https { auth, .. } => auth,
@@ -681,7 +703,9 @@ lazy_static! {
 ///     System proxies information as a hashmap like
 ///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}
 fn get_sys_proxies(
-    #[cfg_attr(not(target_os = "windows"), allow(unused_variables))] registry_values: Option<RegistryProxyValues>,
+    #[cfg_attr(not(target_os = "windows"), allow(unused_variables))] registry_values: Option<
+        RegistryProxyValues,
+    >,
 ) -> SystemProxyMap {
     let proxies = get_from_environment();
 
@@ -764,7 +788,9 @@ fn get_from_registry() -> Option<RegistryProxyValues> {
 }
 
 #[cfg(target_os = "windows")]
-fn parse_registry_values_impl(registry_values: RegistryProxyValues) -> Result<SystemProxyMap, Box<dyn Error>> {
+fn parse_registry_values_impl(
+    registry_values: RegistryProxyValues,
+) -> Result<SystemProxyMap, Box<dyn Error>> {
     let (proxy_enable, proxy_server) = registry_values;
 
     if proxy_enable == 0 {
@@ -1207,5 +1233,126 @@ mod tests {
                 env::remove_var(&self.name);
             }
         }
+    }
+
+    #[test]
+    fn test_has_http_auth() {
+        let http_proxy_with_auth = Proxy {
+            intercept: Intercept::Http(ProxyScheme::Http {
+                auth: Some(HeaderValue::from_static("auth1")),
+                host: http::uri::Authority::from_static("authority"),
+            }),
+            no_proxy: None,
+        };
+        assert_eq!(http_proxy_with_auth.maybe_has_http_auth(), true);
+        assert_eq!(
+            http_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
+            Some(HeaderValue::from_static("auth1"))
+        );
+
+        let http_proxy_without_auth = Proxy {
+            intercept: Intercept::Http(ProxyScheme::Http {
+                auth: None,
+                host: http::uri::Authority::from_static("authority"),
+            }),
+            no_proxy: None,
+        };
+        assert_eq!(http_proxy_without_auth.maybe_has_http_auth(), false);
+        assert_eq!(
+            http_proxy_without_auth.http_basic_auth(&Uri::from_static("http://example.com")),
+            None
+        );
+
+        let https_proxy_with_auth = Proxy {
+            intercept: Intercept::Http(ProxyScheme::Https {
+                auth: Some(HeaderValue::from_static("auth2")),
+                host: http::uri::Authority::from_static("authority"),
+            }),
+            no_proxy: None,
+        };
+        assert_eq!(https_proxy_with_auth.maybe_has_http_auth(), false);
+        assert_eq!(
+            https_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
+            None
+        );
+
+        let all_http_proxy_with_auth = Proxy {
+            intercept: Intercept::All(ProxyScheme::Http {
+                auth: Some(HeaderValue::from_static("auth3")),
+                host: http::uri::Authority::from_static("authority"),
+            }),
+            no_proxy: None,
+        };
+        assert_eq!(all_http_proxy_with_auth.maybe_has_http_auth(), true);
+        assert_eq!(
+            all_http_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
+            Some(HeaderValue::from_static("auth3"))
+        );
+
+        let all_https_proxy_with_auth = Proxy {
+            intercept: Intercept::All(ProxyScheme::Https {
+                auth: Some(HeaderValue::from_static("auth4")),
+                host: http::uri::Authority::from_static("authority"),
+            }),
+            no_proxy: None,
+        };
+        assert_eq!(all_https_proxy_with_auth.maybe_has_http_auth(), false);
+        assert_eq!(
+            all_https_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
+            None
+        );
+
+        let all_https_proxy_without_auth = Proxy {
+            intercept: Intercept::All(ProxyScheme::Https {
+                auth: None,
+                host: http::uri::Authority::from_static("authority"),
+            }),
+            no_proxy: None,
+        };
+        assert_eq!(all_https_proxy_without_auth.maybe_has_http_auth(), false);
+        assert_eq!(
+            all_https_proxy_without_auth.http_basic_auth(&Uri::from_static("http://example.com")),
+            None
+        );
+
+        let system_http_proxy_with_auth = Proxy {
+            intercept: Intercept::System(Arc::new({
+                let mut m = HashMap::new();
+                m.insert(
+                    "http".into(),
+                    ProxyScheme::Http {
+                        auth: Some(HeaderValue::from_static("auth5")),
+                        host: http::uri::Authority::from_static("authority"),
+                    },
+                );
+                m
+            })),
+            no_proxy: None,
+        };
+        assert_eq!(system_http_proxy_with_auth.maybe_has_http_auth(), true);
+        assert_eq!(
+            system_http_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
+            Some(HeaderValue::from_static("auth5"))
+        );
+
+        let system_https_proxy_with_auth = Proxy {
+            intercept: Intercept::System(Arc::new({
+                let mut m = HashMap::new();
+                m.insert(
+                    "https".into(),
+                    ProxyScheme::Https {
+                        auth: Some(HeaderValue::from_static("auth6")),
+                        host: http::uri::Authority::from_static("authority"),
+                    },
+                );
+                m
+            })),
+            no_proxy: None,
+        };
+        assert_eq!(system_https_proxy_with_auth.maybe_has_http_auth(), false);
+        assert_eq!(
+            system_https_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
+            None
+        );
     }
 }
