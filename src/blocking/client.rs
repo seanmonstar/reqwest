@@ -566,7 +566,7 @@ impl Client {
     ///
     /// # Panic
     ///
-    /// This method panics if TLS backend cannot initialized, or the resolver
+    /// This method panics if TLS backend cannot be initialized, or the resolver
     /// cannot load the system configuration.
     ///
     /// Use `Client::builder()` if you wish to handle the failure as an `Error`
