@@ -102,6 +102,7 @@ impl Error {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// Returns true if the error is related to connect
     pub fn is_connect(&self) -> bool {
         let mut source = self.source();
