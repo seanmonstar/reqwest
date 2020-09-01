@@ -54,7 +54,7 @@ async fn request_timeout() {
 
     let err = res.unwrap_err();
 
-    assert!(err.is_timeout());
+    assert!(err.is_timeout() && !err.is_connect());
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
 }
 
