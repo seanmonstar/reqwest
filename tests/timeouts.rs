@@ -62,7 +62,10 @@ async fn request_timeout() {
 async fn connect_timeout() {
     let _ = env_logger::try_init();
 
-    let client = reqwest::Client::builder().connect_timeout(Duration::from_millis(100)).build().unwrap();
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_millis(100))
+        .build()
+        .unwrap();
 
     let url = format!("http://10.255.255.1:81/slow");
 
