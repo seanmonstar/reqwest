@@ -59,6 +59,25 @@ async fn request_timeout() {
 }
 
 #[tokio::test]
+async fn connect_timeout() {
+    let _ = env_logger::try_init();
+
+    let client = reqwest::Client::builder().connect_timeout(Duration::from_millis(100)).build().unwrap();
+
+    let url = format!("http://10.255.255.1:81/slow");
+
+    let res = client
+        .get(&url)
+        .timeout(Duration::from_millis(1000))
+        .send()
+        .await;
+
+    let err = res.unwrap_err();
+
+    assert!(err.is_connect() && err.is_timeout());
+}
+
+#[tokio::test]
 async fn response_timeout() {
     let _ = env_logger::try_init();
 

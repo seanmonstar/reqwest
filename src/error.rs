@@ -102,6 +102,23 @@ impl Error {
         }
     }
 
+    /// Returns true if the error is related to connect
+    pub fn is_connect(&self) -> bool {
+        let mut source = self.source();
+
+        while let Some(err) = source {
+            if let Some(hyper_err) = err.downcast_ref::<hyper::Error>() {
+                if hyper_err.is_connect() {
+                    return true;
+                }
+            }
+
+            source = err.source();
+        }
+
+        false
+    }
+
     /// Returns true if the error is related to the request or response body
     pub fn is_body(&self) -> bool {
         match self.inner.kind {
