@@ -54,8 +54,35 @@ async fn request_timeout() {
 
     let err = res.unwrap_err();
 
-    assert!(err.is_timeout());
+    if cfg!(not(target_arch = "wasm32")) {
+        assert!(err.is_timeout() && !err.is_connect());
+    } else {
+        assert!(err.is_timeout());
+    }
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[tokio::test]
+async fn connect_timeout() {
+    let _ = env_logger::try_init();
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_millis(100))
+        .build()
+        .unwrap();
+
+    let url = format!("http://10.255.255.1:81/slow");
+
+    let res = client
+        .get(&url)
+        .timeout(Duration::from_millis(1000))
+        .send()
+        .await;
+
+    let err = res.unwrap_err();
+
+    assert!(err.is_connect() && err.is_timeout());
 }
 
 #[tokio::test]
