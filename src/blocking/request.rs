@@ -1029,7 +1029,7 @@ mod tests {
         assert_eq!(req.headers()["authorization"], "Bearer Hold my bear");
         assert_eq!(req.headers()["authorization"].is_sensitive(), true);
     }
-    
+
     #[test]
     fn test_negotiate_auth_sensitive_header() {
         let client = Client::new();
@@ -1042,7 +1042,7 @@ mod tests {
             .expect("request build");
 
         assert_eq!(req.url().as_str(), "https://localhost/");
-        assert_eq!(req.headers()["authorization"], "SomeOddlyLongAndUnreadableKerberosToken");
+        assert_eq!(req.headers()["authorization"], "Negotiate SomeOddlyLongAndUnreadableKerberosToken");
         assert_eq!(req.headers()["authorization"].is_sensitive(), true);
     }
 }
