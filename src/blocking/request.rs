@@ -276,6 +276,25 @@ impl RequestBuilder {
         let header_value = format!("Bearer {}", token);
         self.header_sensitive(crate::header::AUTHORIZATION, &*header_value, true)
     }
+    
+    /// Enable HTTP negotiate authentication.
+    ///
+    /// ```rust
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// let client = reqwest::blocking::Client::new();
+    /// let resp = client.delete("http://httpbin.org/delete")
+    ///     .negotiate_auth("token")
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn negotiate_auth<T>(self, token: T) -> RequestBuilder
+    where
+        T: fmt::Display,
+    {
+        let header_value = format!("Negotiate {}", token);
+        self.header_sensitive(crate::header::AUTHORIZATION, &*header_value, true)
+    }
 
     /// Set the request body.
     ///
@@ -1008,6 +1027,22 @@ mod tests {
 
         assert_eq!(req.url().as_str(), "https://localhost/");
         assert_eq!(req.headers()["authorization"], "Bearer Hold my bear");
+        assert_eq!(req.headers()["authorization"].is_sensitive(), true);
+    }
+    
+    #[test]
+    fn test_negotiate_auth_sensitive_header() {
+        let client = Client::new();
+        let some_url = "https://localhost/";
+
+        let req = client
+            .get(some_url)
+            .negotiate_auth("SomeOddlyLongAndUnreadableKerberosToken")
+            .build()
+            .expect("request build");
+
+        assert_eq!(req.url().as_str(), "https://localhost/");
+        assert_eq!(req.headers()["authorization"], "SomeOddlyLongAndUnreadableKerberosToken");
         assert_eq!(req.headers()["authorization"].is_sensitive(), true);
     }
 }
