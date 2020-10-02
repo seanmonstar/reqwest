@@ -676,6 +676,33 @@ impl fmt::Debug for Client {
     }
 }
 
+#[cfg(feature = "cookies")]
+impl Client {
+    /// Save the internal cookies as JSON
+    ///
+    /// Using `persistent` will only save cookies marked as persistent,
+    /// this should probably be `true` to respect the cookie.
+    ///
+    /// Using `expired` will save expired cookies,
+    /// this should probably be `false` to respect the cookie.
+    ///
+    /// # Errors
+    /// This method fails when the underlying writer encouters an error.
+    #[cfg(feature = "json")]
+    pub fn save_cookies_json<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+        persistent: bool,
+        expired: bool,
+    ) -> Option<Result<(), std::io::Error>> {
+        self.inner.cookie_store.as_ref().map(|cs| {
+            cs.read()
+                .unwrap_or_else(|e| e.into_inner())
+                .save_json(writer, persistent, expired)
+        })
+    }
+}
+
 impl fmt::Debug for ClientBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.inner.fmt(f)
@@ -694,6 +721,8 @@ type ThreadSender = mpsc::UnboundedSender<(async_impl::Request, OneshotResponse)
 struct InnerClientHandle {
     tx: Option<ThreadSender>,
     thread: Option<thread::JoinHandle<()>>,
+    #[cfg(feature = "cookies")] // this field is required only to get access to the cookies for now
+    inner: Arc<async_impl::client::ClientRef>,
 }
 
 impl Drop for InnerClientHandle {
@@ -717,6 +746,11 @@ impl ClientHandle {
         let builder = builder.inner;
         let (tx, rx) = mpsc::unbounded_channel::<(async_impl::Request, OneshotResponse)>();
         let (spawn_tx, spawn_rx) = oneshot::channel::<crate::Result<()>>();
+
+        let client = builder.build()?;
+        #[cfg(feature = "cookies")]
+        let inner = Arc::clone(&client.inner);
+
         let handle = thread::Builder::new()
             .name("reqwest-internal-sync-runtime".into())
             .spawn(move || {
@@ -732,15 +766,6 @@ impl ClientHandle {
                 };
 
                 let f = async move {
-                    let client = match builder.build() {
-                        Err(e) => {
-                            if let Err(e) = spawn_tx.send(Err(e)) {
-                                error!("Failed to communicate client creation failure: {:?}", e);
-                            }
-                            return;
-                        }
-                        Ok(v) => v,
-                    };
                     if let Err(e) = spawn_tx.send(Ok(())) {
                         error!("Failed to communicate successful startup: {:?}", e);
                         return;
@@ -774,6 +799,8 @@ impl ClientHandle {
         let inner_handle = Arc::new(InnerClientHandle {
             tx: Some(tx),
             thread: Some(handle),
+            #[cfg(feature = "cookies")]
+            inner,
         });
 
         Ok(ClientHandle {
