@@ -185,6 +185,22 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.cookie_store(enable))
     }
 
+    /// Load cookies from JSON
+    ///
+    /// Cookies received in responses will be preserved and included in
+    /// additional requests. The cookie store will be initialized from
+    /// the provided JSON object.
+    ///
+    /// By default, no cookie store is used.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional features `cookies` and `json` to be enabled.
+    #[cfg(all(feature = "cookies", feature = "json"))]
+    pub fn load_cookies_json<R: std::io::BufRead>(mut self, reader: R) -> ClientBuilder {
+        self.with_inner(|inner| inner.load_cookies_json(reader))
+    }
+
     /// Enable auto gzip decompression by checking the `Content-Encoding` response header.
     ///
     /// If auto gzip decompresson is turned on:

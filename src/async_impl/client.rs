@@ -99,7 +99,7 @@ struct Config {
     local_address: Option<IpAddr>,
     nodelay: bool,
     #[cfg(feature = "cookies")]
-    cookie_store: Option<cookie::CookieStore>,
+    cookie_store: cookie::CookieStoreBuilder,
     trust_dns: bool,
     error: Option<crate::Error>,
 }
@@ -151,7 +151,7 @@ impl ClientBuilder {
                 nodelay: true,
                 trust_dns: cfg!(feature = "trust-dns"),
                 #[cfg(feature = "cookies")]
-                cookie_store: None,
+                cookie_store: cookie::CookieStoreBuilder::default(),
             },
         }
     }
@@ -325,11 +325,17 @@ impl ClientBuilder {
 
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
 
+        #[cfg(feature = "cookies")]
+        let cookie_store = {
+            config.cookie_store.build()
+                .map_err(crate::error::builder)
+        }?;
+
         Ok(Client {
             inner: Arc::new(ClientRef {
                 accepts: config.accepts,
                 #[cfg(feature = "cookies")]
-                cookie_store: config.cookie_store.map(RwLock::new),
+                cookie_store: cookie_store.map(RwLock::new),
                 hyper: hyper_client,
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
@@ -436,11 +442,25 @@ impl ClientBuilder {
     /// This requires the optional `cookies` feature to be enabled.
     #[cfg(feature = "cookies")]
     pub fn cookie_store(mut self, enable: bool) -> ClientBuilder {
-        self.config.cookie_store = if enable {
-            Some(cookie::CookieStore::default())
-        } else {
-            None
-        };
+        self.config.cookie_store.enable(enable);
+        self
+    }
+
+    /// Load cookies from JSON
+    ///
+    /// Cookies received in responses will be preserved and included in
+    /// additional requests. The cookie store will be initialized from
+    /// the provided JSON object.
+    ///
+    /// By default, no cookie store is used.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional features `cookies` and `json` to be enabled.
+    #[cfg(all(feature = "cookies", feature = "json"))]
+    pub fn load_cookies_json<R: std::io::BufRead>(mut self, reader: R) -> ClientBuilder {
+        let cookie_store = cookie::CookieStore::load_json(reader);
+        self.config.cookie_store.loaded(cookie_store);
         self
     }
 
@@ -1163,8 +1183,8 @@ impl Config {
 
         #[cfg(feature = "cookies")]
         {
-            if let Some(_) = self.cookie_store {
-                f.field("cookie_store", &true);
+            if self.cookie_store.is_enabled() {
+                f.field("cookie_store", &self.cookie_store);
             }
         }
 

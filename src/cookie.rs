@@ -111,6 +111,12 @@ impl CookieStore {
         }
         Ok(())
     }
+
+    /// Deserialize any cookies in from JSON format and add them to the store
+    #[cfg(feature = "json")]
+    pub(crate) fn load_json<R: std::io::BufRead>(reader: R) -> Result<CookieStore, cookie_store::Error> {
+        Ok(CookieStore(cookie_store::CookieStore::load_json(reader)?))
+    }
 }
 
 impl<'a> fmt::Debug for CookieStore {
@@ -135,3 +141,44 @@ impl<'a> fmt::Display for CookieParseError {
 }
 
 impl std::error::Error for CookieParseError {}
+
+
+#[derive(Debug)]
+pub(crate) enum CookieStoreBuilder {
+    None,
+    Default,
+    Loaded(Result<CookieStore, cookie_store::Error>),
+}
+
+impl Default for CookieStoreBuilder {
+    fn default() -> Self {
+        CookieStoreBuilder::None
+    }
+}
+
+impl CookieStoreBuilder {
+    pub(crate) fn enable(&mut self, enable: bool) {
+        if !enable {
+            *self = CookieStoreBuilder::None;
+        } else if let CookieStoreBuilder::None = self {
+            *self = CookieStoreBuilder::Default;
+        }
+    }
+    pub(crate) fn loaded(&mut self, store: Result<CookieStore, cookie_store::Error>) {
+        *self = CookieStoreBuilder::Loaded(store);
+    }
+    pub(crate) fn build(self) -> Result<Option<CookieStore>, cookie_store::Error> {
+        match self {
+            CookieStoreBuilder::None => Ok(None),
+            CookieStoreBuilder::Default => Ok(Some(CookieStore::default())),
+            CookieStoreBuilder::Loaded(c) => c.map(|store| Some(store)),
+        }
+    }
+    pub(crate) fn is_enabled(&self) -> bool {
+        if let CookieStoreBuilder::None = self {
+            false
+        } else {
+            true
+        }
+    }
+}
