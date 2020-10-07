@@ -109,7 +109,7 @@ async-compression = { version = "0.3.0", default-features = false, features = ["
 
 
 ## socks
-tokio-socks = { version = "0.2", optional = true }
+tokio-socks = { version = "0.3", optional = true }
 
 ## trust-dns
 trust-dns-resolver = { version = "0.19", optional = true }
