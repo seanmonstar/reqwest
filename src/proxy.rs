@@ -202,7 +202,7 @@ impl Proxy {
     /// # fn main() {}
     pub fn custom<F, U: IntoProxyScheme>(fun: F) -> Proxy
     where
-        F: Fn(&Url) -> Option<U> + Send + Sync + 'static,
+        F: Fn(&Url) -> Option<U> + Send + Sync + std::panic::RefUnwindSafe + 'static,
     {
         Proxy::new(Intercept::Custom(Custom {
             auth: None,
@@ -608,7 +608,7 @@ impl Intercept {
 struct Custom {
     // This auth only applies if the returned ProxyScheme doesn't have an auth...
     auth: Option<HeaderValue>,
-    func: Arc<dyn Fn(&Url) -> Option<crate::Result<ProxyScheme>> + Send + Sync + 'static>,
+    func: Arc<dyn Fn(&Url) -> Option<crate::Result<ProxyScheme>> + Send + Sync + std::panic::RefUnwindSafe + 'static>,
 }
 
 impl Custom {
