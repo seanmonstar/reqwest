@@ -269,6 +269,8 @@ impl ClientBuilder {
                         id.add_to_rustls(&mut tls)?;
                     }
 
+                    tls.key_log = Arc::new(rustls::KeyLogFile::new());
+
                     Connector::new_rustls_tls(
                         http,
                         tls,
