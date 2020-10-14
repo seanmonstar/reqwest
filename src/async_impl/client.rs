@@ -574,8 +574,8 @@ impl ClientBuilder {
 
     /// Enables a request timeout.
     ///
-    /// The timeout is applied from the when the request starts connecting
-    /// until the response body has finished.
+    /// The timeout is applied from when the request starts connecting until the
+    /// response body has finished.
     ///
     /// Default is no timeout.
     pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
