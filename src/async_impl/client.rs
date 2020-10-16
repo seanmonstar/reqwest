@@ -21,6 +21,8 @@ use http::Uri;
 use hyper::client::ResponseFuture;
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::TlsConnector;
+#[cfg(feature = "rustls-tls-native-roots")]
+use rustls::RootCertStore;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -259,6 +261,11 @@ impl ClientBuilder {
                     #[cfg(feature = "rustls-tls-webpki-roots")]
                     tls.root_store
                         .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+                    #[cfg(feature = "rustls-tls-native-roots")]
+                    {
+                        let roots_slice = NATIVE_ROOTS.as_ref().unwrap().roots.as_slice();
+                        tls.root_store.roots.extend_from_slice(roots_slice);
+                    }
 
                     if !config.certs_verification {
                         tls.dangerous()
@@ -1538,6 +1545,11 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &cookie::CookieStore
             HeaderValue::from_bytes(header.as_bytes()).unwrap(),
         );
     }
+}
+
+#[cfg(feature = "rustls-tls-native-roots")]
+lazy_static! {
+    static ref NATIVE_ROOTS: std::io::Result<RootCertStore> = rustls_native_certs::load_native_certs().map_err(|e| e.1);
 }
 
 #[cfg(test)]
