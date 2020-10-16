@@ -26,7 +26,7 @@ use crate::proxy::{Proxy, ProxyScheme};
 use crate::error::BoxError;
 #[cfg(feature = "default-tls")]
 use self::native_tls_conn::NativeTlsConn;
-#[cfg(feature = "rustls-tls")]
+#[cfg(feature = "__rustls")]
 use self::rustls_tls_conn::RustlsTlsConn;
 
 #[derive(Clone)]
@@ -123,7 +123,7 @@ enum Inner {
     Http(HttpConnector),
     #[cfg(feature = "default-tls")]
     DefaultTls(HttpConnector, TlsConnector),
-    #[cfg(feature = "rustls-tls")]
+    #[cfg(feature = "__rustls")]
     RustlsTls {
         http: HttpConnector,
         tls: Arc<rustls::ClientConfig>,
@@ -199,7 +199,7 @@ impl Connector {
         }
     }
 
-    #[cfg(feature = "rustls-tls")]
+    #[cfg(feature = "__rustls")]
     pub(crate) fn new_rustls_tls<T>(
         mut http: HttpConnector,
         tls: rustls::ClientConfig,
@@ -282,7 +282,7 @@ impl Connector {
                     });
                 }
             }
-            #[cfg(feature = "rustls-tls")]
+            #[cfg(feature = "__rustls")]
             Inner::RustlsTls { tls_proxy, .. } => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     use tokio_rustls::webpki::DNSNameRef;
@@ -357,7 +357,7 @@ impl Connector {
                     is_proxy,
                 })
             }
-            #[cfg(feature = "rustls-tls")]
+            #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, tls, .. } => {
                 let mut http = http.clone();
 
@@ -434,7 +434,7 @@ impl Connector {
                     });
                 }
             }
-            #[cfg(feature = "rustls-tls")]
+            #[cfg(feature = "__rustls")]
             Inner::RustlsTls {
                 http,
                 tls,
@@ -480,7 +480,7 @@ impl Connector {
         match &mut self.inner {
             #[cfg(feature = "default-tls")]
             Inner::DefaultTls(http, _tls) => http.set_keepalive(dur),
-            #[cfg(feature = "rustls-tls")]
+            #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, .. } => http.set_keepalive(dur),
             #[cfg(not(feature = "__tls"))]
             Inner::Http(http) => http.set_keepalive(dur),
@@ -801,7 +801,7 @@ mod native_tls_conn {
     }
 }
 
-#[cfg(feature = "rustls-tls")]
+#[cfg(feature = "__rustls")]
 mod rustls_tls_conn {
     use rustls::Session;
     use std::mem::MaybeUninit;

@@ -34,7 +34,9 @@ default-tls = ["hyper-tls", "native-tls-crate", "__tls", "tokio-tls"]
 native-tls = ["default-tls"]
 native-tls-vendored = ["native-tls", "native-tls-crate/vendored"]
 
-rustls-tls = ["hyper-rustls", "tokio-rustls", "webpki-roots", "rustls", "__tls"]
+rustls-tls = ["rustls-tls-webpki-roots"]
+rustls-tls-manual-roots = ["__rustls"]
+rustls-tls-webpki-roots = ["webpki-roots", "__rustls"]
 
 blocking = ["futures-util/io", "tokio/rt-threaded", "tokio/rt-core", "tokio/sync"]
 
@@ -57,6 +59,10 @@ socks = ["tokio-socks"]
 
 # Enables common types used for TLS. Useless on its own.
 __tls = []
+
+# Enables common rustls code.
+# Equivalent to rustls-tls-manual-roots but shorter :)
+__rustls = ["hyper-rustls", "tokio-rustls", "rustls", "__tls"]
 
 # When enabled, disable using the cached SYS_PROXIES.
 __internal_proxy_sys_no_cache = []
