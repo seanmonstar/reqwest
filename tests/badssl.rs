@@ -1,6 +1,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-#[cfg(feature = "__tls")]
+#[cfg(all(feature = "__tls", not(feature = "rustls-tls-manual-roots")))]
 #[tokio::test]
 async fn test_badssl_modern() {
     let text = reqwest::Client::builder()
@@ -18,7 +18,7 @@ async fn test_badssl_modern() {
     assert!(text.contains("<title>mozilla-modern.badssl.com</title>"));
 }
 
-#[cfg(feature = "rustls-tls")]
+#[cfg(feature = "rustls-tls-webpki-roots")]
 #[tokio::test]
 async fn test_rustls_badssl_modern() {
     let text = reqwest::Client::builder()

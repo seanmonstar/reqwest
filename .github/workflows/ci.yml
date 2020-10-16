@@ -55,6 +55,7 @@ jobs:
           - windows / stable-i686-gnu
           - "feat.: default-tls disabled"
           - "feat.: rustls-tls"
+          - "feat.: rustls-tls-manual-roots"
           - "feat.: native-tls"
           - "feat.: default-tls and rustls-tls"
           - "feat.: cookies"
@@ -103,6 +104,8 @@ jobs:
             features: "--no-default-features"
           - name: "feat.: rustls-tls"
             features: "--no-default-features --features rustls-tls"
+          - name: "feat.: rustls-tls-manual-roots"
+            features: "--no-default-features --features rustls-tls-manual-roots"
           - name: "feat.: native-tls"
             features: "--features native-tls"
           - name: "feat.: default-tls and rustls-tls"

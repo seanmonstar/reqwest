@@ -1,7 +1,7 @@
-#[cfg(feature = "rustls-tls")]
+#[cfg(feature = "__rustls")]
 use rustls::{RootCertStore, ServerCertVerified, ServerCertVerifier, TLSError};
 use std::fmt;
-#[cfg(feature = "rustls-tls")]
+#[cfg(feature = "__rustls")]
 use tokio_rustls::webpki::DNSNameRef;
 
 /// Represents a server X509 certificate.
@@ -9,11 +9,11 @@ use tokio_rustls::webpki::DNSNameRef;
 pub struct Certificate {
     #[cfg(feature = "native-tls-crate")]
     native: native_tls_crate::Certificate,
-    #[cfg(feature = "rustls-tls")]
+    #[cfg(feature = "__rustls")]
     original: Cert,
 }
 
-#[cfg(feature = "rustls-tls")]
+#[cfg(feature = "__rustls")]
 #[derive(Clone)]
 enum Cert {
     Der(Vec<u8>),
@@ -23,7 +23,7 @@ enum Cert {
 /// Represents a private key and X509 cert as a client certificate.
 pub struct Identity {
     #[cfg_attr(
-        not(any(feature = "native-tls", feature = "rustls-tls")),
+        not(any(feature = "native-tls", feature = "__rustls")),
         allow(unused)
     )]
     inner: ClientCert,
@@ -32,7 +32,7 @@ pub struct Identity {
 enum ClientCert {
     #[cfg(feature = "native-tls")]
     Pkcs12(native_tls_crate::Identity),
-    #[cfg(feature = "rustls-tls")]
+    #[cfg(feature = "__rustls")]
     Pem {
         key: rustls::PrivateKey,
         certs: Vec<rustls::Certificate>,
@@ -60,7 +60,7 @@ impl Certificate {
         Ok(Certificate {
             #[cfg(feature = "native-tls-crate")]
             native: native_tls_crate::Certificate::from_der(der).map_err(crate::error::builder)?,
-            #[cfg(feature = "rustls-tls")]
+            #[cfg(feature = "__rustls")]
             original: Cert::Der(der.to_owned()),
         })
     }
@@ -85,7 +85,7 @@ impl Certificate {
         Ok(Certificate {
             #[cfg(feature = "native-tls-crate")]
             native: native_tls_crate::Certificate::from_pem(pem).map_err(crate::error::builder)?,
-            #[cfg(feature = "rustls-tls")]
+            #[cfg(feature = "__rustls")]
             original: Cert::Pem(pem.to_owned()),
         })
     }
@@ -95,7 +95,7 @@ impl Certificate {
         tls.add_root_certificate(self.native);
     }
 
-    #[cfg(feature = "rustls-tls")]
+    #[cfg(feature = "__rustls")]
     pub(crate) fn add_to_rustls(self, tls: &mut rustls::ClientConfig) -> crate::Result<()> {
         use rustls::internal::pemfile;
         use std::io::Cursor;
@@ -186,8 +186,8 @@ impl Identity {
     ///
     /// # Optional
     ///
-    /// This requires the `rustls-tls` Cargo feature enabled.
-    #[cfg(feature = "rustls-tls")]
+    /// This requires the `rustls-tls(-...)` Cargo feature enabled.
+    #[cfg(feature = "__rustls")]
     pub fn from_pem(buf: &[u8]) -> crate::Result<Identity> {
         use rustls::internal::pemfile;
         use std::io::Cursor;
@@ -236,12 +236,12 @@ impl Identity {
                 tls.identity(id);
                 Ok(())
             }
-            #[cfg(feature = "rustls-tls")]
+            #[cfg(feature = "__rustls")]
             ClientCert::Pem { .. } => Err(crate::error::builder("incompatible TLS identity type")),
         }
     }
 
-    #[cfg(feature = "rustls-tls")]
+    #[cfg(feature = "__rustls")]
     pub(crate) fn add_to_rustls(self, tls: &mut rustls::ClientConfig) -> crate::Result<()> {
         match self.inner {
             ClientCert::Pem { key, certs } => {
@@ -271,13 +271,13 @@ pub(crate) enum TlsBackend {
     Default,
     #[cfg(feature = "native-tls")]
     BuiltNativeTls(native_tls_crate::TlsConnector),
-    #[cfg(feature = "rustls-tls")]
+    #[cfg(feature = "__rustls")]
     Rustls,
-    #[cfg(feature = "rustls-tls")]
+    #[cfg(feature = "__rustls")]
     BuiltRustls(rustls::ClientConfig),
     #[cfg(any(
         feature = "native-tls",
-        feature = "rustls-tls",
+        feature = "__rustls",
     ))]
     UnknownPreconfigured,
 }
@@ -289,13 +289,13 @@ impl fmt::Debug for TlsBackend {
             TlsBackend::Default => write!(f, "Default"),
             #[cfg(feature = "native-tls")]
             TlsBackend::BuiltNativeTls(_) => write!(f, "BuiltNativeTls"),
-            #[cfg(feature = "rustls-tls")]
+            #[cfg(feature = "__rustls")]
             TlsBackend::Rustls => write!(f, "Rustls"),
-            #[cfg(feature = "rustls-tls")]
+            #[cfg(feature = "__rustls")]
             TlsBackend::BuiltRustls(_) => write!(f, "BuiltRustls"),
             #[cfg(any(
                 feature = "native-tls",
-                feature = "rustls-tls",
+                feature = "__rustls",
             ))]
             TlsBackend::UnknownPreconfigured => write!(f, "UnknownPreconfigured"),
         }
@@ -309,17 +309,17 @@ impl Default for TlsBackend {
             TlsBackend::Default
         }
 
-        #[cfg(all(feature = "rustls-tls", not(feature = "default-tls")))]
+        #[cfg(all(feature = "__rustls", not(feature = "default-tls")))]
         {
             TlsBackend::Rustls
         }
     }
 }
 
-#[cfg(feature = "rustls-tls")]
+#[cfg(feature = "__rustls")]
 pub(crate) struct NoVerifier;
 
-#[cfg(feature = "rustls-tls")]
+#[cfg(feature = "__rustls")]
 impl ServerCertVerifier for NoVerifier {
     fn verify_server_cert(
         &self,
@@ -354,13 +354,13 @@ mod tests {
         Identity::from_pkcs12_der(b"not der", "nope").unwrap_err();
     }
 
-    #[cfg(feature = "rustls-tls")]
+    #[cfg(feature = "__rustls")]
     #[test]
     fn identity_from_pem_invalid() {
         Identity::from_pem(b"not pem").unwrap_err();
     }
 
-    #[cfg(feature = "rustls-tls")]
+    #[cfg(feature = "__rustls")]
     #[test]
     fn identity_from_pem_pkcs1_key() {
         let pem = b"-----BEGIN CERTIFICATE-----\n\
