@@ -18,7 +18,10 @@ async fn test_badssl_modern() {
     assert!(text.contains("<title>mozilla-modern.badssl.com</title>"));
 }
 
-#[cfg(feature = "rustls-tls-webpki-roots")]
+#[cfg(any(
+    feature = "rustls-tls-webpki-roots",
+    feature = "rustls-tls-native-roots"
+))]
 #[tokio::test]
 async fn test_rustls_badssl_modern() {
     let text = reqwest::Client::builder()

@@ -174,7 +174,9 @@
 //! - **rustls-tls-manual-roots**: Enables TLS functionality provided by `rustls`,
 //!   without setting any root certificates. Roots have to be specified manually.
 //! - **rustls-tls-webpki-roots**: Enables TLS functionality provided by `rustls`,
-//!   while using root certificates from the `webpki-roots` crate
+//!   while using root certificates from the `webpki-roots` crate.
+//! - **rustls-tls-native-roots**: Enables TLS functionality provided by `rustls`,
+//!   while using root certificates from the `rustls-native-certs` crate.
 //! - **blocking**: Provides the [blocking][] client API.
 //! - **cookies**: Provides cookie session support.
 //! - **gzip**: Provides response body gzip decompression.
