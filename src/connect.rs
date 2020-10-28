@@ -71,6 +71,7 @@ impl_http_connector! {
     fn set_local_address(&mut self, addr: Option<IpAddr>);
     fn enforce_http(&mut self, is_enforced: bool);
     fn set_nodelay(&mut self, nodelay: bool);
+    fn set_keepalive(&mut self, dur: Option<Duration>);
 }
 
 impl Service<Uri> for HttpConnector {
@@ -473,6 +474,17 @@ impl Connector {
         }
 
         self.connect_with_maybe_proxy(proxy_dst, true).await
+    }
+
+    pub fn set_keepalive(&mut self, dur: Option<Duration>) {
+        match &mut self.inner {
+            #[cfg(feature = "default-tls")]
+            Inner::DefaultTls(http, _tls) => http.set_keepalive(dur),
+            #[cfg(feature = "rustls-tls")]
+            Inner::RustlsTls { http, .. } => http.set_keepalive(dur),
+            #[cfg(not(feature = "__tls"))]
+            Inner::Http(http) => http.set_keepalive(dur),
+        }
     }
 }
 

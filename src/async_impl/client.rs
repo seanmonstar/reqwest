@@ -80,6 +80,7 @@ struct Config {
     connection_verbose: bool,
     pool_idle_timeout: Option<Duration>,
     pool_max_idle_per_host: usize,
+    tcp_keepalive: Option<Duration>,
     #[cfg(feature = "__tls")]
     identity: Option<Identity>,
     proxies: Vec<Proxy>,
@@ -131,6 +132,7 @@ impl ClientBuilder {
                 connection_verbose: false,
                 pool_idle_timeout: Some(Duration::from_secs(90)),
                 pool_max_idle_per_host: std::usize::MAX,
+                tcp_keepalive: Some(Duration::from_secs(60)),
                 proxies: Vec::new(),
                 auto_sys_proxy: true,
                 redirect_policy: redirect::Policy::default(),
@@ -316,6 +318,7 @@ impl ClientBuilder {
 
         builder.pool_idle_timeout(config.pool_idle_timeout);
         builder.pool_max_idle_per_host(config.pool_max_idle_per_host);
+        connector.set_keepalive(config.tcp_keepalive);
 
         if config.http1_title_case_headers {
             builder.http1_title_case_headers(true);
@@ -623,6 +626,19 @@ impl ClientBuilder {
     /// Sets the maximum idle connection per host allowed in the pool.
     pub fn pool_max_idle_per_host(mut self, max: usize) -> ClientBuilder {
         self.config.pool_max_idle_per_host = max;
+        self
+    }
+
+    /// Set that all sockets have `SO_KEEPALIVE` set with the supplied duration.
+    ///
+    /// If `None`, the option will not be set.
+    ///
+    /// Default is 60 seconds.
+    pub fn tcp_keepalive<D>(mut self, val: D) -> ClientBuilder
+        where
+            D: Into<Option<Duration>>,
+    {
+        self.config.tcp_keepalive = val.into();
         self
     }
 
