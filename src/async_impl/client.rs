@@ -629,19 +629,6 @@ impl ClientBuilder {
         self
     }
 
-    /// Set that all sockets have `SO_KEEPALIVE` set with the supplied duration.
-    ///
-    /// If `None`, the option will not be set.
-    ///
-    /// Default is 60 seconds.
-    pub fn tcp_keepalive<D>(mut self, val: D) -> ClientBuilder
-        where
-            D: Into<Option<Duration>>,
-    {
-        self.config.tcp_keepalive = val.into();
-        self
-    }
-
     #[doc(hidden)]
     #[deprecated(note = "renamed to `pool_max_idle_per_host`")]
     pub fn max_idle_per_host(self, max: usize) -> ClientBuilder {
@@ -725,6 +712,19 @@ impl ClientBuilder {
         T: Into<Option<IpAddr>>,
     {
         self.config.local_address = addr.into();
+        self
+    }
+
+    /// Set that all sockets have `SO_KEEPALIVE` set with the supplied duration.
+    ///
+    /// If `None`, the option will not be set.
+    ///
+    /// Default is 60 seconds.
+    pub fn tcp_keepalive<D>(mut self, val: D) -> ClientBuilder
+        where
+            D: Into<Option<Duration>>,
+    {
+        self.config.tcp_keepalive = val.into();
         self
     }
 
