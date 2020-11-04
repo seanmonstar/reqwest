@@ -11,6 +11,8 @@ use hyper::service::Service;
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+#[cfg(feature = "trust-dns")]
+use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 
 use pin_project_lite::pin_project;
 use std::io::IoSlice;
@@ -71,6 +73,28 @@ impl HttpConnector {
             .map(hyper::client::HttpConnector::new_with_resolver)
             .map(Self::TrustDnsWithOverrides)
             .map_err(crate::error::builder)
+    }
+
+    #[cfg(feature = "trust-dns")]
+    pub(crate) fn new_trust_dns_with_config(
+        config: ResolverConfig,
+        opts: ResolverOpts,
+    ) -> HttpConnector {
+        let resolver = TrustDnsResolver::with_config(config, opts);
+        let http_connector = hyper::client::HttpConnector::new_with_resolver(resolver);
+        Self::TrustDns(http_connector)
+    }
+
+    #[cfg(feature = "trust-dns")]
+    pub(crate) fn new_trust_dns_with_config_and_overrides(
+        config: ResolverConfig,
+        opts: ResolverOpts,
+        overrides: HashMap<String, SocketAddr>,
+    ) -> HttpConnector {
+        let resolver = TrustDnsResolver::with_config(config, opts);
+        let override_resolver = DnsResolverWithOverrides::new(resolver, overrides);
+        let http_connector = hyper::client::HttpConnector::new_with_resolver(override_resolver);
+        Self::TrustDnsWithOverrides(http_connector)
     }
 }
 

@@ -11,6 +11,8 @@ use std::time::Duration;
 use http::header::HeaderValue;
 use log::{error, trace};
 use tokio::sync::{mpsc, oneshot};
+#[cfg(feature = "trust-dns")]
+use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
@@ -529,7 +531,7 @@ impl ClientBuilder {
     }
 
     /// Controls the use of built-in system certificates during certificate validation.
-    ///         
+    ///
     /// Defaults to `true` -- built-in system certs will be used.
     ///
     /// # Optional
@@ -713,7 +715,9 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.use_preconfigured_tls(tls))
     }
 
-    /// Enables the [trust-dns](trust_dns_resolver) async resolver instead of a default threadpool using `getaddrinfo`.
+    /// Enables the [trust-dns](trust_dns_resolver) async resolver
+    /// using the system's resolver configuration instead of a default threadpool
+    /// using `getaddrinfo`.
     ///
     /// If the `trust-dns` feature is turned on, the default option is enabled.
     ///
@@ -724,6 +728,24 @@ impl ClientBuilder {
     #[cfg_attr(docsrs, doc(cfg(feature = "trust-dns")))]
     pub fn trust_dns(self, enable: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.trust_dns(enable))
+    }
+
+    /// Enables the [trust-dns](trust_dns_resolver) async resolver using a custom
+    /// configuration and custom options.
+    ///
+    /// If the `trust-dns` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `trust-dns` feature to be enabled
+    #[cfg(feature = "trust-dns")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "trust-dns")))]
+    pub fn trust_dns_with_config(
+        self,
+        config: ResolverConfig,
+        opts: ResolverOpts,
+    ) -> ClientBuilder {
+        self.with_inner(|inner| inner.trust_dns_with_config(config, opts))
     }
 
     /// Disables the trust-dns async resolver.

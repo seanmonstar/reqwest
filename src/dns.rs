@@ -34,6 +34,10 @@ pub(crate) struct SocketAddrs {
 
 enum State {
     Init,
+    InitWithConfig {
+        config: ResolverConfig,
+        opts: ResolverOpts,
+    },
     Ready(SharedResolver),
 }
 
@@ -49,6 +53,12 @@ impl TrustDnsResolver {
         Ok(TrustDnsResolver {
             state: Arc::new(Mutex::new(State::Init)),
         })
+    }
+
+    pub(crate) fn with_config(config: ResolverConfig, opts: ResolverOpts) -> Self {
+        TrustDnsResolver {
+            state: Arc::new(Mutex::new(State::InitWithConfig { config, opts })),
+        }
     }
 }
 
@@ -69,6 +79,11 @@ impl Service<hyper_dns::Name> for TrustDnsResolver {
             let resolver = match &*lock {
                 State::Init => {
                     let resolver = new_resolver().await?;
+                    *lock = State::Ready(resolver.clone());
+                    resolver
+                }
+                State::InitWithConfig { config, opts } => {
+                    let resolver = new_resolver_with_config(config.clone(), opts.clone()).await?;
                     *lock = State::Ready(resolver.clone());
                     resolver
                 }
@@ -100,6 +115,14 @@ async fn new_resolver() -> Result<SharedResolver, BoxError> {
         .as_ref()
         .expect("can't construct TrustDnsResolver if SYSTEM_CONF is error")
         .clone();
+    let resolver = AsyncResolver::new(config, opts, TokioHandle)?;
+    Ok(Arc::new(resolver))
+}
+
+async fn new_resolver_with_config(
+    config: ResolverConfig,
+    opts: ResolverOpts,
+) -> Result<SharedResolver, BoxError> {
     let resolver = AsyncResolver::new(config, opts, TokioHandle)?;
     Ok(Arc::new(resolver))
 }

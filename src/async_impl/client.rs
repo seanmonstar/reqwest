@@ -23,6 +23,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::time::Sleep;
+#[cfg(feature = "trust-dns")]
+use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 
 use log::debug;
 
@@ -74,6 +76,24 @@ enum HttpVersionPref {
     All,
 }
 
+/// Trust-dns async resolver configuration.
+enum TrustDnsConfig {
+    /// Disable the trust-dns async resolver and perform lookups using a default threadpool
+    /// using `getaddrinfo`.
+    Off,
+    /// Enables the trust-dns async resolver using the system resolver configuration.
+    #[cfg(feature = "trust-dns")]
+    System,
+    /// Enables the trust-dns async resolver using a custom resolver configuration.
+    #[cfg(feature = "trust-dns")]
+    Custom {
+        /// Resolver configuration.
+        config: ResolverConfig,
+        /// Resolver options.
+        opts: ResolverOpts,
+    },
+}
+
 struct Config {
     // NOTE: When adding a new field, update `fmt::Debug for ClientBuilder`
     accepts: Accepts,
@@ -114,7 +134,7 @@ struct Config {
     nodelay: bool,
     #[cfg(feature = "cookies")]
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
-    trust_dns: bool,
+    trust_dns: TrustDnsConfig,
     error: Option<crate::Error>,
     https_only: bool,
     dns_overrides: HashMap<String, SocketAddr>,
@@ -175,7 +195,10 @@ impl ClientBuilder {
                 http2_max_frame_size: None,
                 local_address: None,
                 nodelay: true,
-                trust_dns: cfg!(feature = "trust-dns"),
+                #[cfg(feature = "trust-dns")]
+                trust_dns: TrustDnsConfig::System,
+                #[cfg(not(feature = "trust-dns"))]
+                trust_dns: TrustDnsConfig::Off,
                 #[cfg(feature = "cookies")]
                 cookie_store: None,
                 https_only: false,
@@ -210,7 +233,7 @@ impl ClientBuilder {
             }
 
             let http = match config.trust_dns {
-                false => {
+                TrustDnsConfig::Off => {
                     if config.dns_overrides.is_empty() {
                         HttpConnector::new_gai()
                     } else {
@@ -218,15 +241,28 @@ impl ClientBuilder {
                     }
                 }
                 #[cfg(feature = "trust-dns")]
-                true => {
+                TrustDnsConfig::System => {
                     if config.dns_overrides.is_empty() {
                         HttpConnector::new_trust_dns()?
                     } else {
                         HttpConnector::new_trust_dns_with_overrides(config.dns_overrides)?
                     }
                 }
-                #[cfg(not(feature = "trust-dns"))]
-                true => unreachable!("trust-dns shouldn't be enabled unless the feature is"),
+                #[cfg(feature = "trust-dns")]
+                TrustDnsConfig::Custom {
+                    config: trust_config,
+                    opts: trust_opts,
+                } => {
+                    if config.dns_overrides.is_empty() {
+                        HttpConnector::new_trust_dns_with_config(trust_config, trust_opts)
+                    } else {
+                        HttpConnector::new_trust_dns_with_config_and_overrides(
+                            trust_config,
+                            trust_opts,
+                            config.dns_overrides,
+                        )
+                    }
+                }
             };
 
             #[cfg(feature = "__tls")]
@@ -1152,7 +1188,27 @@ impl ClientBuilder {
         self
     }
 
-    /// Enables the [trust-dns](trust_dns_resolver) async resolver instead of a default threadpool using `getaddrinfo`.
+    /// Enables the [trust-dns](trust_dns_resolver) async resolver
+    /// using the system's resolver configuration instead of a default threadpool
+    /// using `getaddrinfo`.
+    ///
+    /// If the `trust-dns` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `trust-dns` feature to be enabled
+    #[cfg(feature = "trust-dns")]
+    pub fn trust_dns(mut self, enable: bool) -> ClientBuilder {
+        self.config.trust_dns = if enable {
+            TrustDnsConfig::System
+        } else {
+            TrustDnsConfig::Off
+        };
+        self
+    }
+
+    /// Enables the [trust-dns](trust_dns_resolver) async resolver using a custom
+    /// configuration and custom options.
     ///
     /// If the `trust-dns` feature is turned on, the default option is enabled.
     ///
@@ -1161,8 +1217,12 @@ impl ClientBuilder {
     /// This requires the optional `trust-dns` feature to be enabled
     #[cfg(feature = "trust-dns")]
     #[cfg_attr(docsrs, doc(cfg(feature = "trust-dns")))]
-    pub fn trust_dns(mut self, enable: bool) -> ClientBuilder {
-        self.config.trust_dns = enable;
+    pub fn trust_dns_with_config(
+        mut self,
+        config: ResolverConfig,
+        opts: ResolverOpts,
+    ) -> ClientBuilder {
+        self.config.trust_dns = TrustDnsConfig::Custom { config, opts };
         self
     }
 
@@ -1171,10 +1231,12 @@ impl ClientBuilder {
     /// This method exists even if the optional `trust-dns` feature is not enabled.
     /// This can be used to ensure a `Client` doesn't use the trust-dns async resolver
     /// even if another dependency were to enable the optional `trust-dns` feature.
-    pub fn no_trust_dns(self) -> ClientBuilder {
+    #[allow(unused_mut)]
+    pub fn no_trust_dns(mut self) -> ClientBuilder {
         #[cfg(feature = "trust-dns")]
         {
-            self.trust_dns(false)
+            self.config.trust_dns = TrustDnsConfig::Off;
+            self
         }
 
         #[cfg(not(feature = "trust-dns"))]
