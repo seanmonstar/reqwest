@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 use trust_dns_resolver::{
     config::{ResolverConfig, ResolverOpts},
     lookup_ip::LookupIpIntoIter,
-    system_conf, AsyncResolver, TokioConnection, TokioConnectionProvider,
+    system_conf, AsyncResolver, TokioConnection, TokioConnectionProvider, TokioHandle
 };
 
 use crate::error::BoxError;
@@ -62,7 +62,7 @@ impl Service<hyper_dns::Name> for TrustDnsResolver {
 
             let resolver = match &*lock {
                 State::Init => {
-                    let resolver = new_resolver(tokio::runtime::Handle::current()).await?;
+                    let resolver = new_resolver().await?;
                     *lock = State::Ready(resolver.clone());
                     resolver
                 },
@@ -79,13 +79,11 @@ impl Service<hyper_dns::Name> for TrustDnsResolver {
     }
 }
 
-/// Takes a `Handle` argument as an indicator that it must be called from
-/// within the context of a Tokio runtime.
-async fn new_resolver(handle: tokio::runtime::Handle) -> Result<SharedResolver, BoxError> {
+async fn new_resolver() -> Result<SharedResolver, BoxError> {
     let (config, opts) = SYSTEM_CONF
         .as_ref()
         .expect("can't construct TrustDnsResolver if SYSTEM_CONF is error")
         .clone();
-    let resolver = AsyncResolver::new(config, opts, handle).await?;
+    let resolver = AsyncResolver::new(config, opts, TokioHandle)?;
     Ok(Arc::new(resolver))
 }

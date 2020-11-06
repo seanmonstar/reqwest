@@ -26,7 +26,7 @@ use rustls::RootCertStore;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio::time::Delay;
+use tokio::time::Sleep;
 use pin_project_lite::pin_project;
 
 use log::debug;
@@ -1103,7 +1103,7 @@ impl Client {
 
         let timeout = timeout
             .or(self.inner.request_timeout)
-            .map(tokio::time::delay_for);
+            .map(tokio::time::sleep);
 
         *req.headers_mut() = headers.clone();
 
@@ -1317,7 +1317,7 @@ pin_project! {
         #[pin]
         in_flight: ResponseFuture,
         #[pin]
-        timeout: Option<Delay>,
+        timeout: Option<Sleep>,
     }
 }
 
@@ -1326,7 +1326,7 @@ impl PendingRequest {
         self.project().in_flight
     }
 
-    fn timeout(self: Pin<&mut Self>) -> Pin<&mut Option<Delay>> {
+    fn timeout(self: Pin<&mut Self>) -> Pin<&mut Option<Sleep>> {
         self.project().timeout
     }
 

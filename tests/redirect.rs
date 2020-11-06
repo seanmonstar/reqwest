@@ -155,14 +155,15 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
 async fn test_redirect_removes_sensitive_headers() {
     use tokio::sync::watch;
 
-    let (tx, rx) = watch::channel(None);
+    let (tx, rx) = watch::channel::<Option<std::net::SocketAddr>>(None);
 
     let end_server = server::http(move |req| {
         let mut rx = rx.clone();
         async move {
             assert_eq!(req.headers().get("cookie"), None);
 
-            let mid_addr = rx.recv().await.unwrap().unwrap();
+            rx.changed().await.unwrap();
+            let mid_addr = rx.borrow().unwrap();
             assert_eq!(
                 req.headers()["referer"],
                 format!("http://{}/sensitive", mid_addr)
@@ -182,7 +183,7 @@ async fn test_redirect_removes_sensitive_headers() {
             .unwrap()
     });
 
-    tx.broadcast(Some(mid_server.addr())).unwrap();
+    tx.send(Some(mid_server.addr())).unwrap();
 
     reqwest::Client::builder()
         .build()

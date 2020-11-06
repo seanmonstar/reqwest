@@ -11,7 +11,7 @@ async fn client_timeout() {
     let server = server::http(move |_req| {
         async {
             // delay returning the response
-            tokio::time::delay_for(Duration::from_secs(2)).await;
+            tokio::time::sleep(Duration::from_secs(2)).await;
             http::Response::default()
         }
     });
@@ -38,7 +38,7 @@ async fn request_timeout() {
     let server = server::http(move |_req| {
         async {
             // delay returning the response
-            tokio::time::delay_for(Duration::from_secs(2)).await;
+            tokio::time::sleep(Duration::from_secs(2)).await;
             http::Response::default()
         }
     });
@@ -94,7 +94,7 @@ async fn response_timeout() {
         async {
             // immediate response, but delayed body
             let body = hyper::Body::wrap_stream(futures_util::stream::once(async {
-                tokio::time::delay_for(Duration::from_secs(2)).await;
+                tokio::time::sleep(Duration::from_secs(2)).await;
                 Ok::<_, std::convert::Infallible>("Hello")
             }));
 
@@ -134,7 +134,7 @@ fn timeout_closes_connection() {
     let server = server::http(move |_req| {
         async {
             // delay returning the response
-            tokio::time::delay_for(Duration::from_secs(2)).await;
+            tokio::time::sleep(Duration::from_secs(2)).await;
             http::Response::default()
         }
     });
@@ -158,7 +158,7 @@ fn timeout_blocking_request() {
     let server = server::http(move |_req| {
         async {
             // delay returning the response
-            tokio::time::delay_for(Duration::from_secs(2)).await;
+            tokio::time::sleep(Duration::from_secs(2)).await;
             http::Response::default()
         }
     });
@@ -191,7 +191,7 @@ fn write_timeout_large_body() {
     let server = server::http(move |_req| {
         async {
             // delay returning the response
-            tokio::time::delay_for(Duration::from_secs(2)).await;
+            tokio::time::sleep(Duration::from_secs(2)).await;
             http::Response::default()
         }
     });

@@ -12,7 +12,7 @@ use mime::Mime;
 use serde::de::DeserializeOwned;
 #[cfg(feature = "json")]
 use serde_json;
-use tokio::time::Delay;
+use tokio::time::Sleep;
 use url::Url;
 
 use super::body::Body;
@@ -37,7 +37,7 @@ impl Response {
         res: hyper::Response<hyper::Body>,
         url: Url,
         accepts: Accepts,
-        timeout: Option<Delay>,
+        timeout: Option<Sleep>,
     ) -> Response {
         let (parts, body) = res.into_parts();
         let status = parts.status;

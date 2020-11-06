@@ -764,7 +764,7 @@ impl ClientHandle {
             .name("reqwest-internal-sync-runtime".into())
             .spawn(move || {
                 use tokio::runtime;
-                let mut rt = match runtime::Builder::new().basic_scheduler().enable_all().build().map_err(crate::error::builder) {
+                let rt = match runtime::Builder::new_current_thread().enable_all().build().map_err(crate::error::builder) {
                     Err(e) => {
                         if let Err(e) = spawn_tx.send(Err(e)) {
                             error!("Failed to communicate runtime creation failure: {:?}", e);

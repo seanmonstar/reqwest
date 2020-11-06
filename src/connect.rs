@@ -2,13 +2,12 @@ use hyper::service::Service;
 use http::uri::{Scheme, Authority};
 use http::Uri;
 use hyper::client::connect::{Connected, Connection};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
 #[cfg(feature = "__tls")]
 use http::header::HeaderValue;
 use futures_util::future::Either;
-use bytes::{Buf, BufMut};
 
 use std::future::Future;
 use std::io;
@@ -17,7 +16,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use std::mem::MaybeUninit;
 use pin_project_lite::pin_project;
 
 #[cfg(feature = "trust-dns")]
@@ -272,7 +270,7 @@ impl Connector {
                         .ok_or("no host in url")?
                         .to_string();
                     let conn = socks::connect(proxy, dst, dns).await?;
-                    let tls_connector = tokio_tls::TlsConnector::from(tls.clone());
+                    let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                     let io = tls_connector
                         .connect(&host, conn)
                         .await?;
@@ -342,13 +340,13 @@ impl Connector {
                     http.set_nodelay(true);
                 }
 
-                let tls_connector = tokio_tls::TlsConnector::from(tls.clone());
+                let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                 let mut http = hyper_tls::HttpsConnector::from((http, tls_connector));
                 let io = http.call(dst).await?;
 
                 if let hyper_tls::MaybeHttpsStream::Https(stream) = &io {
                     if !self.nodelay {
-                        stream.get_ref().set_nodelay(false)?;
+                        stream.get_ref().get_ref().get_ref().set_nodelay(false)?;
                     }
                 }
 
@@ -411,7 +409,7 @@ impl Connector {
                     let host = dst.host().to_owned();
                     let port = dst.port().map(|p| p.as_u16()).unwrap_or(443);
                     let http = http.clone();
-                    let tls_connector = tokio_tls::TlsConnector::from(tls.clone());
+                    let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                     let mut http = hyper_tls::HttpsConnector::from((http, tls_connector));
                     let conn = http.call(proxy_dst).await?;
                     log::trace!("tunneling HTTPS over proxy");
@@ -424,7 +422,7 @@ impl Connector {
                         self.user_agent.clone(),
                         auth
                     ).await?;
-                    let tls_connector = tokio_tls::TlsConnector::from(tls.clone());
+                    let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                     let io = tls_connector
                         .connect(&host.ok_or("no host in url")?, tunneled)
                         .await?;
@@ -569,29 +567,10 @@ impl AsyncRead for Conn {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context,
-        buf: &mut [u8]
-    ) -> Poll<io::Result<usize>> {
+        buf: &mut ReadBuf<'_>
+    ) -> Poll<io::Result<()>> {
         let this = self.project();
         AsyncRead::poll_read(this.inner, cx, buf)
-    }
-
-    unsafe fn prepare_uninitialized_buffer(
-        &self,
-        buf: &mut [MaybeUninit<u8>]
-    ) -> bool {
-        self.inner.prepare_uninitialized_buffer(buf)
-    }
-
-    fn poll_read_buf<B: BufMut>(
-        self: Pin<&mut Self>,
-        cx: &mut Context,
-        buf: &mut B
-    ) -> Poll<io::Result<usize>>
-        where
-            Self: Sized
-    {
-        let this = self.project();
-        AsyncRead::poll_read_buf(this.inner, cx, buf)
     }
 }
 
@@ -616,16 +595,6 @@ impl AsyncWrite for Conn {
     ) -> Poll<Result<(), io::Error>> {
         let this = self.project();
         AsyncWrite::poll_shutdown(this.inner, cx)
-    }
-
-    fn poll_write_buf<B: Buf>(
-        self: Pin<&mut Self>,
-        cx: &mut Context,
-        buf: &mut B
-    ) -> Poll<Result<usize, io::Error>> where
-        Self: Sized {
-        let this = self.project();
-        AsyncWrite::poll_write_buf(this.inner, cx, buf)
     }
 }
 
@@ -715,13 +684,11 @@ fn tunnel_eof() -> BoxError {
 
 #[cfg(feature = "default-tls")]
 mod native_tls_conn {
-    use std::mem::MaybeUninit;
     use std::{pin::Pin, task::{Context, Poll}};
-    use bytes::{Buf, BufMut};
     use hyper::client::connect::{Connected, Connection};
     use pin_project_lite::pin_project;
-    use tokio::io::{AsyncRead, AsyncWrite};
-    use tokio_tls::TlsStream;
+    use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+    use tokio_native_tls::TlsStream;
 
 
     pin_project! {
@@ -732,7 +699,7 @@ mod native_tls_conn {
 
     impl<T: Connection + AsyncRead + AsyncWrite + Unpin> Connection for NativeTlsConn<T> {
         fn connected(&self) -> Connected {
-            self.inner.get_ref().connected()
+            self.inner.get_ref().get_ref().get_ref().connected()
         }
     }
 
@@ -740,29 +707,10 @@ mod native_tls_conn {
         fn poll_read(
             self: Pin<&mut Self>,
             cx: &mut Context,
-            buf: &mut [u8]
-        ) -> Poll<tokio::io::Result<usize>> {
+            buf: &mut ReadBuf<'_>
+        ) -> Poll<tokio::io::Result<()>> {
             let this = self.project();
             AsyncRead::poll_read(this.inner, cx, buf)
-        }
-
-        unsafe fn prepare_uninitialized_buffer(
-            &self,
-            buf: &mut [MaybeUninit<u8>]
-        ) -> bool {
-            self.inner.prepare_uninitialized_buffer(buf)
-        }
-
-        fn poll_read_buf<B: BufMut>(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-            buf: &mut B
-        ) -> Poll<tokio::io::Result<usize>>
-            where
-                Self: Sized
-        {
-            let this = self.project();
-            AsyncRead::poll_read_buf(this.inner, cx, buf)
         }
     }
 
@@ -788,28 +736,16 @@ mod native_tls_conn {
             let this = self.project();
             AsyncWrite::poll_shutdown(this.inner, cx)
         }
-
-        fn poll_write_buf<B: Buf>(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-            buf: &mut B
-        ) -> Poll<Result<usize, tokio::io::Error>> where
-            Self: Sized {
-            let this = self.project();
-            AsyncWrite::poll_write_buf(this.inner, cx, buf)
-        }
     }
 }
 
 #[cfg(feature = "__rustls")]
 mod rustls_tls_conn {
     use rustls::Session;
-    use std::mem::MaybeUninit;
     use std::{pin::Pin, task::{Context, Poll}};
-    use bytes::{Buf, BufMut};
     use hyper::client::connect::{Connected, Connection};
     use pin_project_lite::pin_project;
-    use tokio::io::{AsyncRead, AsyncWrite};
+    use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
     use tokio_rustls::client::TlsStream;
 
 
@@ -833,29 +769,10 @@ mod rustls_tls_conn {
         fn poll_read(
             self: Pin<&mut Self>,
             cx: &mut Context,
-            buf: &mut [u8]
-        ) -> Poll<tokio::io::Result<usize>> {
+            buf: &mut ReadBuf<'_>
+        ) -> Poll<tokio::io::Result<()>> {
             let this = self.project();
             AsyncRead::poll_read(this.inner, cx, buf)
-        }
-
-        unsafe fn prepare_uninitialized_buffer(
-            &self,
-            buf: &mut [MaybeUninit<u8>]
-        ) -> bool {
-            self.inner.prepare_uninitialized_buffer(buf)
-        }
-
-        fn poll_read_buf<B: BufMut>(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-            buf: &mut B
-        ) -> Poll<tokio::io::Result<usize>>
-            where
-                Self: Sized
-        {
-            let this = self.project();
-            AsyncRead::poll_read_buf(this.inner, cx, buf)
         }
     }
 
@@ -880,16 +797,6 @@ mod rustls_tls_conn {
         ) -> Poll<Result<(), tokio::io::Error>> {
             let this = self.project();
             AsyncWrite::poll_shutdown(this.inner, cx)
-        }
-
-        fn poll_write_buf<B: Buf>(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-            buf: &mut B
-        ) -> Poll<Result<usize, tokio::io::Error>> where
-            Self: Sized {
-            let this = self.project();
-            AsyncWrite::poll_write_buf(this.inner, cx, buf)
         }
     }
 }
@@ -964,7 +871,7 @@ mod verbose {
     use std::pin::Pin;
     use std::task::{Context, Poll};
     use hyper::client::connect::{Connected, Connection};
-    use tokio::io::{AsyncRead, AsyncWrite};
+    use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
     pub(super) const OFF: Wrapper = Wrapper(false);
 
@@ -1000,12 +907,12 @@ mod verbose {
         fn poll_read(
             mut self: Pin<&mut Self>,
             cx: &mut Context,
-            buf: &mut [u8]
-        ) -> Poll<std::io::Result<usize>> {
+            buf: &mut ReadBuf<'_>
+        ) -> Poll<std::io::Result<()>> {
             match Pin::new(&mut self.inner).poll_read(cx, buf) {
-                Poll::Ready(Ok(n)) => {
-                    log::trace!("{:08x} read: {:?}", self.id, Escape(&buf[..n]));
-                    Poll::Ready(Ok(n))
+                Poll::Ready(Ok(())) => {
+                    log::trace!("{:08x} read: {:?}", self.id, Escape(buf.filled()));
+                    Poll::Ready(Ok(()))
                 },
                 Poll::Ready(Err(e)) => {
                     Poll::Ready(Err(e))
@@ -1137,7 +1044,7 @@ mod tests {
     fn test_tunnel() {
         let addr = mock_tunnel!();
 
-        let mut rt = runtime::Builder::new().basic_scheduler().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
         let f = async move {
             let tcp = TcpStream::connect(&addr).await?;
             let host = addr.ip().to_string();
@@ -1152,7 +1059,7 @@ mod tests {
     fn test_tunnel_eof() {
         let addr = mock_tunnel!(b"HTTP/1.1 200 OK");
 
-        let mut rt = runtime::Builder::new().basic_scheduler().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
         let f = async move {
             let tcp = TcpStream::connect(&addr).await?;
             let host = addr.ip().to_string();
@@ -1167,7 +1074,7 @@ mod tests {
     fn test_tunnel_non_http_response() {
         let addr = mock_tunnel!(b"foo bar baz hallo");
 
-        let mut rt = runtime::Builder::new().basic_scheduler().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
         let f = async move {
             let tcp = TcpStream::connect(&addr).await?;
             let host = addr.ip().to_string();
@@ -1188,7 +1095,7 @@ mod tests {
         "
         );
 
-        let mut rt = runtime::Builder::new().basic_scheduler().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
         let f = async move {
             let tcp = TcpStream::connect(&addr).await?;
             let host = addr.ip().to_string();
@@ -1207,7 +1114,7 @@ mod tests {
             "Proxy-Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==\r\n"
         );
 
-        let mut rt = runtime::Builder::new().basic_scheduler().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
         let f = async move {
             let tcp = TcpStream::connect(&addr).await?;
             let host = addr.ip().to_string();

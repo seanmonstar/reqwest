@@ -7,7 +7,7 @@ use bytes::Bytes;
 use futures_core::Stream;
 use http_body::Body as HttpBody;
 use pin_project_lite::pin_project;
-use tokio::time::Delay;
+use tokio::time::Sleep;
 
 /// An asynchronous request body.
 pub struct Body {
@@ -27,7 +27,7 @@ enum Inner {
                     + Sync,
             >,
         >,
-        timeout: Option<Delay>,
+        timeout: Option<Sleep>,
     },
 }
 
@@ -103,7 +103,7 @@ impl Body {
         }
     }
 
-    pub(crate) fn response(body: hyper::Body, timeout: Option<Delay>) -> Body {
+    pub(crate) fn response(body: hyper::Body, timeout: Option<Sleep>) -> Body {
         Body {
             inner: Inner::Streaming {
                 body: Box::pin(WrapHyper(body)),

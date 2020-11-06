@@ -282,7 +282,9 @@ fn test_blocking_inside_a_runtime() {
 
     let url = format!("http://{}/text", server.addr());
 
-    let mut rt = tokio::runtime::Builder::new().build().expect("new rt");
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("new rt");
 
     rt.block_on(async move {
         let _should_panic = reqwest::blocking::get(&url);
