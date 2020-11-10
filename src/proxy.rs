@@ -778,12 +778,12 @@ fn parse_registry_values_impl(registry_values: RegistryProxyValues) -> Result<Sy
             let protocol_parts: Vec<&str> = p.split("=").collect();
             match protocol_parts.as_slice() {
                 [protocol, address] => {
-                    // See if address has a type:// prefix
-                    let address = if !contains_type_prefix(*address) {
-                        format!("{}://{}", protocol, address)
-                    }
-                    else {
+                    // If address doesn't specify an explicit protocol as protocol://address
+                    // then default to HTTP
+                    let address = if extract_type_prefix(*address).is_some() {
                         String::from(*address)
+                    } else {
+                        format!("http://{}", address)
                     };
 
                     insert_proxy(&mut proxies, *protocol, address);
@@ -797,32 +797,39 @@ fn parse_registry_values_impl(registry_values: RegistryProxyValues) -> Result<Sy
             }
         }
     } else {
-        // Use one setting for all protocols.
-        if proxy_server.starts_with("http:") {
-            insert_proxy(&mut proxies, "http", proxy_server);
+        if let Some(scheme) = extract_type_prefix(&proxy_server) {
+            // Explicit protocol has been specified
+            insert_proxy(&mut proxies, scheme, proxy_server);
         } else {
+            // No explicit protocol has been specified, default to HTTP
             insert_proxy(&mut proxies, "http", format!("http://{}", proxy_server));
-            insert_proxy(&mut proxies, "https", format!("https://{}", proxy_server));
+            insert_proxy(&mut proxies, "https", format!("http://{}", proxy_server));
         }
     }
     Ok(proxies)
 }
 
+/// Extract the protocol from the given address, if present
+/// For example, "https://example.com" will return Some("https")
 #[cfg(target_os = "windows")]
-fn contains_type_prefix(address: &str) -> bool {
+fn extract_type_prefix(address: &str) -> Option<String> {
     if let Some(indice) = address.find("://") {
         if indice == 0 {
-            false
+            None
         }
         else {
             let prefix = &address[..indice];
             let contains_banned = prefix.contains(|c| c == ':' || c == '/');
 
-            !contains_banned
+            if !contains_banned {
+                Some(prefix.to_owned())
+            } else {
+                None
+            }
         }
     }
     else {
-        false
+        None
     }
 }
 
@@ -999,7 +1006,10 @@ mod tests {
         let disabled_proxies = get_sys_proxies(Some((0, String::from("http://127.0.0.1/"))));
         // set valid proxy
         let valid_proxies = get_sys_proxies(Some((1, String::from("http://127.0.0.1/"))));
+        let valid_proxies_no_schema = get_sys_proxies(Some((1, String::from("127.0.0.1"))));
+        let valid_proxies_explicit_https = get_sys_proxies(Some((1, String::from("https://127.0.0.1/"))));
         let multiple_proxies = get_sys_proxies(Some((1, String::from("http=127.0.0.1:8888;https=127.0.0.2:8888"))));
+        let multiple_proxies_explicit_schema = get_sys_proxies(Some((1, String::from("http=http://127.0.0.1:8888;https=https://127.0.0.2:8888"))));
 
         // reset user setting when guards drop
         drop(_g1);
@@ -1014,11 +1024,31 @@ mod tests {
         assert_eq!(p.scheme(), "http");
         assert_eq!(p.host(), "127.0.0.1");
 
+        let p = &valid_proxies_no_schema["http"];
+        assert_eq!(p.scheme(), "http");
+        assert_eq!(p.host(), "127.0.0.1");
+
+        let p = &valid_proxies_no_schema["https"];
+        assert_eq!(p.scheme(), "http");
+        assert_eq!(p.host(), "127.0.0.1");
+
+        let p = &valid_proxies_explicit_https["https"];
+        assert_eq!(p.scheme(), "https");
+        assert_eq!(p.host(), "127.0.0.1");
+
         let p = &multiple_proxies["http"];
         assert_eq!(p.scheme(), "http");
         assert_eq!(p.host(), "127.0.0.1:8888");
 
         let p = &multiple_proxies["https"];
+        assert_eq!(p.scheme(), "http");
+        assert_eq!(p.host(), "127.0.0.2:8888");
+
+        let p = &multiple_proxies_explicit_schema["http"];
+        assert_eq!(p.scheme(), "http");
+        assert_eq!(p.host(), "127.0.0.1:8888");
+
+        let p = &multiple_proxies_explicit_schema["https"];
         assert_eq!(p.scheme(), "https");
         assert_eq!(p.host(), "127.0.0.2:8888");
     }
@@ -1145,14 +1175,14 @@ mod tests {
 
     #[cfg(target_os = "windows")]
     #[test]
-    fn test_type_prefix_detection() {
-        assert!(!contains_type_prefix("test"));
-        assert!(!contains_type_prefix("://test"));
-        assert!(!contains_type_prefix("some:prefix://test"));
-        assert!(!contains_type_prefix("some/prefix://test"));
+    fn test_type_prefix_extraction() {
+        assert!(extract_type_prefix("test").is_none());
+        assert!(extract_type_prefix("://test").is_none());
+        assert!(extract_type_prefix("some:prefix://test").is_none());
+        assert!(extract_type_prefix("some/prefix://test").is_none());
 
-        assert!(contains_type_prefix("http://test"));
-        assert!(contains_type_prefix("a://test"));
+        assert_eq!(extract_type_prefix("http://test").unwrap(), "http");
+        assert_eq!(extract_type_prefix("a://test").unwrap(), "a");
     }
 
     /// Guard an environment variable, resetting it to the original value
