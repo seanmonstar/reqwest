@@ -129,9 +129,9 @@ winreg = "0.7"
 # wasm
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-js-sys = "0.3.28"
-wasm-bindgen = { version = "0.2.51", features = ["serde-serialize"] }
-wasm-bindgen-futures = "0.4.1"
+js-sys = "0.3.45"
+wasm-bindgen = { version = "0.2.68", features = ["serde-serialize"] }
+wasm-bindgen-futures = "0.4.18"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3.25"
@@ -145,6 +145,7 @@ features = [
     "FormData",
     "Blob",
     "BlobPropertyBag",
+    "ServiceWorkerGlobalScope",
 ]
 
 [[example]]
