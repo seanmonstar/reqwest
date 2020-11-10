@@ -182,6 +182,7 @@
 //!
 //!
 //! [hyper]: http://hyper.rs
+//! [blocking]: ./blocking/index.html
 //! [client]: ./struct.Client.html
 //! [response]: ./struct.Response.html
 //! [get]: ./fn.get.html
