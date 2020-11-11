@@ -799,7 +799,7 @@ fn parse_registry_values_impl(registry_values: RegistryProxyValues) -> Result<Sy
     } else {
         if let Some(scheme) = extract_type_prefix(&proxy_server) {
             // Explicit protocol has been specified
-            insert_proxy(&mut proxies, scheme, proxy_server);
+            insert_proxy(&mut proxies, scheme, proxy_server.to_owned());
         } else {
             // No explicit protocol has been specified, default to HTTP
             insert_proxy(&mut proxies, "http", format!("http://{}", proxy_server));
@@ -812,7 +812,7 @@ fn parse_registry_values_impl(registry_values: RegistryProxyValues) -> Result<Sy
 /// Extract the protocol from the given address, if present
 /// For example, "https://example.com" will return Some("https")
 #[cfg(target_os = "windows")]
-fn extract_type_prefix(address: &str) -> Option<String> {
+fn extract_type_prefix(address: &str) -> Option<&str> {
     if let Some(indice) = address.find("://") {
         if indice == 0 {
             None
@@ -822,7 +822,7 @@ fn extract_type_prefix(address: &str) -> Option<String> {
             let contains_banned = prefix.contains(|c| c == ':' || c == '/');
 
             if !contains_banned {
-                Some(prefix.to_owned())
+                Some(prefix)
             } else {
                 None
             }
