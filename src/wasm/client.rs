@@ -13,6 +13,22 @@ extern "C" {
     fn fetch_with_request(input: &web_sys::Request) -> Promise;
 }
 
+fn js_fetch(req: &web_sys::Request) -> Promise {
+    use wasm_bindgen::{JsCast, JsValue};
+    let global = js_sys::global();
+
+    if let Some(true) =
+        js_sys::Reflect::has(&global, &JsValue::from_str("ServiceWorkerGlobalScope")).ok()
+    {
+        global
+            .unchecked_into::<web_sys::ServiceWorkerGlobalScope>()
+            .fetch_with_request(req)
+    } else {
+        // browser
+        fetch_with_request(req)
+    }
+}
+
 /// dox
 #[derive(Clone, Debug)]
 pub struct Client(());
@@ -168,7 +184,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         .map_err(crate::error::builder)?;
 
     // Await the fetch() promise
-    let p = fetch_with_request(&js_req);
+    let p = js_fetch(&js_req);
     let js_resp = super::promise::<web_sys::Response>(p)
         .await
         .map_err(crate::error::request)?;
