@@ -61,6 +61,12 @@ __tls = []
 # When enabled, disable using the cached SYS_PROXIES.
 __internal_proxy_sys_no_cache = []
 
+# feature to prevent building examples in wasm-builds
+# There will be a better way to do this issue #1197 is fixed
+# https://github.com/rust-lang/cargo/issues/1197
+# To build all examples, use cargo build --examples --features __examples
+__examples = []
+
 [dependencies]
 http = "0.2"
 url = "2.1"
@@ -132,6 +138,9 @@ winreg = "0.7"
 js-sys = "0.3.45"
 wasm-bindgen = { version = "0.2.68", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4.18"
+wasm-bindgen-test = "0.3"
+
+# [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3.25"
@@ -167,6 +176,16 @@ required-features = ["json"]
 name = "tor_socks"
 path = "examples/tor_socks.rs"
 required-features = ["socks"]
+
+[[example]]
+name = "form"
+path = "examples/form.rs"
+required-features = ["__examples"]
+
+[[example]]
+name = "simple"
+path = "examples/simple.rs"
+required-features = ["__examples"]
 
 [[test]]
 name = "blocking"
