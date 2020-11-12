@@ -3,6 +3,7 @@
 // This is using the `tokio` runtime. You'll need the following dependency:
 //
 // `tokio = { version = "0.2", features = ["macros"] }`
+#[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
     let res = reqwest::get("https://hyper.rs").await?;
@@ -15,3 +16,6 @@ async fn main() -> Result<(), reqwest::Error> {
 
     Ok(())
 }
+
+#[cfg(target_arch = "wasm32")]
+fn main() {}

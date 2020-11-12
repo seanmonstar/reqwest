@@ -1,3 +1,4 @@
+#[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() {
     reqwest::Client::new()
@@ -7,3 +8,6 @@ async fn main() {
         .await
         .unwrap();
 }
+
+#[cfg(target_arch = "wasm32")]
+fn main() {}
