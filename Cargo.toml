@@ -83,7 +83,7 @@ log = "0.4"
 mime = "0.3.7"
 percent-encoding = "2.1"
 tokio = { version = "0.2.5", default-features = false, features = ["tcp", "time"] }
-pin-project-lite = "0.1.1"
+pin-project-lite = "0.2.0"
 ipnet = "2.3"
 
 # Optional deps...
