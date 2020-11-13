@@ -25,6 +25,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::time::Delay;
+use pin_project_lite::pin_project;
 
 use log::debug;
 
@@ -1265,8 +1266,11 @@ impl ClientRef {
     }
 }
 
-pub(super) struct Pending {
-    inner: PendingInner,
+pin_project! {
+    pub(super) struct Pending {
+        #[pin]
+        inner: PendingInner,
+    }
 }
 
 enum PendingInner {
@@ -1274,35 +1278,39 @@ enum PendingInner {
     Error(Option<crate::Error>),
 }
 
-struct PendingRequest {
-    method: Method,
-    url: Url,
-    headers: HeaderMap,
-    body: Option<Option<Bytes>>,
+pin_project! {
+    struct PendingRequest {
+        method: Method,
+        url: Url,
+        headers: HeaderMap,
+        body: Option<Option<Bytes>>,
 
-    urls: Vec<Url>,
+        urls: Vec<Url>,
 
-    client: Arc<ClientRef>,
+        client: Arc<ClientRef>,
 
-    in_flight: ResponseFuture,
-    timeout: Option<Delay>,
+        #[pin]
+        in_flight: ResponseFuture,
+        #[pin]
+        timeout: Option<Delay>,
+    }
 }
 
 impl PendingRequest {
     fn in_flight(self: Pin<&mut Self>) -> Pin<&mut ResponseFuture> {
-        unsafe { Pin::map_unchecked_mut(self, |x| &mut x.in_flight) }
+        self.project().in_flight
     }
 
     fn timeout(self: Pin<&mut Self>) -> Pin<&mut Option<Delay>> {
-        unsafe { Pin::map_unchecked_mut(self, |x| &mut x.timeout) }
+        self.project().timeout
     }
 
     fn urls(self: Pin<&mut Self>) -> &mut Vec<Url> {
-        unsafe { &mut Pin::get_unchecked_mut(self).urls }
+        self.project().urls
     }
 
     fn headers(self: Pin<&mut Self>) -> &mut HeaderMap {
-        unsafe { &mut Pin::get_unchecked_mut(self).headers }
+        self.project().headers
     }
 }
 
@@ -1314,7 +1322,7 @@ impl Pending {
     }
 
     fn inner(self: Pin<&mut Self>) -> Pin<&mut PendingInner> {
-        unsafe { Pin::map_unchecked_mut(self, |x| &mut x.inner) }
+        self.project().inner
     }
 }
 
