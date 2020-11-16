@@ -132,6 +132,7 @@ winreg = "0.7"
 js-sys = "0.3.45"
 wasm-bindgen = { version = "0.2.68", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4.18"
+wasm-bindgen-test = "0.3"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3.25"
@@ -167,6 +168,14 @@ required-features = ["json"]
 name = "tor_socks"
 path = "examples/tor_socks.rs"
 required-features = ["socks"]
+
+[[example]]
+name = "form"
+path = "examples/form.rs"
+
+[[example]]
+name = "simple"
+path = "examples/simple.rs"
 
 [[test]]
 name = "blocking"
