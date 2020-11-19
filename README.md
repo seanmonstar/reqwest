@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/reqwest.svg)](https://crates.io/crates/reqwest)
 [![Documentation](https://docs.rs/reqwest/badge.svg)](https://docs.rs/reqwest)
-[![MIT/Apache-2 licensed](https://img.shields.io/crates/l/reqwest.svg)](./LICENSE)
+[![MIT/Apache-2 licensed](https://img.shields.io/crates/l/reqwest.svg)](./LICENSE-APACHE)
 [![CI](https://github.com/seanmonstar/reqwest/workflows/CI/badge.svg)](https://github.com/seanmonstar/reqwest/actions?query=workflow%3ACI)
 
 An ergonomic, batteries-included HTTP Client for Rust.

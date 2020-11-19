@@ -170,6 +170,13 @@
 //! - **native-tls**: Enables TLS functionality provided by `native-tls`.
 //! - **native-tls-vendored**: Enables the `vendored` feature of `native-tls`.
 //! - **rustls-tls**: Enables TLS functionality provided by `rustls`.
+//!   Equivalent to `rustls-tls-webpki-roots`.
+//! - **rustls-tls-manual-roots**: Enables TLS functionality provided by `rustls`,
+//!   without setting any root certificates. Roots have to be specified manually.
+//! - **rustls-tls-webpki-roots**: Enables TLS functionality provided by `rustls`,
+//!   while using root certificates from the `webpki-roots` crate.
+//! - **rustls-tls-native-roots**: Enables TLS functionality provided by `rustls`,
+//!   while using root certificates from the `rustls-native-certs` crate.
 //! - **blocking**: Provides the [blocking][] client API.
 //! - **cookies**: Provides cookie session support.
 //! - **gzip**: Provides response body gzip decompression.
@@ -182,6 +189,7 @@
 //!
 //!
 //! [hyper]: http://hyper.rs
+//! [blocking]: ./blocking/index.html
 //! [client]: ./struct.Client.html
 //! [response]: ./struct.Response.html
 //! [get]: ./fn.get.html

@@ -6,6 +6,7 @@ use std::task::{Context, Poll};
 use bytes::Bytes;
 use futures_core::Stream;
 use http_body::Body as HttpBody;
+use pin_project_lite::pin_project;
 use tokio::time::Delay;
 
 /// An asynchronous request body.
@@ -30,7 +31,12 @@ enum Inner {
     },
 }
 
-struct WrapStream<S>(S);
+pin_project! {
+    struct WrapStream<S> {
+        #[pin]
+        inner: S,
+    }
+}
 
 struct WrapHyper(hyper::Body);
 
@@ -86,9 +92,9 @@ impl Body {
     {
         use futures_util::TryStreamExt;
 
-        let body = Box::pin(WrapStream(
-            stream.map_ok(Bytes::from).map_err(Into::into),
-        ));
+        let body = Box::pin(WrapStream {
+            inner: stream.map_ok(Bytes::from).map_err(Into::into),
+        });
         Body {
             inner: Inner::Streaming {
                 body,
@@ -279,11 +285,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        // safe pin projection
-        let item =
-            futures_core::ready!(
-                unsafe { Pin::new_unchecked(&mut self.get_unchecked_mut().0) }.poll_next(cx)?
-            );
+        let item = futures_core::ready!(self.project().inner.poll_next(cx)?);
 
         Poll::Ready(item.map(|val| Ok(val.into())))
     }

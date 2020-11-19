@@ -1,6 +1,6 @@
 #[cfg(any(
     feature = "native-tls",
-    feature = "rustls-tls",
+    feature = "__rustls",
 ))]
 use std::any::Any;
 use std::convert::TryInto;
@@ -440,7 +440,7 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls`
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
     /// feature to be enabled.
     #[cfg(feature = "__tls")]
     pub fn add_root_certificate(self, cert: Certificate) -> ClientBuilder {
@@ -508,8 +508,8 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `rustls-tls` feature to be enabled.
-    #[cfg(feature = "rustls-tls")]
+    /// This requires the optional `rustls-tls(-...)` feature to be enabled.
+    #[cfg(feature = "__rustls")]
     pub fn use_rustls_tls(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.use_rustls_tls())
     }
@@ -531,10 +531,10 @@ impl ClientBuilder {
     /// # Optional
     ///
     /// This requires one of the optional features `native-tls` or
-    /// `rustls-tls` to be enabled.
+    /// `rustls-tls(-...)` to be enabled.
     #[cfg(any(
         feature = "native-tls",
-        feature = "rustls-tls",
+        feature = "__rustls",
     ))]
     pub fn use_preconfigured_tls(self, tls: impl Any) -> ClientBuilder {
         self.with_inner(move |inner| inner.use_preconfigured_tls(tls))
