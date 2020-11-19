@@ -223,7 +223,7 @@ impl ClientBuilder {
     ///
     /// This requires the optional `brotli` feature to be enabled
     #[cfg(feature = "brotli")]
-    pub fn brotli(mut self, enable: bool) -> ClientBuilder { self.with_inner(|inner| inner.brotli(enable)) }
+    pub fn brotli(self, enable: bool) -> ClientBuilder { self.with_inner(|inner| inner.brotli(enable)) }
 
     /// Disable auto response body gzip decompression.
     ///
