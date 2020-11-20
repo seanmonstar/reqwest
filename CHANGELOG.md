@@ -1,3 +1,15 @@
+## v0.10.9
+
+- Add `rustls-tls-native-roots`, `rustls-tls-webpki-roots`, and `rustls-tls-manual-roots` Cargo features, to configure which certificate roots to use with rustls.
+- Add `ClientBuilder::tcp_keepalive()` method to enable TCP keepalive.
+- Add `ClientBuilder::http1_writev()` method to force enable or disable vectored writes.
+- Add `Error::is_connect()` method to identify if the error is related to connection-establishment.
+- Add `blocking::ClientBuilder::brotli()` method.
+- Windows: Update default protocol to HTTP for HTTPS system proxies, when a protocol is not specified.
+- (wasm) Add support for Cloudflare workers runtime.
+- (wasm) Add `ClientBuilder::default_headers()` method.
+- (wasm) Add `RequestBuilder::build()` method.
+
 ## v0.10.8
 
 - Add `must_use` to `RequestBuilder` and `ClientBuilder`.
