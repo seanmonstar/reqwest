@@ -2,10 +2,11 @@ use std::fmt;
 use std::fs::File;
 use std::future::Future;
 use std::io::{self, Cursor, Read};
-use std::mem::{self, MaybeUninit};
+use std::mem;
 use std::ptr;
 
 use bytes::Bytes;
+use bytes::buf::UninitSlice;
 
 use crate::async_impl;
 
@@ -289,14 +290,14 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
             if buf.remaining_mut() == 0 {
                 buf.reserve(8192);
                 // zero out the reserved memory
+                let uninit = buf.bytes_mut();
                 unsafe {
-                    let uninit = mem::transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(buf.bytes_mut());
                     ptr::write_bytes(uninit.as_mut_ptr(), 0, uninit.len());
                 }
             }
 
             let bytes = unsafe {
-                mem::transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(buf.bytes_mut())
+                mem::transmute::<&mut UninitSlice, &mut [u8]>(buf.bytes_mut())
             };
             match body.read(bytes) {
                 Ok(0) => {

@@ -71,7 +71,7 @@ __internal_proxy_sys_no_cache = []
 [dependencies]
 http = "0.2"
 url = "2.2"
-bytes = "0.5"
+bytes = "0.6"
 serde = "1.0"
 serde_urlencoded = "0.7"
 mime_guess = "2.0"
@@ -83,7 +83,7 @@ base64 = "0.13"
 encoding_rs = "0.8"
 futures-core = { version = "0.3.0", default-features = false }
 futures-util = { version = "0.3.0", default-features = false }
-http-body = "0.3.0"
+http-body = { git = "https://github.com/hyperium/http-body" }
 hyper = { git = "https://github.com/hyperium/hyper.git", default-features = false, features = ["tcp", "http1", "http2", "client"] }
 lazy_static = "1.4"
 log = "0.4"
@@ -113,7 +113,7 @@ cookie_store = { version = "0.12", optional = true }
 time = { version = "0.2.11", optional = true }
 
 ## compression
-async-compression = { version = "0.3.0", default-features = false, features = ["stream"], optional = true }
+async-compression = { git = "https://github.com/blacktemplar/async-compression.git", branch="lighthouse", default-features = false, features = ["stream"], optional = true }
 
 
 ## socks
@@ -124,7 +124,7 @@ trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", bran
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.7"
-hyper = { git = "https://github.com/hyperium/hyper.git", default-features = false, features = ["tcp", "stream", "http1", "http2", "client"] }
+hyper = { git = "https://github.com/hyperium/hyper.git", default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server"] }
 serde = { version = "1.0", features = ["derive"] }
 libflate = "1.0"
 brotli_crate = { package = "brotli", version = "3.3.0" }
