@@ -95,6 +95,48 @@ async fn http_proxy_basic_auth_parsed() {
 }
 
 #[tokio::test]
+async fn system_http_proxy_basic_auth_parsed() {
+    let url = "http://hyper.rs/prox";
+    let server = server::http(move |req| {
+        assert_eq!(req.method(), "GET");
+        assert_eq!(req.uri(), url);
+        assert_eq!(req.headers()["host"], "hyper.rs");
+        assert_eq!(
+            req.headers()["proxy-authorization"],
+            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="
+        );
+
+        async { http::Response::default() }
+    });
+
+    // save system setting first.
+    let system_proxy = env::var("http_proxy");
+
+    // set-up http proxy.
+    env::set_var(
+        "http_proxy",
+        format!("http://Aladdin:open sesame@{}", server.addr()),
+    );
+
+    let res = reqwest::Client::builder()
+        .build()
+        .unwrap()
+        .get(url)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.url().as_str(), url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+
+    // reset user setting.
+    match system_proxy {
+        Err(_) => env::remove_var("http_proxy"),
+        Ok(proxy) => env::set_var("http_proxy", proxy),
+    }
+}
+
+#[tokio::test]
 async fn test_no_proxy() {
     let server = server::http(move |req| {
         assert_eq!(req.method(), "GET");
