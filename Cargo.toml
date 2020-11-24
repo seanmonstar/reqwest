@@ -140,7 +140,6 @@ winreg = "0.7"
 js-sys = "0.3.45"
 wasm-bindgen = { version = "0.2.68", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4.18"
-wasm-bindgen-test = "0.3"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3.25"
@@ -156,6 +155,9 @@ features = [
     "BlobPropertyBag",
     "ServiceWorkerGlobalScope",
 ]
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
 
 [[example]]
 name = "blocking"
