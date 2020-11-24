@@ -299,71 +299,74 @@ impl Config {
     }
 }
 
-use wasm_bindgen_test::*;
+#[cfg(test)]
+mod tests {
+    use wasm_bindgen_test::*;
 
-wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
-#[wasm_bindgen_test]
-async fn default_headers() {
-    use crate::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
+    #[wasm_bindgen_test]
+    async fn default_headers() {
+        use crate::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 
-    let mut headers = HeaderMap::new();
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-    headers.insert("x-custom", HeaderValue::from_static("flibbertigibbet"));
-    let client = crate::Client::builder()
-        .default_headers(headers)
-        .build()
-        .expect("client");
-    let mut req = client
-        .get("https://www.example.com")
-        .build()
-        .expect("request");
-    // merge headers as if client were about to issue fetch
-    client.merge_headers(&mut req);
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        headers.insert("x-custom", HeaderValue::from_static("flibbertigibbet"));
+        let client = crate::Client::builder()
+            .default_headers(headers)
+            .build()
+            .expect("client");
+        let mut req = client
+            .get("https://www.example.com")
+            .build()
+            .expect("request");
+        // merge headers as if client were about to issue fetch
+        client.merge_headers(&mut req);
 
-    let test_headers = req.headers();
-    assert!(test_headers.get(CONTENT_TYPE).is_some(), "content-type");
-    assert!(test_headers.get("x-custom").is_some(), "custom header");
-    assert!(test_headers.get("accept").is_none(), "no accept header");
-}
+        let test_headers = req.headers();
+        assert!(test_headers.get(CONTENT_TYPE).is_some(), "content-type");
+        assert!(test_headers.get("x-custom").is_some(), "custom header");
+        assert!(test_headers.get("accept").is_none(), "no accept header");
+    }
 
-#[wasm_bindgen_test]
-async fn default_headers_clone() {
-    use crate::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
+    #[wasm_bindgen_test]
+    async fn default_headers_clone() {
+        use crate::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 
-    let mut headers = HeaderMap::new();
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-    headers.insert("x-custom", HeaderValue::from_static("flibbertigibbet"));
-    let client = crate::Client::builder()
-        .default_headers(headers)
-        .build()
-        .expect("client");
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        headers.insert("x-custom", HeaderValue::from_static("flibbertigibbet"));
+        let client = crate::Client::builder()
+            .default_headers(headers)
+            .build()
+            .expect("client");
 
-    let mut req = client
-        .get("https://www.example.com")
-        .header(CONTENT_TYPE, "text/plain")
-        .build()
-        .expect("request");
-    client.merge_headers(&mut req);
-    let headers1 = req.headers();
+        let mut req = client
+            .get("https://www.example.com")
+            .header(CONTENT_TYPE, "text/plain")
+            .build()
+            .expect("request");
+        client.merge_headers(&mut req);
+        let headers1 = req.headers();
 
-    // confirm that request headers override defaults
-    assert_eq!(
-        headers1.get(CONTENT_TYPE).unwrap(),
-        "text/plain",
-        "request headers override defaults"
-    );
+        // confirm that request headers override defaults
+        assert_eq!(
+            headers1.get(CONTENT_TYPE).unwrap(),
+            "text/plain",
+            "request headers override defaults"
+        );
 
-    // confirm that request headers don't change client defaults
-    let mut req2 = client
-        .get("https://www.example.com/x")
-        .build()
-        .expect("req 2");
-    client.merge_headers(&mut req2);
-    let headers2 = req2.headers();
-    assert_eq!(
-        headers2.get(CONTENT_TYPE).unwrap(),
-        "application/json",
-        "request headers don't change client defaults"
-    );
+        // confirm that request headers don't change client defaults
+        let mut req2 = client
+            .get("https://www.example.com/x")
+            .build()
+            .expect("req 2");
+        client.merge_headers(&mut req2);
+        let headers2 = req2.headers();
+        assert_eq!(
+            headers2.get(CONTENT_TYPE).unwrap(),
+            "application/json",
+            "request headers don't change client defaults"
+        );
+    }
 }
