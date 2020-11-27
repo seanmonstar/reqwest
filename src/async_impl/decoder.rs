@@ -4,16 +4,21 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 #[cfg(feature = "gzip")]
-use async_compression::stream::GzipDecoder;
+use async_compression::tokio_03::bufread::GzipDecoder;
 
 #[cfg(feature = "brotli")]
-use async_compression::stream::BrotliDecoder;
+use async_compression::tokio_03::bufread::BrotliDecoder;
 
 use bytes::Bytes;
 use futures_core::Stream;
 use futures_util::stream::Peekable;
 use http::HeaderMap;
 use hyper::body::HttpBody;
+
+#[cfg(any(feature = "gzip", feature = "brotli"))]
+use tokio_util::io::StreamReader;
+#[cfg(any(feature = "gzip", feature = "brotli"))]
+use tokio_util::codec::{BytesCodec, FramedRead};
 
 use super::super::Body;
 use crate::error;
@@ -39,11 +44,11 @@ enum Inner {
 
     /// A `Gzip` decoder will uncompress the gzipped response content before returning it.
     #[cfg(feature = "gzip")]
-    Gzip(GzipDecoder<Peekable<IoStream>>),
+    Gzip(FramedRead<GzipDecoder<StreamReader<Peekable<IoStream>, Bytes>>, BytesCodec>),
 
     /// A `Brotli` decoder will uncompress the brotlied response content before returning it.
     #[cfg(feature = "brotli")]
-    Brotli(BrotliDecoder<Peekable<IoStream>>),
+    Brotli(FramedRead<BrotliDecoder<StreamReader<Peekable<IoStream>, Bytes>>, BytesCodec>),
 
     /// A decoder that doesn't have a value yet.
     #[cfg(any(feature = "brotli", feature = "gzip"))]
@@ -229,7 +234,7 @@ impl Stream for Decoder {
             #[cfg(feature = "gzip")]
             Inner::Gzip(ref mut decoder) => {
                 return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
-                    Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes))),
+                    Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.freeze()))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                     None => Poll::Ready(None),
                 };
@@ -237,7 +242,7 @@ impl Stream for Decoder {
             #[cfg(feature = "brotli")]
             Inner::Brotli(ref mut decoder) => {
                 return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
-                    Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes))),
+                    Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.freeze()))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                     None => Poll::Ready(None),
                 };
@@ -302,9 +307,9 @@ impl Future for Pending {
 
         match self.1 {
             #[cfg(feature = "brotli")]
-            DecoderType::Brotli => Poll::Ready(Ok(Inner::Brotli(BrotliDecoder::new(_body)))),
+            DecoderType::Brotli => Poll::Ready(Ok(Inner::Brotli(FramedRead::new(BrotliDecoder::new(StreamReader::new(_body)), BytesCodec::new())))),
             #[cfg(feature = "gzip")]
-            DecoderType::Gzip => Poll::Ready(Ok(Inner::Gzip(GzipDecoder::new(_body)))),
+            DecoderType::Gzip => Poll::Ready(Ok(Inner::Gzip(FramedRead::new(GzipDecoder::new(StreamReader::new(_body)), BytesCodec::new())))),
         }
     }
 }
