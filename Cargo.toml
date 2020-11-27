@@ -113,7 +113,7 @@ cookie_store = { version = "0.12", optional = true }
 time = { version = "0.2.11", optional = true }
 
 ## compression
-async-compression = { version = "0.3.0", default-features = false, features = ["tokio-03"], optional = true }
+async-compression = { version = "0.3.6", default-features = false, features = ["tokio-03"], optional = true }
 tokio-util = { version = "0.5.0", default-features = false, features = ["codec", "io"], optional = true }
 
 ## socks
