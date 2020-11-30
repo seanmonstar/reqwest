@@ -21,7 +21,7 @@ pub struct Request {
     inner: async_impl::Request,
 }
 
-/// A builder to construct the properties of a `Request`.
+/// A builder to construct the properties of a `Request`. To construct a `RequestBuilder`, refer to the `Client` documentation. 
 #[derive(Debug)]
 #[must_use = "RequestBuilder does nothing until you 'send' it"]
 pub struct RequestBuilder {
