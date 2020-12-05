@@ -123,7 +123,7 @@ tokio-socks = { version = "0.4", optional = true }
 trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", branch = "main", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-env_logger = "0.7"
+env_logger = "0.8"
 hyper = { git = "https://github.com/hyperium/hyper.git", default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server"] }
 serde = { version = "1.0", features = ["derive"] }
 libflate = "1.0"
