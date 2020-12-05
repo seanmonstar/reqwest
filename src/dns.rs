@@ -3,6 +3,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{self, Poll};
 use std::io;
+use std::net::SocketAddr;
 
 use hyper::client::connect::dns as hyper_dns;
 use hyper::service::Service;
@@ -26,6 +27,10 @@ pub(crate) struct TrustDnsResolver {
     state: Arc<Mutex<State>>,
 }
 
+pub(crate) struct SocketAddrs {
+    iter: LookupIpIntoIter,
+}
+
 enum State {
     Init,
     Ready(SharedResolver),
@@ -47,7 +52,7 @@ impl TrustDnsResolver {
 }
 
 impl Service<hyper_dns::Name> for TrustDnsResolver {
-    type Response = LookupIpIntoIter;
+    type Response = SocketAddrs;
     type Error = BoxError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
@@ -74,8 +79,16 @@ impl Service<hyper_dns::Name> for TrustDnsResolver {
             drop(lock);
 
             let lookup = resolver.lookup_ip(name.as_str()).await?;
-            Ok(lookup.into_iter())
+            Ok(SocketAddrs { iter: lookup.into_iter() })
         })
+    }
+}
+
+impl Iterator for SocketAddrs {
+    type Item = SocketAddr;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|ip_addr| SocketAddr::new(ip_addr, 0))
     }
 }
 
