@@ -18,6 +18,8 @@ use url::Url;
 use super::body::Body;
 use super::decoder::{Accepts, Decoder};
 #[cfg(feature = "cookies")]
+use std::collections::HashMap;
+#[cfg(feature = "cookies")]
 use crate::cookie;
 
 /// A Response to a submitted `Request`.
@@ -30,6 +32,8 @@ pub struct Response {
     body: Decoder,
     version: Version,
     extensions: http::Extensions,
+    #[cfg(feature = "cookies")]
+    cookies: Option<HashMap<String, cookie::OwnedCookie>>,
 }
 
 impl Response {
@@ -38,6 +42,8 @@ impl Response {
         url: Url,
         accepts: Accepts,
         timeout: Option<Delay>,
+        #[cfg(feature = "cookies")]
+        cookies: Option<HashMap<String, cookie::OwnedCookie>>,
     ) -> Response {
         let (parts, body) = res.into_parts();
         let status = parts.status;
@@ -54,6 +60,8 @@ impl Response {
             body: decoder,
             version,
             extensions,
+            #[cfg(feature = "cookies")]
+            cookies,
         }
     }
 
@@ -100,10 +108,22 @@ impl Response {
     ///
     /// # Optional
     ///
-    /// This requires the optional `cookies` feature to be enabled.
+    /// This requires the optional `cookies` feature to be enabledand the `cookie_store` option on the sourcing `Client` to be enabled.
     #[cfg(feature = "cookies")]
     pub fn cookies<'a>(&'a self) -> impl Iterator<Item = cookie::Cookie<'a>> + 'a {
         cookie::extract_response_cookies(&self.headers).filter_map(Result::ok)
+    }
+
+    /// Retrieve the cookies contained in the response and accompying connection
+    ///
+    /// Note that invalid 'Set-Cookie' headers will be ignored.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled and the `cookie_store` and `tracking_cookie_store` options on the sourcing `Client` to be enabled.
+    #[cfg(feature = "cookies")]
+    pub fn session_cookies(&self) -> Option<&HashMap<String, cookie::OwnedCookie>> {
+        self.cookies.as_ref()
     }
 
     /// Get the final `Url` of this `Response`.
@@ -411,6 +431,8 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
             body,
             version: parts.version,
             extensions: parts.extensions,
+            #[cfg(feature = "cookies")]
+            cookies: None,
         }
     }
 }

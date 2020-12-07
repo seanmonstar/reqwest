@@ -14,6 +14,8 @@ use serde::de::DeserializeOwned;
 use super::client::KeepCoreThreadAlive;
 use super::wait;
 #[cfg(feature = "cookies")]
+use std::collections::HashMap;
+#[cfg(feature = "cookies")]
 use crate::cookie;
 use crate::{async_impl, StatusCode, Url, Version};
 
@@ -134,10 +136,22 @@ impl Response {
     ///
     /// # Optional
     ///
-    /// This requires the optional `cookies` feature to be enabled.
+    /// This requires the optional `cookies` feature to be enabledand the `cookie_store` option on the sourcing `Client` to be enabled.
     #[cfg(feature = "cookies")]
     pub fn cookies<'a>(&'a self) -> impl Iterator<Item = cookie::Cookie<'a>> + 'a {
         cookie::extract_response_cookies(self.headers()).filter_map(Result::ok)
+    }
+
+    /// Retrieve the cookies contained in the response and accompying connection
+    ///
+    /// Note that invalid 'Set-Cookie' headers will be ignored.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled and the `cookie_store` and `tracking_cookie_store` options on the sourcing `Client` to be enabled.
+    #[cfg(feature = "cookies")]
+    pub fn session_cookies(&self) -> Option<&HashMap<String, cookie::OwnedCookie>> {
+        self.inner.session_cookies()
     }
 
     /// Get the HTTP `Version` of this `Response`.

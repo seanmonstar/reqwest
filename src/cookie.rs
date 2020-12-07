@@ -5,9 +5,36 @@ use std::convert::TryInto;
 use crate::header;
 use std::fmt;
 use std::time::SystemTime;
+use std::collections::HashMap;
+use url::Url;
 
 /// A single HTTP cookie.
 pub struct Cookie<'a>(cookie_crate::Cookie<'a>);
+
+/// A single owned HTTP cookie.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct OwnedCookie {
+    /// The name of the cookie.
+    pub name: String,
+    /// The value of the cookie.
+    pub value: String,
+    /// Is true if the 'HttpOnly' directive is enabled.
+    pub http_only: bool,
+    /// Is true if the 'Secure' directive is enabled.
+    pub secure: bool,
+    /// Is true if 'SameSite' directive is 'Lax'.
+    pub same_site_lax: bool,
+    /// Is true if 'SameSite' directive is 'Strict'.
+    pub same_site_strict: bool,
+    /// The path directive of the cookie, if set.
+    pub path: Option<String>,
+    /// The domain directive of the cookie, if set.
+    pub domain: Option<String>,
+    /// The Max-Age information, if set.
+    pub max_age: Option<std::time::Duration>,
+    /// The cookie expiration time, if set.
+    pub expires: Option<SystemTime>,
+}
 
 impl<'a> Cookie<'a> {
     fn parse(value: &'a crate::header::HeaderValue) -> Result<Cookie<'a>, CookieParseError> {
@@ -75,6 +102,24 @@ impl<'a> Cookie<'a> {
     }
 }
 
+impl<'a> Cookie<'a> {
+
+    fn to_owned_cookie(&self) -> OwnedCookie {
+        OwnedCookie {
+            name: self.name().to_string(),
+            value: self.value().to_string(),
+            http_only: self.http_only(),
+            secure: self.secure(),
+            same_site_lax: self.same_site_lax(),
+            same_site_strict: self.same_site_strict(),
+            path: self.path().map(str::to_string),
+            domain: self.domain().map(str::to_string),
+            max_age: self.max_age(),
+            expires: self.expires(),
+        }
+    }
+}
+
 impl<'a> fmt::Debug for Cookie<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.0.fmt(f)
@@ -93,6 +138,14 @@ pub(crate) fn extract_response_cookies<'a>(
 /// A persistent cookie store that provides session support.
 #[derive(Default)]
 pub(crate) struct CookieStore(pub(crate) cookie_store::CookieStore);
+
+impl CookieStore {
+    pub(crate) fn exposed<'a>(&'a self, url: &Url) -> HashMap<String, OwnedCookie> {
+        self.0.get_request_cookies(url)
+            .map(|cookie| (cookie.name().to_string(), Cookie(cookie.to_owned()).to_owned_cookie()))
+            .collect()
+    }
+}
 
 impl<'a> fmt::Debug for CookieStore {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
