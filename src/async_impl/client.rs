@@ -6,8 +6,6 @@ use std::any::Any;
 use std::convert::TryInto;
 use std::net::IpAddr;
 use std::sync::Arc;
-#[cfg(feature = "cookies")]
-use std::sync::RwLock;
 use std::time::Duration;
 use std::{fmt, str};
 
@@ -102,7 +100,7 @@ struct Config {
     local_address: Option<IpAddr>,
     nodelay: bool,
     #[cfg(feature = "cookies")]
-    cookie_store: Option<cookie::CookieStore>,
+    cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     trust_dns: bool,
     error: Option<crate::Error>,
     https_only: bool,
@@ -219,7 +217,6 @@ impl ClientBuilder {
                             id.add_to_native_tls(&mut tls)?;
                         }
                     }
-
 
                     Connector::new_default_tls(
                         http,
@@ -339,7 +336,7 @@ impl ClientBuilder {
             inner: Arc::new(ClientRef {
                 accepts: config.accepts,
                 #[cfg(feature = "cookies")]
-                cookie_store: config.cookie_store.map(RwLock::new),
+                cookie_store: config.cookie_store,
                 hyper: hyper_client,
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
@@ -435,10 +432,10 @@ impl ClientBuilder {
         self
     }
 
-    /// Enable a persistent cookie store for the client.
+    /// Set the persistent cookie store for the client.
     ///
-    /// Cookies received in responses will be preserved and included in
-    /// additional requests.
+    /// Cookies received in responses will be passed to this store, and
+    /// additional requests will query this store for cookies.
     ///
     /// By default, no cookie store is used.
     ///
@@ -446,12 +443,11 @@ impl ClientBuilder {
     ///
     /// This requires the optional `cookies` feature to be enabled.
     #[cfg(feature = "cookies")]
-    pub fn cookie_store(mut self, enable: bool) -> ClientBuilder {
-        self.config.cookie_store = if enable {
-            Some(cookie::CookieStore::default())
-        } else {
-            None
-        };
+    pub fn cookie_store<C: cookie::CookieStore + 'static>(
+        mut self,
+        cookie_store: Option<Arc<C>>,
+    ) -> ClientBuilder {
+        self.config.cookie_store = cookie_store.map(|a| a as _);
         self
     }
 
@@ -840,7 +836,6 @@ impl ClientBuilder {
         #[cfg(feature = "__rustls")]
         {
             if let Some(conn) = (&mut tls as &mut dyn Any).downcast_mut::<Option<rustls::ClientConfig>>() {
-
                 let tls = conn.take().expect("is definitely Some");
                 let tls = crate::tls::TlsBackend::BuiltRustls(tls);
                 self.config.tls = tls;
@@ -1029,10 +1024,9 @@ impl Client {
         // Add cookies from the cookie store.
         #[cfg(feature = "cookies")]
         {
-            if let Some(cookie_store_wrapper) = self.inner.cookie_store.as_ref() {
+            if let Some(cookie_store) = self.inner.cookie_store.as_ref() {
                 if headers.get(crate::header::COOKIE).is_none() {
-                    let cookie_store = cookie_store_wrapper.read().unwrap();
-                    add_cookie_header(&mut headers, &cookie_store, &url);
+                    add_cookie_header(&mut headers, &**cookie_store, &url);
                 }
             }
         }
@@ -1209,7 +1203,7 @@ impl Config {
 struct ClientRef {
     accepts: Accepts,
     #[cfg(feature = "cookies")]
-    cookie_store: Option<RwLock<cookie::CookieStore>>,
+    cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     headers: HeaderMap,
     hyper: HyperClient,
     redirect_policy: redirect::Policy,
@@ -1351,14 +1345,12 @@ impl Future for PendingRequest {
 
             #[cfg(feature = "cookies")]
             {
-                if let Some(store_wrapper) = self.client.cookie_store.as_ref() {
-                    let mut cookies = cookie::extract_response_cookies(&res.headers())
-                        .filter_map(|res| res.ok())
-                        .map(|cookie| cookie.into_inner().into_owned())
-                        .peekable();
+                if let Some(ref cookie_store) = self.client.cookie_store {
+                    let mut cookies =
+                        cookie::extract_response_cookie_headers(&res.headers()).peekable();
                     if cookies.peek().is_some() {
-                      let mut store = store_wrapper.write().unwrap();
-                      store.0.store_response_cookies(cookies, &self.url);
+                        let cookies = cookies.collect();
+                        cookie_store.set_cookies(cookies, &self.url);
                     }
                 }
             }
@@ -1451,11 +1443,8 @@ impl Future for PendingRequest {
                             // Add cookies from the cookie store.
                             #[cfg(feature = "cookies")]
                             {
-                                if let Some(cookie_store_wrapper) =
-                                    self.client.cookie_store.as_ref()
-                                {
-                                    let cookie_store = cookie_store_wrapper.read().unwrap();
-                                    add_cookie_header(&mut headers, &cookie_store, &self.url);
+                                if let Some(ref cookie_store) = self.client.cookie_store {
+                                    add_cookie_header(&mut headers, &**cookie_store, &self.url);
                                 }
                             }
 
@@ -1512,13 +1501,8 @@ fn make_referer(next: &Url, previous: &Url) -> Option<HeaderValue> {
 }
 
 #[cfg(feature = "cookies")]
-fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &cookie::CookieStore, url: &Url) {
-    let header = cookie_store
-        .0
-        .get_request_cookies(url)
-        .map(|c| format!("{}={}", c.name(), c.value()))
-        .collect::<Vec<_>>()
-        .join("; ");
+fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &dyn cookie::CookieStore, url: &Url) {
+    let header = cookie_store.cookies(url).join("; ");
     if !header.is_empty() {
         headers.insert(
             crate::header::COOKIE,

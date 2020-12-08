@@ -18,10 +18,6 @@ impl<'a> Cookie<'a> {
             .map(Cookie)
     }
 
-    pub(crate) fn into_inner(self) -> cookie_crate::Cookie<'a> {
-        self.0
-    }
-
     /// The name of the cookie.
     pub fn name(&self) -> &str {
         self.0.name()
@@ -81,6 +77,15 @@ impl<'a> fmt::Debug for Cookie<'a> {
     }
 }
 
+pub(crate) fn extract_response_cookie_headers<'a>(
+    headers: &'a hyper::HeaderMap,
+) -> impl Iterator<Item = &'a str> + 'a {
+    headers
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .filter_map(|value| std::str::from_utf8(value.as_bytes()).ok())
+}
+
 pub(crate) fn extract_response_cookies<'a>(
     headers: &'a hyper::HeaderMap,
 ) -> impl Iterator<Item = Result<Cookie<'a>, CookieParseError>> + 'a {
@@ -90,14 +95,12 @@ pub(crate) fn extract_response_cookies<'a>(
         .map(|value| Cookie::parse(value))
 }
 
-/// A persistent cookie store that provides session support.
-#[derive(Default)]
-pub(crate) struct CookieStore(pub(crate) cookie_store::CookieStore);
-
-impl<'a> fmt::Debug for CookieStore {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
-    }
+/// Actions for a persistent cookie store providing session supprt.
+pub trait CookieStore: Send + Sync {
+    /// Store a set of Set-Cookie header values recevied from `url`
+    fn set_cookies(&self, cookie_headers: Vec<&str>, url: &url::Url);
+    /// Get any Cookie values in the store for `url`
+    fn cookies(&self, url: &url::Url) -> Vec<String>;
 }
 
 /// Error representing a parse failure of a 'Set-Cookie' header.
