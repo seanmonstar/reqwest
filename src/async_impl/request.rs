@@ -26,7 +26,9 @@ pub struct Request {
     timeout: Option<Duration>,
 }
 
-/// A builder to construct the properties of a `Request`. To construct a `RequestBuilder`, refer to the `Client` documentation.
+/// A builder to construct the properties of a `Request`.
+///
+/// To construct a `RequestBuilder`, refer to the `Client` documentation.
 #[must_use = "RequestBuilder does nothing until you 'send' it"]
 pub struct RequestBuilder {
     client: Client,
