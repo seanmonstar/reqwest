@@ -573,6 +573,18 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.no_trust_dns())
     }
 
+    /// Enable only specific methods (HTTP/HTTPS) to be used.
+    /// 
+    /// Defaults to allow methods allowed.
+    /// 
+    /// Use it with [HTTP_MASK] and [HTTPS_MASK].
+    /// 
+    /// [HTTP_MASK]: static.HTTPS_MASK.html
+    /// [HTTPS_MASK]: static.HTTPS_MASK.html
+    pub fn allow_method(self, flag: u8) -> ClientBuilder {
+        self.with_inner(|inner| inner.allow_method(flag))
+    }
+
     // private
 
     fn with_inner<F>(mut self, func: F) -> ClientBuilder
