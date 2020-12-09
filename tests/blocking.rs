@@ -288,3 +288,25 @@ fn test_blocking_inside_a_runtime() {
         let _should_panic = reqwest::blocking::get(&url);
     });
 }
+
+#[cfg(feature = "default-tls")]
+#[test]
+fn test_allowed_methods_blocking() {
+    let resp = reqwest::blocking::Client::builder()
+        .https_only(true)
+        .build()
+        .expect("client builder")
+        .get("https://google.com")
+        .send();
+
+    assert_eq!(resp.is_err(), false);
+
+    let resp = reqwest::blocking::Client::builder()
+        .https_only(true)
+        .build()
+        .expect("client builder")
+        .get("http://google.com")
+        .send();
+
+    assert_eq!(resp.is_err(), true);
+}

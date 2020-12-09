@@ -199,3 +199,27 @@ fn use_preconfigured_rustls_default() {
         .build()
         .expect("preconfigured rustls tls");
 }
+
+#[cfg(feature = "default-tls")]
+#[tokio::test]
+async fn test_allowed_methods() {
+    let resp = reqwest::Client::builder()
+        .https_only(true)
+        .build()
+        .expect("client builder")
+        .get("https://google.com")
+        .send()
+        .await;
+
+    assert_eq!(resp.is_err(), false);
+
+    let resp = reqwest::Client::builder()
+        .https_only(true)
+        .build()
+        .expect("client builder")
+        .get("http://google.com")
+        .send()
+        .await;
+
+    assert_eq!(resp.is_err(), true);
+}

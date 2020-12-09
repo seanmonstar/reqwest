@@ -573,6 +573,13 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.no_trust_dns())
     }
 
+    /// Restrict the Client to be used with HTTPS only requests.
+    /// 
+    /// Defaults to false.
+    pub fn https_only(self, enabled: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.https_only(enabled))
+    }
+
     // private
 
     fn with_inner<F>(mut self, func: F) -> ClientBuilder
