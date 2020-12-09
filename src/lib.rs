@@ -318,8 +318,3 @@ if_wasm! {
 
     pub use self::wasm::{multipart, Body, Client, ClientBuilder, Request, RequestBuilder, Response};
 }
-
-/// Bytes shift mask to define the HTTP methods.
-pub static HTTP_MASK: u8 = 1 << 0;
-/// Bytes shift mask to define the HTTPS methods.
-pub static HTTPS_MASK: u8 = 1 << 1;

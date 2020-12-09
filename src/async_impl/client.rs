@@ -106,7 +106,7 @@ struct Config {
     cookie_store: Option<cookie::CookieStore>,
     trust_dns: bool,
     error: Option<crate::Error>,
-    methods_allowed: u8,
+    https_only: bool,
 }
 
 impl Default for ClientBuilder {
@@ -158,7 +158,7 @@ impl ClientBuilder {
                 trust_dns: cfg!(feature = "trust-dns"),
                 #[cfg(feature = "cookies")]
                 cookie_store: None,
-                methods_allowed: 0,
+                https_only: false,
             },
         }
     }
@@ -351,7 +351,7 @@ impl ClientBuilder {
                 request_timeout: config.timeout,
                 proxies,
                 proxies_maybe_http_auth,
-                methods_allowed: config.methods_allowed,
+                https_only: config.https_only,
             }),
         })
     }
@@ -921,16 +921,11 @@ impl ClientBuilder {
         }
     }
 
-    /// Enable only specific methods (HTTP/HTTPS) to be used.
+    /// Restrict the Client to be used with HTTPS only requests.
     /// 
-    /// Defaults to allow methods allowed.
-    /// 
-    /// Use it with [HTTP_MASK] and [HTTPS_MASK].
-    /// 
-    /// [HTTP_MASK]: static.HTTPS_MASK.html
-    /// [HTTPS_MASK]: static.HTTPS_MASK.html
-    pub fn allow_method(mut self, flag: u8) -> ClientBuilder {
-        self.config.methods_allowed |= flag;
+    /// Defaults to false.
+    pub fn https_only(mut self, enabled: bool) -> ClientBuilder {
+        self.config.https_only = enabled;
         self
     }
 }
@@ -1052,19 +1047,12 @@ impl Client {
 
     pub(super) fn execute_request(&self, req: Request) -> Pending {
         let (method, url, mut headers, body, timeout) = req.pieces();
-        let url_scheme: u8 = if url.scheme() == "http" {
-            crate::HTTP_MASK
-        } else if url.scheme() == "https" {
-            crate::HTTPS_MASK
-        } else {
-            // we don't currently support any other methods
+        if url.scheme() != "http" && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
-        };
+        }
 
-        // check if we've defined allowed methods
-        //  if methods_allowed == 0, it mean we haven't touched to it so any method is ok
-        // the later check is to determine if the url_scheme (MASK) is in the methods_allowed
-        if self.inner.methods_allowed != 0 && (self.inner.methods_allowed & url_scheme) == 0 {
+        // check if we're in https_only mode and check the scheme of the current URL
+        if self.inner.https_only && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
         }
 
@@ -1266,7 +1254,7 @@ struct ClientRef {
     request_timeout: Option<Duration>,
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
-    methods_allowed: u8,
+    https_only: bool,
 }
 
 impl ClientRef {

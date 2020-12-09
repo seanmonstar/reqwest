@@ -200,39 +200,26 @@ fn use_preconfigured_rustls_default() {
         .expect("preconfigured rustls tls");
 }
 
+#[cfg(feature = "default-tls")]
 #[tokio::test]
 async fn test_allowed_methods() {
     let resp = reqwest::Client::builder()
-        .allow_method(reqwest::HTTP_MASK)
+        .https_only(true)
         .build()
         .expect("client builder")
         .get("https://google.com")
+        .send()
+        .await;
+
+    assert_eq!(resp.is_err(), false);
+
+    let resp = reqwest::Client::builder()
+        .https_only(true)
+        .build()
+        .expect("client builder")
+        .get("http://google.com")
         .send()
         .await;
 
     assert_eq!(resp.is_err(), true);
-
-    let resp = reqwest::Client::builder()
-        .allow_method(reqwest::HTTPS_MASK)
-        .build()
-        .expect("client builder")
-        .get("https://google.com")
-        .send()
-        .await;
-
-    assert_eq!(resp.is_err(), false);
-
-    let builder = reqwest::Client::builder()
-        .allow_method(reqwest::HTTPS_MASK)
-        .allow_method(reqwest::HTTP_MASK)
-        .build()
-        .expect("client builder");
-
-    let resp = builder.get("https://google.com").send().await;
-
-    assert_eq!(resp.is_err(), false);
-
-    let resp = builder.get("http://google.com").send().await;
-
-    assert_eq!(resp.is_err(), false);
 }
