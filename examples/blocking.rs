@@ -1,4 +1,4 @@
-//! `cargo run --example blocking`
+//! `cargo run --example blocking --features=blocking`
 #![deny(warnings)]
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
