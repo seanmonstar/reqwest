@@ -254,11 +254,8 @@ impl Proxy {
             // Custom *may* match 'http', so assume so.
             | Intercept::Custom(_) => true,
             Intercept::System(ref system) => {
-                if let Some(proxy) = system.get("http") {
-                    match proxy {
-                        ProxyScheme::Http { auth, .. } => auth.is_some(),
-                        _ => false,
-                    }
+                if let Some(ProxyScheme::Http { auth, .. }) = system.get("http") {
+                    auth.is_some()
                 } else {
                     false
                 }
@@ -702,6 +699,7 @@ lazy_static! {
 /// Returns:
 ///     System proxies information as a hashmap like
 ///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}
+#[allow(clippy::collapsible_match)]
 fn get_sys_proxies(
     #[cfg_attr(not(target_os = "windows"), allow(unused_variables))] registry_values: Option<
         RegistryProxyValues,
