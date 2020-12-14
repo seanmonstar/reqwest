@@ -136,7 +136,9 @@ impl ClientBuilder {
                 connection_verbose: false,
                 pool_idle_timeout: Some(Duration::from_secs(90)),
                 pool_max_idle_per_host: std::usize::MAX,
-                tcp_keepalive: Some(Duration::from_secs(60)),
+                // TODO: Re-enable default duration once hyper's HttpConnector is fixed
+                // to no longer error when an option fails.
+                tcp_keepalive: None, //Some(Duration::from_secs(60)),
                 proxies: Vec::new(),
                 auto_sys_proxy: true,
                 redirect_policy: redirect::Policy::default(),
@@ -730,8 +732,6 @@ impl ClientBuilder {
     /// Set that all sockets have `SO_KEEPALIVE` set with the supplied duration.
     ///
     /// If `None`, the option will not be set.
-    ///
-    /// Default is 60 seconds.
     pub fn tcp_keepalive<D>(mut self, val: D) -> ClientBuilder
         where
             D: Into<Option<Duration>>,

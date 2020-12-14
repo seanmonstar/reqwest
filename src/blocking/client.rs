@@ -412,8 +412,6 @@ impl ClientBuilder {
     /// Set that all sockets have `SO_KEEPALIVE` set with the supplied duration.
     ///
     /// If `None`, the option will not be set.
-    ///
-    /// Default is 60 seconds.
     pub fn tcp_keepalive<D>(self, val: D) -> ClientBuilder
         where
             D: Into<Option<Duration>>,
