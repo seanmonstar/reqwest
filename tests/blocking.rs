@@ -310,3 +310,19 @@ fn test_allowed_methods_blocking() {
 
     assert_eq!(resp.is_err(), true);
 }
+
+/// Test that a [`reqwest::blocking::Body`] can be created from [`bytes::Bytes`].
+#[test]
+fn test_body_from_bytes() {
+    let body = "abc";
+    // No external calls are needed. Only the request building is tested.
+    let request = reqwest::blocking::Client::builder()
+        .build()
+        .expect("Could not build the client")
+        .put("https://google.com")
+        .body(bytes::Bytes::from(body))
+        .build()
+        .expect("Invalid body");
+
+    assert_eq!(request.body().unwrap().as_bytes(), Some(body.as_bytes()));
+}
