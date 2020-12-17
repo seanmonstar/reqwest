@@ -203,6 +203,14 @@ impl From<File> for Body {
         }
     }
 }
+impl From<Bytes> for Body {
+    #[inline]
+    fn from(b: Bytes) -> Body {
+        Body {
+            kind: Kind::Bytes(b),
+        }
+    }
+}
 
 impl fmt::Debug for Kind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
