@@ -71,7 +71,7 @@ __internal_proxy_sys_no_cache = []
 [dependencies]
 http = "0.2"
 url = "2.2"
-bytes = "0.6"
+bytes = "1.0"
 serde = "1.0"
 serde_urlencoded = "0.7"
 mime_guess = "2.0"
@@ -83,27 +83,27 @@ base64 = "0.13"
 encoding_rs = "0.8"
 futures-core = { version = "0.3.0", default-features = false }
 futures-util = { version = "0.3.0", default-features = false }
-http-body = { git = "https://github.com/hyperium/http-body" }
-hyper = { git = "https://github.com/hyperium/hyper.git", default-features = false, features = ["tcp", "http1", "http2", "client"] }
+http-body = "0.4.0"
+hyper = { version = "0.14", default-features = false, features = ["tcp", "http1", "http2", "client"] }
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3.7"
 percent-encoding = "2.1"
-tokio = { version = "0.3.3", default-features = false, features = ["net", "time"] }
+tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
 pin-project-lite = "0.2.0"
 ipnet = "2.3"
 
 # Optional deps...
 
 ## default-tls
-hyper-tls = { git = "https://github.com/messense/hyper-tls.git", branch = "bump-tokio", optional = true }
+hyper-tls = { git = "https://github.com/teozkr/hyper-tls.git", branch = "chore/tokio-1.0", optional = true }
 native-tls-crate = { version = "0.2", optional = true, package = "native-tls" }
-tokio-native-tls = { version = "0.2.0", optional = true }
+tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
-hyper-rustls = { git = "https://github.com/ctz/hyper-rustls.git", default-features = false, optional = true }
+hyper-rustls = { version = "0.22.1", default-features = false, optional = true }
 rustls = { version = "0.19", features = ["dangerous_configuration"], optional = true }
-tokio-rustls = { version = "0.21", optional = true }
+tokio-rustls = { version = "0.22", optional = true }
 webpki-roots = { version = "0.21", optional = true }
 rustls-native-certs = { version = "0.5", optional = true }
 
@@ -113,23 +113,23 @@ cookie_store = { version = "0.12", optional = true }
 time = { version = "0.2.11", optional = true }
 
 ## compression
-async-compression = { version = "0.3.6", default-features = false, features = ["tokio-03"], optional = true }
-tokio-util = { version = "0.5.0", default-features = false, features = ["codec", "io"], optional = true }
+async-compression = { version = "0.3.7", default-features = false, features = ["tokio"], optional = true }
+tokio-util = { version = "0.6.0", default-features = false, features = ["codec", "io"], optional = true }
 
 ## socks
-tokio-socks = { version = "0.4", optional = true }
+tokio-socks = { version = "0.5", optional = true }
 
 ## trust-dns
 trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", branch = "main", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.8"
-hyper = { git = "https://github.com/hyperium/hyper.git", default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server"] }
+hyper = { version = "0.14", default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server"] }
 serde = { version = "1.0", features = ["derive"] }
 libflate = "1.0"
 brotli_crate = { package = "brotli", version = "3.3.0" }
 doc-comment = "0.3"
-tokio = { version = "0.3", default-features = false, features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.7"

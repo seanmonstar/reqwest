@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fmt;
 use std::net::SocketAddr;
+use std::pin::Pin;
 
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
@@ -37,7 +38,7 @@ impl Response {
         res: hyper::Response<hyper::Body>,
         url: Url,
         accepts: Accepts,
-        timeout: Option<Sleep>,
+        timeout: Option<Pin<Box<Sleep>>>,
     ) -> Response {
         let (parts, body) = res.into_parts();
         let status = parts.status;

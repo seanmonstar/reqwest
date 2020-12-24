@@ -1089,7 +1089,8 @@ impl Client {
 
         let timeout = timeout
             .or(self.inner.request_timeout)
-            .map(tokio::time::sleep);
+            .map(tokio::time::sleep)
+            .map(Box::pin);
 
         *req.headers_mut() = headers.clone();
 
@@ -1303,7 +1304,7 @@ pin_project! {
         #[pin]
         in_flight: ResponseFuture,
         #[pin]
-        timeout: Option<Sleep>,
+        timeout: Option<Pin<Box<Sleep>>>,
     }
 }
 
@@ -1312,7 +1313,7 @@ impl PendingRequest {
         self.project().in_flight
     }
 
-    fn timeout(self: Pin<&mut Self>) -> Pin<&mut Option<Sleep>> {
+    fn timeout(self: Pin<&mut Self>) -> Pin<&mut Option<Pin<Box<Sleep>>>> {
         self.project().timeout
     }
 

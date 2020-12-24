@@ -4,10 +4,10 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 #[cfg(feature = "gzip")]
-use async_compression::tokio_03::bufread::GzipDecoder;
+use async_compression::tokio::bufread::GzipDecoder;
 
 #[cfg(feature = "brotli")]
-use async_compression::tokio_03::bufread::BrotliDecoder;
+use async_compression::tokio::bufread::BrotliDecoder;
 
 use bytes::Bytes;
 use futures_core::Stream;

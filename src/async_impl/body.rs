@@ -27,7 +27,7 @@ enum Inner {
                     + Sync,
             >,
         >,
-        timeout: Option<Sleep>,
+        timeout: Option<Pin<Box<Sleep>>>,
     },
 }
 
@@ -103,7 +103,7 @@ impl Body {
         }
     }
 
-    pub(crate) fn response(body: hyper::Body, timeout: Option<Sleep>) -> Body {
+    pub(crate) fn response(body: hyper::Body, timeout: Option<Pin<Box<Sleep>>>) -> Body {
         Body {
             inner: Inner::Streaming {
                 body: Box::pin(WrapHyper(body)),
@@ -217,7 +217,7 @@ impl HttpBody for ImplStream {
                 ref mut timeout,
             } => {
                 if let Some(ref mut timeout) = timeout {
-                    if let Poll::Ready(()) = Pin::new(timeout).poll(cx) {
+                    if let Poll::Ready(()) = timeout.as_mut().poll(cx) {
                         return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
                     }
                 }

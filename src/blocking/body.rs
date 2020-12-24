@@ -290,14 +290,14 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
             if buf.remaining_mut() == 0 {
                 buf.reserve(8192);
                 // zero out the reserved memory
-                let uninit = buf.bytes_mut();
+                let uninit = buf.chunk_mut();
                 unsafe {
                     ptr::write_bytes(uninit.as_mut_ptr(), 0, uninit.len());
                 }
             }
 
             let bytes = unsafe {
-                mem::transmute::<&mut UninitSlice, &mut [u8]>(buf.bytes_mut())
+                mem::transmute::<&mut UninitSlice, &mut [u8]>(buf.chunk_mut())
             };
             match body.read(bytes) {
                 Ok(0) => {
