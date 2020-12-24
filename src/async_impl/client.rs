@@ -579,12 +579,6 @@ impl ClientBuilder {
         self
     }
 
-    #[doc(hidden)]
-    #[deprecated(note = "the system proxy is used automatically")]
-    pub fn use_sys_proxy(self) -> ClientBuilder {
-        self
-    }
-
     // Timeout options
 
     /// Enables a request timeout.
@@ -643,12 +637,6 @@ impl ClientBuilder {
         self
     }
 
-    #[doc(hidden)]
-    #[deprecated(note = "renamed to `pool_max_idle_per_host`")]
-    pub fn max_idle_per_host(self, max: usize) -> ClientBuilder {
-        self.pool_max_idle_per_host(max)
-    }
-
     /// Enable case sensitive headers.
     pub fn http1_title_case_headers(mut self) -> ClientBuilder {
         self.config.http1_title_case_headers = true;
@@ -690,22 +678,10 @@ impl ClientBuilder {
 
     // TCP options
 
-    #[doc(hidden)]
-    #[deprecated(note = "tcp_nodelay is enabled by default, use `tcp_nodelay_` to disable")]
-    pub fn tcp_nodelay(self) -> ClientBuilder {
-        self.tcp_nodelay_(true)
-    }
-
     /// Set whether sockets have `SO_NODELAY` enabled.
     ///
     /// Default is `true`.
-    // NOTE: Regarding naming (trailing underscore):
-    //
-    // Due to the original `tcp_nodelay()` not taking an argument, changing
-    // the default means a user has no way of *disabling* this feature.
-    //
-    // TODO(v0.11.x): Remove trailing underscore.
-    pub fn tcp_nodelay_(mut self, enabled: bool) -> ClientBuilder {
+    pub fn tcp_nodelay(mut self, enabled: bool) -> ClientBuilder {
         self.config.nodelay = enabled;
         self
     }
