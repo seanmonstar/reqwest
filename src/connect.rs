@@ -11,6 +11,7 @@ use futures_util::future::Either;
 
 use std::future::Future;
 use std::io;
+use std::io::IoSlice;
 use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -584,6 +585,19 @@ impl AsyncWrite for Conn {
         AsyncWrite::poll_write(this.inner, cx, buf)
     }
 
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>]
+    ) -> Poll<Result<usize, io::Error>> {
+        let this = self.project();
+        AsyncWrite::poll_write_vectored(this.inner, cx, bufs)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.inner.is_write_vectored()
+    }
+
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
         let this = self.project();
         AsyncWrite::poll_flush(this.inner, cx)
@@ -684,7 +698,7 @@ fn tunnel_eof() -> BoxError {
 
 #[cfg(feature = "default-tls")]
 mod native_tls_conn {
-    use std::{pin::Pin, task::{Context, Poll}};
+    use std::{pin::Pin, task::{Context, Poll}, io::{self, IoSlice}};
     use hyper::client::connect::{Connected, Connection};
     use pin_project_lite::pin_project;
     use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -724,6 +738,19 @@ mod native_tls_conn {
             AsyncWrite::poll_write(this.inner, cx, buf)
         }
 
+        fn poll_write_vectored(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            bufs: &[IoSlice<'_>]
+        ) -> Poll<Result<usize, io::Error>> {
+            let this = self.project();
+            AsyncWrite::poll_write_vectored(this.inner, cx, bufs)
+        }
+
+        fn is_write_vectored(&self) -> bool {
+            self.inner.is_write_vectored()
+        }
+
         fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), tokio::io::Error>> {
             let this = self.project();
             AsyncWrite::poll_flush(this.inner, cx)
@@ -742,7 +769,7 @@ mod native_tls_conn {
 #[cfg(feature = "__rustls")]
 mod rustls_tls_conn {
     use rustls::Session;
-    use std::{pin::Pin, task::{Context, Poll}};
+    use std::{pin::Pin, task::{Context, Poll}, io::{self, IoSlice}};
     use hyper::client::connect::{Connected, Connection};
     use pin_project_lite::pin_project;
     use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -784,6 +811,19 @@ mod rustls_tls_conn {
         ) -> Poll<Result<usize, tokio::io::Error>> {
             let this = self.project();
             AsyncWrite::poll_write(this.inner, cx, buf)
+        }
+
+        fn poll_write_vectored(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            bufs: &[IoSlice<'_>]
+        ) -> Poll<Result<usize, io::Error>> {
+            let this = self.project();
+            AsyncWrite::poll_write_vectored(this.inner, cx, bufs)
+        }
+
+        fn is_write_vectored(&self) -> bool {
+            self.inner.is_write_vectored()
         }
 
         fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), tokio::io::Error>> {
@@ -868,6 +908,7 @@ mod socks {
 
 mod verbose {
     use std::fmt;
+    use std::io::{self, IoSlice};
     use std::pin::Pin;
     use std::task::{Context, Poll};
     use hyper::client::connect::{Connected, Connection};
@@ -938,6 +979,18 @@ mod verbose {
                 },
                 Poll::Pending => Poll::Pending,
             }
+        }
+
+        fn poll_write_vectored(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            bufs: &[IoSlice<'_>]
+        ) -> Poll<Result<usize, io::Error>> {
+            Pin::new(&mut self.inner).poll_write_vectored(cx, bufs)
+        }
+
+        fn is_write_vectored(&self) -> bool {
+            self.inner.is_write_vectored()
         }
 
         fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), std::io::Error>> {
