@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fmt;
 use std::net::SocketAddr;
+use std::pin::Pin;
 
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
@@ -12,7 +13,7 @@ use mime::Mime;
 use serde::de::DeserializeOwned;
 #[cfg(feature = "json")]
 use serde_json;
-use tokio::time::Delay;
+use tokio::time::Sleep;
 use url::Url;
 
 use super::body::Body;
@@ -37,7 +38,7 @@ impl Response {
         res: hyper::Response<hyper::Body>,
         url: Url,
         accepts: Accepts,
-        timeout: Option<Delay>,
+        timeout: Option<Pin<Box<Sleep>>>,
     ) -> Response {
         let (parts, body) = res.into_parts();
         let status = parts.status;

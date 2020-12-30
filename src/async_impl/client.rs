@@ -26,7 +26,7 @@ use rustls::RootCertStore;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio::time::Delay;
+use tokio::time::Sleep;
 use pin_project_lite::pin_project;
 
 use log::debug;
@@ -96,7 +96,6 @@ struct Config {
     #[cfg(feature = "__tls")]
     tls: TlsBackend,
     http2_only: bool,
-    http1_writev: Option<bool>,
     http1_title_case_headers: bool,
     http2_initial_stream_window_size: Option<u32>,
     http2_initial_connection_window_size: Option<u32>,
@@ -151,7 +150,6 @@ impl ClientBuilder {
                 #[cfg(feature = "__tls")]
                 tls: TlsBackend::default(),
                 http2_only: false,
-                http1_writev: None,
                 http1_title_case_headers: false,
                 http2_initial_stream_window_size: None,
                 http2_initial_connection_window_size: None,
@@ -314,10 +312,6 @@ impl ClientBuilder {
         let mut builder = hyper::Client::builder();
         if config.http2_only {
             builder.http2_only(true);
-        }
-
-        if let Some(http1_writev) = config.http1_writev {
-            builder.http1_writev(http1_writev);
         }
 
         if let Some(http2_initial_stream_window_size) = config.http2_initial_stream_window_size {
@@ -652,14 +646,6 @@ impl ClientBuilder {
     /// Enable case sensitive headers.
     pub fn http1_title_case_headers(mut self) -> ClientBuilder {
         self.config.http1_title_case_headers = true;
-        self
-    }
-
-    /// Force hyper to use either queued(if true), or flattened(if false) write strategy
-    /// This may eliminate unnecessary cloning of buffers for some TLS backends
-    /// By default hyper will try to guess which strategy to use
-    pub fn http1_writev(mut self, writev: bool) -> ClientBuilder {
-        self.config.http1_writev = Some(writev);
         self
     }
 
@@ -1103,7 +1089,8 @@ impl Client {
 
         let timeout = timeout
             .or(self.inner.request_timeout)
-            .map(tokio::time::delay_for);
+            .map(tokio::time::sleep)
+            .map(Box::pin);
 
         *req.headers_mut() = headers.clone();
 
@@ -1317,7 +1304,7 @@ pin_project! {
         #[pin]
         in_flight: ResponseFuture,
         #[pin]
-        timeout: Option<Delay>,
+        timeout: Option<Pin<Box<Sleep>>>,
     }
 }
 
@@ -1326,7 +1313,7 @@ impl PendingRequest {
         self.project().in_flight
     }
 
-    fn timeout(self: Pin<&mut Self>) -> Pin<&mut Option<Delay>> {
+    fn timeout(self: Pin<&mut Self>) -> Pin<&mut Option<Pin<Box<Sleep>>>> {
         self.project().timeout
     }
 

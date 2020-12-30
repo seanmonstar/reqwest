@@ -67,10 +67,9 @@ fn enter() {
     // Check we aren't already in a runtime
     #[cfg(debug_assertions)]
     {
-        tokio::runtime::Builder::new()
-            .core_threads(1)
+        tokio::runtime::Builder::new_current_thread()
             .build()
             .expect("build shell runtime")
-            .enter(|| {});
+            .enter();
     }
 }

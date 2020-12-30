@@ -28,7 +28,7 @@ default = ["default-tls"]
 
 # Note: this doesn't enable the 'native-tls' feature, which adds specific
 # functionality for it.
-default-tls = ["hyper-tls", "native-tls-crate", "__tls", "tokio-tls"]
+default-tls = ["hyper-tls", "native-tls-crate", "__tls", "tokio-native-tls"]
 
 # Enables native-tls specific functionality not available by default.
 native-tls = ["default-tls"]
@@ -39,13 +39,13 @@ rustls-tls-manual-roots = ["__rustls"]
 rustls-tls-webpki-roots = ["webpki-roots", "__rustls"]
 rustls-tls-native-roots = ["rustls-native-certs", "__rustls"]
 
-blocking = ["futures-util/io", "tokio/rt-threaded", "tokio/rt-core", "tokio/sync"]
+blocking = ["futures-util/io", "tokio/rt-multi-thread", "tokio/sync"]
 
 cookies = ["cookie_crate", "cookie_store", "time"]
 
-gzip = ["async-compression", "async-compression/gzip"]
+gzip = ["async-compression", "async-compression/gzip", "tokio-util"]
 
-brotli = ["async-compression", "async-compression/brotli"]
+brotli = ["async-compression", "async-compression/brotli", "tokio-util"]
 
 json = ["serde_json"]
 
@@ -71,7 +71,7 @@ __internal_proxy_sys_no_cache = []
 [dependencies]
 http = "0.2"
 url = "2.2"
-bytes = "0.5"
+bytes = "1.0"
 serde = "1.0"
 serde_urlencoded = "0.7"
 mime_guess = "2.0"
@@ -83,29 +83,29 @@ base64 = "0.13"
 encoding_rs = "0.8"
 futures-core = { version = "0.3.0", default-features = false }
 futures-util = { version = "0.3.0", default-features = false }
-http-body = "0.3.0"
-hyper = { version = "0.13.4", default-features = false, features = ["tcp"] }
+http-body = "0.4.0"
+hyper = { version = "0.14", default-features = false, features = ["tcp", "http1", "http2", "client"] }
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3.7"
 percent-encoding = "2.1"
-tokio = { version = "0.2.5", default-features = false, features = ["tcp", "time"] }
+tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
 pin-project-lite = "0.2.0"
 ipnet = "2.3"
 
 # Optional deps...
 
 ## default-tls
-hyper-tls = { version = "0.4", optional = true }
+hyper-tls = { version = "0.5", optional = true }
 native-tls-crate = { version = "0.2", optional = true, package = "native-tls" }
-tokio-tls = { version = "0.3.0", optional = true }
+tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
-hyper-rustls = { version = "0.21", default-features = false, optional = true }
-rustls = { version = "0.18", features = ["dangerous_configuration"], optional = true }
-tokio-rustls = { version = "0.14", optional = true }
-webpki-roots = { version = "0.20", optional = true }
-rustls-native-certs = { version = "0.4", optional = true }
+hyper-rustls = { version = "0.22.1", default-features = false, optional = true }
+rustls = { version = "0.19", features = ["dangerous_configuration"], optional = true }
+tokio-rustls = { version = "0.22", optional = true }
+webpki-roots = { version = "0.21", optional = true }
+rustls-native-certs = { version = "0.5", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.14", package = "cookie", optional = true }
@@ -113,23 +113,23 @@ cookie_store = { version = "0.12", optional = true }
 time = { version = "0.2.11", optional = true }
 
 ## compression
-async-compression = { version = "0.3.0", default-features = false, features = ["stream"], optional = true }
-
+async-compression = { version = "0.3.7", default-features = false, features = ["tokio"], optional = true }
+tokio-util = { version = "0.6.0", default-features = false, features = ["codec", "io"], optional = true }
 
 ## socks
-tokio-socks = { version = "0.3", optional = true }
+tokio-socks = { version = "0.5", optional = true }
 
 ## trust-dns
-trust-dns-resolver = { version = "0.19", optional = true }
+trust-dns-resolver = { version = "0.20", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-env_logger = "0.7"
-hyper = { version = "0.13", default-features = false, features = ["tcp", "stream"] }
+env_logger = "0.8"
+hyper = { version = "0.14", default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server"] }
 serde = { version = "1.0", features = ["derive"] }
 libflate = "1.0"
 brotli_crate = { package = "brotli", version = "3.3.0" }
 doc-comment = "0.3"
-tokio = { version = "0.2.0", default-features = false, features = ["macros"] }
+tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.7"
