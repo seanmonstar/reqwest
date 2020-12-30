@@ -96,7 +96,7 @@ ipnet = "2.3"
 # Optional deps...
 
 ## default-tls
-hyper-tls = { git = "https://github.com/teozkr/hyper-tls.git", branch = "chore/tokio-1.0", optional = true }
+hyper-tls = { version = "0.5", optional = true }
 native-tls-crate = { version = "0.2", optional = true, package = "native-tls" }
 tokio-native-tls = { version = "0.3.0", optional = true }
 
@@ -120,7 +120,7 @@ tokio-util = { version = "0.6.0", default-features = false, features = ["codec",
 tokio-socks = { version = "0.5", optional = true }
 
 ## trust-dns
-trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", branch = "main", optional = true }
+trust-dns-resolver = { version = "0.20", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.8"
