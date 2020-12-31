@@ -11,9 +11,12 @@ use serde_json;
 
 use super::body::Body;
 use super::client::{Client, Pending};
+#[cfg(feature = "multipart")]
 use super::multipart;
 use super::response::Response;
-use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
+use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
+#[cfg(feature = "multipart")]
+use crate::header::CONTENT_LENGTH;
 use crate::{Method, Url};
 use http::{Request as HttpRequest, request::Parts};
 
@@ -260,6 +263,7 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    #[cfg(feature = "multipart")]
     pub fn multipart(self, mut multipart: multipart::Form) -> RequestBuilder {
         let mut builder = self.header(
             CONTENT_TYPE,

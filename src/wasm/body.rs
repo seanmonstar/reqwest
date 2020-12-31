@@ -1,3 +1,4 @@
+#[cfg(feature = "multipart")]
 use super::multipart::Form;
 /// dox
 use bytes::Bytes;
@@ -18,6 +19,7 @@ pub struct Body {
 
 enum Inner {
     Bytes(Bytes),
+    #[cfg(feature = "multipart")]
     Multipart(Form),
 }
 
@@ -30,6 +32,7 @@ impl Body {
                 let js_value: &JsValue = body_array.as_ref();
                 Ok(js_value.to_owned())
             }
+            #[cfg(feature = "multipart")]
             Inner::Multipart(form) => {
                 let form_data = form.to_form_data()?;
                 let js_value: &JsValue = form_data.as_ref();
@@ -39,6 +42,7 @@ impl Body {
     }
 
     #[inline]
+    #[cfg(feature = "multipart")]
     pub(crate) fn from_form(f: Form) -> Body {
         Self {
             inner: Inner::Multipart(f),
@@ -48,6 +52,7 @@ impl Body {
     pub(crate) fn is_empty(&self) -> bool {
         match &self.inner {
             Inner::Bytes(bytes) => bytes.is_empty(),
+            #[cfg(feature = "multipart")]
             Inner::Multipart(form) => form.is_empty(),
         }
     }

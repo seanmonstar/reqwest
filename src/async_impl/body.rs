@@ -152,6 +152,7 @@ impl Body {
         ImplStream(self)
     }
 
+    #[cfg(feature = "multipart")]
     pub(crate) fn content_length(&self) -> Option<u64> {
         match self.inner {
             Inner::Reusable(ref bytes) => Some(bytes.len() as u64),
