@@ -987,16 +987,18 @@ impl Client {
         let req = url.into_url().map(move |url| {
             #[allow(unused_mut)]
             let mut req = Request::new(method, url);
-        
-            #[allow(unused_variables)]
-            let url = req.url().clone();
 
             #[cfg(feature = "cookies")]
             {
-                let headers = req.headers_mut();
-                if let Some(cookie_store_wrapper) = self.inner.cookie_store.as_ref() {
-                    let cookie_store = cookie_store_wrapper.read().unwrap();
-                    add_cookie_header(headers, &cookie_store, &url);
+                #[allow(unused_variables)]
+                let url = req.url().clone();
+
+                {
+                    let headers = req.headers_mut();
+                    if let Some(cookie_store_wrapper) = self.inner.cookie_store.as_ref() {
+                        let cookie_store = cookie_store_wrapper.read().unwrap();
+                        add_cookie_header(headers, &cookie_store, &url);
+                    }
                 }
             }
 
