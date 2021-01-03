@@ -990,7 +990,6 @@ impl Client {
 
             #[cfg(feature = "cookies")]
             {
-                #[allow(unused_variables)]
                 let url = req.url().clone();
 
                 {
