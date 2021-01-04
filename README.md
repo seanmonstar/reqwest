@@ -23,8 +23,8 @@ optional features, so your `Cargo.toml` could look like this:
 
 ```toml
 [dependencies]
-reqwest = { version = "0.10", features = ["json"] }
-tokio = { version = "0.2", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
 ```
 
 And then the code:
@@ -49,7 +49,7 @@ There is an optional "blocking" client API that can be enabled:
 
 ```toml
 [dependencies]
-reqwest = { version = "0.10", features = ["blocking", "json"] }
+reqwest = { version = "0.11", features = ["blocking", "json"] }
 ```
 
 ```rust,no_run
