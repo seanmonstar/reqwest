@@ -1,7 +1,9 @@
 use std::fmt;
 use std::fs::File;
 use std::future::Future;
-use std::io::{self, Cursor, Read};
+use std::io::{self, Read};
+#[cfg(feature = "multipart")]
+use std::io::Cursor;
 use std::mem;
 use std::ptr;
 
@@ -113,6 +115,7 @@ impl Body {
         }
     }
 
+    #[cfg(feature = "multipart")]
     pub(crate) fn len(&self) -> Option<u64> {
         match self.kind {
             Kind::Reader(_, len) => len,
@@ -120,6 +123,7 @@ impl Body {
         }
     }
 
+    #[cfg(feature = "multipart")]
     pub(crate) fn into_reader(self) -> Reader {
         match self.kind {
             Kind::Reader(r, _) => Reader::Reader(r),
@@ -236,11 +240,13 @@ impl<'a> fmt::Debug for DebugLength<'a> {
     }
 }
 
+#[cfg(feature = "multipart")]
 pub(crate) enum Reader {
     Reader(Box<dyn Read + Send>),
     Bytes(Cursor<Bytes>),
 }
 
+#[cfg(feature = "multipart")]
 impl Read for Reader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match *self {

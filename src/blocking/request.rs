@@ -10,6 +10,7 @@ use serde_json;
 use serde_urlencoded;
 
 use super::body::{self, Body};
+#[cfg(feature = "multipart")]
 use super::multipart;
 use super::Client;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
@@ -508,6 +509,7 @@ impl RequestBuilder {
     /// ```
     ///
     /// See [`multipart`](multipart/) for more examples.
+    #[cfg(feature = "multipart")]
     pub fn multipart(self, mut multipart: multipart::Form) -> RequestBuilder {
         let mut builder = self.header(
             CONTENT_TYPE,
