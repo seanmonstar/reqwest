@@ -27,10 +27,9 @@ where
     futures_util::pin_mut!(fut);
 
     loop {
-        match fut.as_mut().poll(&mut cx) {
-            Poll::Ready(Ok(val)) => return Ok(val),
-            Poll::Ready(Err(err)) => return Err(Waited::Inner(err)),
-            Poll::Pending => (), // fallthrough
+        if let Poll::Ready(val) = fut.as_mut().poll(&mut cx) {
+            thread::current().unpark();
+            return val.map_err(Waited::Inner);
         }
 
         if let Some(deadline) = deadline {

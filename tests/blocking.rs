@@ -1,3 +1,4 @@
+use std::thread;
 mod support;
 use support::*;
 
@@ -327,4 +328,13 @@ fn test_body_from_bytes() {
         .expect("Invalid body");
 
     assert_eq!(request.body().unwrap().as_bytes(), Some(body.as_bytes()));
+}
+
+#[test]
+fn test_not_consuming_parking_tokens() {
+    thread::current().unpark();
+    let server = server::http(move |_req| async { http::Response::default() });
+    let url = format!("http://{}/text", server.addr());
+    let _res = reqwest::blocking::get(&url).unwrap();
+    thread::park();
 }
