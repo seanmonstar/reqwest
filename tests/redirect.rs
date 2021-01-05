@@ -1,7 +1,11 @@
 #![cfg(not(target_arch = "wasm32"))]
+use std::sync::Arc;
+
 mod support;
 use futures_util::stream::StreamExt;
 use support::*;
+
+use cookie_store::CookieStoreMutex as CookieStore;
 
 #[tokio::test]
 async fn test_redirect_301_and_302_and_303_changes_post_to_get() {
@@ -292,7 +296,7 @@ async fn test_redirect_302_with_set_cookies() {
     let server = server::http(move |req| async move {
         if req.uri() == "/302" {
             http::Response::builder()
-                .status(302)
+                .status(code)
                 .header("location", "/dst")
                 .header("set-cookie", "key=value")
                 .body(Default::default())
@@ -308,7 +312,7 @@ async fn test_redirect_302_with_set_cookies() {
     let dst = format!("http://{}/{}", server.addr(), "dst");
 
     let client = reqwest::ClientBuilder::new()
-        .cookie_store(true)
+        .cookie_store(Some(Arc::new(CookieStore::default())))
         .build()
         .unwrap();
     let res = client.get(&url).send().await.unwrap();

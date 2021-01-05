@@ -1,5 +1,9 @@
+use std::sync::Arc;
+
 mod support;
 use support::*;
+
+use cookie_store::CookieStoreMutex as CookieStore;
 
 #[tokio::test]
 async fn cookie_response_accessor() {
@@ -84,7 +88,7 @@ async fn cookie_store_simple() {
     });
 
     let client = reqwest::Client::builder()
-        .cookie_store(true)
+        .cookie_store(Some(Arc::new(CookieStore::default())))
         .build()
         .unwrap();
 
@@ -117,7 +121,7 @@ async fn cookie_store_overwrite_existing() {
     });
 
     let client = reqwest::Client::builder()
-        .cookie_store(true)
+        .cookie_store(Some(Arc::new(CookieStore::default())))
         .build()
         .unwrap();
 
@@ -142,7 +146,7 @@ async fn cookie_store_max_age() {
     });
 
     let client = reqwest::Client::builder()
-        .cookie_store(true)
+        .cookie_store(Some(Arc::new(CookieStore::default())))
         .build()
         .unwrap();
     let url = format!("http://{}/", server.addr());
@@ -164,7 +168,7 @@ async fn cookie_store_expires() {
     });
 
     let client = reqwest::Client::builder()
-        .cookie_store(true)
+        .cookie_store(Some(Arc::new(CookieStore::default())))
         .build()
         .unwrap();
 
@@ -190,7 +194,7 @@ async fn cookie_store_path() {
     });
 
     let client = reqwest::Client::builder()
-        .cookie_store(true)
+        .cookie_store(Some(Arc::new(CookieStore::default())))
         .build()
         .unwrap();
 
