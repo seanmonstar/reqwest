@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.10.10" # remember to update html_root_url
+version = "0.11.0" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -21,6 +21,7 @@ features = [
     "blocking",
     "cookies",
     "json",
+    "multipart",
 ]
 
 [features]
@@ -49,6 +50,8 @@ brotli = ["async-compression", "async-compression/brotli", "tokio-util"]
 
 json = ["serde_json"]
 
+multipart = ["mime_guess"]
+
 trust-dns = ["trust-dns-resolver"]
 
 stream = []
@@ -74,9 +77,13 @@ url = "2.2"
 bytes = "1.0"
 serde = "1.0"
 serde_urlencoded = "0.7"
-mime_guess = "2.0"
+
+# Optional deps...
+
 ## json
 serde_json = { version = "1.0", optional = true }
+## multipart
+mime_guess = { version = "2.0", default-features = false, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 base64 = "0.13"
@@ -206,3 +213,8 @@ required-features = ["gzip"]
 name = "brotli"
 path = "tests/brotli.rs"
 required-features = ["brotli"]
+
+[[test]]
+name = "multipart"
+path = "tests/multipart.rs"
+required-features = ["multipart"]

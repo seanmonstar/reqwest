@@ -5,6 +5,7 @@ mod client;
 mod request;
 mod response;
 /// TODO
+#[cfg(feature = "multipart")]
 pub mod multipart;
 
 pub use self::body::Body;

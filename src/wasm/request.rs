@@ -191,6 +191,7 @@ impl RequestBuilder {
     }
 
     /// TODO
+    #[cfg(feature = "multipart")]
     pub fn multipart(mut self, multipart: super::multipart::Form) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             *req.body_mut() = Some(Body::from_form(multipart))

@@ -1,3 +1,12 @@
+# v0.11.0
+
+- Change `multipart` to be an optional cargo feature.
+- Remove deprecated methods.
+
+- Update to Tokio v1.0.
+- Update to Bytes v1.0.
+- Update to hyper v0.14.
+
 ## v0.10.10
 
 - Add `tcp_keepalive` option to `blocking::ClientBuilder`.

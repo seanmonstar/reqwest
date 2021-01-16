@@ -1,7 +1,7 @@
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
 #![cfg_attr(test, deny(warnings))]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.10.10")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.11.0")]
 
 //! # reqwest
 //!
@@ -182,6 +182,7 @@
 //! - **gzip**: Provides response body gzip decompression.
 //! - **brotli**: Provides response body brotli decompression.
 //! - **json**: Provides serialization and deserialization for JSON bodies.
+//! - **multipart**: Provides functionality for multipart forms.
 //! - **stream**: Adds support for `futures::Stream`.
 //! - **socks**: Provides SOCKS5 proxy support.
 //! - **trust-dns**: Enables a trust-dns async resolver instead of default
@@ -290,11 +291,13 @@ if_hyper! {
     doctest!("../README.md");
 
     pub use self::async_impl::{
-        multipart, Body, Client, ClientBuilder, Request, RequestBuilder, Response, ResponseBuilderExt,
+        Body, Client, ClientBuilder, Request, RequestBuilder, Response, ResponseBuilderExt,
     };
     pub use self::proxy::Proxy;
     #[cfg(feature = "__tls")]
     pub use self::tls::{Certificate, Identity};
+    #[cfg(feature = "multipart")]
+    pub use self::async_impl::multipart;
 
 
     mod async_impl;
@@ -316,5 +319,7 @@ if_wasm! {
     mod wasm;
     mod util;
 
-    pub use self::wasm::{multipart, Body, Client, ClientBuilder, Request, RequestBuilder, Response};
+    pub use self::wasm::{Body, Client, ClientBuilder, Request, RequestBuilder, Response};
+    #[cfg(feature = "multipart")]
+    pub use self::wasm::multipart;
 }

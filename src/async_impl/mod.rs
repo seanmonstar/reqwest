@@ -9,6 +9,7 @@ pub(crate) use self::decoder::Decoder;
 pub mod body;
 pub mod client;
 pub mod decoder;
+#[cfg(feature = "multipart")]
 pub mod multipart;
 pub(crate) mod request;
 mod response;
