@@ -433,6 +433,22 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.add_root_certificate(cert))
     }
 
+    /// Controls the use of built-in system certificates during certificate validation.
+    ///         
+    /// Defaults to `true` -- built-in system certs will be used.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
+    pub fn use_built_in_root_certificates(
+        self,
+        use_built_in_root_certificates: bool,
+    ) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_built_in_root_certificates(use_built_in_root_certificates))
+    }
+
     /// Sets the identity to be used for client certificate authentication.
     #[cfg(feature = "__tls")]
     pub fn identity(self, identity: Identity) -> ClientBuilder {

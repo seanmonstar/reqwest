@@ -59,6 +59,21 @@ async fn test_badssl_self_signed() {
     assert!(text.contains("<title>self-signed.badssl.com</title>"));
 }
 
+#[cfg(feature = "__tls")]
+#[tokio::test]
+async fn test_badssl_no_built_in_roots() {
+    let result = reqwest::Client::builder()
+        .use_built_in_root_certificates(false)
+        .no_proxy()
+        .build()
+        .unwrap()
+        .get("https://mozilla-modern.badssl.com/")
+        .send()
+        .await;
+
+    assert!(result.is_err());
+}
+
 #[cfg(feature = "native-tls")]
 #[tokio::test]
 async fn test_badssl_wrong_host() {

@@ -94,6 +94,8 @@ struct Config {
     #[cfg(feature = "__tls")]
     root_certs: Vec<Certificate>,
     #[cfg(feature = "__tls")]
+    use_built_in_root_certificates: bool,
+    #[cfg(feature = "__tls")]
     tls: TlsBackend,
     http2_only: bool,
     http1_title_case_headers: bool,
@@ -145,6 +147,8 @@ impl ClientBuilder {
                 timeout: None,
                 #[cfg(feature = "__tls")]
                 root_certs: Vec::new(),
+                #[cfg(feature = "__tls")]
+                use_built_in_root_certificates: true,
                 #[cfg(feature = "__tls")]
                 identity: None,
                 #[cfg(feature = "__tls")]
@@ -209,6 +213,8 @@ impl ClientBuilder {
 
                     tls.danger_accept_invalid_certs(!config.certs_verification);
 
+                    tls.disable_built_in_roots(!config.use_built_in_root_certificates);
+
                     for cert in config.root_certs {
                         cert.add_to_native_tls(&mut tls);
                     }
@@ -261,10 +267,12 @@ impl ClientBuilder {
                         tls.set_protocols(&["h2".into(), "http/1.1".into()]);
                     }
                     #[cfg(feature = "rustls-tls-webpki-roots")]
+                    if config.use_built_in_root_certificates {
                     tls.root_store
                         .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+                    }
                     #[cfg(feature = "rustls-tls-native-roots")]
-                    {
+                    if config.use_built_in_root_certificates {
                         let roots_slice = NATIVE_ROOTS.as_ref().unwrap().roots.as_slice();
                         tls.root_store.roots.extend_from_slice(roots_slice);
                     }
@@ -716,6 +724,23 @@ impl ClientBuilder {
     #[cfg(feature = "__tls")]
     pub fn add_root_certificate(mut self, cert: Certificate) -> ClientBuilder {
         self.config.root_certs.push(cert);
+        self
+    }
+
+    /// Controls the use of built-in system certificates during certificate validation.
+    ///
+    /// Defaults to `true` -- built-in system certs will be used.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
+    pub fn use_built_in_root_certificates(
+        mut self,
+        use_built_in_root_certificates: bool,
+    ) -> ClientBuilder {
+        self.config.use_built_in_root_certificates = use_built_in_root_certificates;
         self
     }
 
