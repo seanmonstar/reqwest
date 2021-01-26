@@ -63,7 +63,7 @@ async fn test_badssl_self_signed() {
 #[tokio::test]
 async fn test_badssl_no_built_in_roots() {
     let result = reqwest::Client::builder()
-        .use_built_in_root_certificates(false)
+        .tls_built_in_root_certs(false)
         .no_proxy()
         .build()
         .unwrap()

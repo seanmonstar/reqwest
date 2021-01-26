@@ -94,7 +94,7 @@ struct Config {
     #[cfg(feature = "__tls")]
     root_certs: Vec<Certificate>,
     #[cfg(feature = "__tls")]
-    use_built_in_root_certificates: bool,
+    tls_built_in_root_certs: bool,
     #[cfg(feature = "__tls")]
     tls: TlsBackend,
     http2_only: bool,
@@ -148,7 +148,7 @@ impl ClientBuilder {
                 #[cfg(feature = "__tls")]
                 root_certs: Vec::new(),
                 #[cfg(feature = "__tls")]
-                use_built_in_root_certificates: true,
+                tls_built_in_root_certs: true,
                 #[cfg(feature = "__tls")]
                 identity: None,
                 #[cfg(feature = "__tls")]
@@ -213,7 +213,7 @@ impl ClientBuilder {
 
                     tls.danger_accept_invalid_certs(!config.certs_verification);
 
-                    tls.disable_built_in_roots(!config.use_built_in_root_certificates);
+                    tls.disable_built_in_roots(!config.tls_built_in_root_certs);
 
                     for cert in config.root_certs {
                         cert.add_to_native_tls(&mut tls);
@@ -267,12 +267,12 @@ impl ClientBuilder {
                         tls.set_protocols(&["h2".into(), "http/1.1".into()]);
                     }
                     #[cfg(feature = "rustls-tls-webpki-roots")]
-                    if config.use_built_in_root_certificates {
+                    if config.tls_built_in_root_certs {
                     tls.root_store
                         .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
                     }
                     #[cfg(feature = "rustls-tls-native-roots")]
-                    if config.use_built_in_root_certificates {
+                    if config.tls_built_in_root_certs {
                         let roots_slice = NATIVE_ROOTS.as_ref().unwrap().roots.as_slice();
                         tls.root_store.roots.extend_from_slice(roots_slice);
                     }
@@ -736,11 +736,11 @@ impl ClientBuilder {
     /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
     /// feature to be enabled.
     #[cfg(feature = "__tls")]
-    pub fn use_built_in_root_certificates(
+    pub fn tls_built_in_root_certs(
         mut self,
-        use_built_in_root_certificates: bool,
+        tls_built_in_root_certs: bool,
     ) -> ClientBuilder {
-        self.config.use_built_in_root_certificates = use_built_in_root_certificates;
+        self.config.tls_built_in_root_certs = tls_built_in_root_certs;
         self
     }
 

@@ -442,11 +442,11 @@ impl ClientBuilder {
     /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
     /// feature to be enabled.
     #[cfg(feature = "__tls")]
-    pub fn use_built_in_root_certificates(
+    pub fn tls_built_in_root_certs(
         self,
-        use_built_in_root_certificates: bool,
+        tls_built_in_root_certs: bool,
     ) -> ClientBuilder {
-        self.with_inner(move |inner| inner.use_built_in_root_certificates(use_built_in_root_certificates))
+        self.with_inner(move |inner| inner.tls_built_in_root_certs(tls_built_in_root_certs))
     }
 
     /// Sets the identity to be used for client certificate authentication.
