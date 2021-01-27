@@ -727,7 +727,7 @@ impl ClientBuilder {
         self
     }
 
-    /// Controls the use of built-in system certificates during certificate validation.
+    /// Controls the use of built-in/preloaded certificates during certificate validation.
     ///
     /// Defaults to `true` -- built-in system certs will be used.
     ///
