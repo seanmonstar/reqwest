@@ -77,6 +77,7 @@ url = "2.2"
 bytes = "1.0"
 serde = "1.0"
 serde_urlencoded = "0.7"
+base64 = "0.13"
 
 # Optional deps...
 
@@ -85,8 +86,8 @@ serde_json = { version = "1.0", optional = true }
 ## multipart
 mime_guess = { version = "2.0", default-features = false, optional = true }
 
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-base64 = "0.13"
 encoding_rs = "0.8"
 futures-core = { version = "0.3.0", default-features = false }
 futures-util = { version = "0.3.0", default-features = false }

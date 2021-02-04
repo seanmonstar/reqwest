@@ -1,12 +1,13 @@
 use std::convert::TryFrom;
 use std::fmt;
 
+use base64::encode;
 use http::{request::Parts, Method, Request as HttpRequest};
-use url::Url;
+use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
-use serde::Serialize;
 use serde_urlencoded;
+use url::Url;
 
 use super::{Body, Client, Response};
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
@@ -172,6 +173,30 @@ impl RequestBuilder {
         self
     }
 
+    /// Enable HTTP basic authentication.
+    ///
+    /// ```rust
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// let client = reqwest::Client::new();
+    /// let resp = client.delete("http://httpbin.org/delete")
+    ///     .basic_auth("admin", Some("good password"))
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn basic_auth<U, P>(self, username: U, password: Option<P>) -> RequestBuilder
+    where
+        U: fmt::Display,
+        P: fmt::Display,
+    {
+        let auth = match password {
+            Some(password) => format!("{}:{}", username, password),
+            None => format!("{}:", username),
+        };
+        let header_value = format!("Basic {}", encode(&auth));
+        self.header(crate::header::AUTHORIZATION, header_value)
+    }
+
     /// Enable HTTP bearer authentication.
     pub fn bearer_auth<T>(self, token: T) -> RequestBuilder
     where
@@ -180,7 +205,6 @@ impl RequestBuilder {
         let header_value = format!("Bearer {}", token);
         self.header(crate::header::AUTHORIZATION, header_value)
     }
-
 
     /// Set the request body.
     pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder {
