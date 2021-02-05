@@ -91,7 +91,7 @@ encoding_rs = "0.8"
 futures-core = { version = "0.3.0", default-features = false }
 futures-util = { version = "0.3.0", default-features = false }
 http-body = "0.4.0"
-hyper = { version = "0.14", default-features = false, features = ["tcp", "http1", "http2", "client"] }
+hyper = { version = "0.14", default-features = false, features = ["tcp", "http1", "http2", "client", "runtime"] }
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3.7"
@@ -131,7 +131,7 @@ trust-dns-resolver = { version = "0.20", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.8"
-hyper = { version = "0.14", default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server"] }
+hyper = { version = "0.14", default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server", "runtime"] }
 serde = { version = "1.0", features = ["derive"] }
 libflate = "1.0"
 brotli_crate = { package = "brotli", version = "3.3.0" }
