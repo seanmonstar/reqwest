@@ -136,7 +136,13 @@ impl ClientBuilder {
     /// use reqwest::header;
     /// # fn build_client() -> Result<(), reqwest::Error> {
     /// let mut headers = header::HeaderMap::new();
+    /// headers.insert("X-MY-HEADER", header::HeaderValue::from_static("value"));
     /// headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("secret"));
+    ///
+    /// // Consider marking security-sensitive headers with `set_sensitive`.
+    /// let mut auth_value = header::HeaderValue::from_static("secret");
+    /// auth_value.set_sensitive(true);
+    /// headers.insert(header::AUTHORIZATION, auth_value);
     ///
     /// // get a client builder
     /// let client = reqwest::blocking::Client::builder()
@@ -153,7 +159,7 @@ impl ClientBuilder {
     /// use reqwest::header;
     /// # fn build_client() -> Result<(), reqwest::Error> {
     /// let mut headers = header::HeaderMap::new();
-    /// headers.insert(header::AUTHORIZATION, header::HeaderValue::from_static("secret"));
+    /// headers.insert("X-MY-HEADER", header::HeaderValue::from_static("value"));
     ///
     /// // get a client builder
     /// let client = reqwest::blocking::Client::builder()
@@ -161,7 +167,7 @@ impl ClientBuilder {
     ///     .build()?;
     /// let res = client
     ///     .get("https://www.rust-lang.org")
-    ///     .header(header::AUTHORIZATION, "token")
+    ///     .header("X-MY-HEADER", "new_value")
     ///     .send()?;
     /// # Ok(())
     /// # }
