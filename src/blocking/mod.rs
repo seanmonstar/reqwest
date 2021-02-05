@@ -3,6 +3,13 @@
 //! The blocking `Client` will block the current thread to execute, instead
 //! of returning futures that need to be executed on a runtime.
 //!
+//! Conversely, the functionality in `reqwest::blocking` must *not* be executed
+//! within an async runtime, or it will panic when attempting to block. If
+//! calling directly from an async function, consider using an async
+//! [`reqwest::Client`][crate::Client] instead. If the immediate context is only
+//! synchronous, but a transitive caller is async, consider changing that caller
+//! to use [`tokio::task::spawn_blocking`] around the calls that need to block.
+//!
 //! # Optional
 //!
 //! This requires the optional `blocking` feature to be enabled.
