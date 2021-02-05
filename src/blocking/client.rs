@@ -92,6 +92,11 @@ impl ClientBuilder {
     ///
     /// This method fails if TLS backend cannot be initialized, or the resolver
     /// cannot load the system configuration.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if called from within an async runtime. See docs on
+    /// [`reqwest::blocking`][crate::blocking] for details.
     pub fn build(self) -> crate::Result<Client> {
         ClientHandle::new(self).map(|handle| Client { inner: handle })
     }
@@ -606,6 +611,9 @@ impl Client {
     ///
     /// Use `Client::builder()` if you wish to handle the failure as an `Error`
     /// instead of panicking.
+    ///
+    /// This method also panics if called from within an async runtime. See docs
+    /// on [`reqwest::blocking`][crate::blocking] for details.
     pub fn new() -> Client {
         ClientBuilder::new().build().expect("Client::new()")
     }
