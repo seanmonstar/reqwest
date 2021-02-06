@@ -20,7 +20,9 @@ use super::response::Response;
 use super::wait;
 use crate::{async_impl, header, IntoUrl, Method, Proxy, redirect};
 #[cfg(feature = "__tls")]
-use crate::{Certificate, Identity};
+use crate::Certificate;
+#[cfg(any(feature = "native-tls", feature = "__rustls"))]
+use crate::Identity;
 
 /// A `Client` to make Requests with.
 ///
@@ -461,7 +463,12 @@ impl ClientBuilder {
     }
 
     /// Sets the identity to be used for client certificate authentication.
-    #[cfg(feature = "__tls")]
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `native-tls` or `rustls-tls(-...)` feature to be
+    /// enabled.
+    #[cfg(any(feature = "native-tls", feature = "__rustls"))]
     pub fn identity(self, identity: Identity) -> ClientBuilder {
         self.with_inner(move |inner| inner.identity(identity))
     }
