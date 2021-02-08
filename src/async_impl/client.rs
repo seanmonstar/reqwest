@@ -44,7 +44,9 @@ use crate::redirect::{self, remove_sensitive_headers};
 #[cfg(feature = "__tls")]
 use crate::tls::TlsBackend;
 #[cfg(feature = "__tls")]
-use crate::{Certificate, Identity};
+use crate::Certificate;
+#[cfg(any(feature = "native-tls", feature = "__rustls"))]
+use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
 
 /// An asynchronous `Client` to make Requests with.
@@ -84,7 +86,7 @@ struct Config {
     pool_idle_timeout: Option<Duration>,
     pool_max_idle_per_host: usize,
     tcp_keepalive: Option<Duration>,
-    #[cfg(feature = "__tls")]
+    #[cfg(any(feature = "native-tls", feature = "__rustls"))]
     identity: Option<Identity>,
     proxies: Vec<Proxy>,
     auto_sys_proxy: bool,
@@ -149,7 +151,7 @@ impl ClientBuilder {
                 root_certs: Vec::new(),
                 #[cfg(feature = "__tls")]
                 tls_built_in_root_certs: true,
-                #[cfg(feature = "__tls")]
+                #[cfg(any(feature = "native-tls", feature = "__rustls"))]
                 identity: None,
                 #[cfg(feature = "__tls")]
                 tls: TlsBackend::default(),
@@ -755,7 +757,7 @@ impl ClientBuilder {
     ///
     /// This requires the optional `native-tls` or `rustls-tls(-...)` feature to be
     /// enabled.
-    #[cfg(feature = "__tls")]
+    #[cfg(any(feature = "native-tls", feature = "__rustls"))]
     pub fn identity(mut self, identity: Identity) -> ClientBuilder {
         self.config.identity = Some(identity);
         self
