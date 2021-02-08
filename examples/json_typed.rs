@@ -32,7 +32,7 @@ async fn main() -> Result<(), reqwest::Error> {
         .json(&new_post)
         .send()
         .await?
-        .json()
+        .decode(|bytes| serde_json::from_slice(bytes))
         .await?;
 
     println!("{:#?}", new_post);
