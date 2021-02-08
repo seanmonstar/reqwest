@@ -370,17 +370,21 @@ impl Connector {
                 let mut http = hyper_rustls::HttpsConnector::from((http, tls.clone()));
                 let io = http.call(dst).await?;
 
-                if let hyper_rustls::MaybeHttpsStream::Https(stream) = &io {
+                if let hyper_rustls::MaybeHttpsStream::Https(stream) = io {
                     if !self.nodelay {
                         let (io, _) = stream.get_ref();
                         io.set_nodelay(false)?;
                     }
+                    Ok(Conn {
+                        inner: self.verbose.wrap(RustlsTlsConn { inner: stream }),
+                        is_proxy,
+                    })
+                } else {
+                    Ok(Conn {
+                        inner: self.verbose.wrap(io),
+                        is_proxy,
+                    })
                 }
-
-                Ok(Conn {
-                    inner: self.verbose.wrap(io),
-                    is_proxy,
-                })
             }
         }
     }
