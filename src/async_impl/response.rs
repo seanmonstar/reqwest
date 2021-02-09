@@ -9,10 +9,7 @@ use futures_util::stream::StreamExt;
 use hyper::client::connect::HttpInfo;
 use hyper::{HeaderMap, StatusCode, Version};
 use mime::Mime;
-#[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
-#[cfg(feature = "json")]
-use serde_json;
 use tokio::time::Sleep;
 use url::Url;
 
@@ -237,9 +234,49 @@ impl Response {
     /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
     #[cfg(feature = "json")]
     pub async fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
-        let full = self.bytes().await?;
+        self.decode(crate::codec::Json).await
+    }
 
-        serde_json::from_slice(&full).map_err(crate::error::decode)
+    /// Try to deserialize the response body using the supplied `Decoder`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate reqwest;
+    /// # extern crate serde;
+    /// #
+    /// # use reqwest::Error;
+    /// # use serde::Deserialize;
+    /// #
+    /// // This `derive` requires the `serde` dependency.
+    /// #[derive(Deserialize)]
+    /// struct Ip {
+    ///     origin: String,
+    /// }
+    ///
+    /// # #[cfg(feature = "json")]
+    /// # async fn run() -> Result<(), Error> {
+    /// let ip: Ip = reqwest::get("http://httpbin.org/ip")
+    ///     .await?
+    ///     .decode(reqwest::codec::Json)
+    ///     .await?;
+    ///
+    /// println!("ip: {}", ip.origin);
+    /// # Ok(())
+    /// # }
+    /// #
+    /// # fn main() { }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever the decoder fails.
+    pub async fn decode<T: DeserializeOwned>(
+        self,
+        mut decoder: impl crate::codec::Decoder,
+    ) -> crate::Result<T> {
+        let bytes = self.bytes().await?;
+        decoder.decode(&bytes).map_err(crate::error::decode)
     }
 
     /// Get the full response body as `Bytes`.

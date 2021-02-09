@@ -5,8 +5,6 @@ use std::time::Duration;
 use base64::encode;
 use http::{Request as HttpRequest, request::Parts};
 use serde::Serialize;
-#[cfg(feature = "json")]
-use serde_json;
 use serde_urlencoded;
 
 use super::body::{self, Body};
@@ -472,21 +470,54 @@ impl RequestBuilder {
     /// Serialization can fail if `T`'s implementation of `Serialize` decides to
     /// fail, or if `T` contains a map with non-string keys.
     #[cfg(feature = "json")]
-    pub fn json<T: Serialize + ?Sized>(mut self, json: &T) -> RequestBuilder {
-        let mut error = None;
+    pub fn json<T: Serialize + ?Sized>(self, value: &T) -> RequestBuilder {
+        self.encode(value, crate::codec::Json)
+    }
+
+    /// Send a body encoded with the supplied `Encoder`.
+    ///
+    /// Sets the body to the encoding of the passed value, and also sets the
+    /// `Content-Type` header to `Encoder::CONTENT_TYPE`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use reqwest::Error;
+    /// # use std::collections::HashMap;
+    /// #
+    /// # #[cfg(feature = "json")]
+    /// # fn run() -> Result<(), Error> {
+    /// let mut map = HashMap::new();
+    /// map.insert("lang", "rust");
+    ///
+    /// let client = reqwest::blocking::Client::new();
+    /// let res = client.post("http://httpbin.org")
+    ///     .encode(&map, reqwest::codec::Json)
+    ///     .send()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Serialization can fail if `T`'s implementation of `Serialize` decides to
+    /// fail, or if `T` contains a map with non-string keys.
+    pub fn encode<T: Serialize + ?Sized, E: crate::codec::Encoder>(
+        mut self,
+        value: &T,
+        mut encoder: E,
+    ) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            match serde_json::to_vec(json) {
+            match encoder.encode(value) {
+                Err(err) => self.request = Err(crate::error::builder(err)),
                 Ok(body) => {
-                    req.headers_mut()
-                        .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+                    let hv = HeaderValue::from_static(E::CONTENT_TYPE);
+                    req.headers_mut().insert(CONTENT_TYPE, hv);
                     *req.body_mut() = Some(body.into());
                 }
-                Err(err) => error = Some(crate::error::builder(err)),
             }
         }
-        if let Some(err) = error {
-            self.request = Err(err);
-        }
+
         self
     }
 

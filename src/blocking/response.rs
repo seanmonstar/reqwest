@@ -8,7 +8,6 @@ use std::time::Duration;
 use bytes::Bytes;
 use http;
 use hyper::header::HeaderMap;
-#[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
 
 use super::client::KeepCoreThreadAlive;
@@ -226,7 +225,45 @@ impl Response {
     /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
     #[cfg(feature = "json")]
     pub fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
-        wait::timeout(self.inner.json(), self.timeout).map_err(|e| match e {
+        self.decode(crate::codec::Json)
+    }
+
+    /// Try to deserialize the response body using the supplied `Decoder`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate reqwest;
+    /// # extern crate serde;
+    /// #
+    /// # use reqwest::Error;
+    /// # use serde::Deserialize;
+    /// #
+    /// // This `derive` requires the `serde` dependency.
+    /// #[derive(Deserialize)]
+    /// struct Ip {
+    ///     origin: String,
+    /// }
+    ///
+    /// # #[cfg(feature = "json")]
+    /// # async fn run() -> Result<(), Error> {
+    /// let ip: Ip = reqwest::get("http://httpbin.org/ip")
+    ///     .await?
+    ///     .decode(reqwest::codec::Json)
+    ///     .await?;
+    ///
+    /// println!("ip: {}", ip.origin);
+    /// # Ok(())
+    /// # }
+    /// #
+    /// # fn main() { }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever the decoder fails.
+    pub fn decode<T: DeserializeOwned>(self, decoder: impl crate::codec::Decoder) -> crate::Result<T> {
+        wait::timeout(self.inner.decode(decoder), self.timeout).map_err(|e| match e {
             wait::Waited::TimedOut(e) => crate::error::decode(e),
             wait::Waited::Inner(e) => e,
         })

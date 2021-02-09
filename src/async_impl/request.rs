@@ -6,8 +6,6 @@ use std::time::Duration;
 
 use base64::write::EncoderWriter as Base64Encoder;
 use serde::Serialize;
-#[cfg(feature = "json")]
-use serde_json;
 
 use super::body::Body;
 use super::client::{Client, Pending};
@@ -353,21 +351,31 @@ impl RequestBuilder {
     /// Serialization can fail if `T`'s implementation of `Serialize` decides to
     /// fail, or if `T` contains a map with non-string keys.
     #[cfg(feature = "json")]
-    pub fn json<T: Serialize + ?Sized>(mut self, json: &T) -> RequestBuilder {
-        let mut error = None;
+    pub fn json<T: Serialize + ?Sized>(self, value: &T) -> RequestBuilder {
+        self.encode(value, crate::codec::Json)
+    }
+
+    /// Send a body encoded with the supplied `Encoder`.
+    ///
+    /// # Errors
+    ///
+    /// Serialization can fail if `T`'s implementation of `Serialize` fails.
+    pub fn encode<T: Serialize + ?Sized, E: crate::codec::Encoder>(
+        mut self,
+        value: &T,
+        mut encoder: E,
+    ) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            match serde_json::to_vec(json) {
+            match encoder.encode(value) {
+                Err(err) => self.request = Err(crate::error::builder(err)),
                 Ok(body) => {
-                    req.headers_mut()
-                        .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-                    *req.body_mut() = Some(body.into());
+                    let hv = HeaderValue::from_static(E::CONTENT_TYPE);
+                    req.headers_mut().insert(CONTENT_TYPE, hv);
+                    *req.body_mut() = Some(body.into())
                 }
-                Err(err) => error = Some(crate::error::builder(err)),
             }
         }
-        if let Some(err) = error {
-            self.request = Err(err);
-        }
+
         self
     }
 
