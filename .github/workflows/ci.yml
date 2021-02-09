@@ -233,6 +233,7 @@ jobs:
       - name: Build
         uses: actions-rs/cargo@v1
         with:
+          use-cross: true
           command: build
           # disable default-tls feature since cross-compiling openssl is dragons
           args: --target aarch64-linux-android --no-default-features
