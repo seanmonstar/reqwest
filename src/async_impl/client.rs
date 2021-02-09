@@ -1039,6 +1039,17 @@ impl Client {
         self.execute_request(request)
     }
 
+    ///  Serialize any __unexpired__ and __persistent__ cookies in the store to JSON format and
+    //   write them to `writer`
+    ///
+    /// # Errors
+    ///
+    /// This method fails if can not lock the cookie store or io error.
+    #[cfg(feature = "cookies")]
+    pub fn export_cookie_to_json<W: std::io::Write>(&self,writer: &mut W)-> Result<(), crate::Error> {
+        self.inner.export_cookie_to_json(writer)
+    }
+
     pub(super) fn execute_request(&self, req: Request) -> Pending {
         let (method, url, mut headers, body, timeout) = req.pieces();
         if url.scheme() != "http" && url.scheme() != "https" {
@@ -1282,6 +1293,26 @@ impl ClientRef {
 
         if let Some(ref d) = self.request_timeout {
             f.field("timeout", d);
+        }
+    }
+
+    /// Serialize any __unexpired__ and __persistent__ cookies in the store to JSON format and
+    /// write them to `writer`
+    #[cfg(feature = "cookies")]
+    pub fn export_cookie_to_json<W: std::io::Write>(&self,writer: &mut W)-> Result<(), crate::Error> {
+        if self.cookie_store.is_none(){
+            return Err(crate::error::Error::new(crate::error::Kind::Builder, Some("cookie store not found")));
+        }
+        let rc = self.cookie_store.as_ref().unwrap().read();
+        if rc.is_err(){
+            return Err(crate::error::Error::new(crate::error::Kind::Builder, Some("can not read cookie store")));
+        }
+        let cookie_store = rc.unwrap();
+        let rc = cookie_store.0.save_json(writer);
+        if rc.is_err(){
+            return Err(crate::error::Error::new(crate::error::Kind::Builder, Some("error happend when saving cookie to json")));
+        }else{
+            return Ok(());
         }
     }
 }
