@@ -470,6 +470,22 @@ impl ClientBuilder {
         self
     }
 
+    /// Enable and Sets a default cookie store for the request.
+    ///
+    /// Cookies received in responses will be preserved and included in
+    /// additional requests.
+    ///
+    /// By default, no cookie store is used.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled.
+    #[cfg(feature = "cookies")]
+    pub fn default_cookie_store(mut self, cookie_store: cookie_store::CookieStore) -> ClientBuilder {
+        self.config.cookie_store = Some(cookie::CookieStore(cookie_store));
+        self
+    }
+
     /// Enable auto gzip decompression by checking the `Content-Encoding` response header.
     ///
     /// If auto gzip decompression is turned on:
