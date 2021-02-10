@@ -200,6 +200,27 @@ fn use_preconfigured_rustls_default() {
         .expect("preconfigured rustls tls");
 }
 
+#[cfg(feature = "__rustls")]
+#[tokio::test]
+#[ignore = "Needs TLS support in the test server"]
+async fn http2_upgrade() {
+    let server = server::http(move |_| async move { http::Response::default() });
+
+    let url = format!("https://localhost:{}", server.addr().port());
+    let res = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .use_rustls_tls()
+        .build()
+        .expect("client builder")
+        .get(&url)
+        .send()
+        .await
+        .expect("request");
+
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.version(), reqwest::Version::HTTP_2);
+}
+
 #[cfg(feature = "default-tls")]
 #[tokio::test]
 async fn test_allowed_methods() {
