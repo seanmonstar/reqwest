@@ -27,6 +27,7 @@ pub struct RequestBuilder {
 }
 
 impl Request {
+    /// Constructs a new request.
     #[inline]
     pub fn new(method: Method, url: Url) -> Self {
         Request {
@@ -88,7 +89,7 @@ impl Request {
 }
 
 impl RequestBuilder {
-    pub fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
+    pub(super) fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
         RequestBuilder { client, request }
     }
 
