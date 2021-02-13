@@ -9,7 +9,6 @@ use futures_util::stream::StreamExt;
 use hyper::client::connect::HttpInfo;
 use hyper::{HeaderMap, StatusCode, Version};
 use mime::Mime;
-#[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
 #[cfg(feature = "json")]
 use serde_json;
@@ -200,10 +199,22 @@ impl Response {
     ///
     /// This requires the optional `json` feature enabled.
     ///
+    /// # Deprecated
+    ///
+    /// This function is deprecated. See `Self::decode()` for a more flexible approach.
+    #[deprecated]
+    #[cfg(feature = "json")]
+    pub async fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
+        self.decode(|bytes| serde_json::from_slice(&bytes)).await
+    }
+
+    /// Try to deserialize the response body using a decoder closure.
+    ///
     /// # Examples
     ///
     /// ```
     /// # extern crate reqwest;
+    /// # extern crate serde_json;
     /// # extern crate serde;
     /// #
     /// # use reqwest::Error;
@@ -216,9 +227,9 @@ impl Response {
     /// }
     ///
     /// # async fn run() -> Result<(), Error> {
-    /// let ip = reqwest::get("http://httpbin.org/ip")
+    /// let ip: Ip = reqwest::get("http://httpbin.org/ip")
     ///     .await?
-    ///     .json::<Ip>()
+    ///     .decode(|bytes| serde_json::from_slice(bytes))
     ///     .await?;
     ///
     /// println!("ip: {}", ip.origin);
@@ -230,16 +241,16 @@ impl Response {
     ///
     /// # Errors
     ///
-    /// This method fails whenever the response body is not in JSON format
-    /// or it cannot be properly deserialized to target type `T`. For more
-    /// details please see [`serde_json::from_reader`].
-    ///
-    /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
-    #[cfg(feature = "json")]
-    pub async fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
+    /// This method fails whenever fetching the bytes fails or when the decoder
+    /// closure fails.
+    pub async fn decode<T, E, D>(self, decoder: D) -> crate::Result<T>
+    where
+        T: DeserializeOwned,
+        E: 'static + Send + Sync + std::error::Error,
+        D: FnOnce(&[u8]) -> Result<T, E>
+    {
         let full = self.bytes().await?;
-
-        serde_json::from_slice(&full).map_err(crate::error::decode)
+        decoder(&full).map_err(crate::error::decode)
     }
 
     /// Get the full response body as `Bytes`.

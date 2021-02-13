@@ -100,7 +100,6 @@ async fn response_bytes() {
 }
 
 #[tokio::test]
-#[cfg(feature = "json")]
 async fn response_json() {
     let _ = env_logger::try_init();
 
@@ -113,7 +112,10 @@ async fn response_json() {
         .send()
         .await
         .expect("Failed to get");
-    let text = res.json::<String>().await.expect("Failed to get json");
+    let text: String = res
+        .decode(|bytes| serde_json::from_slice(bytes))
+        .await
+        .expect("Failed to get json");
     assert_eq!("Hello", text);
 }
 

@@ -18,7 +18,7 @@ async fn main() -> Result<(), reqwest::Error> {
         }))
         .send()
         .await?
-        .json()
+        .decode(|bytes| serde_json::from_slice(bytes))
         .await?;
 
     println!("{:#?}", echo_json);

@@ -8,7 +8,6 @@ use std::time::Duration;
 use bytes::Bytes;
 use http;
 use hyper::header::HeaderMap;
-#[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
 
 use super::client::KeepCoreThreadAlive;
@@ -194,10 +193,22 @@ impl Response {
     ///
     /// This requires the optional `json` feature enabled.
     ///
+    /// # Deprecated
+    ///
+    /// This function is deprecated. See `Self::decode()` for a more flexible approach.
+    #[deprecated]
+    #[cfg(feature = "json")]
+    pub fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
+        self.decode(|bytes| serde_json::from_slice(bytes))
+    }
+
+    /// Try and deserialize the response body using a decoder closure.
+    ///
     /// # Examples
     ///
     /// ```rust
     /// # extern crate reqwest;
+    /// # extern crate serde_json;
     /// # extern crate serde;
     /// #
     /// # use reqwest::Error;
@@ -210,7 +221,8 @@ impl Response {
     /// }
     ///
     /// # fn run() -> Result<(), Error> {
-    /// let json: Ip = reqwest::blocking::get("http://httpbin.org/ip")?.json()?;
+    /// let ip: Ip = reqwest::blocking::get("http://httpbin.org/ip")?
+    ///     .decode(|bytes| serde_json::from_slice(bytes))?;
     /// # Ok(())
     /// # }
     /// #
@@ -219,14 +231,15 @@ impl Response {
     ///
     /// # Errors
     ///
-    /// This method fails whenever the response body is not in JSON format
-    /// or it cannot be properly deserialized to target type `T`. For more
-    /// details please see [`serde_json::from_reader`].
-    ///
-    /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
-    #[cfg(feature = "json")]
-    pub fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
-        wait::timeout(self.inner.json(), self.timeout).map_err(|e| match e {
+    /// This method fails whenever fetching the bytes fails or when the decoder
+    /// closure fails.
+    pub fn decode<T, E, D>(self, decoder: D) -> crate::Result<T>
+    where
+        T: DeserializeOwned,
+        E: 'static + Send + Sync + std::error::Error,
+        D: FnOnce(&[u8]) -> Result<T, E>
+    {
+        wait::timeout(self.inner.decode(decoder), self.timeout).map_err(|e| match e {
             wait::Waited::TimedOut(e) => crate::error::decode(e),
             wait::Waited::Inner(e) => e,
         })

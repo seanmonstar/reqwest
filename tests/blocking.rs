@@ -36,7 +36,6 @@ fn test_response_non_utf_8_text() {
 }
 
 #[test]
-#[cfg(feature = "json")]
 fn test_response_json() {
     let server = server::http(move |_req| async { http::Response::new("\"Hello\"".into()) });
 
@@ -46,7 +45,7 @@ fn test_response_json() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.content_length(), Some(7));
 
-    let body = res.json::<String>().unwrap();
+    let body: String = res.decode(|bytes| serde_json::from_slice(bytes)).unwrap();
     assert_eq!("Hello", body);
 }
 

@@ -137,6 +137,7 @@ libflate = "1.0"
 brotli_crate = { package = "brotli", version = "3.3.0" }
 doc-comment = "0.3"
 tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
+serde_json = "1.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.7"
