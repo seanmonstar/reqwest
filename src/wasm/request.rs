@@ -27,7 +27,9 @@ pub struct RequestBuilder {
 }
 
 impl Request {
-    pub(super) fn new(method: Method, url: Url) -> Self {
+    /// Constructs a new request.
+    #[inline]
+    pub fn new(method: Method, url: Url) -> Self {
         Request {
             method,
             url,
