@@ -313,11 +313,15 @@ if_hyper! {
     #[cfg(feature = "__tls")]
     mod tls;
     mod util;
+
+    pub mod codec;
 }
 
 if_wasm! {
     mod wasm;
     mod util;
+
+    pub mod codec;
 
     pub use self::wasm::{Body, Client, ClientBuilder, Request, RequestBuilder, Response};
     #[cfg(feature = "multipart")]
