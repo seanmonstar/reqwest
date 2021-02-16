@@ -13,6 +13,8 @@ pub trait PolyfillTryInto {
     // Besides parsing as a valid `Url`, the `Url` must be a valid
     // `http::Uri`, in that it makes sense to use in a network request.
     fn into_url(self) -> crate::Result<Url>;
+
+    fn _as_str(&self) -> &str;
 }
 
 impl PolyfillTryInto for Url {
@@ -23,17 +25,29 @@ impl PolyfillTryInto for Url {
             Err(crate::error::url_bad_scheme(self))
         }
     }
+
+    fn _as_str(&self) -> &str {
+        self.as_ref()
+    }
 }
 
 impl<'a> PolyfillTryInto for &'a str {
     fn into_url(self) -> crate::Result<Url> {
         Url::parse(self).map_err(crate::error::builder)?.into_url()
     }
+
+    fn _as_str(&self) -> &str {
+        self.as_ref()
+    }
 }
 
 impl<'a> PolyfillTryInto for &'a String {
     fn into_url(self) -> crate::Result<Url> {
         (&**self).into_url()
+    }
+
+    fn _as_str(&self) -> &str {
+        self.as_ref()
     }
 }
 
