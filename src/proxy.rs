@@ -3,7 +3,8 @@ use std::fmt;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::{IntoUrl, Url};
+use crate::into_url::PolyfillTryInto;
+use crate::Url;
 use http::{header::HeaderValue, Uri};
 use ipnet::IpNet;
 use percent_encoding::percent_decode;
@@ -107,9 +108,23 @@ pub trait IntoProxyScheme {
     fn into_proxy_scheme(self) -> crate::Result<ProxyScheme>;
 }
 
-impl<T: IntoUrl> IntoProxyScheme for T {
+impl<S: AsRef<str>> IntoProxyScheme for S {
     fn into_proxy_scheme(self) -> crate::Result<ProxyScheme> {
-        ProxyScheme::parse(self.into_url()?)
+        // validate the URL
+        let url = match self.as_ref().into_url() {
+            Ok(ok) => ok,
+            Err(e) => {
+                // the issue could have been caused by a missing scheme, so we try adding http://
+                format!("http://{}", self.as_ref())
+                    .into_url()
+                    .map_err(|_| {
+                        // return the original error
+                        crate::error::builder(e)
+                    })?
+                    .into_url()?
+            }
+        };
+        ProxyScheme::parse(url)
     }
 }
 
@@ -842,8 +857,7 @@ fn extract_type_prefix(address: &str) -> Option<&str> {
     if let Some(indice) = address.find("://") {
         if indice == 0 {
             None
-        }
-        else {
+        } else {
             let prefix = &address[..indice];
             let contains_banned = prefix.contains(|c| c == ':' || c == '/');
 
@@ -853,8 +867,7 @@ fn extract_type_prefix(address: &str) -> Option<&str> {
                 None
             }
         }
-    }
-    else {
+    } else {
         None
     }
 }
@@ -977,6 +990,33 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_proxy_scheme_ip_address_default_http() {
+        let ps = "192.168.1.1:8888".into_proxy_scheme().unwrap();
+
+        match ps {
+            ProxyScheme::Http { auth, host } => {
+                assert!(auth.is_none());
+                assert_eq!(host, "192.168.1.1:8888");
+            }
+            other => panic!("unexpected: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_proxy_scheme_parse_default_http_with_auth() {
+        // this should fail because `foo` is interpreted as the scheme and no host can be found
+        let ps = "foo:bar@localhost:1239".into_proxy_scheme().unwrap();
+
+        match ps {
+            ProxyScheme::Http { auth, host } => {
+                assert_eq!(auth.unwrap(), encode_basic_auth("foo", "bar"));
+                assert_eq!(host, "localhost:1239");
+            }
+            other => panic!("unexpected: {:?}", other),
+        }
+    }
+
     // Smallest possible content for a mutex
     struct MutexInner;
 
@@ -996,10 +1036,10 @@ mod tests {
         // to avoid assert! -> panic! -> Mutex Poisoned.
         let baseline_proxies = get_sys_proxies(None);
         // the system proxy setting url is invalid.
-        env::set_var("http_proxy", "123465");
+        env::set_var("http_proxy", "file://123465");
         let invalid_proxies = get_sys_proxies(None);
         // set valid proxy
-        env::set_var("http_proxy", "http://127.0.0.1/");
+        env::set_var("http_proxy", "127.0.0.1/");
         let valid_proxies = get_sys_proxies(None);
 
         // reset user setting when guards drop
@@ -1033,9 +1073,16 @@ mod tests {
         // set valid proxy
         let valid_proxies = get_sys_proxies(Some((1, String::from("http://127.0.0.1/"))));
         let valid_proxies_no_schema = get_sys_proxies(Some((1, String::from("127.0.0.1"))));
-        let valid_proxies_explicit_https = get_sys_proxies(Some((1, String::from("https://127.0.0.1/"))));
-        let multiple_proxies = get_sys_proxies(Some((1, String::from("http=127.0.0.1:8888;https=127.0.0.2:8888"))));
-        let multiple_proxies_explicit_schema = get_sys_proxies(Some((1, String::from("http=http://127.0.0.1:8888;https=https://127.0.0.2:8888"))));
+        let valid_proxies_explicit_https =
+            get_sys_proxies(Some((1, String::from("https://127.0.0.1/"))));
+        let multiple_proxies = get_sys_proxies(Some((
+            1,
+            String::from("http=127.0.0.1:8888;https=127.0.0.2:8888"),
+        )));
+        let multiple_proxies_explicit_schema = get_sys_proxies(Some((
+            1,
+            String::from("http=http://127.0.0.1:8888;https=https://127.0.0.2:8888"),
+        )));
 
         // reset user setting when guards drop
         drop(_g1);
