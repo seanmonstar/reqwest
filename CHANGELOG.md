@@ -1,3 +1,11 @@
+## v0.11.1
+
+- Add `ClientBuilder::tls_built_in_root_certs()` option to disable built-in root certificates.
+- Fix `rustls-tls` glue to more often support ALPN to upgrade to HTTP/2.
+- Fix proxy parsing to assume `http://` if no scheme is found.
+- Fix connection pool idle reaping by enabling hyper's `runtime` feature.
+- (wasm) Add `Request::new()` constructor.
+
 # v0.11.0
 
 - Change `multipart` to be an optional cargo feature.
