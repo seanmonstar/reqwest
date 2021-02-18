@@ -155,6 +155,7 @@ impl RequestBuilder {
     }
 
     #[cfg(feature = "json")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     /// Set the request json
     pub fn json<T: Serialize + ?Sized>(mut self, json: &T) -> RequestBuilder {
         let mut error = None;
@@ -194,6 +195,7 @@ impl RequestBuilder {
 
     /// TODO
     #[cfg(feature = "multipart")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "multipart")))]
     pub fn multipart(mut self, multipart: super::multipart::Form) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             *req.body_mut() = Some(Body::from_form(multipart))
