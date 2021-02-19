@@ -105,7 +105,7 @@ ipnet = "2.3"
 
 ## default-tls
 hyper-tls = { version = "0.5", optional = true }
-native-tls-crate = { version = "0.2", optional = true, package = "native-tls" }
+native-tls-crate = { version = "0.2.7", optional = true, package = "native-tls" }
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
