@@ -103,6 +103,8 @@ struct Config {
     http1_title_case_headers: bool,
     http2_initial_stream_window_size: Option<u32>,
     http2_initial_connection_window_size: Option<u32>,
+    http2_adaptive_window: bool,
+    http2_max_frame_size: Option<u32>,
     local_address: Option<IpAddr>,
     nodelay: bool,
     #[cfg(feature = "cookies")]
@@ -159,6 +161,8 @@ impl ClientBuilder {
                 http1_title_case_headers: false,
                 http2_initial_stream_window_size: None,
                 http2_initial_connection_window_size: None,
+                http2_adaptive_window: false,
+                http2_max_frame_size: None,
                 local_address: None,
                 nodelay: true,
                 trust_dns: cfg!(feature = "trust-dns"),
@@ -331,6 +335,12 @@ impl ClientBuilder {
             config.http2_initial_connection_window_size
         {
             builder.http2_initial_connection_window_size(http2_initial_connection_window_size);
+        }
+        if config.http2_adaptive_window {
+            builder.http2_adaptive_window(true);
+        }
+        if let Some(http2_max_frame_size) = config.http2_max_frame_size {
+            builder.http2_max_frame_size(http2_max_frame_size);
         }
 
         builder.pool_idle_timeout(config.pool_idle_timeout);
@@ -677,6 +687,23 @@ impl ClientBuilder {
         sz: impl Into<Option<u32>>,
     ) -> ClientBuilder {
         self.config.http2_initial_connection_window_size = sz.into();
+        self
+    }
+
+    /// Sets whether to use an adaptive flow control.
+    ///
+    /// Enabling this will override the limits set in `http2_initial_stream_window_size` and
+    /// `http2_initial_connection_window_size`.
+    pub fn http2_adaptive_window(mut self, enabled: bool) -> ClientBuilder {
+        self.config.http2_adaptive_window = enabled;
+        self
+    }
+
+    /// Sets the maximum frame size to use for HTTP2.
+    ///
+    /// Default is currently 16,384 but may change internally to optimize for common uses.
+    pub fn http2_max_frame_size(mut self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+        self.config.http2_max_frame_size = sz.into();
         self
     }
 
