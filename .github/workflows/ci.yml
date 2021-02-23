@@ -186,6 +186,13 @@ jobs:
           command: test
           args: --features __internal_proxy_sys_no_cache -- --test-threads=1
 
+      - name: Check minimal versions
+        run: |
+          cargo clean
+          cargo update -Z minimal-versions
+          cargo check
+          cargo check --all-features
+
   minversion:
     name: Minimum version ${{ matrix.rust }}
     needs: [style]
