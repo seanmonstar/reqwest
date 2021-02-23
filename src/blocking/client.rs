@@ -374,6 +374,21 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.http2_initial_connection_window_size(sz))
     }
 
+    /// Sets whether to use an adaptive flow control.
+    ///
+    /// Enabling this will override the limits set in `http2_initial_stream_window_size` and
+    /// `http2_initial_connection_window_size`.
+    pub fn http2_adaptive_window(self, enabled: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.http2_adaptive_window(enabled))
+    }
+
+    /// Sets the maximum frame size to use for HTTP2.
+    ///
+    /// Default is currently 16,384 but may change internally to optimize for common uses.
+    pub fn http2_max_frame_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+        self.with_inner(|inner| inner.http2_max_frame_size(sz))
+    }
+
     // TCP options
 
     /// Set whether sockets have `SO_NODELAY` enabled.
