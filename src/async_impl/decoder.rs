@@ -16,9 +16,9 @@ use http::HeaderMap;
 use hyper::body::HttpBody;
 
 #[cfg(any(feature = "gzip", feature = "brotli"))]
-use tokio_util::io::StreamReader;
-#[cfg(any(feature = "gzip", feature = "brotli"))]
 use tokio_util::codec::{BytesCodec, FramedRead};
+#[cfg(any(feature = "gzip", feature = "brotli"))]
+use tokio_util::io::StreamReader;
 
 use super::super::Body;
 use crate::error;
@@ -190,11 +190,7 @@ impl Decoder {
     /// how to decode the content body of the request.
     ///
     /// Uses the correct variant by inspecting the Content-Encoding header.
-    pub(super) fn detect(
-        _headers: &mut HeaderMap,
-        body: Body,
-        _accepts: Accepts,
-    ) -> Decoder {
+    pub(super) fn detect(_headers: &mut HeaderMap, body: Body, _accepts: Accepts) -> Decoder {
         #[cfg(feature = "gzip")]
         {
             if _accepts.gzip && Decoder::detect_gzip(_headers) {
@@ -307,9 +303,15 @@ impl Future for Pending {
 
         match self.1 {
             #[cfg(feature = "brotli")]
-            DecoderType::Brotli => Poll::Ready(Ok(Inner::Brotli(FramedRead::new(BrotliDecoder::new(StreamReader::new(_body)), BytesCodec::new())))),
+            DecoderType::Brotli => Poll::Ready(Ok(Inner::Brotli(FramedRead::new(
+                BrotliDecoder::new(StreamReader::new(_body)),
+                BytesCodec::new(),
+            )))),
             #[cfg(feature = "gzip")]
-            DecoderType::Gzip => Poll::Ready(Ok(Inner::Gzip(FramedRead::new(GzipDecoder::new(StreamReader::new(_body)), BytesCodec::new())))),
+            DecoderType::Gzip => Poll::Ready(Ok(Inner::Gzip(FramedRead::new(
+                GzipDecoder::new(StreamReader::new(_body)),
+                BytesCodec::new(),
+            )))),
         }
     }
 }

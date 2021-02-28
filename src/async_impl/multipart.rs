@@ -521,7 +521,10 @@ mod tests {
     fn form_empty() {
         let form = Form::new();
 
-        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
         let body = form.stream().into_stream();
         let s = body.map_ok(|try_c| try_c.to_vec()).try_concat();
 
@@ -568,7 +571,10 @@ mod tests {
              --boundary\r\n\
              Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
              value3\r\n--boundary--\r\n";
-        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
         let body = form.stream().into_stream();
         let s = body.map(|try_c| try_c.map(|r| r.to_vec())).try_concat();
 
@@ -595,7 +601,10 @@ mod tests {
                         \r\n\
                         value2\r\n\
                         --boundary--\r\n";
-        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
         let body = form.stream().into_stream();
         let s = body.map(|try_c| try_c.map(|r| r.to_vec())).try_concat();
 

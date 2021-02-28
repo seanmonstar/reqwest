@@ -1,7 +1,4 @@
-#[cfg(any(
-    feature = "native-tls",
-    feature = "__rustls",
-))]
+#[cfg(any(feature = "native-tls", feature = "__rustls",))]
 use std::any::Any;
 use std::convert::TryInto;
 use std::fmt;
@@ -18,11 +15,11 @@ use tokio::sync::{mpsc, oneshot};
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::wait;
-use crate::{async_impl, header, IntoUrl, Method, Proxy, redirect};
 #[cfg(feature = "__tls")]
 use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
+use crate::{async_impl, header, redirect, IntoUrl, Method, Proxy};
 
 /// A `Client` to make Requests with.
 ///
@@ -103,9 +100,7 @@ impl ClientBuilder {
         ClientHandle::new(self).map(|handle| Client { inner: handle })
     }
 
-
     // Higher-level options
-
 
     /// Sets the `User-Agent` header to be used by this client.
     ///
@@ -239,7 +234,9 @@ impl ClientBuilder {
     /// This requires the optional `brotli` feature to be enabled
     #[cfg(feature = "brotli")]
     #[cfg_attr(docsrs, doc(cfg(feature = "brotli")))]
-    pub fn brotli(self, enable: bool) -> ClientBuilder { self.with_inner(|inner| inner.brotli(enable)) }
+    pub fn brotli(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.brotli(enable))
+    }
 
     /// Disable auto response body gzip decompression.
     ///
@@ -255,7 +252,9 @@ impl ClientBuilder {
     /// This method exists even if the optional `brotli` feature is not enabled.
     /// This can be used to ensure a `Client` doesn't use brotli decompression
     /// even if another dependency were to enable the optional `brotli` feature.
-    pub fn no_brotli(self) -> ClientBuilder { self.with_inner(|inner| inner.no_brotli()) }
+    pub fn no_brotli(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.no_brotli())
+    }
 
     // Redirect options
 
@@ -420,8 +419,8 @@ impl ClientBuilder {
     ///
     /// If `None`, the option will not be set.
     pub fn tcp_keepalive<D>(self, val: D) -> ClientBuilder
-        where
-            D: Into<Option<Duration>>,
+    where
+        D: Into<Option<Duration>>,
     {
         self.with_inner(move |inner| inner.tcp_keepalive(val))
     }
@@ -460,7 +459,14 @@ impl ClientBuilder {
     /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
     /// feature to be enabled.
     #[cfg(feature = "__tls")]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls-tls"))))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
     pub fn add_root_certificate(self, cert: Certificate) -> ClientBuilder {
         self.with_inner(move |inner| inner.add_root_certificate(cert))
     }
@@ -474,11 +480,15 @@ impl ClientBuilder {
     /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
     /// feature to be enabled.
     #[cfg(feature = "__tls")]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls-tls"))))]
-    pub fn tls_built_in_root_certs(
-        self,
-        tls_built_in_root_certs: bool,
-    ) -> ClientBuilder {
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
+    pub fn tls_built_in_root_certs(self, tls_built_in_root_certs: bool) -> ClientBuilder {
         self.with_inner(move |inner| inner.tls_built_in_root_certs(tls_built_in_root_certs))
     }
 
@@ -526,7 +536,14 @@ impl ClientBuilder {
     /// introduces significant vulnerabilities, and should only be used
     /// as a last resort.
     #[cfg(feature = "__tls")]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls-tls"))))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
     pub fn danger_accept_invalid_certs(self, accept_invalid_certs: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.danger_accept_invalid_certs(accept_invalid_certs))
     }
@@ -577,10 +594,7 @@ impl ClientBuilder {
     ///
     /// This requires one of the optional features `native-tls` or
     /// `rustls-tls(-...)` to be enabled.
-    #[cfg(any(
-        feature = "native-tls",
-        feature = "__rustls",
-    ))]
+    #[cfg(any(feature = "native-tls", feature = "__rustls",))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
     pub fn use_preconfigured_tls(self, tls: impl Any) -> ClientBuilder {
         self.with_inner(move |inner| inner.use_preconfigured_tls(tls))
@@ -609,7 +623,7 @@ impl ClientBuilder {
     }
 
     /// Restrict the Client to be used with HTTPS only requests.
-    /// 
+    ///
     /// Defaults to false.
     pub fn https_only(self, enabled: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.https_only(enabled))
@@ -781,7 +795,8 @@ struct InnerClientHandle {
 
 impl Drop for InnerClientHandle {
     fn drop(&mut self) {
-        let id = self.thread
+        let id = self
+            .thread
             .as_ref()
             .map(|h| h.thread().id())
             .expect("thread not dropped yet");
@@ -804,7 +819,11 @@ impl ClientHandle {
             .name("reqwest-internal-sync-runtime".into())
             .spawn(move || {
                 use tokio::runtime;
-                let rt = match runtime::Builder::new_current_thread().enable_all().build().map_err(crate::error::builder) {
+                let rt = match runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(crate::error::builder)
+                {
                     Err(e) => {
                         if let Err(e) = spawn_tx.send(Err(e)) {
                             error!("Failed to communicate runtime creation failure: {:?}", e);
@@ -886,9 +905,7 @@ impl ClientHandle {
                 };
                 wait::timeout(f, timeout)
             } else {
-                let f = async move {
-                    rx.await.map_err(|_canceled| event_loop_panicked())
-                };
+                let f = async move { rx.await.map_err(|_canceled| event_loop_panicked()) };
                 wait::timeout(f, timeout)
             };
 
