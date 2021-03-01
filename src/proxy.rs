@@ -111,11 +111,11 @@ pub trait IntoProxyScheme {
 impl<S: IntoUrl> IntoProxyScheme for S {
     fn into_proxy_scheme(self) -> crate::Result<ProxyScheme> {
         // validate the URL
-        let url = match self.as_ref().into_url() {
+        let url = match self.as_str().into_url() {
             Ok(ok) => ok,
             Err(e) => {
                 // the issue could have been caused by a missing scheme, so we try adding http://
-                format!("http://{}", self.as_ref())
+                format!("http://{}", self.as_str())
                     .into_url()
                     .map_err(|_| {
                         // return the original error
