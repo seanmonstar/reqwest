@@ -3,21 +3,23 @@ use url::Url;
 /// A trait to try to convert some type into a `Url`.
 ///
 /// This trait is "sealed", such that only types within reqwest can
-/// implement it. The reason is that it will eventually be deprecated
-/// and removed, when `std::convert::TryFrom` is stabilized.
-pub trait IntoUrl: PolyfillTryInto {}
+/// implement it.
+pub trait IntoUrl: IntoUrlSealed {}
 
-impl<T: PolyfillTryInto> IntoUrl for T {}
+impl IntoUrl for Url {}
+impl IntoUrl for String {}
+impl<'a> IntoUrl for &'a str {}
+impl<'a> IntoUrl for &'a String {}
 
-pub trait PolyfillTryInto {
+pub trait IntoUrlSealed {
     // Besides parsing as a valid `Url`, the `Url` must be a valid
     // `http::Uri`, in that it makes sense to use in a network request.
     fn into_url(self) -> crate::Result<Url>;
 
-    fn _as_str(&self) -> &str;
+    fn as_str(&self) -> &str;
 }
 
-impl PolyfillTryInto for Url {
+impl IntoUrlSealed for Url {
     fn into_url(self) -> crate::Result<Url> {
         if self.has_host() {
             Ok(self)
@@ -26,27 +28,37 @@ impl PolyfillTryInto for Url {
         }
     }
 
-    fn _as_str(&self) -> &str {
+    fn as_str(&self) -> &str {
         self.as_ref()
     }
 }
 
-impl<'a> PolyfillTryInto for &'a str {
+impl<'a> IntoUrlSealed for &'a str {
     fn into_url(self) -> crate::Result<Url> {
         Url::parse(self).map_err(crate::error::builder)?.into_url()
     }
 
-    fn _as_str(&self) -> &str {
-        self.as_ref()
+    fn as_str(&self) -> &str {
+        self
     }
 }
 
-impl<'a> PolyfillTryInto for &'a String {
+impl<'a> IntoUrlSealed for &'a String {
     fn into_url(self) -> crate::Result<Url> {
         (&**self).into_url()
     }
 
-    fn _as_str(&self) -> &str {
+    fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+impl<'a> IntoUrlSealed for String {
+    fn into_url(self) -> crate::Result<Url> {
+        (&*self).into_url()
+    }
+
+    fn as_str(&self) -> &str {
         self.as_ref()
     }
 }
