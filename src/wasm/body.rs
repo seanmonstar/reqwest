@@ -2,8 +2,8 @@
 use super::multipart::Form;
 /// dox
 use bytes::Bytes;
-use std::fmt;
 use js_sys::Uint8Array;
+use std::fmt;
 use wasm_bindgen::JsValue;
 
 /// The body of a `Request`.

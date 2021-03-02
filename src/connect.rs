@@ -1,14 +1,15 @@
-use hyper::service::Service;
-use http::uri::{Scheme, Authority};
-use http::Uri;
-use hyper::client::connect::{Connected, Connection};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-#[cfg(feature = "native-tls-crate")]
-use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
+use futures_util::future::Either;
 #[cfg(feature = "__tls")]
 use http::header::HeaderValue;
-use futures_util::future::Either;
+use http::uri::{Authority, Scheme};
+use http::Uri;
+use hyper::client::connect::{Connected, Connection};
+use hyper::service::Service;
+#[cfg(feature = "native-tls-crate")]
+use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
+use pin_project_lite::pin_project;
 use std::future::Future;
 use std::io;
 use std::io::IoSlice;
@@ -17,16 +18,15 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use pin_project_lite::pin_project;
 
-#[cfg(feature = "trust-dns")]
-use crate::dns::TrustDnsResolver;
-use crate::proxy::{Proxy, ProxyScheme};
-use crate::error::BoxError;
 #[cfg(feature = "default-tls")]
 use self::native_tls_conn::NativeTlsConn;
 #[cfg(feature = "__rustls")]
 use self::rustls_tls_conn::RustlsTlsConn;
+#[cfg(feature = "trust-dns")]
+use crate::dns::TrustDnsResolver;
+use crate::error::BoxError;
+use crate::proxy::{Proxy, ProxyScheme};
 
 #[derive(Clone)]
 pub(crate) enum HttpConnector {
@@ -165,25 +165,21 @@ impl Connector {
     {
         let tls = tls.build().map_err(crate::error::builder)?;
         Ok(Self::from_built_default_tls(
-            http,
-            tls,
-            proxies,
-            user_agent,
-            local_addr,
-            nodelay,
+            http, tls, proxies, user_agent, local_addr, nodelay,
         ))
     }
 
     #[cfg(feature = "default-tls")]
-    pub(crate) fn from_built_default_tls<T> (
+    pub(crate) fn from_built_default_tls<T>(
         mut http: HttpConnector,
         tls: TlsConnector,
         proxies: Arc<Vec<Proxy>>,
         user_agent: Option<HeaderValue>,
         local_addr: T,
-        nodelay: bool) -> Connector
-        where
-            T: Into<Option<IpAddr>>,
+        nodelay: bool,
+    ) -> Connector
+    where
+        T: Into<Option<IpAddr>>,
     {
         http.set_local_address(local_addr.into());
         http.enforce_http(false);
@@ -245,11 +241,7 @@ impl Connector {
     }
 
     #[cfg(feature = "socks")]
-    async fn connect_socks(
-        &self,
-        dst: Uri,
-        proxy: ProxyScheme,
-    ) -> Result<Conn, BoxError> {
+    async fn connect_socks(&self, dst: Uri, proxy: ProxyScheme) -> Result<Conn, BoxError> {
         let dns = match proxy {
             ProxyScheme::Socks5 {
                 remote_dns: false, ..
@@ -259,22 +251,17 @@ impl Connector {
             } => socks::DnsResolve::Proxy,
             ProxyScheme::Http { .. } | ProxyScheme::Https { .. } => {
                 unreachable!("connect_socks is only called for socks proxies");
-            },
+            }
         };
 
         match &self.inner {
             #[cfg(feature = "default-tls")]
             Inner::DefaultTls(_http, tls) => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
-                    let host = dst
-                        .host()
-                        .ok_or("no host in url")?
-                        .to_string();
+                    let host = dst.host().ok_or("no host in url")?.to_string();
                     let conn = socks::connect(proxy, dst, dns).await?;
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
-                    let io = tls_connector
-                        .connect(&host, conn)
-                        .await?;
+                    let io = tls_connector.connect(&host, conn).await?;
                     return Ok(Conn {
                         inner: self.verbose.wrap(NativeTlsConn { inner: io }),
                         is_proxy: false,
@@ -288,10 +275,7 @@ impl Connector {
                     use tokio_rustls::TlsConnector as RustlsConnector;
 
                     let tls = tls_proxy.clone();
-                    let host = dst
-                        .host()
-                        .ok_or("no host in url")?
-                        .to_string();
+                    let host = dst.host().ok_or("no host in url")?.to_string();
                     let conn = socks::connect(proxy, dst, dns).await?;
                     let dnsname = DNSNameRef::try_from_ascii_str(&host)
                         .map(|dnsname| dnsname.to_owned())
@@ -306,7 +290,7 @@ impl Connector {
                 }
             }
             #[cfg(not(feature = "__tls"))]
-            Inner::Http(_) => ()
+            Inner::Http(_) => (),
         }
 
         socks::connect(proxy, dst, dns).await.map(|tcp| Conn {
@@ -315,11 +299,7 @@ impl Connector {
         })
     }
 
-    async fn connect_with_maybe_proxy(
-        self,
-        dst: Uri,
-        is_proxy: bool,
-    ) -> Result<Conn, BoxError> {
+    async fn connect_with_maybe_proxy(self, dst: Uri, is_proxy: bool) -> Result<Conn, BoxError> {
         match self.inner {
             #[cfg(not(feature = "__tls"))]
             Inner::Http(mut http) => {
@@ -332,7 +312,6 @@ impl Connector {
             #[cfg(feature = "default-tls")]
             Inner::DefaultTls(http, tls) => {
                 let mut http = http.clone();
-
 
                 // Disable Nagle's algorithm for TLS handshake
                 //
@@ -403,7 +382,6 @@ impl Connector {
             ProxyScheme::Socks5 { .. } => return self.connect_socks(dst, proxy_scheme).await,
         };
 
-
         #[cfg(feature = "__tls")]
         let auth = _auth;
 
@@ -420,13 +398,12 @@ impl Connector {
                     log::trace!("tunneling HTTPS over proxy");
                     let tunneled = tunnel(
                         conn,
-                        host
-                            .ok_or("no host in url")?
-                            .to_string(),
+                        host.ok_or("no host in url")?.to_string(),
                         port,
                         self.user_agent.clone(),
-                        auth
-                    ).await?;
+                        auth,
+                    )
+                    .await?;
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                     let io = tls_connector
                         .connect(&host.ok_or("no host in url")?, tunneled)
@@ -447,10 +424,7 @@ impl Connector {
                     use tokio_rustls::webpki::DNSNameRef;
                     use tokio_rustls::TlsConnector as RustlsConnector;
 
-                    let host = dst
-                        .host()
-                        .ok_or("no host in url")?
-                        .to_string();
+                    let host = dst.host().ok_or("no host in url")?.to_string();
                     let port = dst.port().map(|r| r.as_u16()).unwrap_or(443);
                     let http = http.clone();
                     let mut http = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
@@ -544,7 +518,10 @@ impl Service<Uri> for Connector {
     }
 }
 
-pub(crate) trait AsyncConn: AsyncRead + AsyncWrite + Connection + Send + Sync + Unpin + 'static {}
+pub(crate) trait AsyncConn:
+    AsyncRead + AsyncWrite + Connection + Send + Sync + Unpin + 'static
+{
+}
 
 impl<T: AsyncRead + AsyncWrite + Connection + Send + Sync + Unpin + 'static> AsyncConn for T {}
 
@@ -572,7 +549,7 @@ impl AsyncRead for Conn {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context,
-        buf: &mut ReadBuf<'_>
+        buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
         let this = self.project();
         AsyncRead::poll_read(this.inner, cx, buf)
@@ -583,7 +560,7 @@ impl AsyncWrite for Conn {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context,
-        buf: &[u8]
+        buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
         let this = self.project();
         AsyncWrite::poll_write(this.inner, cx, buf)
@@ -592,7 +569,7 @@ impl AsyncWrite for Conn {
     fn poll_write_vectored(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        bufs: &[IoSlice<'_>]
+        bufs: &[IoSlice<'_>],
     ) -> Poll<Result<usize, io::Error>> {
         let this = self.project();
         AsyncWrite::poll_write_vectored(this.inner, cx, bufs)
@@ -607,17 +584,13 @@ impl AsyncWrite for Conn {
         AsyncWrite::poll_flush(this.inner, cx)
     }
 
-    fn poll_shutdown(
-        self: Pin<&mut Self>,
-        cx: &mut Context
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
         let this = self.project();
         AsyncWrite::poll_shutdown(this.inner, cx)
     }
 }
 
-pub(crate) type Connecting =
-    Pin<Box<dyn Future<Output = Result<Conn, BoxError>> + Send>>;
+pub(crate) type Connecting = Pin<Box<dyn Future<Output = Result<Conn, BoxError>> + Send>>;
 
 #[cfg(feature = "__tls")]
 async fn tunnel<T>(
@@ -641,14 +614,12 @@ where
     )
     .into_bytes();
 
-
     // user-agent
     if let Some(user_agent) = user_agent {
         buf.extend_from_slice(b"User-Agent: ");
         buf.extend_from_slice(user_agent.as_bytes());
         buf.extend_from_slice(b"\r\n");
     }
-
 
     // proxy-authorization
     if let Some(value) = auth {
@@ -680,15 +651,11 @@ where
                 return Ok(conn);
             }
             if pos == buf.len() {
-                return Err(
-                    "proxy headers too long for tunnel".into()
-                );
+                return Err("proxy headers too long for tunnel".into());
             }
         // else read more
         } else if recvd.starts_with(b"HTTP/1.1 407") {
-            return Err(
-                "proxy authentication required".into()
-            );
+            return Err("proxy authentication required".into());
         } else {
             return Err("unsuccessful tunnel".into());
         }
@@ -702,12 +669,15 @@ fn tunnel_eof() -> BoxError {
 
 #[cfg(feature = "default-tls")]
 mod native_tls_conn {
-    use std::{pin::Pin, task::{Context, Poll}, io::{self, IoSlice}};
     use hyper::client::connect::{Connected, Connection};
     use pin_project_lite::pin_project;
+    use std::{
+        io::{self, IoSlice},
+        pin::Pin,
+        task::{Context, Poll},
+    };
     use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
     use tokio_native_tls::TlsStream;
-
 
     pin_project! {
         pub(super) struct NativeTlsConn<T> {
@@ -725,7 +695,7 @@ mod native_tls_conn {
         fn poll_read(
             self: Pin<&mut Self>,
             cx: &mut Context,
-            buf: &mut ReadBuf<'_>
+            buf: &mut ReadBuf<'_>,
         ) -> Poll<tokio::io::Result<()>> {
             let this = self.project();
             AsyncRead::poll_read(this.inner, cx, buf)
@@ -736,7 +706,7 @@ mod native_tls_conn {
         fn poll_write(
             self: Pin<&mut Self>,
             cx: &mut Context,
-            buf: &[u8]
+            buf: &[u8],
         ) -> Poll<Result<usize, tokio::io::Error>> {
             let this = self.project();
             AsyncWrite::poll_write(this.inner, cx, buf)
@@ -745,7 +715,7 @@ mod native_tls_conn {
         fn poll_write_vectored(
             self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            bufs: &[IoSlice<'_>]
+            bufs: &[IoSlice<'_>],
         ) -> Poll<Result<usize, io::Error>> {
             let this = self.project();
             AsyncWrite::poll_write_vectored(this.inner, cx, bufs)
@@ -755,14 +725,17 @@ mod native_tls_conn {
             self.inner.is_write_vectored()
         }
 
-        fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), tokio::io::Error>> {
+        fn poll_flush(
+            self: Pin<&mut Self>,
+            cx: &mut Context,
+        ) -> Poll<Result<(), tokio::io::Error>> {
             let this = self.project();
             AsyncWrite::poll_flush(this.inner, cx)
         }
 
         fn poll_shutdown(
             self: Pin<&mut Self>,
-            cx: &mut Context
+            cx: &mut Context,
         ) -> Poll<Result<(), tokio::io::Error>> {
             let this = self.project();
             AsyncWrite::poll_shutdown(this.inner, cx)
@@ -772,13 +745,16 @@ mod native_tls_conn {
 
 #[cfg(feature = "__rustls")]
 mod rustls_tls_conn {
-    use rustls::Session;
-    use std::{pin::Pin, task::{Context, Poll}, io::{self, IoSlice}};
     use hyper::client::connect::{Connected, Connection};
     use pin_project_lite::pin_project;
+    use rustls::Session;
+    use std::{
+        io::{self, IoSlice},
+        pin::Pin,
+        task::{Context, Poll},
+    };
     use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
     use tokio_rustls::client::TlsStream;
-
 
     pin_project! {
         pub(super) struct RustlsTlsConn<T> {
@@ -800,7 +776,7 @@ mod rustls_tls_conn {
         fn poll_read(
             self: Pin<&mut Self>,
             cx: &mut Context,
-            buf: &mut ReadBuf<'_>
+            buf: &mut ReadBuf<'_>,
         ) -> Poll<tokio::io::Result<()>> {
             let this = self.project();
             AsyncRead::poll_read(this.inner, cx, buf)
@@ -811,7 +787,7 @@ mod rustls_tls_conn {
         fn poll_write(
             self: Pin<&mut Self>,
             cx: &mut Context,
-            buf: &[u8]
+            buf: &[u8],
         ) -> Poll<Result<usize, tokio::io::Error>> {
             let this = self.project();
             AsyncWrite::poll_write(this.inner, cx, buf)
@@ -820,7 +796,7 @@ mod rustls_tls_conn {
         fn poll_write_vectored(
             self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            bufs: &[IoSlice<'_>]
+            bufs: &[IoSlice<'_>],
         ) -> Poll<Result<usize, io::Error>> {
             let this = self.project();
             AsyncWrite::poll_write_vectored(this.inner, cx, bufs)
@@ -830,14 +806,17 @@ mod rustls_tls_conn {
             self.inner.is_write_vectored()
         }
 
-        fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), tokio::io::Error>> {
+        fn poll_flush(
+            self: Pin<&mut Self>,
+            cx: &mut Context,
+        ) -> Poll<Result<(), tokio::io::Error>> {
             let this = self.project();
             AsyncWrite::poll_flush(this.inner, cx)
         }
 
         fn poll_shutdown(
             self: Pin<&mut Self>,
-            cx: &mut Context
+            cx: &mut Context,
         ) -> Poll<Result<(), tokio::io::Error>> {
             let this = self.project();
             AsyncWrite::poll_shutdown(this.inner, cx)
@@ -911,11 +890,11 @@ mod socks {
 }
 
 mod verbose {
+    use hyper::client::connect::{Connected, Connection};
     use std::fmt;
     use std::io::{self, IoSlice};
     use std::pin::Pin;
     use std::task::{Context, Poll};
-    use hyper::client::connect::{Connected, Connection};
     use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
     pub(super) const OFF: Wrapper = Wrapper(false);
@@ -952,16 +931,14 @@ mod verbose {
         fn poll_read(
             mut self: Pin<&mut Self>,
             cx: &mut Context,
-            buf: &mut ReadBuf<'_>
+            buf: &mut ReadBuf<'_>,
         ) -> Poll<std::io::Result<()>> {
             match Pin::new(&mut self.inner).poll_read(cx, buf) {
                 Poll::Ready(Ok(())) => {
                     log::trace!("{:08x} read: {:?}", self.id, Escape(buf.filled()));
                     Poll::Ready(Ok(()))
-                },
-                Poll::Ready(Err(e)) => {
-                    Poll::Ready(Err(e))
-                },
+                }
+                Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
                 Poll::Pending => Poll::Pending,
             }
         }
@@ -971,16 +948,14 @@ mod verbose {
         fn poll_write(
             mut self: Pin<&mut Self>,
             cx: &mut Context,
-            buf: &[u8]
+            buf: &[u8],
         ) -> Poll<Result<usize, std::io::Error>> {
             match Pin::new(&mut self.inner).poll_write(cx, buf) {
                 Poll::Ready(Ok(n)) => {
                     log::trace!("{:08x} write: {:?}", self.id, Escape(&buf[..n]));
                     Poll::Ready(Ok(n))
-                },
-                Poll::Ready(Err(e)) => {
-                    Poll::Ready(Err(e))
-                },
+                }
+                Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
                 Poll::Pending => Poll::Pending,
             }
         }
@@ -988,7 +963,7 @@ mod verbose {
         fn poll_write_vectored(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            bufs: &[IoSlice<'_>]
+            bufs: &[IoSlice<'_>],
         ) -> Poll<Result<usize, io::Error>> {
             Pin::new(&mut self.inner).poll_write_vectored(cx, bufs)
         }
@@ -997,13 +972,16 @@ mod verbose {
             self.inner.is_write_vectored()
         }
 
-        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), std::io::Error>> {
+        fn poll_flush(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context,
+        ) -> Poll<Result<(), std::io::Error>> {
             Pin::new(&mut self.inner).poll_flush(cx)
         }
 
         fn poll_shutdown(
             mut self: Pin<&mut Self>,
-            cx: &mut Context
+            cx: &mut Context,
         ) -> Poll<Result<(), std::io::Error>> {
             Pin::new(&mut self.inner).poll_shutdown(cx)
         }
@@ -1101,7 +1079,10 @@ mod tests {
     fn test_tunnel() {
         let addr = mock_tunnel!();
 
-        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
         let f = async move {
             let tcp = TcpStream::connect(&addr).await?;
             let host = addr.ip().to_string();
@@ -1116,7 +1097,10 @@ mod tests {
     fn test_tunnel_eof() {
         let addr = mock_tunnel!(b"HTTP/1.1 200 OK");
 
-        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
         let f = async move {
             let tcp = TcpStream::connect(&addr).await?;
             let host = addr.ip().to_string();
@@ -1131,7 +1115,10 @@ mod tests {
     fn test_tunnel_non_http_response() {
         let addr = mock_tunnel!(b"foo bar baz hallo");
 
-        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
         let f = async move {
             let tcp = TcpStream::connect(&addr).await?;
             let host = addr.ip().to_string();
@@ -1152,7 +1139,10 @@ mod tests {
         "
         );
 
-        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
         let f = async move {
             let tcp = TcpStream::connect(&addr).await?;
             let host = addr.ip().to_string();
@@ -1171,7 +1161,10 @@ mod tests {
             "Proxy-Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==\r\n"
         );
 
-        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
         let f = async move {
             let tcp = TcpStream::connect(&addr).await?;
             let host = addr.ip().to_string();
