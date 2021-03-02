@@ -3,7 +3,7 @@ use std::fmt;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::into_url::{IntoUrl, PolyfillTryInto};
+use crate::into_url::{IntoUrl, IntoUrlSealed};
 use crate::Url;
 use http::{header::HeaderValue, Uri};
 use ipnet::IpNet;
@@ -111,11 +111,11 @@ pub trait IntoProxyScheme {
 impl<S: IntoUrl> IntoProxyScheme for S {
     fn into_proxy_scheme(self) -> crate::Result<ProxyScheme> {
         // validate the URL
-        let url = match self._as_str().into_url() {
+        let url = match self.as_str().into_url() {
             Ok(ok) => ok,
             Err(e) => {
                 // the issue could have been caused by a missing scheme, so we try adding http://
-                format!("http://{}", self._as_str())
+                format!("http://{}", self.as_str())
                     .into_url()
                     .map_err(|_| {
                         // return the original error
