@@ -194,6 +194,25 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.cookie_store(enable))
     }
 
+    /// Set the persistent cookie store for the client.
+    ///
+    /// Cookies received in responses will be passed to this store, and
+    /// additional requests will query this store for cookies.
+    ///
+    /// By default, no cookie store is used.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled.
+    #[cfg(feature = "cookies")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
+    pub fn cookie_provider<C: crate::cookie::CookieStore + 'static>(
+        self,
+        cookie_store: Arc<C>,
+    ) -> ClientBuilder {
+        self.with_inner(|inner| inner.cookie_provider(cookie_store))
+    }
+
     /// Enable auto gzip decompression by checking the `Content-Encoding` response header.
     ///
     /// If auto gzip decompresson is turned on:
