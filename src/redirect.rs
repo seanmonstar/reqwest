@@ -21,6 +21,7 @@ use crate::Url;
 ///   the allowed maximum redirect hops in a chain.
 /// - `none` can be used to disable all redirect behavior.
 /// - `custom` can be used to create a customized policy.
+#[derive(Clone)]
 pub struct Policy {
     inner: PolicyKind,
 }
@@ -207,6 +208,16 @@ enum PolicyKind {
     Custom(Box<dyn Fn(Attempt) -> Action + Send + Sync + 'static>),
     Limit(usize),
     None,
+}
+
+impl Clone for PolicyKind {
+    fn clone(&self) -> Self {
+        match self {
+            c @ PolicyKind::Custom(_) => c.clone(),
+            l @ PolicyKind::Limit(_) => l.clone(),
+            PolicyKind::None => PolicyKind::None,
+        }
+    }
 }
 
 impl fmt::Debug for Policy {

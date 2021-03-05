@@ -14,7 +14,7 @@ use super::body::{self, Body};
 use super::multipart;
 use super::Client;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
-use crate::{async_impl, Method, Url};
+use crate::{async_impl, redirect, Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -100,6 +100,18 @@ impl Request {
     #[inline]
     pub fn timeout_mut(&mut self) -> &mut Option<Duration> {
         self.inner.timeout_mut()
+    }
+
+    /// Get the redirect policy.
+    #[inline]
+    pub fn redirect_policy(&self) -> Option<&redirect::Policy> {
+        self.inner.redirect_policy()
+    }
+
+    /// Get a mutable reference to the redirect policy.
+    #[inline]
+    pub fn redirect_policy_mut(&mut self) -> &mut Option<redirect::Policy> {
+        self.inner.redirect_policy_mut()
     }
 
     /// Attempts to clone the `Request`.
@@ -338,6 +350,17 @@ impl RequestBuilder {
     pub fn timeout(mut self, timeout: Duration) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             *req.timeout_mut() = Some(timeout);
+        }
+        self
+    }
+
+    /// Enables a request specific redirect policy.
+    ///
+    /// It affects only this request and overrides
+    /// the request policy configured using `ClientBuilder::request()`.
+    pub fn redirect(mut self, policy: redirect::Policy) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *req.redirect_policy_mut() = Some(policy);
         }
         self
     }

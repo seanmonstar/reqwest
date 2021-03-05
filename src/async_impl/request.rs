@@ -17,7 +17,7 @@ use super::response::Response;
 #[cfg(feature = "multipart")]
 use crate::header::CONTENT_LENGTH;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
-use crate::{Method, Url};
+use crate::{redirect, Method, Url};
 use http::{request::Parts, Request as HttpRequest};
 
 /// A request which can be executed with `Client::execute()`.
@@ -27,6 +27,7 @@ pub struct Request {
     headers: HeaderMap,
     body: Option<Body>,
     timeout: Option<Duration>,
+    redirect_policy: Option<redirect::Policy>,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -48,6 +49,7 @@ impl Request {
             headers: HeaderMap::new(),
             body: None,
             timeout: None,
+            redirect_policy: None,
         }
     }
 
@@ -111,6 +113,18 @@ impl Request {
         &mut self.timeout
     }
 
+    /// Get the redirect policy.
+    #[inline]
+    pub fn redirect_policy(&self) -> Option<&redirect::Policy> {
+        self.redirect_policy.as_ref()
+    }
+
+    /// Get a mutable reference to the redirect policy.
+    #[inline]
+    pub fn redirect_policy_mut(&mut self) -> &mut Option<redirect::Policy> {
+        &mut self.redirect_policy
+    }
+
     /// Attempt to clone the request.
     ///
     /// `None` is returned if the request can not be cloned, i.e. if the body is a stream.
@@ -122,12 +136,29 @@ impl Request {
         let mut req = Request::new(self.method().clone(), self.url().clone());
         *req.timeout_mut() = self.timeout().cloned();
         *req.headers_mut() = self.headers().clone();
+        *req.redirect_policy_mut() = self.redirect_policy().cloned();
         req.body = body;
         Some(req)
     }
 
-    pub(super) fn pieces(self) -> (Method, Url, HeaderMap, Option<Body>, Option<Duration>) {
-        (self.method, self.url, self.headers, self.body, self.timeout)
+    pub(super) fn pieces(
+        self,
+    ) -> (
+        Method,
+        Url,
+        HeaderMap,
+        Option<Body>,
+        Option<Duration>,
+        Option<redirect::Policy>,
+    ) {
+        (
+            self.method,
+            self.url,
+            self.headers,
+            self.body,
+            self.timeout,
+            self.redirect_policy,
+        )
     }
 }
 
@@ -240,6 +271,17 @@ impl RequestBuilder {
     pub fn timeout(mut self, timeout: Duration) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             *req.timeout_mut() = Some(timeout);
+        }
+        self
+    }
+
+    /// Enables a request specific redirect policy.
+    ///
+    /// It affects only this request and overrides
+    /// the request policy configured using `ClientBuilder::request()`.
+    pub fn redirect(mut self, policy: redirect::Policy) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *req.redirect_policy_mut() = Some(policy);
         }
         self
     }
@@ -525,6 +567,7 @@ where
             headers,
             body: Some(body.into()),
             timeout: None,
+            redirect_policy: None,
         })
     }
 }

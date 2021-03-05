@@ -1088,7 +1088,7 @@ impl Client {
     }
 
     pub(super) fn execute_request(&self, req: Request) -> Pending {
-        let (method, url, mut headers, body, timeout) = req.pieces();
+        let (method, url, mut headers, body, timeout, redirect_policy) = req.pieces();
         if url.scheme() != "http" && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
         }
@@ -1165,6 +1165,7 @@ impl Client {
 
                 in_flight,
                 timeout,
+                redirect_policy,
             }),
         }
     }
@@ -1361,6 +1362,7 @@ pin_project! {
         in_flight: ResponseFuture,
         #[pin]
         timeout: Option<Pin<Box<Sleep>>>,
+        redirect_policy: Option<redirect::Policy>,
     }
 }
 
@@ -1503,10 +1505,15 @@ impl Future for PendingRequest {
                     }
                     let url = self.url.clone();
                     self.as_mut().urls().push(url);
-                    let action = self
-                        .client
-                        .redirect_policy
-                        .check(res.status(), &loc, &self.urls);
+
+                    // Request specific redirect policy takes precedence
+                    // over client redirect policy
+                    let policy = match &self.redirect_policy {
+                        Some(p) => p,
+                        None => &self.client.redirect_policy,
+                    };
+
+                    let action = policy.check(res.status(), &loc, &self.urls);
 
                     match action {
                         redirect::ActionKind::Follow => {
