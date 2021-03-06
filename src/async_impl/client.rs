@@ -1088,7 +1088,7 @@ impl Client {
     }
 
     pub(super) fn execute_request(&self, req: Request) -> Pending {
-        let (method, url, mut headers, body, timeout) = req.pieces();
+        let (method, url, mut headers, body, timeout, allow_redirect) = req.pieces();
         if url.scheme() != "http" && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
         }
@@ -1158,6 +1158,7 @@ impl Client {
                 url,
                 headers,
                 body: reusable,
+                allow_redirect,
 
                 urls: Vec::new(),
 
@@ -1352,6 +1353,7 @@ pin_project! {
         url: Url,
         headers: HeaderMap,
         body: Option<Option<Bytes>>,
+        allow_redirect: bool,
 
         urls: Vec<Url>,
 
@@ -1470,7 +1472,7 @@ impl Future for PendingRequest {
                 }
                 _ => false,
             };
-            if should_redirect {
+            if should_redirect && self.allow_redirect {
                 let loc = res.headers().get(LOCATION).and_then(|val| {
                     let loc = (|| -> Option<Url> {
                         // Some sites may send a utf-8 Location header,
