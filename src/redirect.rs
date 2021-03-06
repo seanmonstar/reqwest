@@ -148,10 +148,7 @@ impl Policy {
     }
 
     pub(crate) fn is_default(&self) -> bool {
-        match self.inner {
-            PolicyKind::Limit(10) => true,
-            _ => false,
-        }
+        matches!(self.inner, PolicyKind::Limit(10))
     }
 }
 
