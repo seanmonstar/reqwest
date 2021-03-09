@@ -1,3 +1,11 @@
+## v0.11.2
+
+- Add `CookieStore` trait to customize the type that stores and retrieves cookies for a session.
+- Add `cookie::Jar` as a default `CookieStore`, easing creating some session cookies before creating the `Client`.
+- Add `ClientBuilder::http2_adaptive_window()` option to configure an adaptive HTTP2 flow control behavior.
+- Add `ClientBuilder::http2_max_frame_size()` option to adjust the maximum HTTP2 frame size that can be received.
+- Implement `IntoUrl` for `String`, making it more convenient to create requests with `format!`.
+
 ## v0.11.1
 
 - Add `ClientBuilder::tls_built_in_root_certs()` option to disable built-in root certificates.
