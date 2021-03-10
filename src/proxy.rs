@@ -279,11 +279,8 @@ impl Proxy {
             // Custom *may* match 'http', so assume so.
             | Intercept::Custom(_) => true,
             Intercept::System(ref system) => {
-                if let Some(proxy) = system.get("http") {
-                    match proxy {
-                        ProxyScheme::Http { auth, .. } => auth.is_some(),
-                        _ => false,
-                    }
+                if let Some(ProxyScheme::Http { auth, .. }) = system.get("http") {
+                    auth.is_some()
                 } else {
                     false
                 }
@@ -732,11 +729,10 @@ fn get_sys_proxies(
         RegistryProxyValues,
     >,
 ) -> SystemProxyMap {
-    let proxies = get_from_environment();
-
     // TODO: move the following #[cfg] to `if expression` when attributes on `if` expressions allowed
     #[cfg(target_os = "windows")]
     {
+        let proxies = get_from_environment();
         if proxies.is_empty() {
             // don't care errors if can't get proxies from registry, just return an empty HashMap.
             if let Some(registry_values) = registry_values {
@@ -744,7 +740,7 @@ fn get_sys_proxies(
             }
         }
     }
-    proxies
+    get_from_environment()
 }
 
 fn insert_proxy(proxies: &mut SystemProxyMap, scheme: impl Into<String>, addr: String) -> bool {
