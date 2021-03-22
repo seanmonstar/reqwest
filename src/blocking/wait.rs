@@ -70,7 +70,7 @@ fn enter() {
     // Check we aren't already in a runtime
     #[cfg(debug_assertions)]
     {
-        tokio::runtime::Builder::new_current_thread()
+        let _enter = tokio::runtime::Builder::new_current_thread()
             .build()
             .expect("build shell runtime")
             .enter();
