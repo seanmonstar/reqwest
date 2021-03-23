@@ -8,7 +8,7 @@ use std::time::SystemTime;
 use crate::header::{HeaderValue, SET_COOKIE};
 use bytes::Bytes;
 
-/// Actions for a persistent cookie store providing session supprt.
+/// Actions for a persistent cookie store providing session support.
 pub trait CookieStore: Send + Sync {
     /// Store a set of Set-Cookie header values recevied from `url`
     fn set_cookies(&self, cookie_headers: &mut dyn Iterator<Item = &HeaderValue>, url: &url::Url);
