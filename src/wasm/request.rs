@@ -7,6 +7,7 @@ use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
 use url::Url;
+use web_sys::RequestCredentials;
 
 use super::{Body, Client, Response};
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
@@ -18,6 +19,7 @@ pub struct Request {
     headers: HeaderMap,
     body: Option<Body>,
     pub(super) cors: bool,
+    pub(super) credentials: RequestCredentials,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -36,6 +38,7 @@ impl Request {
             headers: HeaderMap::new(),
             body: None,
             cors: true,
+            credentials: RequestCredentials::SameOrigin,
         }
     }
 
@@ -254,6 +257,54 @@ impl RequestBuilder {
         self
     }
 
+    /// Set fetch credentials to 'same-origin'
+    ///
+    /// # WASM
+    ///
+    /// This option is only effective with WebAssembly target.
+    ///
+    /// The [request credentials][mdn] will be set to 'same-origin'.
+    ///
+    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials
+    pub fn fetch_credentials_same_origin(mut self) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.credentials = RequestCredentials::SameOrigin;
+        }
+        self
+    }
+
+    /// Set fetch credentials to 'include'
+    ///
+    /// # WASM
+    ///
+    /// This option is only effective with WebAssembly target.
+    ///
+    /// The [request credentials][mdn] will be set to 'include'.
+    ///
+    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials
+    pub fn fetch_credentials_include(mut self) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.credentials = RequestCredentials::Include;
+        }
+        self
+    }
+
+    /// Set fetch credentials to 'omit'
+    ///
+    /// # WASM
+    ///
+    /// This option is only effective with WebAssembly target.
+    ///
+    /// The [request credentials][mdn] will be set to 'omit'.
+    ///
+    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials
+    pub fn fetch_credentials_omit(mut self) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.credentials = RequestCredentials::Omit;
+        }
+        self
+    }
+
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
     pub fn build(self) -> crate::Result<Request> {
@@ -332,6 +383,7 @@ where
             headers,
             body: Some(body.into()),
             cors: true,
+            credentials: RequestCredentials::SameOrigin,
         })
     }
 }
