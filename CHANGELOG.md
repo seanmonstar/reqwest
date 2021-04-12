@@ -1,3 +1,8 @@
+## v0.11.3
+
+- Add `impl From<hyper::Body> for reqwest::Body`.
+- (wasm) Add credentials mode methods to `RequestBuilder`.
+
 ## v0.11.2
 
 - Add `CookieStore` trait to customize the type that stores and retrieves cookies for a session.
