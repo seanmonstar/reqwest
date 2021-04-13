@@ -27,6 +27,7 @@ pub struct Request {
     headers: HeaderMap,
     body: Option<Body>,
     timeout: Option<Duration>,
+    allow_redirect: bool,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -48,6 +49,7 @@ impl Request {
             headers: HeaderMap::new(),
             body: None,
             timeout: None,
+            allow_redirect: true,
         }
     }
 
@@ -111,6 +113,18 @@ impl Request {
         &mut self.timeout
     }
 
+    /// Get if redirects are allowed.
+    #[inline]
+    pub fn allow_redirect(&self) -> bool {
+        self.allow_redirect
+    }
+
+    /// Get a mutable reference to allow_redirect.
+    #[inline]
+    pub fn allow_redirect_mut(&mut self) -> &mut bool {
+        &mut self.allow_redirect
+    }
+
     /// Attempt to clone the request.
     ///
     /// `None` is returned if the request can not be cloned, i.e. if the body is a stream.
@@ -126,8 +140,15 @@ impl Request {
         Some(req)
     }
 
-    pub(super) fn pieces(self) -> (Method, Url, HeaderMap, Option<Body>, Option<Duration>) {
-        (self.method, self.url, self.headers, self.body, self.timeout)
+    pub(super) fn pieces(self) -> (Method, Url, HeaderMap, Option<Body>, Option<Duration>, bool) {
+        (
+            self.method,
+            self.url,
+            self.headers,
+            self.body,
+            self.timeout,
+            self.allow_redirect,
+        )
     }
 }
 
@@ -222,6 +243,14 @@ impl RequestBuilder {
     {
         let header_value = format!("Bearer {}", token);
         self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
+    }
+
+    /// Disables automatic redirection
+    pub fn disable_redirect(mut self) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *req.allow_redirect_mut() = false;
+        }
+        self
     }
 
     /// Set the request body.
@@ -525,6 +554,7 @@ where
             headers,
             body: Some(body.into()),
             timeout: None,
+            allow_redirect: true,
         })
     }
 }
