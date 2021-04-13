@@ -1106,7 +1106,7 @@ impl Client {
     }
 
     pub(super) fn execute_request(&self, req: Request) -> Pending {
-        let (method, url, mut headers, body, timeout) = req.pieces();
+        let (method, url, mut headers, body, timeout, version) = req.pieces();
         if url.scheme() != "http" && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
         }
@@ -1157,6 +1157,7 @@ impl Client {
         let mut req = hyper::Request::builder()
             .method(method.clone())
             .uri(uri)
+            .version(version)
             .body(body.into_stream())
             .expect("valid request parts");
 
