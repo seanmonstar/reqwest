@@ -3,7 +3,7 @@ use std::fmt;
 use std::time::Duration;
 
 use base64::encode;
-use http::{request::Parts, Request as HttpRequest};
+use http::{request::Parts, Request as HttpRequest, Version};
 use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
@@ -78,6 +78,18 @@ impl Request {
         self.inner.headers_mut()
     }
 
+    /// Get the http version.
+    #[inline]
+    pub fn version(&self) -> Version {
+        self.inner.version()
+    }
+
+    /// Get a mutable reference to the http version.
+    #[inline]
+    pub fn version_mut(&mut self) -> &mut Version {
+        self.inner.version_mut()
+    }
+
     /// Get the body.
     #[inline]
     pub fn body(&self) -> Option<&Body> {
@@ -118,6 +130,7 @@ impl Request {
         };
         let mut req = Request::new(self.method().clone(), self.url().clone());
         *req.headers_mut() = self.headers().clone();
+        *req.version_mut() = self.version().clone();
         req.body = body;
         Some(req)
     }
@@ -394,6 +407,14 @@ impl RequestBuilder {
         self
     }
 
+    /// Set HTTP version
+    pub fn version(mut self, version: Version) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *req.version_mut() = version;
+        }
+        self
+    }
+
     /// Send a form body.
     ///
     /// Sets the body to the url encoded serialization of the passed value,
@@ -640,7 +661,7 @@ fn fmt_request_fields<'a, 'b>(
 #[cfg(test)]
 mod tests {
     use super::super::{body, Client};
-    use super::{HttpRequest, Request};
+    use super::{HttpRequest, Request, Version};
     use crate::header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE, HOST};
     use crate::Method;
     use serde::Serialize;
@@ -986,6 +1007,26 @@ mod tests {
         assert_eq!(headers.get("User-Agent").unwrap(), "my-awesome-agent/1.0");
         assert_eq!(req.method(), Method::GET);
         assert_eq!(req.url().as_str(), "http://localhost/");
+    }
+
+    #[test]
+    fn set_http_request_version() {
+        let http_request = HttpRequest::builder()
+            .method("GET")
+            .uri("http://localhost/")
+            .header("User-Agent", "my-awesome-agent/1.0")
+            .version(Version::HTTP_11)
+            .body("test test test")
+            .unwrap();
+        let req: Request = Request::try_from(http_request).unwrap();
+        assert_eq!(req.body().is_none(), false);
+        let test_data = b"test test test";
+        assert_eq!(req.body().unwrap().as_bytes(), Some(&test_data[..]));
+        let headers = req.headers();
+        assert_eq!(headers.get("User-Agent").unwrap(), "my-awesome-agent/1.0");
+        assert_eq!(req.method(), Method::GET);
+        assert_eq!(req.url().as_str(), "http://localhost/");
+        assert_eq!(req.version(), Version::HTTP_11);
     }
 
     #[test]

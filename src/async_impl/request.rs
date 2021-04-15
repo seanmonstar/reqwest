@@ -18,7 +18,7 @@ use super::response::Response;
 use crate::header::CONTENT_LENGTH;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 use crate::{Method, Url};
-use http::{request::Parts, Request as HttpRequest};
+use http::{request::Parts, Request as HttpRequest, Version};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -27,6 +27,7 @@ pub struct Request {
     headers: HeaderMap,
     body: Option<Body>,
     timeout: Option<Duration>,
+    version: Version,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -48,6 +49,7 @@ impl Request {
             headers: HeaderMap::new(),
             body: None,
             timeout: None,
+            version: Version::default(),
         }
     }
 
@@ -111,6 +113,18 @@ impl Request {
         &mut self.timeout
     }
 
+    /// Get the http version.
+    #[inline]
+    pub fn version(&self) -> Version {
+        self.version
+    }
+
+    /// Get a mutable reference to the http version.
+    #[inline]
+    pub fn version_mut(&mut self) -> &mut Version {
+        &mut self.version
+    }
+
     /// Attempt to clone the request.
     ///
     /// `None` is returned if the request can not be cloned, i.e. if the body is a stream.
@@ -122,12 +136,29 @@ impl Request {
         let mut req = Request::new(self.method().clone(), self.url().clone());
         *req.timeout_mut() = self.timeout().cloned();
         *req.headers_mut() = self.headers().clone();
+        *req.version_mut() = self.version().clone();
         req.body = body;
         Some(req)
     }
 
-    pub(super) fn pieces(self) -> (Method, Url, HeaderMap, Option<Body>, Option<Duration>) {
-        (self.method, self.url, self.headers, self.body, self.timeout)
+    pub(super) fn pieces(
+        self,
+    ) -> (
+        Method,
+        Url,
+        HeaderMap,
+        Option<Body>,
+        Option<Duration>,
+        Version,
+    ) {
+        (
+            self.method,
+            self.url,
+            self.headers,
+            self.body,
+            self.timeout,
+            self.version,
+        )
     }
 }
 
@@ -318,6 +349,14 @@ impl RequestBuilder {
         }
         if let Some(err) = error {
             self.request = Err(err);
+        }
+        self
+    }
+
+    /// Set HTTP version
+    pub fn version(mut self, version: Version) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.version = version;
         }
         self
     }
@@ -516,6 +555,7 @@ where
             method,
             uri,
             headers,
+            version,
             ..
         } = parts;
         let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
@@ -525,13 +565,14 @@ where
             headers,
             body: Some(body.into()),
             timeout: None,
+            version: version,
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Client, HttpRequest, Request};
+    use super::{Client, HttpRequest, Request, Version};
     use crate::Method;
     use serde::Serialize;
     use std::collections::BTreeMap;
@@ -751,6 +792,26 @@ mod tests {
         assert_eq!(headers.get("User-Agent").unwrap(), "my-awesome-agent/1.0");
         assert_eq!(req.method(), Method::GET);
         assert_eq!(req.url().as_str(), "http://localhost/");
+    }
+
+    #[test]
+    fn set_http_request_version() {
+        let http_request = HttpRequest::builder()
+            .method("GET")
+            .uri("http://localhost/")
+            .header("User-Agent", "my-awesome-agent/1.0")
+            .version(Version::HTTP_11)
+            .body("test test test")
+            .unwrap();
+        let req: Request = Request::try_from(http_request).unwrap();
+        assert_eq!(req.body().is_none(), false);
+        let test_data = b"test test test";
+        assert_eq!(req.body().unwrap().as_bytes(), Some(&test_data[..]));
+        let headers = req.headers();
+        assert_eq!(headers.get("User-Agent").unwrap(), "my-awesome-agent/1.0");
+        assert_eq!(req.method(), Method::GET);
+        assert_eq!(req.url().as_str(), "http://localhost/");
+        assert_eq!(req.version(), Version::HTTP_11);
     }
 
     /*
