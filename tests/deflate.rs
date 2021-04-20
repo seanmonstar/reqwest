@@ -1,4 +1,5 @@
 mod support;
+use std::io::Write;
 use support::*;
 
 #[tokio::test]
@@ -85,6 +86,8 @@ async fn test_accept_encoding_header_is_not_changed_if_set() {
 }
 
 async fn deflate_case(response_size: usize, chunk_size: usize) {
+    use futures_util::stream::StreamExt;
+
     let content: String = (0..response_size)
         .into_iter()
         .map(|i| format!("test {}", i))
