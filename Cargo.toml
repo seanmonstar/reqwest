@@ -219,6 +219,11 @@ path = "tests/brotli.rs"
 required-features = ["brotli"]
 
 [[test]]
+name = "deflate"
+path = "tests/deflate.rs"
+required-features = ["deflate"]
+
+[[test]]
 name = "multipart"
 path = "tests/multipart.rs"
 required-features = ["multipart"]
