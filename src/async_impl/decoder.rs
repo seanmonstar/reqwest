@@ -183,13 +183,13 @@ impl Decoder {
         use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
         use log::warn;
 
-        let content_encoding_gzip: bool;
+        let content_encoding_brotli: bool;
         let mut is_brotli = {
-            content_encoding_gzip = headers
+            content_encoding_brotli = headers
                 .get_all(CONTENT_ENCODING)
                 .iter()
                 .any(|enc| enc == "br");
-            content_encoding_gzip
+            content_encoding_brotli
                 || headers
                     .get_all(TRANSFER_ENCODING)
                     .iter()

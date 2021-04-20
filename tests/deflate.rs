@@ -95,43 +95,43 @@ async fn deflate_case(response_size: usize, chunk_size: usize) {
     let mut encoder = libflate::deflate::Encoder::new(Vec::new()).unwrap();
     match encoder.write(content.as_bytes()) {
         Ok(n) => assert!(n > 0, "Failed to write to encoder."),
-        _ => panic!("Failed to gzip encode string."),
+        _ => panic!("Failed to deflate encode string."),
     };
 
-    let gzipped_content = encoder.finish().into_result().unwrap();
+    let deflated_content = encoder.finish().into_result().unwrap();
 
     let mut response = format!(
         "\
          HTTP/1.1 200 OK\r\n\
          Server: test-accept\r\n\
-         Content-Encoding: gzip\r\n\
+         Content-Encoding: deflate\r\n\
          Content-Length: {}\r\n\
          \r\n",
-        &gzipped_content.len()
+        &deflated_content.len()
     )
     .into_bytes();
-    response.extend(&gzipped_content);
+    response.extend(&deflated_content);
 
     let server = server::http(move |req| {
         assert!(req.headers()["accept-encoding"]
             .to_str()
             .unwrap()
-            .contains("gzip"));
+            .contains("deflate"));
 
-        let gzipped = gzipped_content.clone();
+        let deflated = deflated_content.clone();
         async move {
-            let len = gzipped.len();
+            let len = deflated.len();
             let stream =
-                futures_util::stream::unfold((gzipped, 0), move |(gzipped, pos)| async move {
-                    let chunk = gzipped.chunks(chunk_size).nth(pos)?.to_vec();
+                futures_util::stream::unfold((deflated, 0), move |(deflated, pos)| async move {
+                    let chunk = deflated.chunks(chunk_size).nth(pos)?.to_vec();
 
-                    Some((chunk, (gzipped, pos + 1)))
+                    Some((chunk, (deflated, pos + 1)))
                 });
 
             let body = hyper::Body::wrap_stream(stream.map(Ok::<_, std::convert::Infallible>));
 
             http::Response::builder()
-                .header("content-encoding", "gzip")
+                .header("content-encoding", "deflate")
                 .header("content-length", len)
                 .body(body)
                 .unwrap()
@@ -141,10 +141,11 @@ async fn deflate_case(response_size: usize, chunk_size: usize) {
     let client = reqwest::Client::new();
 
     let res = client
-        .get(&format!("http://{}/gzip", server.addr()))
+        .get(&format!("http://{}/deflate", server.addr()))
         .send()
         .await
         .expect("response");
 
     let body = res.text().await.expect("text");
-    assert_eq!(body, content);}
+    assert_eq!(body, content);
+}
