@@ -257,6 +257,28 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.brotli(enable))
     }
 
+    /// Enable auto deflate decompression by checking the `Content-Encoding` response header.
+    ///
+    /// If auto deflate decompresson is turned on:
+    ///
+    /// - When sending a request and if the request's headers do not already contain
+    ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `deflate`.
+    ///   The request body is **not** automatically compressed.
+    /// - When receiving a response, if it's headers contain a `Content-Encoding` value that
+    ///   equals to `deflate`, both values `Content-Encoding` and `Content-Length` are removed from the
+    ///   headers' set. The response body is automatically decompressed.
+    ///
+    /// If the `deflate` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `deflate` feature to be enabled
+    #[cfg(feature = "deflate")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "deflate")))]
+    pub fn deflate(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.deflate(enable))
+    }
+
     /// Disable auto response body gzip decompression.
     ///
     /// This method exists even if the optional `gzip` feature is not enabled.
@@ -273,6 +295,15 @@ impl ClientBuilder {
     /// even if another dependency were to enable the optional `brotli` feature.
     pub fn no_brotli(self) -> ClientBuilder {
         self.with_inner(|inner| inner.no_brotli())
+    }
+
+    /// Disable auto response body deflate decompression.
+    ///
+    /// This method exists even if the optional `deflate` feature is not enabled.
+    /// This can be used to ensure a `Client` doesn't use deflate decompression
+    /// even if another dependency were to enable the optional `deflate` feature.
+    pub fn no_deflate(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.no_deflate())
     }
 
     // Redirect options
