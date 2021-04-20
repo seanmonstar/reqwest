@@ -9,15 +9,18 @@ use async_compression::tokio::bufread::GzipDecoder;
 #[cfg(feature = "brotli")]
 use async_compression::tokio::bufread::BrotliDecoder;
 
+#[cfg(feature = "deflate")]
+use async_compression::tokio::bufread::DeflateDecoder;
+
 use bytes::Bytes;
 use futures_core::Stream;
 use futures_util::stream::Peekable;
 use http::HeaderMap;
 use hyper::body::HttpBody;
 
-#[cfg(any(feature = "gzip", feature = "brotli"))]
+#[cfg(any(feature = "gzip", feature = "brotli", feature = "deflate"))]
 use tokio_util::codec::{BytesCodec, FramedRead};
-#[cfg(any(feature = "gzip", feature = "brotli"))]
+#[cfg(any(feature = "gzip", feature = "brotli", feature = "deflate"))]
 use tokio_util::io::StreamReader;
 
 use super::super::Body;
@@ -29,6 +32,8 @@ pub(super) struct Accepts {
     pub(super) gzip: bool,
     #[cfg(feature = "brotli")]
     pub(super) brotli: bool,
+    #[cfg(feature = "deflate")]
+    pub(super) deflate: bool,
 }
 
 /// A response decompressor over a non-blocking stream of chunks.
@@ -50,8 +55,12 @@ enum Inner {
     #[cfg(feature = "brotli")]
     Brotli(FramedRead<BrotliDecoder<StreamReader<Peekable<IoStream>, Bytes>>, BytesCodec>),
 
+    /// A `Deflate` decoder will uncompress the deflated response content before returning it.
+    #[cfg(feature = "deflate")]
+    Deflate(FramedRead<DeflateDecoder<StreamReader<Peekable<IoStream>, Bytes>>, BytesCodec>),
+
     /// A decoder that doesn't have a value yet.
-    #[cfg(any(feature = "brotli", feature = "gzip"))]
+    #[cfg(any(feature = "brotli", feature = "gzip", feature = "deflate"))]
     Pending(Pending),
 }
 
@@ -65,6 +74,8 @@ enum DecoderType {
     Gzip,
     #[cfg(feature = "brotli")]
     Brotli,
+    #[cfg(feature = "deflate")]
+    Deflate,
 }
 
 impl fmt::Debug for Decoder {
@@ -116,6 +127,21 @@ impl Decoder {
             inner: Inner::Pending(Pending(
                 IoStream(body.into_stream()).peekable(),
                 DecoderType::Brotli,
+            )),
+        }
+    }
+
+    /// A deflate decoder.
+    ///
+    /// This decoder will buffer and decompress chunks that are deflated.
+    #[cfg(feature = "deflate")]
+    fn deflate(body: Body) -> Decoder {
+        use futures_util::StreamExt;
+
+        Decoder {
+            inner: Inner::Pending(Pending(
+                IoStream(body.into_stream()).peekable(),
+                DecoderType::Deflate,
             )),
         }
     }
@@ -184,6 +210,38 @@ impl Decoder {
         is_brotli
     }
 
+    #[cfg(feature = "deflate")]
+    fn detect_deflate(headers: &mut HeaderMap) -> bool {
+        use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
+        use log::warn;
+
+        let content_encoding_deflate: bool;
+        let mut is_deflate = {
+            content_encoding_deflate = headers
+                .get_all(CONTENT_ENCODING)
+                .iter()
+                .any(|enc| enc == "deflate");
+            content_encoding_deflate
+                || headers
+                    .get_all(TRANSFER_ENCODING)
+                    .iter()
+                    .any(|enc| enc == "deflate")
+        };
+        if is_deflate {
+            if let Some(content_length) = headers.get(CONTENT_LENGTH) {
+                if content_length == "0" {
+                    warn!("deflate response with content-length of 0");
+                    is_deflate = false;
+                }
+            }
+        }
+        if is_deflate {
+            headers.remove(CONTENT_ENCODING);
+            headers.remove(CONTENT_LENGTH);
+        }
+        is_deflate
+    }
+
     /// Constructs a Decoder from a hyper request.
     ///
     /// A decoder is just a wrapper around the hyper request that knows
@@ -205,6 +263,13 @@ impl Decoder {
             }
         }
 
+        #[cfg(feature = "deflate")]
+        {
+            if _accepts.deflate && Decoder::detect_deflate(_headers) {
+                return Decoder::deflate(body);
+            }
+        }
+
         Decoder::plain_text(body)
     }
 }
@@ -215,7 +280,7 @@ impl Stream for Decoder {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         // Do a read or poll for a pending decoder value.
         match self.inner {
-            #[cfg(any(feature = "brotli", feature = "gzip"))]
+            #[cfg(any(feature = "brotli", feature = "gzip", feature = "deflate"))]
             Inner::Pending(ref mut future) => match Pin::new(future).poll(cx) {
                 Poll::Ready(Ok(inner)) => {
                     self.inner = inner;
@@ -237,6 +302,14 @@ impl Stream for Decoder {
             }
             #[cfg(feature = "brotli")]
             Inner::Brotli(ref mut decoder) => {
+                return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
+                    Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.freeze()))),
+                    Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
+                    None => Poll::Ready(None),
+                };
+            }
+            #[cfg(feature = "deflate")]
+            Inner::Deflate(ref mut decoder) => {
                 return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.freeze()))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
@@ -269,7 +342,7 @@ impl HttpBody for Decoder {
         match self.inner {
             Inner::PlainText(ref body) => HttpBody::size_hint(body),
             // the rest are "unknown", so default
-            #[cfg(any(feature = "brotli", feature = "gzip"))]
+            #[cfg(any(feature = "brotli", feature = "gzip", feature = "deflate"))]
             _ => http_body::SizeHint::default(),
         }
     }
@@ -312,6 +385,11 @@ impl Future for Pending {
                 GzipDecoder::new(StreamReader::new(_body)),
                 BytesCodec::new(),
             )))),
+            #[cfg(feature = "deflate")]
+            DecoderType::Deflate => Poll::Ready(Ok(Inner::Deflate(FramedRead::new(
+                DeflateDecoder::new(StreamReader::new(_body)),
+                BytesCodec::new(),
+            )))),
         }
     }
 }
@@ -337,15 +415,21 @@ impl Accepts {
             gzip: false,
             #[cfg(feature = "brotli")]
             brotli: false,
+            #[cfg(feature = "deflate")]
+            deflate: false,
         }
     }
 
     pub(super) fn as_str(&self) -> Option<&'static str> {
-        match (self.is_gzip(), self.is_brotli()) {
-            (true, true) => Some("gzip, br"),
-            (true, false) => Some("gzip"),
-            (false, true) => Some("br"),
-            _ => None,
+        match (self.is_gzip(), self.is_brotli(), self.is_deflate()) {
+            (true, true, true) => Some("gzip, br, deflate"),
+            (true, true, false) => Some("gzip, br"),
+            (true, false, true) => Some("gzip, deflate"),
+            (false, true, true) => Some("br, deflate"),
+            (true, false, false) => Some("gzip"),
+            (false, true, false) => Some("br"),
+            (false, false, true) => Some("deflate"),
+            (false, false, false) => None,
         }
     }
 
@@ -372,6 +456,18 @@ impl Accepts {
             false
         }
     }
+
+    fn is_deflate(&self) -> bool {
+        #[cfg(feature = "deflate")]
+        {
+            self.deflate
+        }
+
+        #[cfg(not(feature = "deflate"))]
+        {
+            false
+        }
+    }
 }
 
 impl Default for Accepts {
@@ -381,6 +477,8 @@ impl Default for Accepts {
             gzip: true,
             #[cfg(feature = "brotli")]
             brotli: true,
+            #[cfg(feature = "deflate")]
+            deflate: true,
         }
     }
 }
