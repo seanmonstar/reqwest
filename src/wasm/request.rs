@@ -19,7 +19,7 @@ pub struct Request {
     headers: HeaderMap,
     body: Option<Body>,
     pub(super) cors: bool,
-    pub(super) credentials: RequestCredentials,
+    pub(super) credentials: Option<RequestCredentials>,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -38,7 +38,7 @@ impl Request {
             headers: HeaderMap::new(),
             body: None,
             cors: true,
-            credentials: RequestCredentials::SameOrigin,
+            credentials: None,
         }
     }
 
@@ -268,7 +268,7 @@ impl RequestBuilder {
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials
     pub fn fetch_credentials_same_origin(mut self) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            req.credentials = RequestCredentials::SameOrigin;
+            req.credentials = Some(RequestCredentials::SameOrigin);
         }
         self
     }
@@ -284,7 +284,7 @@ impl RequestBuilder {
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials
     pub fn fetch_credentials_include(mut self) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            req.credentials = RequestCredentials::Include;
+            req.credentials = Some(RequestCredentials::Include);
         }
         self
     }
@@ -300,7 +300,7 @@ impl RequestBuilder {
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials
     pub fn fetch_credentials_omit(mut self) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            req.credentials = RequestCredentials::Omit;
+            req.credentials = Some(RequestCredentials::Omit);
         }
         self
     }
@@ -383,7 +383,7 @@ where
             headers,
             body: Some(body.into()),
             cors: true,
-            credentials: RequestCredentials::SameOrigin,
+            credentials: None,
         })
     }
 }
