@@ -49,6 +49,8 @@ gzip = ["async-compression", "async-compression/gzip", "tokio-util"]
 
 brotli = ["async-compression", "async-compression/brotli", "tokio-util"]
 
+deflate = ["async-compression", "async-compression/deflate", "tokio-util"]
+
 json = ["serde_json"]
 
 multipart = ["mime_guess"]
@@ -215,6 +217,11 @@ required-features = ["gzip"]
 name = "brotli"
 path = "tests/brotli.rs"
 required-features = ["brotli"]
+
+[[test]]
+name = "deflate"
+path = "tests/deflate.rs"
+required-features = ["deflate"]
 
 [[test]]
 name = "multipart"
