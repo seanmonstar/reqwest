@@ -146,100 +146,34 @@ impl Decoder {
         }
     }
 
-    #[cfg(feature = "gzip")]
-    fn detect_gzip(headers: &mut HeaderMap) -> bool {
+    #[cfg(any(feature = "brotli", feature = "gzip", feature = "deflate"))]
+    fn detect_encoding(headers: &mut HeaderMap, encoding_str: &str) -> bool {
         use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
         use log::warn;
 
-        let content_encoding_gzip: bool;
-        let mut is_gzip = {
-            content_encoding_gzip = headers
+        let mut is_content_encoded = {
+            headers
                 .get_all(CONTENT_ENCODING)
                 .iter()
-                .any(|enc| enc == "gzip");
-            content_encoding_gzip
+                .any(|enc| enc == encoding_str)
                 || headers
                     .get_all(TRANSFER_ENCODING)
                     .iter()
-                    .any(|enc| enc == "gzip")
+                    .any(|enc| enc == encoding_str)
         };
-        if is_gzip {
+        if is_content_encoded {
             if let Some(content_length) = headers.get(CONTENT_LENGTH) {
                 if content_length == "0" {
-                    warn!("gzip response with content-length of 0");
-                    is_gzip = false;
+                    warn!("{} response with content-length of 0", encoding_str);
+                    is_content_encoded = false;
                 }
             }
         }
-        if is_gzip {
+        if is_content_encoded {
             headers.remove(CONTENT_ENCODING);
             headers.remove(CONTENT_LENGTH);
         }
-        is_gzip
-    }
-
-    #[cfg(feature = "brotli")]
-    fn detect_brotli(headers: &mut HeaderMap) -> bool {
-        use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
-        use log::warn;
-
-        let content_encoding_brotli: bool;
-        let mut is_brotli = {
-            content_encoding_brotli = headers
-                .get_all(CONTENT_ENCODING)
-                .iter()
-                .any(|enc| enc == "br");
-            content_encoding_brotli
-                || headers
-                    .get_all(TRANSFER_ENCODING)
-                    .iter()
-                    .any(|enc| enc == "br")
-        };
-        if is_brotli {
-            if let Some(content_length) = headers.get(CONTENT_LENGTH) {
-                if content_length == "0" {
-                    warn!("brotli response with content-length of 0");
-                    is_brotli = false;
-                }
-            }
-        }
-        if is_brotli {
-            headers.remove(CONTENT_ENCODING);
-            headers.remove(CONTENT_LENGTH);
-        }
-        is_brotli
-    }
-
-    #[cfg(feature = "deflate")]
-    fn detect_deflate(headers: &mut HeaderMap) -> bool {
-        use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
-        use log::warn;
-
-        let content_encoding_deflate: bool;
-        let mut is_deflate = {
-            content_encoding_deflate = headers
-                .get_all(CONTENT_ENCODING)
-                .iter()
-                .any(|enc| enc == "deflate");
-            content_encoding_deflate
-                || headers
-                    .get_all(TRANSFER_ENCODING)
-                    .iter()
-                    .any(|enc| enc == "deflate")
-        };
-        if is_deflate {
-            if let Some(content_length) = headers.get(CONTENT_LENGTH) {
-                if content_length == "0" {
-                    warn!("deflate response with content-length of 0");
-                    is_deflate = false;
-                }
-            }
-        }
-        if is_deflate {
-            headers.remove(CONTENT_ENCODING);
-            headers.remove(CONTENT_LENGTH);
-        }
-        is_deflate
+        is_content_encoded
     }
 
     /// Constructs a Decoder from a hyper request.
@@ -251,21 +185,21 @@ impl Decoder {
     pub(super) fn detect(_headers: &mut HeaderMap, body: Body, _accepts: Accepts) -> Decoder {
         #[cfg(feature = "gzip")]
         {
-            if _accepts.gzip && Decoder::detect_gzip(_headers) {
+            if _accepts.gzip && Decoder::detect_encoding(_headers, "gzip") {
                 return Decoder::gzip(body);
             }
         }
 
         #[cfg(feature = "brotli")]
         {
-            if _accepts.brotli && Decoder::detect_brotli(_headers) {
+            if _accepts.brotli && Decoder::detect_encoding(_headers, "br") {
                 return Decoder::brotli(body);
             }
         }
 
         #[cfg(feature = "deflate")]
         {
-            if _accepts.deflate && Decoder::detect_deflate(_headers) {
+            if _accepts.deflate && Decoder::detect_encoding(_headers, "deflate") {
                 return Decoder::deflate(body);
             }
         }
