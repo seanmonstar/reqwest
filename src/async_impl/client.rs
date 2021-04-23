@@ -53,7 +53,7 @@ use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
 /// The `Client` holds a connection pool internally, so it is advised that
 /// you create one and **reuse** it.
 ///
-/// You do **not** have to wrap the `Client` it in an [`Rc`] or [`Arc`] to **reuse** it,
+/// You do **not** have to wrap the `Client` in an [`Rc`] or [`Arc`] to **reuse** it,
 /// because it already uses an [`Arc`] internally.
 ///
 /// [`Rc`]: std::rc::Rc
@@ -62,7 +62,7 @@ pub struct Client {
     inner: Arc<ClientRef>,
 }
 
-/// A `ClientBuilder` can be used to create a `Client` with  custom configuration.
+/// A `ClientBuilder` can be used to create a `Client` with custom configuration.
 #[must_use]
 pub struct ClientBuilder {
     config: Config,
@@ -172,7 +172,7 @@ impl ClientBuilder {
     ///
     /// # Errors
     ///
-    /// This method fails if TLS backend cannot be initialized, or the resolver
+    /// This method fails if a TLS backend cannot be initialized, or the resolver
     /// cannot load the system configuration.
     pub fn build(self) -> crate::Result<Client> {
         let config = self.config;
@@ -497,8 +497,8 @@ impl ClientBuilder {
     /// - When sending a request and if the request's headers do not already contain
     ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `gzip`.
     ///   The request body is **not** automatically compressed.
-    /// - When receiving a response, if it's headers contain a `Content-Encoding` value that
-    ///   equals to `gzip`, both values `Content-Encoding` and `Content-Length` are removed from the
+    /// - When receiving a response, if its headers contain a `Content-Encoding` value of
+    ///   `gzip`, both `Content-Encoding` and `Content-Length` are removed from the
     ///   headers' set. The response body is automatically decompressed.
     ///
     /// If the `gzip` feature is turned on, the default option is enabled.
@@ -520,8 +520,8 @@ impl ClientBuilder {
     /// - When sending a request and if the request's headers do not already contain
     ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `br`.
     ///   The request body is **not** automatically compressed.
-    /// - When receiving a response, if it's headers contain a `Content-Encoding` value that
-    ///   equals to `br`, both values `Content-Encoding` and `Content-Length` are removed from the
+    /// - When receiving a response, if its headers contain a `Content-Encoding` value of
+    ///   `br`, both `Content-Encoding` and `Content-Length` are removed from the
     ///   headers' set. The response body is automatically decompressed.
     ///
     /// If the `brotli` feature is turned on, the default option is enabled.
@@ -533,6 +533,29 @@ impl ClientBuilder {
     #[cfg_attr(docsrs, doc(cfg(feature = "brotli")))]
     pub fn brotli(mut self, enable: bool) -> ClientBuilder {
         self.config.accepts.brotli = enable;
+        self
+    }
+
+    /// Enable auto deflate decompression by checking the `Content-Encoding` response header.
+    ///
+    /// If auto deflate decompression is turned on:
+    ///
+    /// - When sending a request and if the request's headers do not already contain
+    ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `deflate`.
+    ///   The request body is **not** automatically compressed.
+    /// - When receiving a response, if it's headers contain a `Content-Encoding` value that
+    ///   equals to `deflate`, both values `Content-Encoding` and `Content-Length` are removed from the
+    ///   headers' set. The response body is automatically decompressed.
+    ///
+    /// If the `deflate` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `deflate` feature to be enabled
+    #[cfg(feature = "deflate")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "deflate")))]
+    pub fn deflate(mut self, enable: bool) -> ClientBuilder {
+        self.config.accepts.deflate = enable;
         self
     }
 
@@ -565,6 +588,23 @@ impl ClientBuilder {
         }
 
         #[cfg(not(feature = "brotli"))]
+        {
+            self
+        }
+    }
+
+    /// Disable auto response body deflate decompression.
+    ///
+    /// This method exists even if the optional `deflate` feature is not enabled.
+    /// This can be used to ensure a `Client` doesn't use deflate decompression
+    /// even if another dependency were to enable the optional `deflate` feature.
+    pub fn no_deflate(self) -> ClientBuilder {
+        #[cfg(feature = "deflate")]
+        {
+            self.deflate(false)
+        }
+
+        #[cfg(not(feature = "deflate"))]
         {
             self
         }
@@ -1003,7 +1043,7 @@ impl Client {
     ///
     /// # Panics
     ///
-    /// This method panics if TLS backend cannot initialized, or the resolver
+    /// This method panics if a TLS backend cannot initialized, or the resolver
     /// cannot load the system configuration.
     ///
     /// Use `Client::builder()` if you wish to handle the failure as an `Error`
@@ -1023,7 +1063,7 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// This method fails whenever supplied `Url` cannot be parsed.
+    /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::GET, url)
     }
@@ -1032,7 +1072,7 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// This method fails whenever supplied `Url` cannot be parsed.
+    /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::POST, url)
     }
@@ -1041,7 +1081,7 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// This method fails whenever supplied `Url` cannot be parsed.
+    /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn put<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::PUT, url)
     }
@@ -1050,7 +1090,7 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// This method fails whenever supplied `Url` cannot be parsed.
+    /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn patch<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::PATCH, url)
     }
@@ -1059,7 +1099,7 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// This method fails whenever supplied `Url` cannot be parsed.
+    /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn delete<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::DELETE, url)
     }
@@ -1068,7 +1108,7 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// This method fails whenever supplied `Url` cannot be parsed.
+    /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder {
         self.request(Method::HEAD, url)
     }
@@ -1076,11 +1116,11 @@ impl Client {
     /// Start building a `Request` with the `Method` and `Url`.
     ///
     /// Returns a `RequestBuilder`, which will allow setting headers and
-    /// request body before sending.
+    /// the request body before sending.
     ///
     /// # Errors
     ///
-    /// This method fails whenever supplied `Url` cannot be parsed.
+    /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
         let req = url.into_url().map(move |url| Request::new(method, url));
         RequestBuilder::new(self.clone(), req)
