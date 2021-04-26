@@ -92,7 +92,7 @@ async fn deflate_case(response_size: usize, chunk_size: usize) {
         .into_iter()
         .map(|i| format!("test {}", i))
         .collect();
-    let mut encoder = libflate::deflate::Encoder::new(Vec::new());
+    let mut encoder = libflate::zlib::Encoder::new(Vec::new()).unwrap();
     match encoder.write(content.as_bytes()) {
         Ok(n) => assert!(n > 0, "Failed to write to encoder."),
         _ => panic!("Failed to deflate encode string."),
