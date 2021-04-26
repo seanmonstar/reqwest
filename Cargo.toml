@@ -49,7 +49,7 @@ gzip = ["async-compression", "async-compression/gzip", "tokio-util"]
 
 brotli = ["async-compression", "async-compression/brotli", "tokio-util"]
 
-deflate = ["async-compression", "async-compression/deflate", "tokio-util"]
+deflate = ["async-compression", "async-compression/zlib", "tokio-util"]
 
 json = ["serde_json"]
 
@@ -197,6 +197,7 @@ path = "examples/form.rs"
 [[example]]
 name = "simple"
 path = "examples/simple.rs"
+required-features = ["deflate"]
 
 [[test]]
 name = "blocking"
