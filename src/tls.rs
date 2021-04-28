@@ -1,5 +1,8 @@
 #[cfg(feature = "__rustls")]
-use rustls::{RootCertStore, ServerCertVerified, ServerCertVerifier, TLSError};
+use rustls::{
+    internal::msgs::handshake::DigitallySignedStruct, HandshakeSignatureValid, RootCertStore,
+    ServerCertVerified, ServerCertVerifier, TLSError,
+};
 use std::fmt;
 #[cfg(feature = "__rustls")]
 use tokio_rustls::webpki::DNSNameRef;
@@ -322,6 +325,24 @@ impl ServerCertVerifier for NoVerifier {
         _ocsp_response: &[u8],
     ) -> Result<ServerCertVerified, TLSError> {
         Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &Certificate,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &Certificate,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        Ok(HandshakeSignatureValid::assertion())
     }
 }
 
