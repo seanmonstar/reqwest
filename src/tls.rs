@@ -330,7 +330,7 @@ impl ServerCertVerifier for NoVerifier {
     fn verify_tls12_signature(
         &self,
         _message: &[u8],
-        _cert: &Certificate,
+        _cert: &rustls::Certificate,
         _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
         Ok(HandshakeSignatureValid::assertion())
@@ -339,7 +339,7 @@ impl ServerCertVerifier for NoVerifier {
     fn verify_tls13_signature(
         &self,
         _message: &[u8],
-        _cert: &Certificate,
+        _cert: &rustls::Certificate,
         _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
         Ok(HandshakeSignatureValid::assertion())
