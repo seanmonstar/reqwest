@@ -24,6 +24,10 @@ pub struct Cookie<'a>(cookie_crate::Cookie<'a>);
 /// This is the implementation used when simply calling `cookie_store(true)`.
 /// This type is exposed to allow creating one and filling it with some
 /// existing cookies more easily, before creating a `Client`.
+///
+/// For more advanced scenarios, such as needing to serialize the store or
+/// manipulate it between requests, you may refer to the
+/// [reqwest_cookie_store crate](https://crates.io/crates/reqwest_cookie_store).
 #[derive(Debug, Default)]
 pub struct Jar(RwLock<cookie_store::CookieStore>);
 
