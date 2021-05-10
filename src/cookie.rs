@@ -92,7 +92,10 @@ impl<'a> Cookie<'a> {
 
     /// The cookie expiration time.
     pub fn expires(&self) -> Option<SystemTime> {
-        self.0.expires().map(SystemTime::from)
+        match self.0.expires() {
+            Some(cookie_crate::Expiration::DateTime(offset)) => Some(SystemTime::from(offset)),
+            None | Some(cookie_crate::Expiration::Session) => None,
+        }
     }
 }
 
