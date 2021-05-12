@@ -177,8 +177,8 @@ impl CookieStore for Jar {
             .0
             .read()
             .unwrap()
-            .get_request_cookies(url)
-            .map(|c| format!("{}={}", c.name(), c.value()))
+            .get_request_values(url)
+            .map(|(name, value)| format!("{}={}", name, value))
             .collect::<Vec<_>>()
             .join("; ");
 
