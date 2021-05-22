@@ -575,16 +575,16 @@ where
 /// To construct a `RequestBuilder`, refer to the `Client` documentation.
 #[must_use = "RequestBuilder does nothing until you 'send' it"]
 pub struct DeprecatedRequestBuilder {
-    client: Client,
-    request: crate::Result<Request>,
+    request_builder: RequestBuilder
 }
 
 
 impl DeprecatedRequestBuilder {
     pub(super) fn new(client: Client, request: crate::Result<Request>) -> DeprecatedRequestBuilder {
-        let mut builder = DeprecatedRequestBuilder { client, request };
+        let mut builder = DeprecatedRequestBuilder { request_builder : RequestBuilder { client, request } };
 
         let auth = builder
+            .request_builder
             .request
             .as_mut()
             .ok()
@@ -747,7 +747,7 @@ impl DeprecatedRequestBuilder {
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
     pub fn build(self) -> crate::Result<Request> {
-        self.request
+        self.request_builder.request
     }
 
     /// Constructs the Request and sends it to the target URL, returning a
@@ -772,8 +772,8 @@ impl DeprecatedRequestBuilder {
     /// # }
     /// ```
     pub fn send(self) -> impl Future<Output = Result<Response, crate::Error>> {
-        match self.request {
-            Ok(req) => self.client.execute_request(req),
+        match self.request_builder.request {
+            Ok(req) => self.request_builder.client.execute_request(req),
             Err(err) => Pending::new_err(err),
         }
     }
@@ -798,13 +798,15 @@ impl DeprecatedRequestBuilder {
     /// # }
     /// ```
     pub fn try_clone(&self) -> Option<DeprecatedRequestBuilder> {
-        self.request
+        self.request_builder.request
             .as_ref()
             .ok()
             .and_then(|req| req.try_clone())
-            .map(|req| DeprecatedRequestBuilder {
-                client: self.client.clone(),
-                request: Ok(req),
+            .map(|req| DeprecatedRequestBuilder { 
+                request_builder : RequestBuilder {
+                        client: self.request_builder.client.clone(),
+                        request: Ok(req),
+                }
             })
     }
 }
