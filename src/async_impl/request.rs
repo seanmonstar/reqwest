@@ -608,21 +608,10 @@ impl DeprecatedRequestBuilder {
         DeprecatedRequestBuilder {  request_builder: self.request_builder.header(key, value) }
     }
 
-    /// Add a `Header` to this Request with ability to define if header_value is sensitive.
-    fn header_sensitive<K, V>(mut self, key: K, value: V, sensitive: bool) -> DeprecatedRequestBuilder
-    where
-        HeaderName: TryFrom<K>,
-        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
-        HeaderValue: TryFrom<V>,
-        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
-    {
-        DeprecatedRequestBuilder {  request_builder: self.request_builder.header_sensitive(key, value, sensitive) }
-    }
-
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
-    pub fn headers(mut self, headers: crate::header::HeaderMap) -> DeprecatedRequestBuilder {
+    pub fn headers(self, headers: crate::header::HeaderMap) -> DeprecatedRequestBuilder {
         DeprecatedRequestBuilder {  request_builder: self.request_builder.headers(headers) }
     }
 
@@ -644,7 +633,7 @@ impl DeprecatedRequestBuilder {
     }
 
     /// Set the request body.
-    pub fn body<T: Into<Body>>(mut self, body: T) -> DeprecatedRequestBuilder {
+    pub fn body<T: Into<Body>>(self, body: T) -> DeprecatedRequestBuilder {
         DeprecatedRequestBuilder {  request_builder: self.request_builder.body(body) }
     }
 
@@ -653,7 +642,7 @@ impl DeprecatedRequestBuilder {
     /// The timeout is applied from when the request starts connecting until the
     /// response body has finished. It affects only this request and overrides
     /// the timeout configured using `ClientBuilder::timeout()`.
-    pub fn timeout(mut self, timeout: Duration) -> DeprecatedRequestBuilder {
+    pub fn timeout(self, timeout: Duration) -> DeprecatedRequestBuilder {
         DeprecatedRequestBuilder {  request_builder: self.request_builder.timeout(timeout) }
     }
 
@@ -700,17 +689,17 @@ impl DeprecatedRequestBuilder {
     /// # Errors
     /// This method will fail if the object you provide cannot be serialized
     /// into a query string.
-    pub fn query<T: Serialize + ?Sized>(mut self, query: &T) -> DeprecatedRequestBuilder {
+    pub fn query<T: Serialize + ?Sized>(self, query: &T) -> DeprecatedRequestBuilder {
         DeprecatedRequestBuilder {  request_builder: self.request_builder.query(query) }
     }
 
     /// Set HTTP version
-    pub fn version(mut self, version: Version) -> DeprecatedRequestBuilder {
+    pub fn version(self, version: Version) -> DeprecatedRequestBuilder {
         DeprecatedRequestBuilder {  request_builder: self.request_builder.version(version) }
     }
 
     /// Send a form body.
-    pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> DeprecatedRequestBuilder {
+    pub fn form<T: Serialize + ?Sized>(self, form: &T) -> DeprecatedRequestBuilder {
         DeprecatedRequestBuilder {  request_builder: self.request_builder.form(form) }
     }
 
@@ -808,6 +797,12 @@ impl DeprecatedRequestBuilder {
                         request: Ok(req),
                 }
             })
+    }
+}
+
+impl fmt::Debug for DeprecatedRequestBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.request_builder.fmt(f)
     }
 }
 
