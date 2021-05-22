@@ -605,7 +605,7 @@ impl DeprecatedRequestBuilder {
         HeaderValue: TryFrom<V>,
         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
-        self
+        DeprecatedRequestBuilder {  request_builder: self.request_builder.header(key, value) }
     }
 
     /// Add a `Header` to this Request with ability to define if header_value is sensitive.
@@ -616,14 +616,14 @@ impl DeprecatedRequestBuilder {
         HeaderValue: TryFrom<V>,
         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
-        self
+        DeprecatedRequestBuilder {  request_builder: self.request_builder.header_sensitive(key, value, sensitive) }
     }
 
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
     pub fn headers(mut self, headers: crate::header::HeaderMap) -> DeprecatedRequestBuilder {
-        self
+        DeprecatedRequestBuilder {  request_builder: self.request_builder.headers(headers) }
     }
 
     /// Enable HTTP basic authentication.
@@ -632,7 +632,7 @@ impl DeprecatedRequestBuilder {
         U: fmt::Display,
         P: fmt::Display,
     {
-        self
+        DeprecatedRequestBuilder {  request_builder: self.request_builder.basic_auth(username, password) }
     }
 
     /// Enable HTTP bearer authentication.
@@ -640,12 +640,12 @@ impl DeprecatedRequestBuilder {
     where
         T: fmt::Display,
     {
-        self
+        DeprecatedRequestBuilder {  request_builder: self.request_builder.bearer_auth(token) }
     }
 
     /// Set the request body.
     pub fn body<T: Into<Body>>(mut self, body: T) -> DeprecatedRequestBuilder {
-        self
+        DeprecatedRequestBuilder {  request_builder: self.request_builder.body(body) }
     }
 
     /// Enables a request timeout.
@@ -654,7 +654,7 @@ impl DeprecatedRequestBuilder {
     /// response body has finished. It affects only this request and overrides
     /// the timeout configured using `ClientBuilder::timeout()`.
     pub fn timeout(mut self, timeout: Duration) -> DeprecatedRequestBuilder {
-        self
+        DeprecatedRequestBuilder {  request_builder: self.request_builder.timeout(timeout) }
     }
 
     /// Sends a multipart/form-data body.
@@ -679,7 +679,7 @@ impl DeprecatedRequestBuilder {
     #[cfg(feature = "multipart")]
     #[cfg_attr(docsrs, doc(cfg(feature = "multipart")))]
     pub fn multipart(self, mut multipart: multipart::Form) -> DeprecatedRequestBuilder {
-        self
+        DeprecatedRequestBuilder {  request_builder: self.request_builder.multipart(multipart) }
     }
 
     /// Modify the query string of the URL.
@@ -701,17 +701,17 @@ impl DeprecatedRequestBuilder {
     /// This method will fail if the object you provide cannot be serialized
     /// into a query string.
     pub fn query<T: Serialize + ?Sized>(mut self, query: &T) -> DeprecatedRequestBuilder {
-        self
+        DeprecatedRequestBuilder {  request_builder: self.request_builder.query(query) }
     }
 
     /// Set HTTP version
     pub fn version(mut self, version: Version) -> DeprecatedRequestBuilder {
-        self
+        DeprecatedRequestBuilder {  request_builder: self.request_builder.version(version) }
     }
 
     /// Send a form body.
     pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> DeprecatedRequestBuilder {
-        self
+        DeprecatedRequestBuilder {  request_builder: self.request_builder.form(form) }
     }
 
     /// Send a JSON body.
@@ -728,7 +728,7 @@ impl DeprecatedRequestBuilder {
     #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     pub fn json<T: Serialize + ?Sized>(mut self, json: &T) -> DeprecatedRequestBuilder {
 
-        self
+        DeprecatedRequestBuilder {  request_builder: self.request_builder.multipart(multipart) }
     }
 
     /// Disable CORS on fetching the request.
@@ -741,7 +741,7 @@ impl DeprecatedRequestBuilder {
     ///
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/mode
     pub fn fetch_mode_no_cors(self) -> DeprecatedRequestBuilder {
-        self
+        DeprecatedRequestBuilder {  request_builder: self.request_builder.fetch_mode_no_cors() }
     }
 
     /// Build a `Request`, which can be inspected, modified and executed with
