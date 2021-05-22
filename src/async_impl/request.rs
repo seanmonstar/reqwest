@@ -35,7 +35,6 @@ pub struct Request {
 /// To construct a `RequestBuilder`, refer to the `Client` documentation.
 #[must_use = "RequestBuilder does nothing until you 'send' it"]
 pub struct RequestBuilder {
-    client: Client,
     request: crate::Result<Request>,
 }
 
@@ -163,8 +162,8 @@ impl Request {
 }
 
 impl RequestBuilder {
-    pub(super) fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
-        let mut builder = RequestBuilder { client, request };
+    pub(super) fn new(request: crate::Result<Request>) -> RequestBuilder {
+        let mut builder = RequestBuilder { request };
 
         let auth = builder
             .request
@@ -431,34 +430,6 @@ impl RequestBuilder {
         self.request
     }
 
-    /// Constructs the Request and sends it to the target URL, returning a
-    /// future Response.
-    ///
-    /// # Errors
-    ///
-    /// This method fails if there was an error while sending request,
-    /// redirect loop was detected or redirect limit was exhausted.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use reqwest::Error;
-    /// #
-    /// # async fn run() -> Result<(), Error> {
-    /// let response = reqwest::Client::new()
-    ///     .get("https://hyper.rs")
-    ///     .send()
-    ///     .await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn send(self) -> impl Future<Output = Result<Response, crate::Error>> {
-        match self.request {
-            Ok(req) => self.client.execute_request(req),
-            Err(err) => Pending::new_err(err),
-        }
-    }
-
     /// Attempt to clone the RequestBuilder.
     ///
     /// `None` is returned if the RequestBuilder can not be cloned,
@@ -484,7 +455,6 @@ impl RequestBuilder {
             .ok()
             .and_then(|req| req.try_clone())
             .map(|req| RequestBuilder {
-                client: self.client.clone(),
                 request: Ok(req),
             })
     }
@@ -575,13 +545,14 @@ where
 /// To construct a `RequestBuilder`, refer to the `Client` documentation.
 #[must_use = "RequestBuilder does nothing until you 'send' it"]
 pub struct DeprecatedRequestBuilder {
+    client: Client,
     request_builder: RequestBuilder
 }
 
 
 impl DeprecatedRequestBuilder {
     pub(super) fn new(client: Client, request: crate::Result<Request>) -> DeprecatedRequestBuilder {
-        let mut builder = DeprecatedRequestBuilder { request_builder : RequestBuilder ::new (client, request ) };
+        let mut builder = DeprecatedRequestBuilder { client,  request_builder : RequestBuilder ::new ( request ) };
 
         let auth = builder
             .request_builder
@@ -605,14 +576,14 @@ impl DeprecatedRequestBuilder {
         HeaderValue: TryFrom<V>,
         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
-        DeprecatedRequestBuilder {  request_builder: self.request_builder.header(key, value) }
+        DeprecatedRequestBuilder {  client: self.client, request_builder: self.request_builder.header(key, value) }
     }
 
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
     pub fn headers(self, headers: crate::header::HeaderMap) -> DeprecatedRequestBuilder {
-        DeprecatedRequestBuilder {  request_builder: self.request_builder.headers(headers) }
+        DeprecatedRequestBuilder {  client: self.client, request_builder: self.request_builder.headers(headers) }
     }
 
     /// Enable HTTP basic authentication.
@@ -621,7 +592,7 @@ impl DeprecatedRequestBuilder {
         U: fmt::Display,
         P: fmt::Display,
     {
-        DeprecatedRequestBuilder {  request_builder: self.request_builder.basic_auth(username, password) }
+        DeprecatedRequestBuilder {  client: self.client, request_builder: self.request_builder.basic_auth(username, password) }
     }
 
     /// Enable HTTP bearer authentication.
@@ -629,12 +600,12 @@ impl DeprecatedRequestBuilder {
     where
         T: fmt::Display,
     {
-        DeprecatedRequestBuilder {  request_builder: self.request_builder.bearer_auth(token) }
+        DeprecatedRequestBuilder {  client: self.client, request_builder: self.request_builder.bearer_auth(token) }
     }
 
     /// Set the request body.
     pub fn body<T: Into<Body>>(self, body: T) -> DeprecatedRequestBuilder {
-        DeprecatedRequestBuilder {  request_builder: self.request_builder.body(body) }
+        DeprecatedRequestBuilder {  client: self.client, request_builder: self.request_builder.body(body) }
     }
 
     /// Enables a request timeout.
@@ -643,7 +614,7 @@ impl DeprecatedRequestBuilder {
     /// response body has finished. It affects only this request and overrides
     /// the timeout configured using `ClientBuilder::timeout()`.
     pub fn timeout(self, timeout: Duration) -> DeprecatedRequestBuilder {
-        DeprecatedRequestBuilder {  request_builder: self.request_builder.timeout(timeout) }
+        DeprecatedRequestBuilder {  client: self.client, request_builder: self.request_builder.timeout(timeout) }
     }
 
     /// Sends a multipart/form-data body.
@@ -668,7 +639,7 @@ impl DeprecatedRequestBuilder {
     #[cfg(feature = "multipart")]
     #[cfg_attr(docsrs, doc(cfg(feature = "multipart")))]
     pub fn multipart(self, mut multipart: multipart::Form) -> DeprecatedRequestBuilder {
-        DeprecatedRequestBuilder {  request_builder: self.request_builder.multipart(multipart) }
+        DeprecatedRequestBuilder {  client: self.client, request_builder: self.request_builder.multipart(multipart) }
     }
 
     /// Modify the query string of the URL.
@@ -690,17 +661,17 @@ impl DeprecatedRequestBuilder {
     /// This method will fail if the object you provide cannot be serialized
     /// into a query string.
     pub fn query<T: Serialize + ?Sized>(self, query: &T) -> DeprecatedRequestBuilder {
-        DeprecatedRequestBuilder {  request_builder: self.request_builder.query(query) }
+        DeprecatedRequestBuilder {  client: self.client, request_builder: self.request_builder.query(query) }
     }
 
     /// Set HTTP version
     pub fn version(self, version: Version) -> DeprecatedRequestBuilder {
-        DeprecatedRequestBuilder {  request_builder: self.request_builder.version(version) }
+        DeprecatedRequestBuilder {  client: self.client, request_builder: self.request_builder.version(version) }
     }
 
     /// Send a form body.
     pub fn form<T: Serialize + ?Sized>(self, form: &T) -> DeprecatedRequestBuilder {
-        DeprecatedRequestBuilder {  request_builder: self.request_builder.form(form) }
+        DeprecatedRequestBuilder {  client: self.client, request_builder: self.request_builder.form(form) }
     }
 
     /// Send a JSON body.
@@ -717,7 +688,7 @@ impl DeprecatedRequestBuilder {
     #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     pub fn json<T: Serialize + ?Sized>(mut self, json: &T) -> DeprecatedRequestBuilder {
 
-        DeprecatedRequestBuilder {  request_builder: self.request_builder.multipart(multipart) }
+        DeprecatedRequestBuilder {  client: self.client, request_builder: self.request_builder.multipart(multipart) }
     }
 
     /// Disable CORS on fetching the request.
@@ -730,7 +701,7 @@ impl DeprecatedRequestBuilder {
     ///
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/mode
     pub fn fetch_mode_no_cors(self) -> DeprecatedRequestBuilder {
-        DeprecatedRequestBuilder {  request_builder: self.request_builder.fetch_mode_no_cors() }
+        DeprecatedRequestBuilder {  client: self.client, request_builder: self.request_builder.fetch_mode_no_cors() }
     }
 
     /// Build a `Request`, which can be inspected, modified and executed with
@@ -762,7 +733,7 @@ impl DeprecatedRequestBuilder {
     /// ```
     pub fn send(self) -> impl Future<Output = Result<Response, crate::Error>> {
         match self.request_builder.request {
-            Ok(req) => self.request_builder.client.execute_request(req),
+            Ok(req) => self.client.execute_request(req),
             Err(err) => Pending::new_err(err),
         }
     }
@@ -791,9 +762,9 @@ impl DeprecatedRequestBuilder {
             .as_ref()
             .ok()
             .and_then(|req| req.try_clone())
-            .map(|req| DeprecatedRequestBuilder { 
+            .map(|req| DeprecatedRequestBuilder {
+                client: self.client.clone(),
                 request_builder : RequestBuilder {
-                        client: self.request_builder.client.clone(),
                         request: Ok(req),
                 }
             })
