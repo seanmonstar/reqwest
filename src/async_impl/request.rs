@@ -581,7 +581,7 @@ pub struct DeprecatedRequestBuilder {
 
 impl DeprecatedRequestBuilder {
     pub(super) fn new(client: Client, request: crate::Result<Request>) -> DeprecatedRequestBuilder {
-        let mut builder = DeprecatedRequestBuilder { request_builder : RequestBuilder { client, request } };
+        let mut builder = DeprecatedRequestBuilder { request_builder : RequestBuilder ::new (client, request ) };
 
         let auth = builder
             .request_builder

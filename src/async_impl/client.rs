@@ -27,7 +27,7 @@ use tokio::time::Sleep;
 use log::debug;
 
 use super::decoder::Accepts;
-use super::request::{Request, RequestBuilder};
+use super::request::{Request, DeprecatedRequestBuilder};
 use super::response::Response;
 use super::Body;
 use crate::connect::{Connector, HttpConnector};
@@ -1064,7 +1064,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever the supplied `Url` cannot be parsed.
-    pub fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+    pub fn get<U: IntoUrl>(&self, url: U) -> DeprecatedRequestBuilder {
         self.request(Method::GET, url)
     }
 
@@ -1073,7 +1073,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever the supplied `Url` cannot be parsed.
-    pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+    pub fn post<U: IntoUrl>(&self, url: U) -> DeprecatedRequestBuilder {
         self.request(Method::POST, url)
     }
 
@@ -1082,7 +1082,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever the supplied `Url` cannot be parsed.
-    pub fn put<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+    pub fn put<U: IntoUrl>(&self, url: U) -> DeprecatedRequestBuilder {
         self.request(Method::PUT, url)
     }
 
@@ -1091,7 +1091,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever the supplied `Url` cannot be parsed.
-    pub fn patch<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+    pub fn patch<U: IntoUrl>(&self, url: U) -> DeprecatedRequestBuilder {
         self.request(Method::PATCH, url)
     }
 
@@ -1100,7 +1100,7 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever the supplied `Url` cannot be parsed.
-    pub fn delete<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+    pub fn delete<U: IntoUrl>(&self, url: U) -> DeprecatedRequestBuilder {
         self.request(Method::DELETE, url)
     }
 
@@ -1109,21 +1109,21 @@ impl Client {
     /// # Errors
     ///
     /// This method fails whenever the supplied `Url` cannot be parsed.
-    pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+    pub fn head<U: IntoUrl>(&self, url: U) -> DeprecatedRequestBuilder {
         self.request(Method::HEAD, url)
     }
 
     /// Start building a `Request` with the `Method` and `Url`.
     ///
-    /// Returns a `RequestBuilder`, which will allow setting headers and
+    /// Returns a `DeprecatedRequestBuilder`, which will allow setting headers and
     /// the request body before sending.
     ///
     /// # Errors
     ///
     /// This method fails whenever the supplied `Url` cannot be parsed.
-    pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
+    pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> DeprecatedRequestBuilder {
         let req = url.into_url().map(move |url| Request::new(method, url));
-        RequestBuilder::new(self.clone(), req)
+        DeprecatedRequestBuilder::new(self.clone(), req)
     }
 
     /// Executes a `Request`.
@@ -1131,8 +1131,6 @@ impl Client {
     /// A `Request` can be built manually with `Request::new()` or obtained
     /// from a RequestBuilder with `RequestBuilder::build()`.
     ///
-    /// You should prefer to use the `RequestBuilder` and
-    /// `RequestBuilder::send()`.
     ///
     /// # Errors
     ///
