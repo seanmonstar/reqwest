@@ -605,7 +605,7 @@ impl DeprecatedRequestBuilder {
         HeaderValue: TryFrom<V>,
         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
-        self.header_sensitive(key, value, false)
+        self
     }
 
     /// Add a `Header` to this Request with ability to define if header_value is sensitive.
@@ -616,22 +616,6 @@ impl DeprecatedRequestBuilder {
         HeaderValue: TryFrom<V>,
         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
-        let mut error = None;
-        if let Ok(ref mut req) = self.request {
-            match <HeaderName as TryFrom<K>>::try_from(key) {
-                Ok(key) => match <HeaderValue as TryFrom<V>>::try_from(value) {
-                    Ok(mut value) => {
-                        value.set_sensitive(sensitive);
-                        req.headers_mut().append(key, value);
-                    }
-                    Err(e) => error = Some(crate::error::builder(e.into())),
-                },
-                Err(e) => error = Some(crate::error::builder(e.into())),
-            };
-        }
-        if let Some(err) = error {
-            self.request = Err(err);
-        }
         self
     }
 
@@ -639,9 +623,6 @@ impl DeprecatedRequestBuilder {
     ///
     /// The headers will be merged in to any already set.
     pub fn headers(mut self, headers: crate::header::HeaderMap) -> DeprecatedRequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            crate::util::replace_headers(req.headers_mut(), headers);
-        }
         self
     }
 
@@ -651,17 +632,7 @@ impl DeprecatedRequestBuilder {
         U: fmt::Display,
         P: fmt::Display,
     {
-        let mut header_value = b"Basic ".to_vec();
-        {
-            let mut encoder = Base64Encoder::new(&mut header_value, base64::STANDARD);
-            // The unwraps here are fine because Vec::write* is infallible.
-            write!(encoder, "{}:", username).unwrap();
-            if let Some(password) = password {
-                write!(encoder, "{}", password).unwrap();
-            }
-        }
-
-        self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
+        self
     }
 
     /// Enable HTTP bearer authentication.
@@ -669,15 +640,11 @@ impl DeprecatedRequestBuilder {
     where
         T: fmt::Display,
     {
-        let header_value = format!("Bearer {}", token);
-        self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
+        self
     }
 
     /// Set the request body.
     pub fn body<T: Into<Body>>(mut self, body: T) -> DeprecatedRequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            *req.body_mut() = Some(body.into());
-        }
         self
     }
 
@@ -687,9 +654,6 @@ impl DeprecatedRequestBuilder {
     /// response body has finished. It affects only this request and overrides
     /// the timeout configured using `ClientBuilder::timeout()`.
     pub fn timeout(mut self, timeout: Duration) -> DeprecatedRequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            *req.timeout_mut() = Some(timeout);
-        }
         self
     }
 
@@ -715,20 +679,7 @@ impl DeprecatedRequestBuilder {
     #[cfg(feature = "multipart")]
     #[cfg_attr(docsrs, doc(cfg(feature = "multipart")))]
     pub fn multipart(self, mut multipart: multipart::Form) -> DeprecatedRequestBuilder {
-        let mut builder = self.header(
-            CONTENT_TYPE,
-            format!("multipart/form-data; boundary={}", multipart.boundary()).as_str(),
-        );
-
-        builder = match multipart.compute_length() {
-            Some(length) => builder.header(CONTENT_LENGTH, length),
-            None => builder,
-        };
-
-        if let Ok(ref mut req) = builder.request {
-            *req.body_mut() = Some(multipart.stream())
-        }
-        builder
+        self
     }
 
     /// Modify the query string of the URL.
@@ -750,53 +701,16 @@ impl DeprecatedRequestBuilder {
     /// This method will fail if the object you provide cannot be serialized
     /// into a query string.
     pub fn query<T: Serialize + ?Sized>(mut self, query: &T) -> DeprecatedRequestBuilder {
-        let mut error = None;
-        if let Ok(ref mut req) = self.request {
-            let url = req.url_mut();
-            let mut pairs = url.query_pairs_mut();
-            let serializer = serde_urlencoded::Serializer::new(&mut pairs);
-
-            if let Err(err) = query.serialize(serializer) {
-                error = Some(crate::error::builder(err));
-            }
-        }
-        if let Ok(ref mut req) = self.request {
-            if let Some("") = req.url().query() {
-                req.url_mut().set_query(None);
-            }
-        }
-        if let Some(err) = error {
-            self.request = Err(err);
-        }
         self
     }
 
     /// Set HTTP version
     pub fn version(mut self, version: Version) -> DeprecatedRequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            req.version = version;
-        }
         self
     }
 
     /// Send a form body.
     pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> DeprecatedRequestBuilder {
-        let mut error = None;
-        if let Ok(ref mut req) = self.request {
-            match serde_urlencoded::to_string(form) {
-                Ok(body) => {
-                    req.headers_mut().insert(
-                        CONTENT_TYPE,
-                        HeaderValue::from_static("application/x-www-form-urlencoded"),
-                    );
-                    *req.body_mut() = Some(body.into());
-                }
-                Err(err) => error = Some(crate::error::builder(err)),
-            }
-        }
-        if let Some(err) = error {
-            self.request = Err(err);
-        }
         self
     }
 
@@ -813,20 +727,7 @@ impl DeprecatedRequestBuilder {
     #[cfg(feature = "json")]
     #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     pub fn json<T: Serialize + ?Sized>(mut self, json: &T) -> DeprecatedRequestBuilder {
-        let mut error = None;
-        if let Ok(ref mut req) = self.request {
-            match serde_json::to_vec(json) {
-                Ok(body) => {
-                    req.headers_mut()
-                        .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-                    *req.body_mut() = Some(body.into());
-                }
-                Err(err) => error = Some(crate::error::builder(err)),
-            }
-        }
-        if let Some(err) = error {
-            self.request = Err(err);
-        }
+
         self
     }
 
