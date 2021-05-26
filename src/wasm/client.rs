@@ -2,7 +2,9 @@ use http::{HeaderMap, Method};
 use js_sys::{Promise, JSON};
 use std::{fmt, future::Future, sync::Arc};
 use url::Url;
-use wasm_bindgen::prelude::{wasm_bindgen, UnwrapThrowExt as _};
+use std::rc::{Rc};
+use wasm_bindgen::prelude::{wasm_bindgen, Closure, UnwrapThrowExt as _};
+use wasm_bindgen::JsCast;
 
 use super::{AbortGuard, Request, RequestBuilder, Response};
 use crate::IntoUrl;
@@ -11,6 +13,9 @@ use crate::IntoUrl;
 extern "C" {
     #[wasm_bindgen(js_name = fetch)]
     fn fetch_with_request(input: &web_sys::Request) -> Promise;
+
+    #[wasm_bindgen(js_namespace = console, js_name = log)]
+    fn debug(s: &str);
 }
 
 fn js_fetch(req: &web_sys::Request) -> Promise {
@@ -183,6 +188,7 @@ impl fmt::Debug for ClientBuilder {
 async fn fetch(req: Request) -> crate::Result<Response> {
     // Build the js Request
     let mut init = web_sys::RequestInit::new();
+    let window = web_sys::window().expect("should have a window in this context");
     init.method(req.method().as_str());
 
     // convert HeaderMap to Headers
@@ -218,6 +224,19 @@ async fn fetch(req: Request) -> crate::Result<Response> {
 
     let abort = AbortGuard::new()?;
     init.signal(Some(&abort.signal()));
+
+    if let Some(duration) = req.timeout() {
+        let abort_request_cb = Closure::wrap(Box::new(move || {
+            abort_controller.abort();
+        }) as Box<dyn Fn()>);
+        
+        window.set_timeout_with_callback_and_timeout_and_arguments_0(
+            abort_request_cb.as_ref().unchecked_ref(),
+            duration.as_millis() as i32,
+        ).expect("timeout was set");
+
+        abort_request_cb.forget();
+    }
 
     let js_req = web_sys::Request::new_with_str_and_init(req.url().as_str(), &init)
         .map_err(crate::error::wasm)
