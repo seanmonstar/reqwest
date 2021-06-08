@@ -206,6 +206,11 @@ impl ClientBuilder {
                 #[cfg(feature = "default-tls")]
                 TlsBackend::Default => {
                     let mut tls = TlsConnector::builder();
+                    if config.http2_only {
+                        tls.request_alpns(&["h2"]);
+                    } else {
+                        tls.request_alpns(&["h2", "http/1.1"]);
+                    }
 
                     #[cfg(feature = "native-tls")]
                     {
