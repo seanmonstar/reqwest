@@ -691,15 +691,15 @@ mod native_tls_conn {
 
     impl<T: Connection + AsyncRead + AsyncWrite + Unpin> Connection for NativeTlsConn<T> {
         fn connected(&self) -> Connected {
-            if self.inner.get_ref().negotiated_alpn().ok() == Some(Some(b"h2".to_vec())) {
-                self.inner
+            match self.inner.get_ref().negotiated_alpn().ok() {
+                Some(Some(alpn_protocol)) if alpn_protocol == b"h2" => self
+                    .inner
                     .get_ref()
                     .get_ref()
                     .get_ref()
                     .connected()
-                    .negotiated_h2()
-            } else {
-                self.inner.get_ref().get_ref().get_ref().connected()
+                    .negotiated_h2(),
+                _ => self.inner.get_ref().get_ref().get_ref().connected(),
             }
         }
     }
