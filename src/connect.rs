@@ -690,6 +690,7 @@ mod native_tls_conn {
     }
 
     impl<T: Connection + AsyncRead + AsyncWrite + Unpin> Connection for NativeTlsConn<T> {
+        #[cfg(feature = "native-tls-alpn")]
         fn connected(&self) -> Connected {
             match self.inner.get_ref().negotiated_alpn().ok() {
                 Some(Some(alpn_protocol)) if alpn_protocol == b"h2" => self
@@ -701,6 +702,11 @@ mod native_tls_conn {
                     .negotiated_h2(),
                 _ => self.inner.get_ref().get_ref().get_ref().connected(),
             }
+        }
+
+        #[cfg(not(feature = "native-tls-alpn"))]
+        fn connected(&self) -> Connected {
+            self.inner.get_ref().get_ref().get_ref().connected()
         }
     }
 

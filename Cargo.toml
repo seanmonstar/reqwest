@@ -30,10 +30,11 @@ default = ["default-tls"]
 
 # Note: this doesn't enable the 'native-tls' feature, which adds specific
 # functionality for it.
-default-tls = ["hyper-tls", "native-tls-crate", "native-tls-crate/alpn", "__tls", "tokio-native-tls"]
+default-tls = ["hyper-tls", "native-tls-crate", "__tls", "tokio-native-tls"]
 
 # Enables native-tls specific functionality not available by default.
 native-tls = ["default-tls"]
+native-tls-alpn = ["native-tls", "native-tls-crate/alpn"]
 native-tls-vendored = ["native-tls", "native-tls-crate/vendored"]
 
 rustls-tls = ["rustls-tls-webpki-roots"]
