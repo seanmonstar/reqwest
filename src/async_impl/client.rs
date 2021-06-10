@@ -207,6 +207,15 @@ impl ClientBuilder {
                 TlsBackend::Default => {
                     let mut tls = TlsConnector::builder();
 
+                    #[cfg(feature = "native-tls-alpn")]
+                    {
+                        if config.http2_only {
+                            tls.request_alpns(&["h2"]);
+                        } else {
+                            tls.request_alpns(&["h2", "http/1.1"]);
+                        }
+                    }
+
                     #[cfg(feature = "native-tls")]
                     {
                         tls.danger_accept_invalid_hostnames(!config.hostname_verification);

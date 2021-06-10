@@ -324,16 +324,20 @@ impl Connector {
                 let mut http = hyper_tls::HttpsConnector::from((http, tls_connector));
                 let io = http.call(dst).await?;
 
-                if let hyper_tls::MaybeHttpsStream::Https(stream) = &io {
+                if let hyper_tls::MaybeHttpsStream::Https(stream) = io {
                     if !self.nodelay {
                         stream.get_ref().get_ref().get_ref().set_nodelay(false)?;
                     }
+                    Ok(Conn {
+                        inner: self.verbose.wrap(NativeTlsConn { inner: stream }),
+                        is_proxy,
+                    })
+                } else {
+                    Ok(Conn {
+                        inner: self.verbose.wrap(io),
+                        is_proxy,
+                    })
                 }
-
-                Ok(Conn {
-                    inner: self.verbose.wrap(io),
-                    is_proxy,
-                })
             }
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, tls, .. } => {
@@ -686,6 +690,21 @@ mod native_tls_conn {
     }
 
     impl<T: Connection + AsyncRead + AsyncWrite + Unpin> Connection for NativeTlsConn<T> {
+        #[cfg(feature = "native-tls-alpn")]
+        fn connected(&self) -> Connected {
+            match self.inner.get_ref().negotiated_alpn().ok() {
+                Some(Some(alpn_protocol)) if alpn_protocol == b"h2" => self
+                    .inner
+                    .get_ref()
+                    .get_ref()
+                    .get_ref()
+                    .connected()
+                    .negotiated_h2(),
+                _ => self.inner.get_ref().get_ref().get_ref().connected(),
+            }
+        }
+
+        #[cfg(not(feature = "native-tls-alpn"))]
         fn connected(&self) -> Connected {
             self.inner.get_ref().get_ref().get_ref().connected()
         }
