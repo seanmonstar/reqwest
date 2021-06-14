@@ -89,6 +89,21 @@ impl Request {
     pub fn body_mut(&mut self) -> &mut Option<Body> {
         &mut self.body
     }
+
+    /// Attempts to clone the `Request`.
+    ///
+    /// None is returned if a body is which can not be cloned. This method
+    /// currently always returns `Some`, but that may change in the future.
+    pub fn try_clone(&self) -> Option<Request> {
+        Some(Self {
+            method: self.method.clone(),
+            url: self.url.clone(),
+            headers: self.headers.clone(),
+            body: self.body.as_ref().map(|body| body.clone()),
+            cors: self.cors,
+            credentials: self.credentials.clone(),
+        })
+    }
 }
 
 impl RequestBuilder {
@@ -334,6 +349,36 @@ impl RequestBuilder {
     pub async fn send(self) -> crate::Result<Response> {
         let req = self.request?;
         self.client.execute_request(req).await
+    }
+
+    /// Attempt to clone the RequestBuilder.
+    ///
+    /// `None` is returned if the RequestBuilder can not be cloned. This method
+    /// currently always returns `Some`, but that may change in the future.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use reqwest::Error;
+    /// #
+    /// # fn run() -> Result<(), Error> {
+    /// let client = reqwest::Client::new();
+    /// let builder = client.post("http://httpbin.org/post")
+    ///     .body("from a &str!");
+    /// let clone = builder.try_clone();
+    /// assert!(clone.is_some());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn try_clone(&self) -> Option<RequestBuilder> {
+        self.request
+            .as_ref()
+            .ok()
+            .and_then(|req| req.try_clone())
+            .map(|req| RequestBuilder {
+                client: self.client.clone(),
+                request: Ok(req),
+            })
     }
 }
 
