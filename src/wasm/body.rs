@@ -17,6 +17,7 @@ pub struct Body {
     inner: Inner,
 }
 
+#[derive(Clone)]
 enum Inner {
     Bytes(Bytes),
     #[cfg(feature = "multipart")]
@@ -54,6 +55,12 @@ impl Body {
             Inner::Bytes(bytes) => bytes.is_empty(),
             #[cfg(feature = "multipart")]
             Inner::Multipart(form) => form.is_empty(),
+        }
+    }
+
+    pub(crate) fn clone(&self) -> Body {
+        Self {
+            inner: self.inner.clone(),
         }
     }
 }
