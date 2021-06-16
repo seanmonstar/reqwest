@@ -167,6 +167,54 @@ async fn body_pipe_response() {
     assert_eq!(res2.status(), reqwest::StatusCode::OK);
 }
 
+#[tokio::test]
+async fn overridden_dns_resolution_with_gai() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
+
+    let overridden_domain = "rust-lang.org";
+    let url = format!(
+        "http://{}:{}/domain_override",
+        overridden_domain,
+        server.addr().port()
+    );
+    let client = reqwest::Client::builder()
+        .resolve(overridden_domain, server.addr())
+        .build()
+        .expect("client builder");
+    let req = client.get(&url);
+    let res = req.send().await.expect("request");
+
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    let text = res.text().await.expect("Failed to get text");
+    assert_eq!("Hello", text);
+}
+
+#[cfg(feature = "trust-dns")]
+#[tokio::test]
+async fn overridden_dns_resolution_with_trust_dns() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
+
+    let overridden_domain = "rust-lang.org";
+    let url = format!(
+        "http://{}:{}/domain_override",
+        overridden_domain,
+        server.addr().port()
+    );
+    let client = reqwest::Client::builder()
+        .resolve(overridden_domain, server.addr())
+        .trust_dns(true)
+        .build()
+        .expect("client builder");
+    let req = client.get(&url);
+    let res = req.send().await.expect("request");
+
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    let text = res.text().await.expect("Failed to get text");
+    assert_eq!("Hello", text);
+}
+
 #[cfg(any(feature = "native-tls", feature = "__rustls",))]
 #[test]
 fn use_preconfigured_tls_with_bogus_backend() {
