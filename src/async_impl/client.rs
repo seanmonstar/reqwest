@@ -1,9 +1,9 @@
 #[cfg(any(feature = "native-tls", feature = "__rustls",))]
 use std::any::Any;
-use std::convert::TryInto;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
 use std::{fmt, str};
 
 use bytes::Bytes;
@@ -107,6 +107,7 @@ struct Config {
     trust_dns: bool,
     error: Option<crate::Error>,
     https_only: bool,
+    dns_overrides: HashMap<String, SocketAddr>,
 }
 
 impl Default for ClientBuilder {
@@ -164,6 +165,7 @@ impl ClientBuilder {
                 #[cfg(feature = "cookies")]
                 cookie_store: None,
                 https_only: false,
+                dns_overrides: HashMap::new(),
             },
         }
     }
@@ -194,9 +196,21 @@ impl ClientBuilder {
             }
 
             let http = match config.trust_dns {
-                false => HttpConnector::new_gai(),
+                false => {
+                    if config.dns_overrides.is_empty() {
+                        HttpConnector::new_gai()
+                    } else {
+                        HttpConnector::new_gai_with_overrides(config.dns_overrides)
+                    }
+                }
                 #[cfg(feature = "trust-dns")]
-                true => HttpConnector::new_trust_dns()?,
+                true => {
+                    if config.dns_overrides.is_empty() {
+                        HttpConnector::new_trust_dns()?
+                    } else {
+                        HttpConnector::new_trust_dns_with_overrides(config.dns_overrides)?
+                    }
+                }
                 #[cfg(not(feature = "trust-dns"))]
                 true => unreachable!("trust-dns shouldn't be enabled unless the feature is"),
             };
@@ -206,6 +220,15 @@ impl ClientBuilder {
                 #[cfg(feature = "default-tls")]
                 TlsBackend::Default => {
                     let mut tls = TlsConnector::builder();
+
+                    #[cfg(feature = "native-tls-alpn")]
+                    {
+                        if config.http2_only {
+                            tls.request_alpns(&["h2"]);
+                        } else {
+                            tls.request_alpns(&["h2", "http/1.1"]);
+                        }
+                    }
 
                     #[cfg(feature = "native-tls")]
                     {
@@ -1028,6 +1051,19 @@ impl ClientBuilder {
         self.config.https_only = enabled;
         self
     }
+
+    /// Override DNS resolution for specific domains to particular IP addresses.
+    ///
+    /// Warning
+    ///
+    /// Since the DNS protocol has no notion of ports, if you wish to send
+    /// traffic to a particular port you must include this port in the URL
+    /// itself, any port in the overridden addr will be ignored and traffic sent
+    /// to the conventional port for the given scheme (e.g. 80 for http).
+    pub fn resolve(mut self, domain: &str, addr: SocketAddr) -> ClientBuilder {
+        self.config.dns_overrides.insert(domain.to_string(), addr);
+        self
+    }
 }
 
 type HyperClient = hyper::Client<Connector, super::body::ImplStream>;
@@ -1340,6 +1376,10 @@ impl Config {
         #[cfg(all(feature = "native-tls-crate", feature = "__rustls"))]
         {
             f.field("tls_backend", &self.tls);
+        }
+
+        if !self.dns_overrides.is_empty() {
+            f.field("dns_overrides", &self.dns_overrides);
         }
     }
 }

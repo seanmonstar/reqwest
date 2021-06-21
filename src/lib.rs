@@ -170,6 +170,7 @@
 //!   over HTTPS.
 //! - **native-tls**: Enables TLS functionality provided by `native-tls`.
 //! - **native-tls-vendored**: Enables the `vendored` feature of `native-tls`.
+//! - **native-tls-alpn**: Enables the `alpn` feature of `native-tls`.
 //! - **rustls-tls**: Enables TLS functionality provided by `rustls`.
 //!   Equivalent to `rustls-tls-webpki-roots`.
 //! - **rustls-tls-manual-roots**: Enables TLS functionality provided by `rustls`,
