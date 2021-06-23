@@ -68,6 +68,12 @@ pub struct ClientBuilder {
     config: Config,
 }
 
+enum HttpVersionPref {
+    Http1,
+    Http2,
+    All,
+}
+
 struct Config {
     // NOTE: When adding a new field, update `fmt::Debug for ClientBuilder`
     accepts: Accepts,
@@ -94,7 +100,7 @@ struct Config {
     tls_built_in_root_certs: bool,
     #[cfg(feature = "__tls")]
     tls: TlsBackend,
-    http2_only: bool,
+    http_version_pref: HttpVersionPref,
     http1_title_case_headers: bool,
     http2_initial_stream_window_size: Option<u32>,
     http2_initial_connection_window_size: Option<u32>,
@@ -153,7 +159,7 @@ impl ClientBuilder {
                 identity: None,
                 #[cfg(feature = "__tls")]
                 tls: TlsBackend::default(),
-                http2_only: false,
+                http_version_pref: HttpVersionPref::All,
                 http1_title_case_headers: false,
                 http2_initial_stream_window_size: None,
                 http2_initial_connection_window_size: None,
@@ -223,10 +229,16 @@ impl ClientBuilder {
 
                     #[cfg(feature = "native-tls-alpn")]
                     {
-                        if config.http2_only {
-                            tls.request_alpns(&["h2"]);
-                        } else {
-                            tls.request_alpns(&["h2", "http/1.1"]);
+                        match config.http_version_pref {
+                            HttpVersionPref::Http1 => {
+                                tls.request_alpns(&["http/1.1"]);
+                            }
+                            HttpVersionPref::Http2 => {
+                                tls.request_alpns(&["h2"]);
+                            }
+                            HttpVersionPref::All => {
+                                tls.request_alpns(&["h2", "http/1.1"]);
+                            }
                         }
                     }
 
@@ -282,10 +294,16 @@ impl ClientBuilder {
                     use crate::tls::NoVerifier;
 
                     let mut tls = rustls::ClientConfig::new();
-                    if config.http2_only {
-                        tls.set_protocols(&["h2".into()]);
-                    } else {
-                        tls.set_protocols(&["h2".into(), "http/1.1".into()]);
+                    match config.http_version_pref {
+                        HttpVersionPref::Http1 => {
+                            tls.set_protocols(&["http/1.1".into()]);
+                        }
+                        HttpVersionPref::Http2 => {
+                            tls.set_protocols(&["h2".into()]);
+                        }
+                        HttpVersionPref::All => {
+                            tls.set_protocols(&["h2".into(), "http/1.1".into()]);
+                        }
                     }
                     #[cfg(feature = "rustls-tls-webpki-roots")]
                     if config.tls_built_in_root_certs {
@@ -336,7 +354,7 @@ impl ClientBuilder {
         connector.set_verbose(config.connection_verbose);
 
         let mut builder = hyper::Client::builder();
-        if config.http2_only {
+        if matches!(config.http_version_pref, HttpVersionPref::Http2) {
             builder.http2_only(true);
         }
 
@@ -737,9 +755,15 @@ impl ClientBuilder {
         self
     }
 
+    /// Only use HTTP/1.
+    pub fn http1_only(mut self) -> ClientBuilder {
+        self.config.http_version_pref = HttpVersionPref::Http1;
+        self
+    }
+
     /// Only use HTTP/2.
     pub fn http2_prior_knowledge(mut self) -> ClientBuilder {
-        self.config.http2_only = true;
+        self.config.http_version_pref = HttpVersionPref::Http2;
         self
     }
 
@@ -1339,7 +1363,11 @@ impl Config {
             f.field("http1_title_case_headers", &true);
         }
 
-        if self.http2_only {
+        if matches!(self.http_version_pref, HttpVersionPref::Http1) {
+            f.field("http1_only", &true);
+        }
+
+        if matches!(self.http_version_pref, HttpVersionPref::Http2) {
             f.field("http2_prior_knowledge", &true);
         }
 
