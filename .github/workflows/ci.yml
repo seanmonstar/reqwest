@@ -11,6 +11,20 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  ci-pass:
+    name: CI is green
+    runs-on: ubuntu-latest
+    needs:
+      - style
+      - test
+      - nightly
+      - minversion
+      - android
+      - wasm
+      - docs
+    steps:
+      - run: exit 0
+
   style:
     name: Check Style
 
@@ -38,7 +52,7 @@ jobs:
         # Workaround for rust-lang/cargo#7732
         run: cargo fmt -- --check $(find . -name '*.rs' -print)
 
-  build:
+  test:
     name: ${{ matrix.name }}
     needs: [style]
 
