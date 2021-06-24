@@ -731,7 +731,7 @@ impl ClientBuilder {
         self
     }
 
-    /// Enable case sensitive headers.
+    /// Send headers as title case instead of lowercase.
     pub fn http1_title_case_headers(mut self) -> ClientBuilder {
         self.config.http1_title_case_headers = true;
         self

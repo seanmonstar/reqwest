@@ -399,7 +399,7 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.pool_max_idle_per_host(max))
     }
 
-    /// Enable case sensitive headers.
+    /// Send headers as title case instead of lowercase.
     pub fn http1_title_case_headers(self) -> ClientBuilder {
         self.with_inner(|inner| inner.http1_title_case_headers())
     }
