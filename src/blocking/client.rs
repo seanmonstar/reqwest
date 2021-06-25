@@ -404,6 +404,11 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.http1_title_case_headers())
     }
 
+    /// Only use HTTP/1.
+    pub fn http1_only(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.http1_only())
+    }
+
     /// Only use HTTP/2.
     pub fn http2_prior_knowledge(self) -> ClientBuilder {
         self.with_inner(|inner| inner.http2_prior_knowledge())
