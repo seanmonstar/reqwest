@@ -13,6 +13,7 @@ use wasm_bindgen::JsValue;
 /// passing many things (like a string or vector of bytes).
 ///
 /// [builder]: ./struct.RequestBuilder.html#method.body
+#[derive(Clone)]
 pub struct Body {
     inner: Inner,
 }
@@ -55,12 +56,6 @@ impl Body {
             Inner::Bytes(bytes) => bytes.is_empty(),
             #[cfg(feature = "multipart")]
             Inner::Multipart(form) => form.is_empty(),
-        }
-    }
-
-    pub(crate) fn clone(&self) -> Body {
-        Self {
-            inner: self.inner.clone(),
         }
     }
 }
