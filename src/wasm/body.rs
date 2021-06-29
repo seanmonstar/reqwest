@@ -58,10 +58,11 @@ impl Body {
     }
 
     pub(crate) fn try_clone(&self) -> Option<Body> {
-        match self.inner {
-            Inner::Bytes(ref bytes) => Some(Self {
+        match &self.inner {
+            Inner::Bytes(bytes) => Some(Self {
                 inner: Inner::Bytes(bytes.clone()),
             }),
+            #[cfg(feature = "multipart")]
             Inner::Multipart(_) => None
         }
     }
