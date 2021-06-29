@@ -63,7 +63,7 @@ impl Body {
                 inner: Inner::Bytes(bytes.clone()),
             }),
             #[cfg(feature = "multipart")]
-            Inner::Multipart(_) => None
+            Inner::Multipart(_) => None,
         }
     }
 }
