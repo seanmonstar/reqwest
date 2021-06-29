@@ -92,8 +92,7 @@ impl Request {
 
     /// Attempts to clone the `Request`.
     ///
-    /// None is returned if a body is which can not be cloned. This method
-    /// currently always returns `Some`, but that may change in the future.
+    /// None is returned if a body is which can not be cloned.
     pub fn try_clone(&self) -> Option<Request> {
         let body = match self.body.as_ref() {
             Some(ref body) => Some(body.try_clone()?),
@@ -358,8 +357,7 @@ impl RequestBuilder {
 
     /// Attempt to clone the RequestBuilder.
     ///
-    /// `None` is returned if the RequestBuilder can not be cloned. This method
-    /// currently always returns `Some`, but that may change in the future.
+    /// `None` is returned if the RequestBuilder can not be cloned.
     ///
     /// # Examples
     ///
