@@ -95,11 +95,16 @@ impl Request {
     /// None is returned if a body is which can not be cloned. This method
     /// currently always returns `Some`, but that may change in the future.
     pub fn try_clone(&self) -> Option<Request> {
+        let body = match self.body.as_ref() {
+            Some(ref body) => Some(body.try_clone()?),
+            None => None,
+        };
+
         Some(Self {
             method: self.method.clone(),
             url: self.url.clone(),
             headers: self.headers.clone(),
-            body: self.body.as_ref().map(|body| body.clone()),
+            body,
             cors: self.cors,
             credentials: self.credentials.clone(),
         })

@@ -9,7 +9,6 @@ use web_sys::FormData;
 use super::Body;
 
 /// An async multipart/form-data request.
-#[derive(Clone)]
 pub struct Form {
     inner: FormParts<Part>,
 }
@@ -21,18 +20,15 @@ impl Form {
 }
 
 /// A field in a multipart form.
-#[derive(Clone)]
 pub struct Part {
     meta: PartMetadata,
     value: Body,
 }
 
-#[derive(Clone)]
 pub(crate) struct FormParts<P> {
     pub(crate) fields: Vec<(Cow<'static, str>, P)>,
 }
 
-#[derive(Clone)]
 pub(crate) struct PartMetadata {
     mime: Option<Mime>,
     file_name: Option<Cow<'static, str>>,
