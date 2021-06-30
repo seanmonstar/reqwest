@@ -2,7 +2,7 @@
 
 // This is using the `tokio` runtime. You'll need the following dependency:
 //
-// `tokio = { version = "0.2", features = ["macros"] }`
+// `tokio = { version = "1", features = ["full"] }`
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {

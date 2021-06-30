@@ -1,25 +1,41 @@
 //! HTTP Cookies
 
 use std::convert::TryInto;
-
-use crate::header;
 use std::fmt;
+use std::sync::RwLock;
 use std::time::SystemTime;
+
+use crate::header::{HeaderValue, SET_COOKIE};
+use bytes::Bytes;
+
+/// Actions for a persistent cookie store providing session support.
+pub trait CookieStore: Send + Sync {
+    /// Store a set of Set-Cookie header values recevied from `url`
+    fn set_cookies(&self, cookie_headers: &mut dyn Iterator<Item = &HeaderValue>, url: &url::Url);
+    /// Get any Cookie values in the store for `url`
+    fn cookies(&self, url: &url::Url) -> Option<HeaderValue>;
+}
 
 /// A single HTTP cookie.
 pub struct Cookie<'a>(cookie_crate::Cookie<'a>);
 
+/// A good default `CookieStore` implementation.
+///
+/// This is the implementation used when simply calling `cookie_store(true)`.
+/// This type is exposed to allow creating one and filling it with some
+/// existing cookies more easily, before creating a `Client`.
+#[derive(Debug, Default)]
+pub struct Jar(RwLock<cookie_store::CookieStore>);
+
+// ===== impl Cookie =====
+
 impl<'a> Cookie<'a> {
-    fn parse(value: &'a crate::header::HeaderValue) -> Result<Cookie<'a>, CookieParseError> {
+    fn parse(value: &'a HeaderValue) -> Result<Cookie<'a>, CookieParseError> {
         std::str::from_utf8(value.as_bytes())
             .map_err(cookie_crate::ParseError::from)
             .and_then(cookie_crate::Cookie::parse)
             .map_err(CookieParseError)
             .map(Cookie)
-    }
-
-    pub(crate) fn into_inner(self) -> cookie_crate::Cookie<'a> {
-        self.0
     }
 
     /// The name of the cookie.
@@ -64,9 +80,10 @@ impl<'a> Cookie<'a> {
 
     /// Get the Max-Age information.
     pub fn max_age(&self) -> Option<std::time::Duration> {
-        self.0
-            .max_age()
-            .map(|d| d.try_into().expect("time::Duration into std::time::Duration"))
+        self.0.max_age().map(|d| {
+            d.try_into()
+                .expect("time::Duration into std::time::Duration")
+        })
     }
 
     /// The cookie expiration time.
@@ -81,23 +98,19 @@ impl<'a> fmt::Debug for Cookie<'a> {
     }
 }
 
+pub(crate) fn extract_response_cookie_headers<'a>(
+    headers: &'a hyper::HeaderMap,
+) -> impl Iterator<Item = &'a HeaderValue> + 'a {
+    headers.get_all(SET_COOKIE).iter()
+}
+
 pub(crate) fn extract_response_cookies<'a>(
     headers: &'a hyper::HeaderMap,
 ) -> impl Iterator<Item = Result<Cookie<'a>, CookieParseError>> + 'a {
     headers
-        .get_all(header::SET_COOKIE)
+        .get_all(SET_COOKIE)
         .iter()
         .map(|value| Cookie::parse(value))
-}
-
-/// A persistent cookie store that provides session support.
-#[derive(Default)]
-pub(crate) struct CookieStore(pub(crate) cookie_store::CookieStore);
-
-impl<'a> fmt::Debug for CookieStore {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
-    }
 }
 
 /// Error representing a parse failure of a 'Set-Cookie' header.
@@ -116,3 +129,56 @@ impl<'a> fmt::Display for CookieParseError {
 }
 
 impl std::error::Error for CookieParseError {}
+
+// ===== impl Jar =====
+
+impl Jar {
+    /// Add a cookie to this jar.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use reqwest::{cookie::Jar, Url};
+    ///
+    /// let cookie = "foo=bar; Domain=yolo.local";
+    /// let url = "https://yolo.local".parse::<Url>().unwrap();
+    ///
+    /// let jar = Jar::default();
+    /// jar.add_cookie_str(cookie, &url);
+    ///
+    /// // and now add to a `ClientBuilder`?
+    /// ```
+    pub fn add_cookie_str(&self, cookie: &str, url: &url::Url) {
+        let cookies = cookie_crate::Cookie::parse(cookie)
+            .ok()
+            .map(|c| c.into_owned())
+            .into_iter();
+        self.0.write().unwrap().store_response_cookies(cookies, url);
+    }
+}
+
+impl CookieStore for Jar {
+    fn set_cookies(&self, cookie_headers: &mut dyn Iterator<Item = &HeaderValue>, url: &url::Url) {
+        let iter =
+            cookie_headers.filter_map(|val| Cookie::parse(val).map(|c| c.0.into_owned()).ok());
+
+        self.0.write().unwrap().store_response_cookies(iter, url);
+    }
+
+    fn cookies(&self, url: &url::Url) -> Option<HeaderValue> {
+        let s = self
+            .0
+            .read()
+            .unwrap()
+            .get_request_cookies(url)
+            .map(|c| format!("{}={}", c.name(), c.value()))
+            .collect::<Vec<_>>()
+            .join("; ");
+
+        if s.is_empty() {
+            return None;
+        }
+
+        HeaderValue::from_maybe_shared(Bytes::from(s)).ok()
+    }
+}

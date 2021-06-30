@@ -1,5 +1,8 @@
 #[cfg(feature = "__rustls")]
-use rustls::{RootCertStore, ServerCertVerified, ServerCertVerifier, TLSError};
+use rustls::{
+    internal::msgs::handshake::DigitallySignedStruct, HandshakeSignatureValid, RootCertStore,
+    ServerCertVerified, ServerCertVerifier, TLSError,
+};
 use std::fmt;
 #[cfg(feature = "__rustls")]
 use tokio_rustls::webpki::DNSNameRef;
@@ -22,10 +25,7 @@ enum Cert {
 
 /// Represents a private key and X509 cert as a client certificate.
 pub struct Identity {
-    #[cfg_attr(
-        not(any(feature = "native-tls", feature = "__rustls")),
-        allow(unused)
-    )]
+    #[cfg_attr(not(any(feature = "native-tls", feature = "__rustls")), allow(unused))]
     inner: ClientCert,
 }
 
@@ -159,7 +159,8 @@ impl Identity {
     pub fn from_pkcs12_der(der: &[u8], password: &str) -> crate::Result<Identity> {
         Ok(Identity {
             inner: ClientCert::Pkcs12(
-                native_tls_crate::Identity::from_pkcs12(der, password).map_err(crate::error::builder)?,
+                native_tls_crate::Identity::from_pkcs12(der, password)
+                    .map_err(crate::error::builder)?,
             ),
         })
     }
@@ -245,7 +246,8 @@ impl Identity {
     pub(crate) fn add_to_rustls(self, tls: &mut rustls::ClientConfig) -> crate::Result<()> {
         match self.inner {
             ClientCert::Pem { key, certs } => {
-                tls.set_single_client_cert(certs, key).map_err(|e| crate::error::builder(e))?;
+                tls.set_single_client_cert(certs, key)
+                    .map_err(|e| crate::error::builder(e))?;
                 Ok(())
             }
             #[cfg(feature = "native-tls")]
@@ -275,10 +277,7 @@ pub(crate) enum TlsBackend {
     Rustls,
     #[cfg(feature = "__rustls")]
     BuiltRustls(rustls::ClientConfig),
-    #[cfg(any(
-        feature = "native-tls",
-        feature = "__rustls",
-    ))]
+    #[cfg(any(feature = "native-tls", feature = "__rustls",))]
     UnknownPreconfigured,
 }
 
@@ -293,10 +292,7 @@ impl fmt::Debug for TlsBackend {
             TlsBackend::Rustls => write!(f, "Rustls"),
             #[cfg(feature = "__rustls")]
             TlsBackend::BuiltRustls(_) => write!(f, "BuiltRustls"),
-            #[cfg(any(
-                feature = "native-tls",
-                feature = "__rustls",
-            ))]
+            #[cfg(any(feature = "native-tls", feature = "__rustls",))]
             TlsBackend::UnknownPreconfigured => write!(f, "UnknownPreconfigured"),
         }
     }
@@ -329,6 +325,24 @@ impl ServerCertVerifier for NoVerifier {
         _ocsp_response: &[u8],
     ) -> Result<ServerCertVerified, TLSError> {
         Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls::Certificate,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls::Certificate,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        Ok(HandshakeSignatureValid::assertion())
     }
 }
 

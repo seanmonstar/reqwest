@@ -1,3 +1,25 @@
+## v0.11.4
+
+- Add `ClientBuilder::resolve()` option to override DNS resolution for specific domains.
+- Add `native-tls-alpn` Cargo feature to use ALPN with the native-tls backend.
+- Add `ClientBuilder::deflate()` option and `deflate` Cargo feature to support decoding response bodies using deflate.
+- Add `RequestBuilder::version()` to allow setting the HTTP version of a request.
+- Fix allowing "invalid" certificates with the `rustls-tls` backend, when the server uses TLS v1.2 or v1.3.
+- (wasm) Add `try_clone` to `Request` and `RequestBuilder`
+
+## v0.11.3
+
+- Add `impl From<hyper::Body> for reqwest::Body`.
+- (wasm) Add credentials mode methods to `RequestBuilder`.
+
+## v0.11.2
+
+- Add `CookieStore` trait to customize the type that stores and retrieves cookies for a session.
+- Add `cookie::Jar` as a default `CookieStore`, easing creating some session cookies before creating the `Client`.
+- Add `ClientBuilder::http2_adaptive_window()` option to configure an adaptive HTTP2 flow control behavior.
+- Add `ClientBuilder::http2_max_frame_size()` option to adjust the maximum HTTP2 frame size that can be received.
+- Implement `IntoUrl` for `String`, making it more convenient to create requests with `format!`.
+
 ## v0.11.1
 
 - Add `ClientBuilder::tls_built_in_root_certs()` option to disable built-in root certificates.

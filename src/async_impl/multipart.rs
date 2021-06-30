@@ -408,7 +408,7 @@ impl PartMetadata {
     }
 }
 
-/// https://url.spec.whatwg.org/#fragment-percent-encode-set
+// https://url.spec.whatwg.org/#fragment-percent-encode-set
 const FRAGMENT_ENCODE_SET: &AsciiSet = &percent_encoding::CONTROLS
     .add(b' ')
     .add(b'"')
@@ -416,12 +416,12 @@ const FRAGMENT_ENCODE_SET: &AsciiSet = &percent_encoding::CONTROLS
     .add(b'>')
     .add(b'`');
 
-/// https://url.spec.whatwg.org/#path-percent-encode-set
+// https://url.spec.whatwg.org/#path-percent-encode-set
 const PATH_ENCODE_SET: &AsciiSet = &FRAGMENT_ENCODE_SET.add(b'#').add(b'?').add(b'{').add(b'}');
 
 const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &PATH_ENCODE_SET.add(b'/').add(b'%');
 
-/// https://tools.ietf.org/html/rfc8187#section-3.2.1
+// https://tools.ietf.org/html/rfc8187#section-3.2.1
 const ATTR_CHAR_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'!')
     .remove(b'#')
@@ -521,7 +521,10 @@ mod tests {
     fn form_empty() {
         let form = Form::new();
 
-        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
         let body = form.stream().into_stream();
         let s = body.map_ok(|try_c| try_c.to_vec()).try_concat();
 
@@ -568,7 +571,10 @@ mod tests {
              --boundary\r\n\
              Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
              value3\r\n--boundary--\r\n";
-        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
         let body = form.stream().into_stream();
         let s = body.map(|try_c| try_c.map(|r| r.to_vec())).try_concat();
 
@@ -595,7 +601,10 @@ mod tests {
                         \r\n\
                         value2\r\n\
                         --boundary--\r\n";
-        let rt = runtime::Builder::new_current_thread().enable_all().build().expect("new rt");
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
         let body = form.stream().into_stream();
         let s = body.map(|try_c| try_c.map(|r| r.to_vec())).try_concat();
 

@@ -1,14 +1,14 @@
 use std::fmt;
 use std::fs::File;
 use std::future::Future;
-use std::io::{self, Read};
 #[cfg(feature = "multipart")]
 use std::io::Cursor;
+use std::io::{self, Read};
 use std::mem;
 use std::ptr;
 
-use bytes::Bytes;
 use bytes::buf::UninitSlice;
+use bytes::Bytes;
 
 use crate::async_impl;
 
@@ -95,7 +95,7 @@ impl Body {
     /// Converts streamed requests to their buffered equivalent and
     /// returns a reference to the buffer. If the request is already
     /// buffered, this has no effect.
-    /// 
+    ///
     /// Be aware that for large requests this method is expensive
     /// and may cause your program to run out of memory.
     pub fn buffer(&mut self) -> Result<&[u8], crate::Error> {
@@ -106,11 +106,10 @@ impl Body {
                 } else {
                     Vec::new()
                 };
-                io::copy(reader, &mut bytes)
-                    .map_err(crate::error::builder)?;
+                io::copy(reader, &mut bytes).map_err(crate::error::builder)?;
                 self.kind = Kind::Bytes(bytes.into());
                 self.buffer()
-            },
+            }
             Kind::Bytes(ref bytes) => Ok(bytes.as_ref()),
         }
     }
@@ -302,9 +301,7 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
                 }
             }
 
-            let bytes = unsafe {
-                mem::transmute::<&mut UninitSlice, &mut [u8]>(buf.chunk_mut())
-            };
+            let bytes = unsafe { mem::transmute::<&mut UninitSlice, &mut [u8]>(buf.chunk_mut()) };
             match body.read(bytes) {
                 Ok(0) => {
                     // The buffer was empty and nothing's left to

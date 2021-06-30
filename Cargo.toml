@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.11.1" # remember to update html_root_url
+version = "0.11.4" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -34,6 +34,7 @@ default-tls = ["hyper-tls", "native-tls-crate", "__tls", "tokio-native-tls"]
 
 # Enables native-tls specific functionality not available by default.
 native-tls = ["default-tls"]
+native-tls-alpn = ["native-tls", "native-tls-crate/alpn"]
 native-tls-vendored = ["native-tls", "native-tls-crate/vendored"]
 
 rustls-tls = ["rustls-tls-webpki-roots"]
@@ -48,6 +49,8 @@ cookies = ["cookie_crate", "cookie_store", "time"]
 gzip = ["async-compression", "async-compression/gzip", "tokio-util"]
 
 brotli = ["async-compression", "async-compression/brotli", "tokio-util"]
+
+deflate = ["async-compression", "async-compression/zlib", "tokio-util"]
 
 json = ["serde_json"]
 
@@ -95,7 +98,7 @@ http-body = "0.4.0"
 hyper = { version = "0.14", default-features = false, features = ["tcp", "http1", "http2", "client", "runtime"] }
 lazy_static = "1.4"
 log = "0.4"
-mime = "0.3.7"
+mime = "0.3.16"
 percent-encoding = "2.1"
 tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
 pin-project-lite = "0.2.0"
@@ -105,7 +108,7 @@ ipnet = "2.3"
 
 ## default-tls
 hyper-tls = { version = "0.5", optional = true }
-native-tls-crate = { version = "0.2", optional = true, package = "native-tls" }
+native-tls-crate = { version = "0.2.7", optional = true, package = "native-tls" }
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
@@ -125,7 +128,7 @@ async-compression = { version = "0.3.7", default-features = false, features = ["
 tokio-util = { version = "0.6.0", default-features = false, features = ["codec", "io"], optional = true }
 
 ## socks
-tokio-socks = { version = "0.5", optional = true }
+tokio-socks = { version = "0.5.1", optional = true }
 
 ## trust-dns
 trust-dns-resolver = { version = "0.20", optional = true }
@@ -162,6 +165,7 @@ features = [
     "Blob",
     "BlobPropertyBag",
     "ServiceWorkerGlobalScope",
+    "RequestCredentials"
 ]
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
@@ -214,6 +218,11 @@ required-features = ["gzip"]
 name = "brotli"
 path = "tests/brotli.rs"
 required-features = ["brotli"]
+
+[[test]]
+name = "deflate"
+path = "tests/deflate.rs"
+required-features = ["deflate"]
 
 [[test]]
 name = "multipart"

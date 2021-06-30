@@ -1,7 +1,4 @@
-#[cfg(any(
-    feature = "native-tls",
-    feature = "__rustls",
-))]
+#[cfg(any(feature = "native-tls", feature = "__rustls",))]
 use std::any::Any;
 use std::convert::TryInto;
 use std::fmt;
@@ -18,11 +15,11 @@ use tokio::sync::{mpsc, oneshot};
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::wait;
-use crate::{async_impl, header, IntoUrl, Method, Proxy, redirect};
 #[cfg(feature = "__tls")]
 use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
+use crate::{async_impl, header, redirect, IntoUrl, Method, Proxy};
 
 /// A `Client` to make Requests with.
 ///
@@ -103,9 +100,7 @@ impl ClientBuilder {
         ClientHandle::new(self).map(|handle| Client { inner: handle })
     }
 
-
     // Higher-level options
-
 
     /// Sets the `User-Agent` header to be used by this client.
     ///
@@ -199,6 +194,25 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.cookie_store(enable))
     }
 
+    /// Set the persistent cookie store for the client.
+    ///
+    /// Cookies received in responses will be passed to this store, and
+    /// additional requests will query this store for cookies.
+    ///
+    /// By default, no cookie store is used.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled.
+    #[cfg(feature = "cookies")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
+    pub fn cookie_provider<C: crate::cookie::CookieStore + 'static>(
+        self,
+        cookie_store: Arc<C>,
+    ) -> ClientBuilder {
+        self.with_inner(|inner| inner.cookie_provider(cookie_store))
+    }
+
     /// Enable auto gzip decompression by checking the `Content-Encoding` response header.
     ///
     /// If auto gzip decompresson is turned on:
@@ -239,7 +253,31 @@ impl ClientBuilder {
     /// This requires the optional `brotli` feature to be enabled
     #[cfg(feature = "brotli")]
     #[cfg_attr(docsrs, doc(cfg(feature = "brotli")))]
-    pub fn brotli(self, enable: bool) -> ClientBuilder { self.with_inner(|inner| inner.brotli(enable)) }
+    pub fn brotli(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.brotli(enable))
+    }
+
+    /// Enable auto deflate decompression by checking the `Content-Encoding` response header.
+    ///
+    /// If auto deflate decompresson is turned on:
+    ///
+    /// - When sending a request and if the request's headers do not already contain
+    ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `deflate`.
+    ///   The request body is **not** automatically compressed.
+    /// - When receiving a response, if it's headers contain a `Content-Encoding` value that
+    ///   equals to `deflate`, both values `Content-Encoding` and `Content-Length` are removed from the
+    ///   headers' set. The response body is automatically decompressed.
+    ///
+    /// If the `deflate` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `deflate` feature to be enabled
+    #[cfg(feature = "deflate")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "deflate")))]
+    pub fn deflate(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.deflate(enable))
+    }
 
     /// Disable auto response body gzip decompression.
     ///
@@ -255,7 +293,18 @@ impl ClientBuilder {
     /// This method exists even if the optional `brotli` feature is not enabled.
     /// This can be used to ensure a `Client` doesn't use brotli decompression
     /// even if another dependency were to enable the optional `brotli` feature.
-    pub fn no_brotli(self) -> ClientBuilder { self.with_inner(|inner| inner.no_brotli()) }
+    pub fn no_brotli(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.no_brotli())
+    }
+
+    /// Disable auto response body deflate decompression.
+    ///
+    /// This method exists even if the optional `deflate` feature is not enabled.
+    /// This can be used to ensure a `Client` doesn't use deflate decompression
+    /// even if another dependency were to enable the optional `deflate` feature.
+    pub fn no_deflate(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.no_deflate())
+    }
 
     // Redirect options
 
@@ -350,9 +399,14 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.pool_max_idle_per_host(max))
     }
 
-    /// Enable case sensitive headers.
+    /// Send headers as title case instead of lowercase.
     pub fn http1_title_case_headers(self) -> ClientBuilder {
         self.with_inner(|inner| inner.http1_title_case_headers())
+    }
+
+    /// Only use HTTP/1.
+    pub fn http1_only(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.http1_only())
     }
 
     /// Only use HTTP/2.
@@ -372,6 +426,21 @@ impl ClientBuilder {
     /// Default is currently 65,535 but may change internally to optimize for common uses.
     pub fn http2_initial_connection_window_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
         self.with_inner(|inner| inner.http2_initial_connection_window_size(sz))
+    }
+
+    /// Sets whether to use an adaptive flow control.
+    ///
+    /// Enabling this will override the limits set in `http2_initial_stream_window_size` and
+    /// `http2_initial_connection_window_size`.
+    pub fn http2_adaptive_window(self, enabled: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.http2_adaptive_window(enabled))
+    }
+
+    /// Sets the maximum frame size to use for HTTP2.
+    ///
+    /// Default is currently 16,384 but may change internally to optimize for common uses.
+    pub fn http2_max_frame_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+        self.with_inner(|inner| inner.http2_max_frame_size(sz))
     }
 
     // TCP options
@@ -405,8 +474,8 @@ impl ClientBuilder {
     ///
     /// If `None`, the option will not be set.
     pub fn tcp_keepalive<D>(self, val: D) -> ClientBuilder
-        where
-            D: Into<Option<Duration>>,
+    where
+        D: Into<Option<Duration>>,
     {
         self.with_inner(move |inner| inner.tcp_keepalive(val))
     }
@@ -445,7 +514,14 @@ impl ClientBuilder {
     /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
     /// feature to be enabled.
     #[cfg(feature = "__tls")]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls-tls"))))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
     pub fn add_root_certificate(self, cert: Certificate) -> ClientBuilder {
         self.with_inner(move |inner| inner.add_root_certificate(cert))
     }
@@ -459,11 +535,15 @@ impl ClientBuilder {
     /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
     /// feature to be enabled.
     #[cfg(feature = "__tls")]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls-tls"))))]
-    pub fn tls_built_in_root_certs(
-        self,
-        tls_built_in_root_certs: bool,
-    ) -> ClientBuilder {
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
+    pub fn tls_built_in_root_certs(self, tls_built_in_root_certs: bool) -> ClientBuilder {
         self.with_inner(move |inner| inner.tls_built_in_root_certs(tls_built_in_root_certs))
     }
 
@@ -511,7 +591,14 @@ impl ClientBuilder {
     /// introduces significant vulnerabilities, and should only be used
     /// as a last resort.
     #[cfg(feature = "__tls")]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls-tls"))))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
     pub fn danger_accept_invalid_certs(self, accept_invalid_certs: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.danger_accept_invalid_certs(accept_invalid_certs))
     }
@@ -562,10 +649,7 @@ impl ClientBuilder {
     ///
     /// This requires one of the optional features `native-tls` or
     /// `rustls-tls(-...)` to be enabled.
-    #[cfg(any(
-        feature = "native-tls",
-        feature = "__rustls",
-    ))]
+    #[cfg(any(feature = "native-tls", feature = "__rustls",))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
     pub fn use_preconfigured_tls(self, tls: impl Any) -> ClientBuilder {
         self.with_inner(move |inner| inner.use_preconfigured_tls(tls))
@@ -594,7 +678,7 @@ impl ClientBuilder {
     }
 
     /// Restrict the Client to be used with HTTPS only requests.
-    /// 
+    ///
     /// Defaults to false.
     pub fn https_only(self, enabled: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.https_only(enabled))
@@ -766,7 +850,8 @@ struct InnerClientHandle {
 
 impl Drop for InnerClientHandle {
     fn drop(&mut self) {
-        let id = self.thread
+        let id = self
+            .thread
             .as_ref()
             .map(|h| h.thread().id())
             .expect("thread not dropped yet");
@@ -789,7 +874,11 @@ impl ClientHandle {
             .name("reqwest-internal-sync-runtime".into())
             .spawn(move || {
                 use tokio::runtime;
-                let rt = match runtime::Builder::new_current_thread().enable_all().build().map_err(crate::error::builder) {
+                let rt = match runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(crate::error::builder)
+                {
                     Err(e) => {
                         if let Err(e) = spawn_tx.send(Err(e)) {
                             error!("Failed to communicate runtime creation failure: {:?}", e);
@@ -871,9 +960,7 @@ impl ClientHandle {
                 };
                 wait::timeout(f, timeout)
             } else {
-                let f = async move {
-                    rx.await.map_err(|_canceled| event_loop_panicked())
-                };
+                let f = async move { rx.await.map_err(|_canceled| event_loop_panicked()) };
                 wait::timeout(f, timeout)
             };
 

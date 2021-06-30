@@ -161,6 +161,18 @@ impl Body {
     }
 }
 
+impl From<hyper::Body> for Body {
+    #[inline]
+    fn from(body: hyper::Body) -> Body {
+        Self {
+            inner: Inner::Streaming {
+                body: Box::pin(WrapHyper(body)),
+                timeout: None,
+            },
+        }
+    }
+}
+
 impl From<Bytes> for Body {
     #[inline]
     fn from(bytes: Bytes) -> Body {

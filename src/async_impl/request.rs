@@ -14,11 +14,11 @@ use super::client::{Client, Pending};
 #[cfg(feature = "multipart")]
 use super::multipart;
 use super::response::Response;
-use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 #[cfg(feature = "multipart")]
 use crate::header::CONTENT_LENGTH;
+use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 use crate::{Method, Url};
-use http::{Request as HttpRequest, request::Parts};
+use http::{request::Parts, Request as HttpRequest, Version};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -27,6 +27,7 @@ pub struct Request {
     headers: HeaderMap,
     body: Option<Body>,
     timeout: Option<Duration>,
+    version: Version,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -47,7 +48,8 @@ impl Request {
             url,
             headers: HeaderMap::new(),
             body: None,
-            timeout: None
+            timeout: None,
+            version: Version::default(),
         }
     }
 
@@ -111,6 +113,18 @@ impl Request {
         &mut self.timeout
     }
 
+    /// Get the http version.
+    #[inline]
+    pub fn version(&self) -> Version {
+        self.version
+    }
+
+    /// Get a mutable reference to the http version.
+    #[inline]
+    pub fn version_mut(&mut self) -> &mut Version {
+        &mut self.version
+    }
+
     /// Attempt to clone the request.
     ///
     /// `None` is returned if the request can not be cloned, i.e. if the body is a stream.
@@ -122,12 +136,29 @@ impl Request {
         let mut req = Request::new(self.method().clone(), self.url().clone());
         *req.timeout_mut() = self.timeout().cloned();
         *req.headers_mut() = self.headers().clone();
+        *req.version_mut() = self.version().clone();
         req.body = body;
         Some(req)
     }
 
-    pub(super) fn pieces(self) -> (Method, Url, HeaderMap, Option<Body>, Option<Duration>) {
-        (self.method, self.url, self.headers, self.body, self.timeout)
+    pub(super) fn pieces(
+        self,
+    ) -> (
+        Method,
+        Url,
+        HeaderMap,
+        Option<Body>,
+        Option<Duration>,
+        Version,
+    ) {
+        (
+            self.method,
+            self.url,
+            self.headers,
+            self.body,
+            self.timeout,
+            self.version,
+        )
     }
 }
 
@@ -154,7 +185,7 @@ impl RequestBuilder {
         HeaderName: TryFrom<K>,
         <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
         HeaderValue: TryFrom<V>,
-        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>, 
+        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
         self.header_sensitive(key, value, false)
     }
@@ -322,6 +353,14 @@ impl RequestBuilder {
         self
     }
 
+    /// Set HTTP version
+    pub fn version(mut self, version: Version) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.version = version;
+        }
+        self
+    }
+
     /// Send a form body.
     pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> RequestBuilder {
         let mut error = None;
@@ -476,7 +515,6 @@ fn fmt_request_fields<'a, 'b>(
         .field("headers", &req.headers)
 }
 
-
 /// Check the request URL for a "username:password" type authority, and if
 /// found, remove it from the URL and return it.
 pub(crate) fn extract_authority(url: &mut Url) -> Option<(String, Option<String>)> {
@@ -494,20 +532,21 @@ pub(crate) fn extract_authority(url: &mut Url) -> Option<(String, Option<String>
                 .map(String::from)
         });
         if !username.is_empty() || password.is_some() {
-            url
-                .set_username("")
+            url.set_username("")
                 .expect("has_authority means set_username shouldn't fail");
-            url
-                .set_password(None)
+            url.set_password(None)
                 .expect("has_authority means set_password shouldn't fail");
-            return Some((username, password))
+            return Some((username, password));
         }
     }
 
     None
 }
 
-impl<T> TryFrom<HttpRequest<T>> for Request where T:Into<Body>{
+impl<T> TryFrom<HttpRequest<T>> for Request
+where
+    T: Into<Body>,
+{
     type Error = crate::Error;
 
     fn try_from(req: HttpRequest<T>) -> crate::Result<Self> {
@@ -516,23 +555,24 @@ impl<T> TryFrom<HttpRequest<T>> for Request where T:Into<Body>{
             method,
             uri,
             headers,
+            version,
             ..
         } = parts;
-        let url = Url::parse(&uri.to_string())
-            .map_err(crate::error::builder)?;
+        let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
         Ok(Request {
             method,
             url,
             headers,
             body: Some(body.into()),
             timeout: None,
+            version: version,
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Client, HttpRequest, Request};
+    use super::{Client, HttpRequest, Request, Version};
     use crate::Method;
     use serde::Serialize;
     use std::collections::BTreeMap;
@@ -646,7 +686,8 @@ mod tests {
     #[test]
     fn try_clone_reusable() {
         let client = Client::new();
-        let builder = client.post("http://httpbin.org/post")
+        let builder = client
+            .post("http://httpbin.org/post")
             .header("foo", "bar")
             .body("from a &str!");
         let req = builder
@@ -676,14 +717,11 @@ mod tests {
     #[test]
     #[cfg(feature = "stream")]
     fn try_clone_stream() {
-        let chunks: Vec<Result<_, ::std::io::Error>> = vec![
-            Ok("hello"),
-            Ok(" "),
-            Ok("world"),
-        ];
+        let chunks: Vec<Result<_, ::std::io::Error>> = vec![Ok("hello"), Ok(" "), Ok("world")];
         let stream = futures_util::stream::iter(chunks);
         let client = Client::new();
-        let builder = client.get("http://httpbin.org/get")
+        let builder = client
+            .get("http://httpbin.org/get")
             .body(super::Body::wrap_stream(stream));
         let clone = builder.try_clone();
         assert!(clone.is_none());
@@ -694,13 +732,13 @@ mod tests {
         let client = Client::new();
         let some_url = "https://Aladdin:open sesame@localhost/";
 
-        let req = client
-            .get(some_url)
-            .build()
-            .expect("request build");
+        let req = client.get(some_url).build().expect("request build");
 
         assert_eq!(req.url().as_str(), "https://localhost/");
-        assert_eq!(req.headers()["authorization"], "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
+        assert_eq!(
+            req.headers()["authorization"],
+            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="
+        );
     }
 
     #[test]
@@ -715,7 +753,10 @@ mod tests {
             .expect("request build");
 
         assert_eq!(req.url().as_str(), "https://localhost/");
-        assert_eq!(req.headers()["authorization"], "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
+        assert_eq!(
+            req.headers()["authorization"],
+            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="
+        );
         assert_eq!(req.headers()["authorization"].is_sensitive(), true);
     }
 
@@ -735,11 +776,10 @@ mod tests {
         assert_eq!(req.headers()["authorization"].is_sensitive(), true);
     }
 
-    
-
     #[test]
     fn convert_from_http_request() {
-        let http_request = HttpRequest::builder().method("GET")
+        let http_request = HttpRequest::builder()
+            .method("GET")
             .uri("http://localhost/")
             .header("User-Agent", "my-awesome-agent/1.0")
             .body("test test test")
@@ -752,6 +792,26 @@ mod tests {
         assert_eq!(headers.get("User-Agent").unwrap(), "my-awesome-agent/1.0");
         assert_eq!(req.method(), Method::GET);
         assert_eq!(req.url().as_str(), "http://localhost/");
+    }
+
+    #[test]
+    fn set_http_request_version() {
+        let http_request = HttpRequest::builder()
+            .method("GET")
+            .uri("http://localhost/")
+            .header("User-Agent", "my-awesome-agent/1.0")
+            .version(Version::HTTP_11)
+            .body("test test test")
+            .unwrap();
+        let req: Request = Request::try_from(http_request).unwrap();
+        assert_eq!(req.body().is_none(), false);
+        let test_data = b"test test test";
+        assert_eq!(req.body().unwrap().as_bytes(), Some(&test_data[..]));
+        let headers = req.headers();
+        assert_eq!(headers.get("User-Agent").unwrap(), "my-awesome-agent/1.0");
+        assert_eq!(req.method(), Method::GET);
+        assert_eq!(req.url().as_str(), "http://localhost/");
+        assert_eq!(req.version(), Version::HTTP_11);
     }
 
     /*

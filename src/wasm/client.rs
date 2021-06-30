@@ -207,6 +207,10 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         init.mode(web_sys::RequestMode::NoCors);
     }
 
+    if let Some(creds) = req.credentials {
+        init.credentials(creds);
+    }
+
     if let Some(body) = req.body() {
         if !body.is_empty() {
             init.body(Some(&body.to_js_value()?.as_ref().as_ref()));

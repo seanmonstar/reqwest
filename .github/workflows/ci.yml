@@ -11,6 +11,20 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  ci-pass:
+    name: CI is green
+    runs-on: ubuntu-latest
+    needs:
+      - style
+      - test
+      - nightly
+      - minversion
+      - android
+      - wasm
+      - docs
+    steps:
+      - run: exit 0
+
   style:
     name: Check Style
 
@@ -34,7 +48,11 @@ jobs:
           command: fmt
           args: -- --check
 
-  build:
+      - name: temporary workaround - fmt all files under src
+        # Workaround for rust-lang/cargo#7732
+        run: cargo fmt -- --check $(find . -name '*.rs' -print)
+
+  test:
     name: ${{ matrix.name }}
     needs: [style]
 
@@ -62,6 +80,7 @@ jobs:
           - "feat.: blocking"
           - "feat.: gzip"
           - "feat.: brotli"
+          - "feat.: deflate"
           - "feat.: json"
           - "feat.: multipart"
           - "feat.: stream"
@@ -85,21 +104,21 @@ jobs:
           - name: windows / stable-x86_64-msvc
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            features: "--features blocking,gzip,brotli,json,multipart"
+            features: "--features blocking,gzip,brotli,deflate,json,multipart"
           - name: windows / stable-i686-msvc
             os: windows-latest
             target: i686-pc-windows-msvc
-            features: "--features blocking,gzip,brotli,json,multipart"
+            features: "--features blocking,gzip,brotli,deflate,json,multipart"
           - name: windows / stable-x86_64-gnu
             os: windows-latest
             rust: stable-x86_64-pc-windows-gnu
             target: x86_64-pc-windows-gnu
-            features: "--features blocking,gzip,brotli,json,multipart"
+            features: "--features blocking,gzip,brotli,deflate,json,multipart"
           - name: windows / stable-i686-gnu
             os: windows-latest
             rust: stable-i686-pc-windows-gnu
             target: i686-pc-windows-gnu
-            features: "--features blocking,gzip,brotli,json,multipart"
+            features: "--features blocking,gzip,brotli,deflate,json,multipart"
 
           - name: "feat.: default-tls disabled"
             features: "--no-default-features"
@@ -119,6 +138,8 @@ jobs:
             features: "--features gzip"
           - name: "feat.: brotli"
             features: "--features brotli"
+          - name: "feat.: deflate"
+            features: "--features deflate"
           - name: "feat.: json"
             features: "--features json"
           - name: "feat.: multipart"
@@ -156,6 +177,29 @@ jobs:
           command: test
           args: ${{ matrix.features }} ${{ matrix.test-features }} -- --test-threads=1
 
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Check documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        uses: actions-rs/cargo@v1
+        with:
+          command: doc
+          args: --no-deps --document-private-items --all-features
+
   # Separate build job for nightly because of the missing feature for allowed failures at
   # job level. See `jobs.build.strategy.matrix`.
   nightly:
@@ -186,6 +230,13 @@ jobs:
           command: test
           args: --features __internal_proxy_sys_no_cache -- --test-threads=1
 
+      - name: Check minimal versions
+        run: |
+          cargo clean
+          cargo update -Z minimal-versions
+          cargo check
+          cargo check --all-features
+
   minversion:
     name: Minimum version ${{ matrix.rust }}
     needs: [style]
@@ -194,7 +245,7 @@ jobs:
 
     strategy:
       matrix:
-        rust: [1.45.2]
+        rust: [1.46.0]
 
     steps:
       - name: Checkout
@@ -261,3 +312,12 @@ jobs:
         with:
           command: check
           args: --target wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Wasm-pack test firefox
+        run: wasm-pack test --headless --firefox
+
+      - name: Wasm-pack test chrome
+        run: wasm-pack test --headless --chrome

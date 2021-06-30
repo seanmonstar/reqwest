@@ -148,10 +148,7 @@ impl Policy {
     }
 
     pub(crate) fn is_default(&self) -> bool {
-        match self.inner {
-            PolicyKind::Limit(10) => true,
-            _ => false,
-        }
+        matches!(self.inner, PolicyKind::Limit(10))
     }
 }
 
@@ -267,7 +264,6 @@ fn test_redirect_policy_limit() {
         .map(|i| Url::parse(&format!("http://a.b/c/{}", i)).unwrap())
         .collect::<Vec<_>>();
 
-
     match policy.check(StatusCode::FOUND, &next, &previous) {
         ActionKind::Follow => (),
         other => panic!("unexpected {:?}", other),
@@ -298,7 +294,7 @@ fn test_redirect_policy_custom() {
     }
 
     let next = Url::parse("http://foo/baz").unwrap();
-     match policy.check(StatusCode::FOUND, &next, &[]) {
+    match policy.check(StatusCode::FOUND, &next, &[]) {
         ActionKind::Stop => (),
         other => panic!("unexpected {:?}", other),
     }
