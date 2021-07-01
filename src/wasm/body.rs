@@ -17,7 +17,6 @@ pub struct Body {
     inner: Inner,
 }
 
-#[derive(Clone)]
 enum Inner {
     Bytes(Bytes),
     #[cfg(feature = "multipart")]
@@ -58,9 +57,13 @@ impl Body {
         }
     }
 
-    pub(crate) fn clone(&self) -> Body {
-        Self {
-            inner: self.inner.clone(),
+    pub(crate) fn try_clone(&self) -> Option<Body> {
+        match &self.inner {
+            Inner::Bytes(bytes) => Some(Self {
+                inner: Inner::Bytes(bytes.clone()),
+            }),
+            #[cfg(feature = "multipart")]
+            Inner::Multipart(_) => None,
         }
     }
 }
