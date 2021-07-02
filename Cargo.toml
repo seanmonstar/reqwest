@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.11.3" # remember to update html_root_url
+version = "0.11.4" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -34,6 +34,7 @@ default-tls = ["hyper-tls", "native-tls-crate", "__tls", "tokio-native-tls"]
 
 # Enables native-tls specific functionality not available by default.
 native-tls = ["default-tls"]
+native-tls-alpn = ["native-tls", "native-tls-crate/alpn"]
 native-tls-vendored = ["native-tls", "native-tls-crate/vendored"]
 
 rustls-tls = ["rustls-tls-webpki-roots"]
@@ -197,7 +198,6 @@ path = "examples/form.rs"
 [[example]]
 name = "simple"
 path = "examples/simple.rs"
-required-features = ["deflate"]
 
 [[test]]
 name = "blocking"

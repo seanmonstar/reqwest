@@ -56,6 +56,16 @@ impl Body {
             Inner::Multipart(form) => form.is_empty(),
         }
     }
+
+    pub(crate) fn try_clone(&self) -> Option<Body> {
+        match &self.inner {
+            Inner::Bytes(bytes) => Some(Self {
+                inner: Inner::Bytes(bytes.clone()),
+            }),
+            #[cfg(feature = "multipart")]
+            Inner::Multipart(_) => None,
+        }
+    }
 }
 
 impl From<Bytes> for Body {
