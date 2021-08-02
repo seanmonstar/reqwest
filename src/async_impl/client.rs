@@ -1634,8 +1634,15 @@ impl Future for PendingRequest {
                     match action {
                         redirect::ActionKind::Follow => {
                             debug!("redirecting '{}' to '{}'", self.url, loc);
-                            self.url = loc;
 
+                            if self.client.https_only && loc.scheme() != "https" {
+                                return Poll::Ready(Err(error::redirect(
+                                    error::url_bad_scheme(loc.clone()),
+                                    loc,
+                                )));
+                            }
+
+                            self.url = loc;
                             let mut headers =
                                 std::mem::replace(self.as_mut().headers(), HeaderMap::new());
 
