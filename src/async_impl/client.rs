@@ -37,7 +37,7 @@ use crate::error;
 use crate::into_url::{expect_uri, try_uri};
 use crate::redirect::{self, remove_sensitive_headers};
 #[cfg(feature = "__tls")]
-use crate::tls::TlsBackend;
+use crate::tls::{TlsBackend, TlsVersion};
 #[cfg(feature = "__tls")]
 use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
@@ -99,6 +99,10 @@ struct Config {
     #[cfg(feature = "__tls")]
     tls_built_in_root_certs: bool,
     #[cfg(feature = "__tls")]
+    min_tls_version: Option<Option<TlsVersion>>,
+    #[cfg(feature = "__tls")]
+    max_tls_version: Option<TlsVersion>,
+    #[cfg(feature = "__tls")]
     tls: TlsBackend,
     http_version_pref: HttpVersionPref,
     http1_title_case_headers: bool,
@@ -157,6 +161,10 @@ impl ClientBuilder {
                 tls_built_in_root_certs: true,
                 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
                 identity: None,
+                #[cfg(feature = "__tls")]
+                min_tls_version: None,
+                #[cfg(feature = "__tls")]
+                max_tls_version: None,
                 #[cfg(feature = "__tls")]
                 tls: TlsBackend::default(),
                 http_version_pref: HttpVersionPref::All,
@@ -262,6 +270,48 @@ impl ClientBuilder {
                         }
                     }
 
+                    match config.min_tls_version {
+                        None => {
+                            // Default, do not configure anything and leave it to
+                            // native-tls's default (as of writing, TLSv1.0)
+                        }
+                        Some(None) => {
+                            // Minimum was explicitly disabled, allow anything
+                            tls.min_protocol_version(None);
+                        }
+                        Some(Some(version)) => match version.to_native_tls() {
+                            Some(protocol) => {
+                                tls.min_protocol_version(Some(protocol));
+                            }
+                            None => {
+                                // TLS v1.3. This would be entirely reasonable,
+                                // native-tls just doesn't support it.
+                                // https://github.com/sfackler/rust-native-tls/issues/140
+                                return Err(crate::error::builder(
+                                    "invalid minimum TLS version for backend",
+                                ));
+                            }
+                        },
+                    }
+
+                    match config.max_tls_version.map(TlsVersion::to_native_tls) {
+                        None => {
+                            tls.max_protocol_version(None);
+                        }
+                        Some(Some(version)) => {
+                            tls.max_protocol_version(Some(version));
+                        }
+                        Some(None) => {
+                            // TLS v1.3.
+                            // We could arguably do max_protocol_version(None), given
+                            // that 1.4 does not exist yet, but that'd get messy in the
+                            // future.
+                            return Err(crate::error::builder(
+                                "invalid maximum TLS version for backend",
+                            ));
+                        }
+                    }
+
                     Connector::new_default_tls(
                         http,
                         tls,
@@ -327,6 +377,34 @@ impl ClientBuilder {
 
                     if let Some(id) = config.identity {
                         id.add_to_rustls(&mut tls)?;
+                    }
+
+                    // rustls does not support TLS versions <1.2 and this is unlikely to change.
+                    // https://github.com/rustls/rustls/issues/33
+
+                    // As of writing, TLS 1.2 and 1.3 are the only implemented versions and are both
+                    // enabled by default.
+                    // rustls 0.20 will add ALL_VERSIONS and DEFAULT_VERSIONS. That will enable a more
+                    // sophisticated approach.
+                    // For now we assume the default tls.versions matches the future ALL_VERSIONS and
+                    // act based on that.
+
+                    if let Some(Some(min_tls_version)) = config.min_tls_version {
+                        tls.versions
+                            .retain(|&version| match TlsVersion::from_rustls(version) {
+                                Some(version) => version >= min_tls_version,
+                                // Assume it's so new we don't know about it, allow it
+                                // (as of writing this is unreachable)
+                                None => true,
+                            });
+                    }
+
+                    if let Some(max_tls_version) = config.max_tls_version {
+                        tls.versions
+                            .retain(|&version| match TlsVersion::from_rustls(version) {
+                                Some(version) => version <= max_tls_version,
+                                None => false,
+                            });
                     }
 
                     Connector::new_rustls_tls(
@@ -957,6 +1035,73 @@ impl ClientBuilder {
         self
     }
 
+    /// Set the minimum required TLS version for connections.
+    ///
+    /// If `None`, all versions supported by the backend are enabled,
+    /// potentially including old insecure ones.
+    ///
+    /// By default the TLS backend's own default is used.
+    ///
+    /// # Errors
+    ///
+    /// A value of `TlsVersion::Tlsv1_3` will cause an error with the
+    /// `native-tls`/`default-tls` backend. This does not mean the version
+    /// isn't supported, just that it can't be set as a minimum due to
+    /// technical limitations.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
+    pub fn min_tls_version<V>(mut self, version: V) -> ClientBuilder
+    where
+        V: Into<Option<TlsVersion>>,
+    {
+        self.config.min_tls_version = Some(version.into());
+        self
+    }
+
+    /// Set the maximum allowed TLS version for connections.
+    ///
+    /// If `None` (the default), there's no maximum.
+    ///
+    /// # Errors
+    ///
+    /// A value of `TlsVersion::Tlsv1_3` will cause an error with the
+    /// `native-tls`/`default-tls` backend. This does not mean the version
+    /// isn't supported, just that it can't be set as a maximum due to
+    /// technical limitations.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
+    pub fn max_tls_version<V>(mut self, version: V) -> ClientBuilder
+    where
+        V: Into<Option<TlsVersion>>,
+    {
+        self.config.max_tls_version = version.into();
+        self
+    }
+
     /// Force using the native TLS backend.
     ///
     /// Since multiple TLS backends can be optionally enabled, this option will
@@ -1398,6 +1543,16 @@ impl Config {
         {
             if !self.certs_verification {
                 f.field("danger_accept_invalid_certs", &true);
+            }
+
+            if let Some(Some(ref min_tls_version)) = self.min_tls_version {
+                f.field("min_tls_version", min_tls_version);
+            } else if self.min_tls_version == Some(None) {
+                f.field("min_tls_version", &Option::<TlsVersion>::None);
+            }
+
+            if let Some(ref max_tls_version) = self.max_tls_version {
+                f.field("max_tls_version", max_tls_version);
             }
         }
 

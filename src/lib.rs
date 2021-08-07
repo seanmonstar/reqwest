@@ -298,7 +298,7 @@ if_hyper! {
     };
     pub use self::proxy::Proxy;
     #[cfg(feature = "__tls")]
-    pub use self::tls::{Certificate, Identity};
+    pub use self::tls::{Certificate, Identity, TlsVersion};
     #[cfg(feature = "multipart")]
     pub use self::async_impl::multipart;
 

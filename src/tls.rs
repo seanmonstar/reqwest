@@ -268,6 +268,48 @@ impl fmt::Debug for Identity {
     }
 }
 
+/// A TLS protocol version.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum TlsVersion {
+    // Sslv2 is not supported by either backend, though rustls
+    // does include it in its enum
+    Sslv3,
+    Tlsv1_0,
+    Tlsv1_1,
+    Tlsv1_2,
+    Tlsv1_3,
+}
+
+// These could perhaps be From/TryFrom implementations, but those would be
+// part of the public API so let's be careful
+impl TlsVersion {
+    #[cfg(feature = "default-tls")]
+    pub(crate) fn to_native_tls(self) -> Option<native_tls_crate::Protocol> {
+        match self {
+            TlsVersion::Sslv3 => Some(native_tls_crate::Protocol::Sslv3),
+            TlsVersion::Tlsv1_0 => Some(native_tls_crate::Protocol::Tlsv10),
+            TlsVersion::Tlsv1_1 => Some(native_tls_crate::Protocol::Tlsv11),
+            TlsVersion::Tlsv1_2 => Some(native_tls_crate::Protocol::Tlsv12),
+            TlsVersion::Tlsv1_3 => None,
+        }
+    }
+
+    #[cfg(feature = "__rustls")]
+    pub(crate) fn from_rustls(version: rustls::ProtocolVersion) -> Option<Self> {
+        match version {
+            rustls::ProtocolVersion::SSLv2 => None,
+            rustls::ProtocolVersion::SSLv3 => Some(TlsVersion::Sslv3),
+            rustls::ProtocolVersion::TLSv1_0 => Some(TlsVersion::Tlsv1_0),
+            rustls::ProtocolVersion::TLSv1_1 => Some(TlsVersion::Tlsv1_1),
+            rustls::ProtocolVersion::TLSv1_2 => Some(TlsVersion::Tlsv1_2),
+            rustls::ProtocolVersion::TLSv1_3 => Some(TlsVersion::Tlsv1_3),
+            _ => None,
+        }
+    }
+}
+
 pub(crate) enum TlsBackend {
     #[cfg(feature = "default-tls")]
     Default,
