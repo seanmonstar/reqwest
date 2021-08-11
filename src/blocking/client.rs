@@ -16,7 +16,7 @@ use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::wait;
 #[cfg(feature = "__tls")]
-use crate::tls::TlsVersion;
+use crate::tls;
 #[cfg(feature = "__tls")]
 use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
@@ -614,7 +614,7 @@ impl ClientBuilder {
     ///
     /// # Errors
     ///
-    /// A value of `TlsVersion::Tlsv1_3` will cause an error with the
+    /// A value of `tls::Version::Tlsv1_3` will cause an error with the
     /// `native-tls`/`default-tls` backend. This does not mean the version
     /// isn't supported, just that it can't be set as a minimum due to
     /// technical limitations.
@@ -634,7 +634,7 @@ impl ClientBuilder {
     )]
     pub fn min_tls_version<V>(self, version: V) -> ClientBuilder
     where
-        V: Into<Option<TlsVersion>>,
+        V: Into<Option<tls::Version>>,
     {
         self.with_inner(|inner| inner.min_tls_version(version))
     }
@@ -645,7 +645,7 @@ impl ClientBuilder {
     ///
     /// # Errors
     ///
-    /// A value of `TlsVersion::Tlsv1_3` will cause an error with the
+    /// A value of `tls::Version::Tlsv1_3` will cause an error with the
     /// `native-tls`/`default-tls` backend. This does not mean the version
     /// isn't supported, just that it can't be set as a maximum due to
     /// technical limitations.
@@ -665,7 +665,7 @@ impl ClientBuilder {
     )]
     pub fn max_tls_version<V>(self, version: V) -> ClientBuilder
     where
-        V: Into<Option<TlsVersion>>,
+        V: Into<Option<tls::Version>>,
     {
         self.with_inner(|inner| inner.max_tls_version(version))
     }

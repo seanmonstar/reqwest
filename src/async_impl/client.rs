@@ -37,7 +37,7 @@ use crate::error;
 use crate::into_url::{expect_uri, try_uri};
 use crate::redirect::{self, remove_sensitive_headers};
 #[cfg(feature = "__tls")]
-use crate::tls::{TlsBackend, TlsVersion};
+use crate::tls::{self, TlsBackend};
 #[cfg(feature = "__tls")]
 use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
@@ -99,9 +99,9 @@ struct Config {
     #[cfg(feature = "__tls")]
     tls_built_in_root_certs: bool,
     #[cfg(feature = "__tls")]
-    min_tls_version: Option<Option<TlsVersion>>,
+    min_tls_version: Option<Option<tls::Version>>,
     #[cfg(feature = "__tls")]
-    max_tls_version: Option<TlsVersion>,
+    max_tls_version: Option<tls::Version>,
     #[cfg(feature = "__tls")]
     tls: TlsBackend,
     http_version_pref: HttpVersionPref,
@@ -294,7 +294,7 @@ impl ClientBuilder {
                         },
                     }
 
-                    match config.max_tls_version.map(TlsVersion::to_native_tls) {
+                    match config.max_tls_version.map(tls::Version::to_native_tls) {
                         None => {
                             tls.max_protocol_version(None);
                         }
@@ -391,7 +391,7 @@ impl ClientBuilder {
 
                     if let Some(Some(min_tls_version)) = config.min_tls_version {
                         tls.versions
-                            .retain(|&version| match TlsVersion::from_rustls(version) {
+                            .retain(|&version| match tls::Version::from_rustls(version) {
                                 Some(version) => version >= min_tls_version,
                                 // Assume it's so new we don't know about it, allow it
                                 // (as of writing this is unreachable)
@@ -401,7 +401,7 @@ impl ClientBuilder {
 
                     if let Some(max_tls_version) = config.max_tls_version {
                         tls.versions
-                            .retain(|&version| match TlsVersion::from_rustls(version) {
+                            .retain(|&version| match tls::Version::from_rustls(version) {
                                 Some(version) => version <= max_tls_version,
                                 None => false,
                             });
@@ -1044,7 +1044,7 @@ impl ClientBuilder {
     ///
     /// # Errors
     ///
-    /// A value of `TlsVersion::Tlsv1_3` will cause an error with the
+    /// A value of `tls::Version::Tlsv1_3` will cause an error with the
     /// `native-tls`/`default-tls` backend. This does not mean the version
     /// isn't supported, just that it can't be set as a minimum due to
     /// technical limitations.
@@ -1064,7 +1064,7 @@ impl ClientBuilder {
     )]
     pub fn min_tls_version<V>(mut self, version: V) -> ClientBuilder
     where
-        V: Into<Option<TlsVersion>>,
+        V: Into<Option<tls::Version>>,
     {
         self.config.min_tls_version = Some(version.into());
         self
@@ -1076,7 +1076,7 @@ impl ClientBuilder {
     ///
     /// # Errors
     ///
-    /// A value of `TlsVersion::Tlsv1_3` will cause an error with the
+    /// A value of `tls::Version::Tlsv1_3` will cause an error with the
     /// `native-tls`/`default-tls` backend. This does not mean the version
     /// isn't supported, just that it can't be set as a maximum due to
     /// technical limitations.
@@ -1096,7 +1096,7 @@ impl ClientBuilder {
     )]
     pub fn max_tls_version<V>(mut self, version: V) -> ClientBuilder
     where
-        V: Into<Option<TlsVersion>>,
+        V: Into<Option<tls::Version>>,
     {
         self.config.max_tls_version = version.into();
         self
@@ -1548,7 +1548,7 @@ impl Config {
             if let Some(Some(ref min_tls_version)) = self.min_tls_version {
                 f.field("min_tls_version", min_tls_version);
             } else if self.min_tls_version == Some(None) {
-                f.field("min_tls_version", &Option::<TlsVersion>::None);
+                f.field("min_tls_version", &Option::<tls::Version>::None);
             }
 
             if let Some(ref max_tls_version) = self.max_tls_version {

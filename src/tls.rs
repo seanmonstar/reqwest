@@ -1,3 +1,16 @@
+//! TLS configuration
+//!
+//! By default, a `Client` will make use of system-native transport layer
+//! security to connect to HTTPS destinations. This means schannel on Windows,
+//! Security-Framework on macOS, and OpenSSL on Linux.
+//!
+//! - Additional X509 certificates can be configured on a `ClientBuilder` with the
+//!   [`Certificate`](Certificate) type.
+//! - Client certificates can be add to a `ClientBuilder` with the
+//!   [`Identity`][Identity] type.
+//! - Various parts of TLS can also be configured or even disabled on the
+//!   `ClientBuilder`.
+
 #[cfg(feature = "__rustls")]
 use rustls::{
     internal::msgs::handshake::DigitallySignedStruct, HandshakeSignatureValid, RootCertStore,
@@ -272,7 +285,7 @@ impl fmt::Debug for Identity {
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[non_exhaustive]
-pub enum TlsVersion {
+pub enum Version {
     // Sslv2 is not supported by either backend, though rustls
     // does include it in its enum
     Sslv3,
@@ -284,15 +297,15 @@ pub enum TlsVersion {
 
 // These could perhaps be From/TryFrom implementations, but those would be
 // part of the public API so let's be careful
-impl TlsVersion {
+impl Version {
     #[cfg(feature = "default-tls")]
     pub(crate) fn to_native_tls(self) -> Option<native_tls_crate::Protocol> {
         match self {
-            TlsVersion::Sslv3 => Some(native_tls_crate::Protocol::Sslv3),
-            TlsVersion::Tlsv1_0 => Some(native_tls_crate::Protocol::Tlsv10),
-            TlsVersion::Tlsv1_1 => Some(native_tls_crate::Protocol::Tlsv11),
-            TlsVersion::Tlsv1_2 => Some(native_tls_crate::Protocol::Tlsv12),
-            TlsVersion::Tlsv1_3 => None,
+            Version::Sslv3 => Some(native_tls_crate::Protocol::Sslv3),
+            Version::Tlsv1_0 => Some(native_tls_crate::Protocol::Tlsv10),
+            Version::Tlsv1_1 => Some(native_tls_crate::Protocol::Tlsv11),
+            Version::Tlsv1_2 => Some(native_tls_crate::Protocol::Tlsv12),
+            Version::Tlsv1_3 => None,
         }
     }
 
@@ -300,11 +313,11 @@ impl TlsVersion {
     pub(crate) fn from_rustls(version: rustls::ProtocolVersion) -> Option<Self> {
         match version {
             rustls::ProtocolVersion::SSLv2 => None,
-            rustls::ProtocolVersion::SSLv3 => Some(TlsVersion::Sslv3),
-            rustls::ProtocolVersion::TLSv1_0 => Some(TlsVersion::Tlsv1_0),
-            rustls::ProtocolVersion::TLSv1_1 => Some(TlsVersion::Tlsv1_1),
-            rustls::ProtocolVersion::TLSv1_2 => Some(TlsVersion::Tlsv1_2),
-            rustls::ProtocolVersion::TLSv1_3 => Some(TlsVersion::Tlsv1_3),
+            rustls::ProtocolVersion::SSLv3 => Some(Version::Sslv3),
+            rustls::ProtocolVersion::TLSv1_0 => Some(Version::Tlsv1_0),
+            rustls::ProtocolVersion::TLSv1_1 => Some(Version::Tlsv1_1),
+            rustls::ProtocolVersion::TLSv1_2 => Some(Version::Tlsv1_2),
+            rustls::ProtocolVersion::TLSv1_3 => Some(Version::Tlsv1_3),
             _ => None,
         }
     }
