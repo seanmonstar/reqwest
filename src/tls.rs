@@ -282,30 +282,37 @@ impl fmt::Debug for Identity {
 }
 
 /// A TLS protocol version.
-#[allow(missing_docs)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Version(InnerVersion);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[non_exhaustive]
-pub enum Version {
-    // Sslv2 is not supported by either backend, though rustls
-    // does include it in its enum
-    Sslv3,
-    Tlsv1_0,
-    Tlsv1_1,
-    Tlsv1_2,
-    Tlsv1_3,
+enum InnerVersion {
+    Tls1_0,
+    Tls1_1,
+    Tls1_2,
+    Tls1_3,
 }
 
 // These could perhaps be From/TryFrom implementations, but those would be
 // part of the public API so let's be careful
 impl Version {
+    /// Version 1.0 of the TLS protocol.
+    pub const TLS_1_0: Version = Version(InnerVersion::Tls1_0);
+    /// Version 1.1 of the TLS protocol.
+    pub const TLS_1_1: Version = Version(InnerVersion::Tls1_1);
+    /// Version 1.2 of the TLS protocol.
+    pub const TLS_1_2: Version = Version(InnerVersion::Tls1_2);
+    /// Version 1.3 of the TLS protocol.
+    pub const TLS_1_3: Version = Version(InnerVersion::Tls1_3);
+
     #[cfg(feature = "default-tls")]
     pub(crate) fn to_native_tls(self) -> Option<native_tls_crate::Protocol> {
-        match self {
-            Version::Sslv3 => Some(native_tls_crate::Protocol::Sslv3),
-            Version::Tlsv1_0 => Some(native_tls_crate::Protocol::Tlsv10),
-            Version::Tlsv1_1 => Some(native_tls_crate::Protocol::Tlsv11),
-            Version::Tlsv1_2 => Some(native_tls_crate::Protocol::Tlsv12),
-            Version::Tlsv1_3 => None,
+        match self.0 {
+            InnerVersion::Tls1_0 => Some(native_tls_crate::Protocol::Tlsv10),
+            InnerVersion::Tls1_1 => Some(native_tls_crate::Protocol::Tlsv11),
+            InnerVersion::Tls1_2 => Some(native_tls_crate::Protocol::Tlsv12),
+            InnerVersion::Tls1_3 => None,
         }
     }
 
@@ -313,11 +320,11 @@ impl Version {
     pub(crate) fn from_rustls(version: rustls::ProtocolVersion) -> Option<Self> {
         match version {
             rustls::ProtocolVersion::SSLv2 => None,
-            rustls::ProtocolVersion::SSLv3 => Some(Version::Sslv3),
-            rustls::ProtocolVersion::TLSv1_0 => Some(Version::Tlsv1_0),
-            rustls::ProtocolVersion::TLSv1_1 => Some(Version::Tlsv1_1),
-            rustls::ProtocolVersion::TLSv1_2 => Some(Version::Tlsv1_2),
-            rustls::ProtocolVersion::TLSv1_3 => Some(Version::Tlsv1_3),
+            rustls::ProtocolVersion::SSLv3 => None,
+            rustls::ProtocolVersion::TLSv1_0 => Some(Self(InnerVersion::Tls1_0)),
+            rustls::ProtocolVersion::TLSv1_1 => Some(Self(InnerVersion::Tls1_1)),
+            rustls::ProtocolVersion::TLSv1_2 => Some(Self(InnerVersion::Tls1_2)),
+            rustls::ProtocolVersion::TLSv1_3 => Some(Self(InnerVersion::Tls1_3)),
             _ => None,
         }
     }

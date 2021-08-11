@@ -1044,7 +1044,7 @@ impl ClientBuilder {
     ///
     /// # Errors
     ///
-    /// A value of `tls::Version::Tlsv1_3` will cause an error with the
+    /// A value of `tls::Version::TLS_1_3` will cause an error with the
     /// `native-tls`/`default-tls` backend. This does not mean the version
     /// isn't supported, just that it can't be set as a minimum due to
     /// technical limitations.
@@ -1076,7 +1076,7 @@ impl ClientBuilder {
     ///
     /// # Errors
     ///
-    /// A value of `tls::Version::Tlsv1_3` will cause an error with the
+    /// A value of `tls::Version::TLS_1_3` will cause an error with the
     /// `native-tls`/`default-tls` backend. This does not mean the version
     /// isn't supported, just that it can't be set as a maximum due to
     /// technical limitations.
