@@ -607,9 +607,6 @@ impl ClientBuilder {
 
     /// Set the minimum required TLS version for connections.
     ///
-    /// If `None`, all versions supported by the backend are enabled,
-    /// potentially including old insecure ones.
-    ///
     /// By default the TLS backend's own default is used.
     ///
     /// # Errors
@@ -632,16 +629,13 @@ impl ClientBuilder {
             feature = "rustls-tls"
         )))
     )]
-    pub fn min_tls_version<V>(self, version: V) -> ClientBuilder
-    where
-        V: Into<Option<tls::Version>>,
-    {
+    pub fn min_tls_version(self, version: tls::Version) -> ClientBuilder {
         self.with_inner(|inner| inner.min_tls_version(version))
     }
 
     /// Set the maximum allowed TLS version for connections.
     ///
-    /// If `None` (the default), there's no maximum.
+    /// By default there's no maximum.
     ///
     /// # Errors
     ///
@@ -663,10 +657,7 @@ impl ClientBuilder {
             feature = "rustls-tls"
         )))
     )]
-    pub fn max_tls_version<V>(self, version: V) -> ClientBuilder
-    where
-        V: Into<Option<tls::Version>>,
-    {
+    pub fn max_tls_version(self, version: tls::Version) -> ClientBuilder {
         self.with_inner(|inner| inner.max_tls_version(version))
     }
 
