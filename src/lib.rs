@@ -298,7 +298,8 @@ if_hyper! {
     };
     pub use self::proxy::Proxy;
     #[cfg(feature = "__tls")]
-    pub use self::tls::{Certificate, Identity};
+    // Re-exports, to be removed in a future release
+    pub use tls::{Certificate, Identity};
     #[cfg(feature = "multipart")]
     pub use self::async_impl::multipart;
 
@@ -314,7 +315,7 @@ if_hyper! {
     mod proxy;
     pub mod redirect;
     #[cfg(feature = "__tls")]
-    mod tls;
+    pub mod tls;
     mod util;
 }
 
