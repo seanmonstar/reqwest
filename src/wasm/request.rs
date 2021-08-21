@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 use std::fmt;
 
+use bytes::Bytes;
 use http::{request::Parts, Method, Request as HttpRequest};
 use serde::Serialize;
 #[cfg(feature = "json")]
@@ -433,5 +434,28 @@ where
             cors: true,
             credentials: None,
         })
+    }
+}
+
+impl TryFrom<Request> for HttpRequest<Body> {
+    type Error = crate::Error;
+
+    fn try_from(req: Request) -> crate::Result<Self> {
+        let Request {
+            method,
+            url,
+            headers,
+            body,
+            ..
+        } = req;
+
+        let mut req = HttpRequest::builder()
+            .method(method)
+            .uri(url.as_str())
+            .body(body.unwrap_or_else(|| Body::from(Bytes::default())))
+            .map_err(crate::error::builder)?;
+
+        *req.headers_mut() = headers;
+        Ok(req)
     }
 }

@@ -570,6 +570,31 @@ where
     }
 }
 
+impl TryFrom<Request> for HttpRequest<Body> {
+    type Error = crate::Error;
+
+    fn try_from(req: Request) -> crate::Result<Self> {
+        let Request {
+            method,
+            url,
+            headers,
+            body,
+            version,
+            ..
+        } = req;
+
+        let mut req = HttpRequest::builder()
+            .version(version)
+            .method(method)
+            .uri(url.as_str())
+            .body(body.unwrap_or_else(Body::empty))
+            .map_err(crate::error::builder)?;
+
+        *req.headers_mut() = headers;
+        Ok(req)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Client, HttpRequest, Request, Version};
