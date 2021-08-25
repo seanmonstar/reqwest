@@ -1055,8 +1055,8 @@ mod tests {
         // Let other threads run now
         drop(_lock);
 
-        assert_eq!(baseline_proxies.contains_key("http"), false);
-        assert_eq!(invalid_proxies.contains_key("http"), false);
+        assert!(!baseline_proxies.contains_key("http"));
+        assert!(!invalid_proxies.contains_key("http"));
 
         let p = &valid_proxies["http"];
         assert_eq!(p.scheme(), "http");
@@ -1298,7 +1298,7 @@ mod tests {
             }),
             no_proxy: None,
         };
-        assert_eq!(http_proxy_with_auth.maybe_has_http_auth(), true);
+        assert!(http_proxy_with_auth.maybe_has_http_auth());
         assert_eq!(
             http_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
             Some(HeaderValue::from_static("auth1"))
@@ -1311,7 +1311,7 @@ mod tests {
             }),
             no_proxy: None,
         };
-        assert_eq!(http_proxy_without_auth.maybe_has_http_auth(), false);
+        assert!(!http_proxy_without_auth.maybe_has_http_auth());
         assert_eq!(
             http_proxy_without_auth.http_basic_auth(&Uri::from_static("http://example.com")),
             None
@@ -1324,7 +1324,7 @@ mod tests {
             }),
             no_proxy: None,
         };
-        assert_eq!(https_proxy_with_auth.maybe_has_http_auth(), false);
+        assert!(!https_proxy_with_auth.maybe_has_http_auth());
         assert_eq!(
             https_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
             None
@@ -1337,7 +1337,7 @@ mod tests {
             }),
             no_proxy: None,
         };
-        assert_eq!(all_http_proxy_with_auth.maybe_has_http_auth(), true);
+        assert!(all_http_proxy_with_auth.maybe_has_http_auth());
         assert_eq!(
             all_http_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
             Some(HeaderValue::from_static("auth3"))
@@ -1350,7 +1350,7 @@ mod tests {
             }),
             no_proxy: None,
         };
-        assert_eq!(all_https_proxy_with_auth.maybe_has_http_auth(), false);
+        assert!(!all_https_proxy_with_auth.maybe_has_http_auth());
         assert_eq!(
             all_https_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
             None
@@ -1363,7 +1363,7 @@ mod tests {
             }),
             no_proxy: None,
         };
-        assert_eq!(all_https_proxy_without_auth.maybe_has_http_auth(), false);
+        assert!(!all_https_proxy_without_auth.maybe_has_http_auth());
         assert_eq!(
             all_https_proxy_without_auth.http_basic_auth(&Uri::from_static("http://example.com")),
             None
@@ -1383,7 +1383,7 @@ mod tests {
             })),
             no_proxy: None,
         };
-        assert_eq!(system_http_proxy_with_auth.maybe_has_http_auth(), true);
+        assert!(system_http_proxy_with_auth.maybe_has_http_auth());
         assert_eq!(
             system_http_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
             Some(HeaderValue::from_static("auth5"))
@@ -1403,7 +1403,7 @@ mod tests {
             })),
             no_proxy: None,
         };
-        assert_eq!(system_https_proxy_with_auth.maybe_has_http_auth(), false);
+        assert!(!system_https_proxy_with_auth.maybe_has_http_auth());
         assert_eq!(
             system_https_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
             None

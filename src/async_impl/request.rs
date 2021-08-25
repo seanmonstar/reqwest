@@ -782,7 +782,7 @@ mod tests {
             req.headers()["authorization"],
             "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="
         );
-        assert_eq!(req.headers()["authorization"].is_sensitive(), true);
+        assert!(req.headers()["authorization"].is_sensitive());
     }
 
     #[test]
@@ -798,7 +798,7 @@ mod tests {
 
         assert_eq!(req.url().as_str(), "https://localhost/");
         assert_eq!(req.headers()["authorization"], "Bearer Hold my bear");
-        assert_eq!(req.headers()["authorization"].is_sensitive(), true);
+        assert!(req.headers()["authorization"].is_sensitive());
     }
 
     #[test]
@@ -810,7 +810,7 @@ mod tests {
             .body("test test test")
             .unwrap();
         let req: Request = Request::try_from(http_request).unwrap();
-        assert_eq!(req.body().is_none(), false);
+        assert!(req.body().is_some());
         let test_data = b"test test test";
         assert_eq!(req.body().unwrap().as_bytes(), Some(&test_data[..]));
         let headers = req.headers();
@@ -829,7 +829,7 @@ mod tests {
             .body("test test test")
             .unwrap();
         let req: Request = Request::try_from(http_request).unwrap();
-        assert_eq!(req.body().is_none(), false);
+        assert!(req.body().is_some());
         let test_data = b"test test test";
         assert_eq!(req.body().unwrap().as_bytes(), Some(&test_data[..]));
         let headers = req.headers();
