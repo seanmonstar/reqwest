@@ -17,8 +17,7 @@ fn js_fetch(req: &web_sys::Request) -> Promise {
     use wasm_bindgen::{JsCast, JsValue};
     let global = js_sys::global();
 
-    if let Some(true) =
-        js_sys::Reflect::has(&global, &JsValue::from_str("ServiceWorkerGlobalScope")).ok()
+    if let Ok(true) = js_sys::Reflect::has(&global, &JsValue::from_str("ServiceWorkerGlobalScope"))
     {
         global
             .unchecked_into::<web_sys::ServiceWorkerGlobalScope>()
@@ -213,7 +212,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
 
     if let Some(body) = req.body() {
         if !body.is_empty() {
-            init.body(Some(&body.to_js_value()?.as_ref().as_ref()));
+            init.body(Some(body.to_js_value()?.as_ref()));
         }
     }
 

@@ -130,13 +130,13 @@ impl Request {
     /// `None` is returned if the request can not be cloned, i.e. if the body is a stream.
     pub fn try_clone(&self) -> Option<Request> {
         let body = match self.body.as_ref() {
-            Some(ref body) => Some(body.try_clone()?),
+            Some(body) => Some(body.try_clone()?),
             None => None,
         };
         let mut req = Request::new(self.method().clone(), self.url().clone());
         *req.timeout_mut() = self.timeout().cloned();
         *req.headers_mut() = self.headers().clone();
-        *req.version_mut() = self.version().clone();
+        *req.version_mut() = self.version();
         req.body = body;
         Some(req)
     }
@@ -565,7 +565,7 @@ where
             headers,
             body: Some(body.into()),
             timeout: None,
-            version: version,
+            version,
         })
     }
 }
