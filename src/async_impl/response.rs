@@ -20,6 +20,7 @@ use super::body::Body;
 use super::decoder::{Accepts, Decoder};
 #[cfg(feature = "cookies")]
 use crate::cookie;
+use crate::response::ResponseUrl;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -426,44 +427,12 @@ impl From<Response> for Body {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-struct ResponseUrl(Url);
-
-/// Extension trait for http::response::Builder objects
-///
-/// Allows the user to add a `Url` to the http::Response
-pub trait ResponseBuilderExt {
-    /// A builder method for the `http::response::Builder` type that allows the user to add a `Url`
-    /// to the `http::Response`
-    fn url(self, url: Url) -> Self;
-}
-
-impl ResponseBuilderExt for http::response::Builder {
-    fn url(self, url: Url) -> Self {
-        self.extension(ResponseUrl(url))
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{Response, ResponseBuilderExt, ResponseUrl};
+    use super::Response;
+    use crate::ResponseBuilderExt;
     use http::response::Builder;
     use url::Url;
-
-    #[test]
-    fn test_response_builder_ext() {
-        let url = Url::parse("http://example.com").unwrap();
-        let response = Builder::new()
-            .status(200)
-            .url(url.clone())
-            .body(())
-            .unwrap();
-
-        assert_eq!(
-            response.extensions().get::<ResponseUrl>(),
-            Some(&ResponseUrl(url))
-        );
-    }
 
     #[test]
     fn test_from_http_response() {
@@ -475,7 +444,7 @@ mod tests {
             .unwrap();
         let response = Response::from(response);
 
-        assert_eq!(response.status, 200);
-        assert_eq!(response.url, Box::new(url));
+        assert_eq!(response.status(), 200);
+        assert_eq!(*response.url(), url);
     }
 }
