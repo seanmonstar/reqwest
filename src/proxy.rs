@@ -437,9 +437,7 @@ impl DomainMatcher {
         for d in self.0.iter() {
             // First check for a "wildcard" domain match. A single "." will match anything.
             // Otherwise, check that the domains are equal
-            if (d.starts_with('.') && domain.ends_with(d.get(1..).unwrap_or_default()))
-                || d == domain
-            {
+            if (d.starts_with('.') && domain.ends_with(d)) || d == domain {
                 return true;
             }
         }
@@ -1186,6 +1184,8 @@ mod tests {
 
         assert_eq!(intercepted_uri(&p, "http://hyper.rs"), target);
         assert_eq!(intercepted_uri(&p, "http://foo.bar.baz"), target);
+        assert_eq!(intercepted_uri(&p, "http://foo.bar"), target);
+        assert_eq!(intercepted_uri(&p, "http://notfoo.bar"), target);
         assert_eq!(intercepted_uri(&p, "http://10.43.1.1"), target);
         assert_eq!(intercepted_uri(&p, "http://10.124.7.7"), target);
         assert_eq!(intercepted_uri(&p, "http://[ffff:db8:a0b:12f0::1]"), target);
