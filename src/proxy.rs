@@ -433,11 +433,25 @@ impl IpMatcher {
 }
 
 impl DomainMatcher {
+    // The following links may be useful to understand these rules:
+    // * https://curl.se/libcurl/c/CURLOPT_NOPROXY.html
+    // * https://github.com/curl/curl/issues/1208
     fn contains(&self, domain: &str) -> bool {
+        let domain_len = domain.len();
         for d in self.0.iter() {
-            // First check for a "wildcard" domain match. A single "." will match anything.
-            // Otherwise, check that the domains are equal
-            if (d.starts_with('.') && domain.ends_with(d)) || d == domain {
+            if d == domain {
+                return true;
+            } else if domain.ends_with(d) {
+                if d.starts_with('.') {
+                    // If the first character of d is a dot, that means the first character of domain
+                    // must also be a dot, so we are looking at a subdomain of d and that matches
+                    return true;
+                } else if domain.as_bytes()[domain_len - d.len() - 1] == b'.' {
+                    // Given that d is a prefix of domain, if the prior character in domain is a dot
+                    // then that means we must be matching a subdomain of d, and that matches
+                    return true;
+                }
+            } else if d == "*" {
                 return true;
             }
         }
@@ -1183,9 +1197,9 @@ mod tests {
         p.no_proxy = NoProxy::new();
 
         assert_eq!(intercepted_uri(&p, "http://hyper.rs"), target);
-        assert_eq!(intercepted_uri(&p, "http://foo.bar.baz"), target);
         assert_eq!(intercepted_uri(&p, "http://foo.bar"), target);
         assert_eq!(intercepted_uri(&p, "http://notfoo.bar"), target);
+        assert_eq!(intercepted_uri(&p, "http://notbar.baz"), target);
         assert_eq!(intercepted_uri(&p, "http://10.43.1.1"), target);
         assert_eq!(intercepted_uri(&p, "http://10.124.7.7"), target);
         assert_eq!(intercepted_uri(&p, "http://[ffff:db8:a0b:12f0::1]"), target);
@@ -1193,10 +1207,40 @@ mod tests {
 
         assert!(p.intercept(&url("http://hello.foo.bar")).is_none());
         assert!(p.intercept(&url("http://bar.baz")).is_none());
+        assert!(p.intercept(&url("http://foo.bar.baz")).is_none());
         assert!(p.intercept(&url("http://10.42.1.100")).is_none());
         assert!(p.intercept(&url("http://[::1]")).is_none());
         assert!(p.intercept(&url("http://[2001:db8:a0b:12f0::1]")).is_none());
         assert!(p.intercept(&url("http://10.124.7.8")).is_none());
+
+        // reset user setting when guards drop
+        drop(_g1);
+        drop(_g2);
+        // Let other threads run now
+        drop(_lock);
+    }
+
+    #[test]
+    fn test_wildcard_sys_no_proxy() {
+        // Stop other threads from modifying process-global ENV while we are.
+        let _lock = ENVLOCK.lock();
+        // save system setting first.
+        let _g1 = env_guard("HTTP_PROXY");
+        let _g2 = env_guard("NO_PROXY");
+
+        let target = "http://example.domain/";
+        env::set_var("HTTP_PROXY", target);
+
+        env::set_var(
+            "NO_PROXY",
+            "*",
+        );
+
+        // Manually construct this so we aren't use the cache
+        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
+        p.no_proxy = NoProxy::new();
+
+        assert!(p.intercept(&url("http://foo.bar")).is_none());
 
         // reset user setting when guards drop
         drop(_g1);
