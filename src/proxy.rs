@@ -377,7 +377,8 @@ impl NoProxy {
         }
         let mut ips = Vec::new();
         let mut domains = Vec::new();
-        let parts = raw.split(',');
+        let parts = raw.split(',')
+            .map(str::trim);
         for part in parts {
             match part.parse::<IpNet>() {
                 // If we can parse an IP net or address, then use it, otherwise, assume it is a domain
@@ -1176,7 +1177,7 @@ mod tests {
 
         env::set_var(
             "NO_PROXY",
-            ".foo.bar,bar.baz,10.42.1.1/24,::1,10.124.7.8,2001::/17",
+            ".foo.bar, bar.baz,10.42.1.1/24,::1,10.124.7.8,2001::/17",
         );
 
         // Manually construct this so we aren't use the cache
