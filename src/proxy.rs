@@ -377,8 +377,7 @@ impl NoProxy {
         }
         let mut ips = Vec::new();
         let mut domains = Vec::new();
-        let parts = raw.split(',')
-            .map(str::trim);
+        let parts = raw.split(',').map(str::trim);
         for part in parts {
             match part.parse::<IpNet>() {
                 // If we can parse an IP net or address, then use it, otherwise, assume it is a domain
@@ -1231,10 +1230,7 @@ mod tests {
         let target = "http://example.domain/";
         env::set_var("HTTP_PROXY", target);
 
-        env::set_var(
-            "NO_PROXY",
-            "*",
-        );
+        env::set_var("NO_PROXY", "*");
 
         // Manually construct this so we aren't use the cache
         let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
