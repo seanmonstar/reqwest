@@ -1216,6 +1216,8 @@ mod tests {
         assert!(p.intercept(&url("http://hello.foo.bar")).is_none());
         // make sure exact matches (without leading .) match (also makes sure spaces between entries work)
         assert!(p.intercept(&url("http://bar.baz")).is_none());
+        // check case sensitivity
+        assert!(p.intercept(&url("http://BAR.baz")).is_none());
         // make sure subdomains (without leading . in no_proxy) match
         assert!(p.intercept(&url("http://foo.bar.baz")).is_none());
         // ipv4 address match within range
