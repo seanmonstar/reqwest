@@ -1195,21 +1195,36 @@ mod tests {
         let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
         p.no_proxy = NoProxy::new();
 
+        // random url, not in no_proxy
         assert_eq!(intercepted_uri(&p, "http://hyper.rs"), target);
+        // .foo.bar should only match subdomains
         assert_eq!(intercepted_uri(&p, "http://foo.bar"), target);
+        // make sure that random non-subdomain string prefixes don't match
         assert_eq!(intercepted_uri(&p, "http://notfoo.bar"), target);
+        // make sure that random non-subdomain string prefixes don't match
         assert_eq!(intercepted_uri(&p, "http://notbar.baz"), target);
+        // ipv4 address out of range
         assert_eq!(intercepted_uri(&p, "http://10.43.1.1"), target);
+        // ipv4 address out of range
         assert_eq!(intercepted_uri(&p, "http://10.124.7.7"), target);
+        // ipv6 address out of range
         assert_eq!(intercepted_uri(&p, "http://[ffff:db8:a0b:12f0::1]"), target);
+        // ipv6 address out of range
         assert_eq!(intercepted_uri(&p, "http://[2005:db8:a0b:12f0::1]"), target);
 
+        // make sure subdomains (with leading .) match
         assert!(p.intercept(&url("http://hello.foo.bar")).is_none());
+        // make sure exact matches (without leading .) match (also makes sure spaces between entries work)
         assert!(p.intercept(&url("http://bar.baz")).is_none());
+        // make sure subdomains (without leading . in no_proxy) match
         assert!(p.intercept(&url("http://foo.bar.baz")).is_none());
+        // ipv4 address match within range
         assert!(p.intercept(&url("http://10.42.1.100")).is_none());
+        // ipv6 address exact match
         assert!(p.intercept(&url("http://[::1]")).is_none());
+        // ipv6 address match within range
         assert!(p.intercept(&url("http://[2001:db8:a0b:12f0::1]")).is_none());
+        // ipv4 address exact match
         assert!(p.intercept(&url("http://10.124.7.8")).is_none());
 
         // reset user setting when guards drop
