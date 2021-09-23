@@ -1261,6 +1261,33 @@ mod tests {
     }
 
     #[test]
+    fn test_empty_sys_no_proxy() {
+        // Stop other threads from modifying process-global ENV while we are.
+        let _lock = ENVLOCK.lock();
+        // save system setting first.
+        let _g1 = env_guard("HTTP_PROXY");
+        let _g2 = env_guard("NO_PROXY");
+
+        let target = "http://example.domain/";
+        env::set_var("HTTP_PROXY", target);
+
+        env::set_var("NO_PROXY", ",");
+
+        // Manually construct this so we aren't use the cache
+        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
+        p.no_proxy = NoProxy::new();
+
+        // everything should go through proxy, "effectively" nothing is in no_proxy
+        assert_eq!(intercepted_uri(&p, "http://hyper.rs"), target);
+
+        // reset user setting when guards drop
+        drop(_g1);
+        drop(_g2);
+        // Let other threads run now
+        drop(_lock);
+    }
+
+    #[test]
     fn test_no_proxy_load() {
         // Stop other threads from modifying process-global ENV while we are.
         let _lock = ENVLOCK.lock();
