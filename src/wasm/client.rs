@@ -1,5 +1,5 @@
 use http::{HeaderMap, Method};
-use js_sys::Promise;
+use js_sys::{Promise, JSON};
 use std::{fmt, future::Future, sync::Arc};
 use url::Url;
 use wasm_bindgen::prelude::{wasm_bindgen, UnwrapThrowExt as _};
@@ -238,11 +238,12 @@ async fn fetch(req: Request) -> crate::Result<Response> {
 
     for item in js_iter {
         let item = item.expect_throw("headers iterator doesn't throw");
-        let v: Vec<String> = item.into_serde().expect_throw("headers into_serde");
-        resp = resp.header(
-            v.get(0).expect_throw("headers name"),
-            v.get(1).expect_throw("headers value"),
-        );
+        let serialized_headers: String = JSON::stringify(&item)
+            .expect_throw("serialized headers")
+            .into();
+        let [name, value]: [String; 2] = serde_json::from_str(&serialized_headers)
+            .expect_throw("deserializable serialized headers");
+        resp = resp.header(name, value);
     }
 
     resp.body(js_resp)
