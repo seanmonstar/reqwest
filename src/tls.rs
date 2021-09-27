@@ -183,6 +183,8 @@ impl Identity {
     /// The input should contain a PEM encoded private key
     /// and at least one PEM encoded certificate.
     ///
+    /// Note: The private key must be in RSA or PKCS#8 format.
+    ///
     /// # Examples
     ///
     /// ```
