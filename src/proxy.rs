@@ -205,7 +205,7 @@ impl Proxy {
         )))
     }
 
-    /// Provide a custom function to determine what traffix to proxy to where.
+    /// Provide a custom function to determine what traffic to proxy to where.
     ///
     /// # Example
     ///
@@ -366,8 +366,26 @@ impl fmt::Debug for Proxy {
 }
 
 impl NoProxy {
-    /// Returns a new no proxy configration if the NO_PROXY/no_proxy environment variable is set.
-    /// Returns None otherwise
+    /// Returns a new no-proxy configuration based on environment variables (or `None` if no variables are set)
+    ///
+    /// The rules are as follows:
+    /// * The environment variable `NO_PROXY` is checked, if it is not set, `no_proxy` is checked
+    /// * If neither environment variable is set, `None` is returned
+    /// * Entries are expected to be comma-separated (whitespace between entries is ignored)
+    /// * IP addresses (both IPv4 and IPv6) are allowed, as are optional subnet masks (by adding /size,
+    /// for example "`192.168.1.0/24`").
+    /// * An entry "`*`" matches all hostnames (this is the only wildcard allowed)
+    /// * Any other entry is considered a domain name (and may contain a leading dot, for example `google.com`
+    /// and `.google.com` are equivalent) and would match both that domain AND all subdomains.
+    ///
+    /// For example, if `"NO_PROXY=google.com, 192.168.1.0/24"` was set, all of the following would match
+    /// (and therefore would bypass the proxy):
+    /// * `http://google.com/`
+    /// * `http://www.google.com/`
+    /// * `http://192.168.1.42/`
+    ///
+    /// The URL `http://notgoogle.com/` would not match.
+    ///
     fn new() -> Option<Self> {
         let raw = env::var("NO_PROXY")
             .or_else(|_| env::var("no_proxy"))
@@ -432,7 +450,7 @@ impl IpMatcher {
 }
 
 impl DomainMatcher {
-    // The following links may be useful to understand these rules:
+    // The following links may be useful to understand the origin of these rules:
     // * https://curl.se/libcurl/c/CURLOPT_NOPROXY.html
     // * https://github.com/curl/curl/issues/1208
     fn contains(&self, domain: &str) -> bool {
