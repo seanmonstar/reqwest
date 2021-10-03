@@ -438,7 +438,7 @@ impl DomainMatcher {
     fn contains(&self, domain: &str) -> bool {
         let domain_len = domain.len();
         for d in self.0.iter() {
-            if d == domain {
+            if d == domain || (d.starts_with('.') && &d[1..] == domain) {
                 return true;
             } else if domain.ends_with(d) {
                 if d.starts_with('.') {
@@ -1197,8 +1197,6 @@ mod tests {
 
         // random url, not in no_proxy
         assert_eq!(intercepted_uri(&p, "http://hyper.rs"), target);
-        // .foo.bar should only match subdomains
-        assert_eq!(intercepted_uri(&p, "http://foo.bar"), target);
         // make sure that random non-subdomain string prefixes don't match
         assert_eq!(intercepted_uri(&p, "http://notfoo.bar"), target);
         // make sure that random non-subdomain string prefixes don't match
@@ -1220,6 +1218,8 @@ mod tests {
         assert!(p.intercept(&url("http://BAR.baz")).is_none());
         // make sure subdomains (without leading . in no_proxy) match
         assert!(p.intercept(&url("http://foo.bar.baz")).is_none());
+        // make sure subdomains (without leading . in no_proxy) match - this differs from cURL
+        assert!(p.intercept(&url("http://foo.bar")).is_none());
         // ipv4 address match within range
         assert!(p.intercept(&url("http://10.42.1.100")).is_none());
         // ipv6 address exact match
