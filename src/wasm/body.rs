@@ -35,7 +35,6 @@ impl Body {
             Inner::Multipart(_) => None,
         }
     }
-    
     pub(crate) fn to_js_value(&self) -> crate::Result<JsValue> {
         match &self.inner {
             Inner::Bytes(body_bytes) => {
