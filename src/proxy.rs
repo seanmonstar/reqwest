@@ -205,7 +205,7 @@ impl Proxy {
         )))
     }
 
-    /// Provide a custom function to determine what traffix to proxy to where.
+    /// Provide a custom function to determine what traffic to proxy to where.
     ///
     /// # Example
     ///
@@ -366,8 +366,26 @@ impl fmt::Debug for Proxy {
 }
 
 impl NoProxy {
-    /// Returns a new no proxy configration if the NO_PROXY/no_proxy environment variable is set.
-    /// Returns None otherwise
+    /// Returns a new no-proxy configuration based on environment variables (or `None` if no variables are set)
+    ///
+    /// The rules are as follows:
+    /// * The environment variable `NO_PROXY` is checked, if it is not set, `no_proxy` is checked
+    /// * If neither environment variable is set, `None` is returned
+    /// * Entries are expected to be comma-separated (whitespace between entries is ignored)
+    /// * IP addresses (both IPv4 and IPv6) are allowed, as are optional subnet masks (by adding /size,
+    /// for example "`192.168.1.0/24`").
+    /// * An entry "`*`" matches all hostnames (this is the only wildcard allowed)
+    /// * Any other entry is considered a domain name (and may contain a leading dot, for example `google.com`
+    /// and `.google.com` are equivalent) and would match both that domain AND all subdomains.
+    ///
+    /// For example, if `"NO_PROXY=google.com, 192.168.1.0/24"` was set, all of the following would match
+    /// (and therefore would bypass the proxy):
+    /// * `http://google.com/`
+    /// * `http://www.google.com/`
+    /// * `http://192.168.1.42/`
+    ///
+    /// The URL `http://notgoogle.com/` would not match.
+    ///
     fn new() -> Option<Self> {
         let raw = env::var("NO_PROXY")
             .or_else(|_| env::var("no_proxy"))
@@ -377,7 +395,7 @@ impl NoProxy {
         }
         let mut ips = Vec::new();
         let mut domains = Vec::new();
-        let parts = raw.split(',');
+        let parts = raw.split(',').map(str::trim);
         for part in parts {
             match part.parse::<IpNet>() {
                 // If we can parse an IP net or address, then use it, otherwise, assume it is a domain
@@ -432,13 +450,25 @@ impl IpMatcher {
 }
 
 impl DomainMatcher {
+    // The following links may be useful to understand the origin of these rules:
+    // * https://curl.se/libcurl/c/CURLOPT_NOPROXY.html
+    // * https://github.com/curl/curl/issues/1208
     fn contains(&self, domain: &str) -> bool {
+        let domain_len = domain.len();
         for d in self.0.iter() {
-            // First check for a "wildcard" domain match. A single "." will match anything.
-            // Otherwise, check that the domains are equal
-            if (d.starts_with('.') && domain.ends_with(d.get(1..).unwrap_or_default()))
-                || d == domain
-            {
+            if d == domain || (d.starts_with('.') && &d[1..] == domain) {
+                return true;
+            } else if domain.ends_with(d) {
+                if d.starts_with('.') {
+                    // If the first character of d is a dot, that means the first character of domain
+                    // must also be a dot, so we are looking at a subdomain of d and that matches
+                    return true;
+                } else if domain.as_bytes()[domain_len - d.len() - 1] == b'.' {
+                    // Given that d is a prefix of domain, if the prior character in domain is a dot
+                    // then that means we must be matching a subdomain of d, and that matches
+                    return true;
+                }
+            } else if d == "*" {
                 return true;
             }
         }
@@ -1176,26 +1206,99 @@ mod tests {
 
         env::set_var(
             "NO_PROXY",
-            ".foo.bar,bar.baz,10.42.1.1/24,::1,10.124.7.8,2001::/17",
+            ".foo.bar, bar.baz,10.42.1.1/24,::1,10.124.7.8,2001::/17",
         );
 
         // Manually construct this so we aren't use the cache
         let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
         p.no_proxy = NoProxy::new();
 
+        // random url, not in no_proxy
         assert_eq!(intercepted_uri(&p, "http://hyper.rs"), target);
-        assert_eq!(intercepted_uri(&p, "http://foo.bar.baz"), target);
+        // make sure that random non-subdomain string prefixes don't match
+        assert_eq!(intercepted_uri(&p, "http://notfoo.bar"), target);
+        // make sure that random non-subdomain string prefixes don't match
+        assert_eq!(intercepted_uri(&p, "http://notbar.baz"), target);
+        // ipv4 address out of range
         assert_eq!(intercepted_uri(&p, "http://10.43.1.1"), target);
+        // ipv4 address out of range
         assert_eq!(intercepted_uri(&p, "http://10.124.7.7"), target);
+        // ipv6 address out of range
         assert_eq!(intercepted_uri(&p, "http://[ffff:db8:a0b:12f0::1]"), target);
+        // ipv6 address out of range
         assert_eq!(intercepted_uri(&p, "http://[2005:db8:a0b:12f0::1]"), target);
 
+        // make sure subdomains (with leading .) match
         assert!(p.intercept(&url("http://hello.foo.bar")).is_none());
+        // make sure exact matches (without leading .) match (also makes sure spaces between entries work)
         assert!(p.intercept(&url("http://bar.baz")).is_none());
+        // check case sensitivity
+        assert!(p.intercept(&url("http://BAR.baz")).is_none());
+        // make sure subdomains (without leading . in no_proxy) match
+        assert!(p.intercept(&url("http://foo.bar.baz")).is_none());
+        // make sure subdomains (without leading . in no_proxy) match - this differs from cURL
+        assert!(p.intercept(&url("http://foo.bar")).is_none());
+        // ipv4 address match within range
         assert!(p.intercept(&url("http://10.42.1.100")).is_none());
+        // ipv6 address exact match
         assert!(p.intercept(&url("http://[::1]")).is_none());
+        // ipv6 address match within range
         assert!(p.intercept(&url("http://[2001:db8:a0b:12f0::1]")).is_none());
+        // ipv4 address exact match
         assert!(p.intercept(&url("http://10.124.7.8")).is_none());
+
+        // reset user setting when guards drop
+        drop(_g1);
+        drop(_g2);
+        // Let other threads run now
+        drop(_lock);
+    }
+
+    #[test]
+    fn test_wildcard_sys_no_proxy() {
+        // Stop other threads from modifying process-global ENV while we are.
+        let _lock = ENVLOCK.lock();
+        // save system setting first.
+        let _g1 = env_guard("HTTP_PROXY");
+        let _g2 = env_guard("NO_PROXY");
+
+        let target = "http://example.domain/";
+        env::set_var("HTTP_PROXY", target);
+
+        env::set_var("NO_PROXY", "*");
+
+        // Manually construct this so we aren't use the cache
+        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
+        p.no_proxy = NoProxy::new();
+
+        assert!(p.intercept(&url("http://foo.bar")).is_none());
+
+        // reset user setting when guards drop
+        drop(_g1);
+        drop(_g2);
+        // Let other threads run now
+        drop(_lock);
+    }
+
+    #[test]
+    fn test_empty_sys_no_proxy() {
+        // Stop other threads from modifying process-global ENV while we are.
+        let _lock = ENVLOCK.lock();
+        // save system setting first.
+        let _g1 = env_guard("HTTP_PROXY");
+        let _g2 = env_guard("NO_PROXY");
+
+        let target = "http://example.domain/";
+        env::set_var("HTTP_PROXY", target);
+
+        env::set_var("NO_PROXY", ",");
+
+        // Manually construct this so we aren't use the cache
+        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
+        p.no_proxy = NoProxy::new();
+
+        // everything should go through proxy, "effectively" nothing is in no_proxy
+        assert_eq!(intercepted_uri(&p, "http://hyper.rs"), target);
 
         // reset user setting when guards drop
         drop(_g1);
