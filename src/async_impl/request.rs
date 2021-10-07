@@ -130,13 +130,13 @@ impl Request {
     /// `None` is returned if the request can not be cloned, i.e. if the body is a stream.
     pub fn try_clone(&self) -> Option<Request> {
         let body = match self.body.as_ref() {
-            Some(ref body) => Some(body.try_clone()?),
+            Some(body) => Some(body.try_clone()?),
             None => None,
         };
         let mut req = Request::new(self.method().clone(), self.url().clone());
         *req.timeout_mut() = self.timeout().cloned();
         *req.headers_mut() = self.headers().clone();
-        *req.version_mut() = self.version().clone();
+        *req.version_mut() = self.version();
         req.body = body;
         Some(req)
     }
@@ -565,8 +565,33 @@ where
             headers,
             body: Some(body.into()),
             timeout: None,
-            version: version,
+            version,
         })
+    }
+}
+
+impl TryFrom<Request> for HttpRequest<Body> {
+    type Error = crate::Error;
+
+    fn try_from(req: Request) -> crate::Result<Self> {
+        let Request {
+            method,
+            url,
+            headers,
+            body,
+            version,
+            ..
+        } = req;
+
+        let mut req = HttpRequest::builder()
+            .version(version)
+            .method(method)
+            .uri(url.as_str())
+            .body(body.unwrap_or_else(Body::empty))
+            .map_err(crate::error::builder)?;
+
+        *req.headers_mut() = headers;
+        Ok(req)
     }
 }
 
@@ -757,7 +782,7 @@ mod tests {
             req.headers()["authorization"],
             "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="
         );
-        assert_eq!(req.headers()["authorization"].is_sensitive(), true);
+        assert!(req.headers()["authorization"].is_sensitive());
     }
 
     #[test]
@@ -773,7 +798,7 @@ mod tests {
 
         assert_eq!(req.url().as_str(), "https://localhost/");
         assert_eq!(req.headers()["authorization"], "Bearer Hold my bear");
-        assert_eq!(req.headers()["authorization"].is_sensitive(), true);
+        assert!(req.headers()["authorization"].is_sensitive());
     }
 
     #[test]
@@ -785,7 +810,7 @@ mod tests {
             .body("test test test")
             .unwrap();
         let req: Request = Request::try_from(http_request).unwrap();
-        assert_eq!(req.body().is_none(), false);
+        assert!(req.body().is_some());
         let test_data = b"test test test";
         assert_eq!(req.body().unwrap().as_bytes(), Some(&test_data[..]));
         let headers = req.headers();
@@ -804,7 +829,7 @@ mod tests {
             .body("test test test")
             .unwrap();
         let req: Request = Request::try_from(http_request).unwrap();
-        assert_eq!(req.body().is_none(), false);
+        assert!(req.body().is_some());
         let test_data = b"test test test";
         assert_eq!(req.body().unwrap().as_bytes(), Some(&test_data[..]));
         let headers = req.headers();

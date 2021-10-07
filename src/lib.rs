@@ -2,7 +2,7 @@
 #![deny(missing_debug_implementations)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(test, deny(warnings))]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.11.3")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.11.4")]
 
 //! # reqwest
 //!
@@ -226,9 +226,11 @@ pub use url::Url;
 #[macro_use]
 mod error;
 mod into_url;
+mod response;
 
 pub use self::error::{Error, Result};
 pub use self::into_url::IntoUrl;
+pub use self::response::ResponseBuilderExt;
 
 /// Shortcut method to quickly make a `GET` request.
 ///
@@ -294,11 +296,12 @@ if_hyper! {
     doctest!("../README.md");
 
     pub use self::async_impl::{
-        Body, Client, ClientBuilder, Request, RequestBuilder, Response, ResponseBuilderExt,
+        Body, Client, ClientBuilder, Request, RequestBuilder, Response,
     };
     pub use self::proxy::Proxy;
     #[cfg(feature = "__tls")]
-    pub use self::tls::{Certificate, Identity};
+    // Re-exports, to be removed in a future release
+    pub use tls::{Certificate, Identity};
     #[cfg(feature = "multipart")]
     pub use self::async_impl::multipart;
 
@@ -314,7 +317,7 @@ if_hyper! {
     mod proxy;
     pub mod redirect;
     #[cfg(feature = "__tls")]
-    mod tls;
+    pub mod tls;
     mod util;
 }
 

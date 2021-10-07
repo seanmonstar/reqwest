@@ -408,7 +408,7 @@ impl PartMetadata {
     }
 }
 
-/// https://url.spec.whatwg.org/#fragment-percent-encode-set
+// https://url.spec.whatwg.org/#fragment-percent-encode-set
 const FRAGMENT_ENCODE_SET: &AsciiSet = &percent_encoding::CONTROLS
     .add(b' ')
     .add(b'"')
@@ -416,12 +416,12 @@ const FRAGMENT_ENCODE_SET: &AsciiSet = &percent_encoding::CONTROLS
     .add(b'>')
     .add(b'`');
 
-/// https://url.spec.whatwg.org/#path-percent-encode-set
+// https://url.spec.whatwg.org/#path-percent-encode-set
 const PATH_ENCODE_SET: &AsciiSet = &FRAGMENT_ENCODE_SET.add(b'#').add(b'?').add(b'{').add(b'}');
 
 const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &PATH_ENCODE_SET.add(b'/').add(b'%');
 
-/// https://tools.ietf.org/html/rfc8187#section-3.2.1
+// https://tools.ietf.org/html/rfc8187#section-3.2.1
 const ATTR_CHAR_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'!')
     .remove(b'#')

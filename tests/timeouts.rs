@@ -73,10 +73,10 @@ async fn connect_timeout() {
         .build()
         .unwrap();
 
-    let url = format!("http://10.255.255.1:81/slow");
+    let url = "http://10.255.255.1:81/slow";
 
     let res = client
-        .get(&url)
+        .get(url)
         .timeout(Duration::from_millis(1000))
         .send()
         .await;

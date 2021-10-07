@@ -1,11 +1,11 @@
 use std::convert::TryFrom;
 use std::fmt;
 
+use bytes::Bytes;
 use http::{request::Parts, Method, Request as HttpRequest};
 use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
-use serde_urlencoded;
 use url::Url;
 use web_sys::RequestCredentials;
 
@@ -92,16 +92,20 @@ impl Request {
 
     /// Attempts to clone the `Request`.
     ///
-    /// None is returned if a body is which can not be cloned. This method
-    /// currently always returns `Some`, but that may change in the future.
+    /// None is returned if a body is which can not be cloned.
     pub fn try_clone(&self) -> Option<Request> {
+        let body = match self.body.as_ref() {
+            Some(body) => Some(body.try_clone()?),
+            None => None,
+        };
+
         Some(Self {
             method: self.method.clone(),
             url: self.url.clone(),
             headers: self.headers.clone(),
-            body: self.body.as_ref().map(|body| body.clone()),
+            body,
             cors: self.cors,
-            credentials: self.credentials.clone(),
+            credentials: self.credentials,
         })
     }
 }
@@ -353,8 +357,7 @@ impl RequestBuilder {
 
     /// Attempt to clone the RequestBuilder.
     ///
-    /// `None` is returned if the RequestBuilder can not be cloned. This method
-    /// currently always returns `Some`, but that may change in the future.
+    /// `None` is returned if the RequestBuilder can not be cloned.
     ///
     /// # Examples
     ///
@@ -430,5 +433,28 @@ where
             cors: true,
             credentials: None,
         })
+    }
+}
+
+impl TryFrom<Request> for HttpRequest<Body> {
+    type Error = crate::Error;
+
+    fn try_from(req: Request) -> crate::Result<Self> {
+        let Request {
+            method,
+            url,
+            headers,
+            body,
+            ..
+        } = req;
+
+        let mut req = HttpRequest::builder()
+            .method(method)
+            .uri(url.as_str())
+            .body(body.unwrap_or_else(|| Body::from(Bytes::default())))
+            .map_err(crate::error::builder)?;
+
+        *req.headers_mut() = headers;
+        Ok(req)
     }
 }

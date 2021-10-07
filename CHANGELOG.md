@@ -1,3 +1,12 @@
+## v0.11.4
+
+- Add `ClientBuilder::resolve()` option to override DNS resolution for specific domains.
+- Add `native-tls-alpn` Cargo feature to use ALPN with the native-tls backend.
+- Add `ClientBuilder::deflate()` option and `deflate` Cargo feature to support decoding response bodies using deflate.
+- Add `RequestBuilder::version()` to allow setting the HTTP version of a request.
+- Fix allowing "invalid" certificates with the `rustls-tls` backend, when the server uses TLS v1.2 or v1.3.
+- (wasm) Add `try_clone` to `Request` and `RequestBuilder`
+
 ## v0.11.3
 
 - Add `impl From<hyper::Body> for reqwest::Body`.
