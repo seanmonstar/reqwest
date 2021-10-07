@@ -1,3 +1,15 @@
+## v0.11.5
+
+- Add `ClientBuilder::http1_only()` method.
+- Add `tls::Version` type, and `ClientBuilder::min_tls_version()` and `ClientBuilder::max_tls_version()` methods.
+- Implement `TryFrom<Request>` for `http::Request`.
+- Implement `Clone` for `Identity`.
+- Fix `NO_PROXY`environment variable parsing to more closely match curl's. Comma-separated entries are now trimmed for whitespace, and `*` is allowed to match everything.
+- Fix redirection to respect `https_only` option.
+- (wasm) Add `Body::as_bytes()` method.
+- (wasm) Fix sometimes wrong conversation of bytes into a `JsValue`.
+- (wasm) Avoid dependency on serde-serialize feature.
+
 ## v0.11.4
 
 - Add `ClientBuilder::resolve()` option to override DNS resolution for specific domains.
