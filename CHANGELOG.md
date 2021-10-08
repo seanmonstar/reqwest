@@ -139,7 +139,7 @@
 - Add `Response::bytes_stream()` method to get body as an `impl Stream`.
 - Add `Request::try_clone()` method.
 
-- Change default `Client` API to async. The previous blocking client API is avaialble at `reqwest::blocking`.
+- Change default `Client` API to async. The previous blocking client API is available at `reqwest::blocking`.
 - Change to no longer send a default `User-Agent` header. Add one via `ClientBuilder::user_agent()`.
 - Change to enable system/environment proxy detection by default.
 - Change `default-tls` feature to only include `ClientBuilder` options that both `native-tls` and `rustls` support.
@@ -224,7 +224,7 @@
 
 ### Features
 
-- Add `multipart::Form::percent_encode_noop()` to allow for servers which don't support percent encoding of paramters.
+- Add `multipart::Form::percent_encode_noop()` to allow for servers which don't support percent encoding of parameters.
 - Add `ClientBuilder::http1_title_case_headers()` to force request headers to use Title-Case.
 - Add `ClientBuilder::connect_timeout()` to allow setting only a connect timeout.
 

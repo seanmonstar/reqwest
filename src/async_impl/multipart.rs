@@ -334,7 +334,7 @@ impl<P: PartProps> FormParts<P> {
                     let header = self.percent_encoding.encode_headers(name, field.metadata());
                     let header_length = header.len();
                     self.computed_headers.push(header);
-                    // The additions mimick the format string out of which the field is constructed
+                    // The additions mimic the format string out of which the field is constructed
                     // in Reader. Not the cleanest solution because if that format string is
                     // ever changed then this formula needs to be changed too which is not an
                     // obvious dependency in the code.
