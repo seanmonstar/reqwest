@@ -36,7 +36,8 @@ pub struct Request {
 #[must_use = "RequestBuilder does nothing until you 'send' it"]
 pub struct RequestBuilder {
     client: Client,
-    request: crate::Result<Request>,
+    /// The request of this builder.
+    pub request: crate::Result<Request>,
 }
 
 impl Request {
@@ -246,6 +247,15 @@ impl RequestBuilder {
             crate::util::replace_headers(req.headers_mut(), headers);
         }
         self
+    }
+
+    /// Get the current headers on this Request.
+    pub fn get_headers(self) -> crate::header::HeaderMap {
+        if let Ok(ref req) = self.request {
+            req.headers().clone()
+        } else {
+            crate::header::HeaderMap::new()
+        }
     }
 
     /// Enable HTTP basic authentication.
@@ -732,6 +742,16 @@ mod tests {
             vec!["foo", "foo1"]
         );
         assert_eq!(req.headers()["bar"], "new-bar");
+    }
+
+    #[test]
+    fn test_builder_request() {
+        let client = Client::new();
+        let some_url = "https://localhost/";
+
+        let req = client.get(some_url);
+
+        assert!(req.request.is_ok());
     }
 
     #[test]

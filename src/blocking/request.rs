@@ -29,7 +29,8 @@ pub struct Request {
 #[must_use = "RequestBuilder does nothing until you 'send' it"]
 pub struct RequestBuilder {
     client: Client,
-    request: crate::Result<Request>,
+    /// The request of this builder.
+    pub request: crate::Result<Request>,
 }
 
 impl Request {
@@ -1001,6 +1002,16 @@ mod tests {
             vec!["foo", "foo1"]
         );
         assert_eq!(req.headers()["bar"], "new-bar");
+    }
+
+    #[test]
+    fn test_builder_request() {
+        let client = Client::new();
+        let some_url = "https://localhost/";
+
+        let req = client.get(some_url);
+
+        assert!(req.request.is_ok());
     }
 
     #[test]

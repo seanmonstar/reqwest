@@ -25,7 +25,8 @@ pub struct Request {
 /// A builder to construct the properties of a `Request`.
 pub struct RequestBuilder {
     client: Client,
-    request: crate::Result<Request>,
+    /// The request of this builder.
+    pub request: crate::Result<Request>,
 }
 
 impl Request {
