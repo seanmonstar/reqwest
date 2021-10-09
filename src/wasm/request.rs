@@ -224,8 +224,30 @@ impl RequestBuilder {
         self
     }
 
-    /// Add a `Header` to this Request.
-    pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
+     /// Add a `Header` to this Request.
+     pub fn header<K, V>(self, key: K, value: V) -> RequestBuilder
+     where
+         HeaderName: TryFrom<K>,
+         <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
+         HeaderValue: TryFrom<V>,
+         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
+    {
+         self.set_or_append_header(key, value, false)
+    }
+
+
+    /// Sets a new value for an existing `Header`, or adds the `Header` if it does not already exist.
+    pub fn set_header<K, V>(self, key: K, value: V) -> RequestBuilder
+    where
+        HeaderName: TryFrom<K>,
+        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
+        HeaderValue: TryFrom<V>,
+        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
+    {
+        self.set_or_append_header(key, value, true)
+    }
+
+    fn set_or_append_header<K, V>(mut self, key: K, value: V, replace: bool) -> RequestBuilder
     where
         HeaderName: TryFrom<K>,
         <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
@@ -237,7 +259,11 @@ impl RequestBuilder {
             match <HeaderName as TryFrom<K>>::try_from(key) {
                 Ok(key) => match <HeaderValue as TryFrom<V>>::try_from(value) {
                     Ok(value) => {
-                        req.headers_mut().append(key, value);
+                        let headers = req.headers_mut(); 
+                        if replace {
+                            headers.remove(&key);
+                        }
+                        headers.append(key, value);
                     }
                     Err(e) => error = Some(crate::error::builder(e.into())),
                 },

@@ -187,11 +187,28 @@ impl RequestBuilder {
         HeaderValue: TryFrom<V>,
         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
-        self.header_sensitive(key, value, false)
+        self.header_sensitive(key, value, false, false)
+    }
+
+    /// Sets a new value for an existing `Header`, or adds the `Header` if it does not already exist.
+    pub fn set_header<K, V>(self, key: K, value: V) -> RequestBuilder
+    where
+        HeaderName: TryFrom<K>,
+        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
+        HeaderValue: TryFrom<V>,
+        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
+    {
+        self.header_sensitive(key, value, false, true)
     }
 
     /// Add a `Header` to this Request with ability to define if header_value is sensitive.
-    fn header_sensitive<K, V>(mut self, key: K, value: V, sensitive: bool) -> RequestBuilder
+    fn header_sensitive<K, V>(
+        mut self,
+        key: K,
+        value: V,
+        sensitive: bool,
+        replace: bool,
+    ) -> RequestBuilder
     where
         HeaderName: TryFrom<K>,
         <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
@@ -204,7 +221,11 @@ impl RequestBuilder {
                 Ok(key) => match <HeaderValue as TryFrom<V>>::try_from(value) {
                     Ok(mut value) => {
                         value.set_sensitive(sensitive);
-                        req.headers_mut().append(key, value);
+                        let headers = req.headers_mut();
+                        if replace {
+                            headers.remove(&key);
+                        }
+                        headers.append(key, value);
                     }
                     Err(e) => error = Some(crate::error::builder(e.into())),
                 },
@@ -243,7 +264,7 @@ impl RequestBuilder {
             }
         }
 
-        self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
+        self.header_sensitive(crate::header::AUTHORIZATION, header_value, true, true)
     }
 
     /// Enable HTTP bearer authentication.
@@ -252,7 +273,7 @@ impl RequestBuilder {
         T: fmt::Display,
     {
         let header_value = format!("Bearer {}", token);
-        self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
+        self.header_sensitive(crate::header::AUTHORIZATION, header_value, true, true)
     }
 
     /// Set the request body.
@@ -690,6 +711,27 @@ mod tests {
         assert_eq!(foo.len(), 2);
         assert_eq!(foo[0], "bar");
         assert_eq!(foo[1], "baz");
+    }
+
+    #[test]
+    fn test_replace_header() {
+        let client = Client::new();
+        let some_url = "https://localhost/";
+
+        let req = client
+            .get(some_url)
+            .header("foo", "foo")
+            .header("foo", "foo1")
+            .set_header("bar", "dar")
+            .set_header("bar", "new-bar")
+            .build()
+            .expect("request build");
+
+        assert_eq!(
+            req.headers().get_all("foo").iter().collect::<Vec<_>>(),
+            vec!["foo", "foo1"]
+        );
+        assert_eq!(req.headers()["bar"], "new-bar");
     }
 
     #[test]
