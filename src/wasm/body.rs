@@ -2,7 +2,7 @@
 use super::multipart::Form;
 /// dox
 use bytes::Bytes;
-use js_sys::Uint8Array;
+use js_sys::{Array, Uint8Array};
 use std::fmt;
 use wasm_bindgen::JsValue;
 
@@ -17,7 +17,6 @@ pub struct Body {
     inner: Inner,
 }
 
-#[derive(Clone)]
 enum Inner {
     Bytes(Bytes),
     #[cfg(feature = "multipart")]
@@ -25,11 +24,24 @@ enum Inner {
 }
 
 impl Body {
+    /// Returns a reference to the internal data of the `Body`.
+    ///
+    /// `None` is returned, if the underlying data is a multipart form.
+    #[inline]
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        match &self.inner {
+            Inner::Bytes(bytes) => Some(bytes.as_ref()),
+            #[cfg(feature = "multipart")]
+            Inner::Multipart(_) => None,
+        }
+    }
     pub(crate) fn to_js_value(&self) -> crate::Result<JsValue> {
         match &self.inner {
             Inner::Bytes(body_bytes) => {
                 let body_bytes: &[u8] = body_bytes.as_ref();
-                let body_array: Uint8Array = body_bytes.into();
+                let body_uint8_array: Uint8Array = body_bytes.into();
+                let body_array = Array::new();
+                body_array.push(&body_uint8_array);
                 let js_value: &JsValue = body_array.as_ref();
                 Ok(js_value.to_owned())
             }
@@ -58,9 +70,13 @@ impl Body {
         }
     }
 
-    pub(crate) fn clone(&self) -> Body {
-        Self {
-            inner: self.inner.clone(),
+    pub(crate) fn try_clone(&self) -> Option<Body> {
+        match &self.inner {
+            Inner::Bytes(bytes) => Some(Self {
+                inner: Inner::Bytes(bytes.clone()),
+            }),
+            #[cfg(feature = "multipart")]
+            Inner::Multipart(_) => None,
         }
     }
 }

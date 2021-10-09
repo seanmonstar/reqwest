@@ -10,7 +10,7 @@ use bytes::Bytes;
 
 /// Actions for a persistent cookie store providing session support.
 pub trait CookieStore: Send + Sync {
-    /// Store a set of Set-Cookie header values recevied from `url`
+    /// Store a set of Set-Cookie header values received from `url`
     fn set_cookies(&self, cookie_headers: &mut dyn Iterator<Item = &HeaderValue>, url: &url::Url);
     /// Get any Cookie values in the store for `url`
     fn cookies(&self, url: &url::Url) -> Option<HeaderValue>;

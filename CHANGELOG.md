@@ -1,3 +1,15 @@
+## v0.11.5
+
+- Add `ClientBuilder::http1_only()` method.
+- Add `tls::Version` type, and `ClientBuilder::min_tls_version()` and `ClientBuilder::max_tls_version()` methods.
+- Implement `TryFrom<Request>` for `http::Request`.
+- Implement `Clone` for `Identity`.
+- Fix `NO_PROXY`environment variable parsing to more closely match curl's. Comma-separated entries are now trimmed for whitespace, and `*` is allowed to match everything.
+- Fix redirection to respect `https_only` option.
+- (wasm) Add `Body::as_bytes()` method.
+- (wasm) Fix sometimes wrong conversation of bytes into a `JsValue`.
+- (wasm) Avoid dependency on serde-serialize feature.
+
 ## v0.11.4
 
 - Add `ClientBuilder::resolve()` option to override DNS resolution for specific domains.
@@ -127,7 +139,7 @@
 - Add `Response::bytes_stream()` method to get body as an `impl Stream`.
 - Add `Request::try_clone()` method.
 
-- Change default `Client` API to async. The previous blocking client API is avaialble at `reqwest::blocking`.
+- Change default `Client` API to async. The previous blocking client API is available at `reqwest::blocking`.
 - Change to no longer send a default `User-Agent` header. Add one via `ClientBuilder::user_agent()`.
 - Change to enable system/environment proxy detection by default.
 - Change `default-tls` feature to only include `ClientBuilder` options that both `native-tls` and `rustls` support.
@@ -212,7 +224,7 @@
 
 ### Features
 
-- Add `multipart::Form::percent_encode_noop()` to allow for servers which don't support percent encoding of paramters.
+- Add `multipart::Form::percent_encode_noop()` to allow for servers which don't support percent encoding of parameters.
 - Add `ClientBuilder::http1_title_case_headers()` to force request headers to use Title-Case.
 - Add `ClientBuilder::connect_timeout()` to allow setting only a connect timeout.
 

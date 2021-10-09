@@ -464,7 +464,7 @@ impl Connector {
                     .await?;
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                     let io = tls_connector
-                        .connect(&host.ok_or("no host in url")?, tunneled)
+                        .connect(host.ok_or("no host in url")?, tunneled)
                         .await?;
                     return Ok(Conn {
                         inner: self.verbose.wrap(NativeTlsConn { inner: io }),
@@ -1198,7 +1198,7 @@ mod tests {
     use tokio::net::TcpStream;
     use tokio::runtime;
 
-    static TUNNEL_UA: &'static str = "tunnel-test/x.y";
+    static TUNNEL_UA: &str = "tunnel-test/x.y";
     static TUNNEL_OK: &[u8] = b"\
         HTTP/1.1 200 OK\r\n\
         \r\n\
