@@ -243,7 +243,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
             .into();
         let [name, value]: [String; 2] = serde_json::from_str(&serialized_headers)
             .expect_throw("deserializable serialized headers");
-        resp = resp.header(name, value);
+        resp = resp.header(&name, &value);
     }
 
     resp.body(js_resp)
