@@ -40,8 +40,7 @@ impl Body {
             Inner::Bytes(body_bytes) => {
                 let body_bytes: &[u8] = body_bytes.as_ref();
                 let body_uint8_array: Uint8Array = body_bytes.into();
-                let body_array = Array::new();
-                body_array.push(&body_uint8_array);
+                let body_array = Array::from(&body_uint8_array);
                 let js_value: &JsValue = body_array.as_ref();
                 Ok(js_value.to_owned())
             }
@@ -127,5 +126,51 @@ impl From<&'static str> for Body {
 impl fmt::Debug for Body {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Body").finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use js_sys::{Array, Uint8Array};
+    use wasm_bindgen::{prelude::*, JsValue};
+    use wasm_bindgen_test::*;
+
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen]
+    extern "C" {
+        // Use `js_namespace` here to bind `console.log(..)` instead of just
+        // `log(..)`
+        #[wasm_bindgen(js_namespace = console)]
+        fn log(s: String);
+    }
+
+    #[wasm_bindgen_test]
+    async fn test_body() {
+        use crate::Body;
+
+        let body = Body::from("TEST");
+        assert_eq!([84, 69, 83, 84], body.as_bytes().unwrap());
+    }
+
+    #[wasm_bindgen_test]
+    async fn test_body_js() {
+        use crate::Body;
+
+        let body = Body::from("TEST");
+
+        let arr = [84u8, 69, 83, 84];
+        let u8_arr: Uint8Array = arr.as_ref().into();
+        let expected = JsValue::from(Array::from(&u8_arr));
+
+        // ty JS -.-
+        assert_eq!(
+            format!("{:#?}", expected),
+            format!(
+                "{:#?}",
+                body.to_js_value()
+                    .expect("could not convert body to JsValue")
+            )
+        );
     }
 }
