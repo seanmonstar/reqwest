@@ -128,3 +128,49 @@ impl fmt::Debug for Body {
         f.debug_struct("Body").finish()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use js_sys::{Array, Uint8Array};
+    use wasm_bindgen::{prelude::*, JsValue};
+    use wasm_bindgen_test::*;
+
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen]
+    extern "C" {
+        // Use `js_namespace` here to bind `console.log(..)` instead of just
+        // `log(..)`
+        #[wasm_bindgen(js_namespace = console)]
+        fn log(s: String);
+    }
+
+    #[wasm_bindgen_test]
+    async fn test_body() {
+        use crate::Body;
+
+        let body = Body::from("TEST");
+        assert_eq!([84, 69, 83, 84], body.as_bytes().unwrap());
+    }
+
+    #[wasm_bindgen_test]
+    async fn test_body_js() {
+        use crate::Body;
+
+        let body = Body::from("TEST");
+
+        let arr = [84u8, 69, 83, 84];
+        let u8_arr: Uint8Array = arr.as_ref().into();
+        let expected = JsValue::from(Array::from(&u8_arr));
+
+        // ty JS -.-
+        assert_eq!(
+            format!("{:#?}", expected),
+            format!(
+                "{:#?}",
+                body.to_js_value()
+                    .expect("could not convert body to JsValue")
+            )
+        );
+    }
+}
