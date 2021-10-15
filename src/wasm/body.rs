@@ -40,8 +40,7 @@ impl Body {
             Inner::Bytes(body_bytes) => {
                 let body_bytes: &[u8] = body_bytes.as_ref();
                 let body_uint8_array: Uint8Array = body_bytes.into();
-                let body_array = Array::new();
-                body_array.push(&body_uint8_array);
+                let body_array = Array::from(&body_uint8_array);
                 let js_value: &JsValue = body_array.as_ref();
                 Ok(js_value.to_owned())
             }
