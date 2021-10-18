@@ -7,8 +7,10 @@ use bytes::Bytes;
 use futures_core::Stream;
 use http_body::Body as HttpBody;
 use pin_project_lite::pin_project;
+#[cfg(feature = "stream")]
 use tokio::fs::File;
 use tokio::time::Sleep;
+#[cfg(feature = "stream")]
 use tokio_util::io::ReaderStream;
 
 /// An asynchronous request body.
@@ -210,10 +212,11 @@ impl From<&'static str> for Body {
     }
 }
 
+#[cfg(feature = "stream")]
 impl From<File> for Body {
     #[inline]
     fn from(file: File) -> Body {
-        Body::stream(ReaderStream::new(file))
+        Body::wrap_stream(ReaderStream::new(file))
     }
 }
 
