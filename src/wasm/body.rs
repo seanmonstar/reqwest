@@ -2,7 +2,7 @@
 use super::multipart::Form;
 /// dox
 use bytes::Bytes;
-use js_sys::{Uint8Array};
+use js_sys::Uint8Array;
 use std::fmt;
 use wasm_bindgen::JsValue;
 
@@ -131,7 +131,7 @@ impl fmt::Debug for Body {
 #[cfg(test)]
 mod tests {
     // use js_sys::{Array, Uint8Array};
-    use wasm_bindgen::{prelude::*};
+    use wasm_bindgen::prelude::*;
     use wasm_bindgen_test::*;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -158,14 +158,21 @@ mod tests {
 
         let body_value = "TEST";
         let body = Body::from(body_value);
-        
+
         let mut init = web_sys::RequestInit::new();
         init.method("POST");
-        init.body(Some(body.to_js_value().expect("could not convert body to JsValue").as_ref()));
+        init.body(Some(
+            body.to_js_value()
+                .expect("could not convert body to JsValue")
+                .as_ref(),
+        ));
 
-        let js_req = web_sys::Request::new_with_str_and_init("", &init).expect("could not create JS request");
+        let js_req = web_sys::Request::new_with_str_and_init("", &init)
+            .expect("could not create JS request");
         let text_promise = js_req.text().expect("could not get text promise");
-        let text = crate::wasm::promise::<JsValue>(text_promise).await.expect("could not get request body as text");
+        let text = crate::wasm::promise::<JsValue>(text_promise)
+            .await
+            .expect("could not get request body as text");
 
         assert_eq!(text.as_string().expect("text is not a string"), body_value);
     }
