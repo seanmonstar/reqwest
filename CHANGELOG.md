@@ -1,3 +1,7 @@
+## v0.11.6
+
+- (wasm) Fix request bodies more.
+
 ## v0.11.5
 
 - Add `ClientBuilder::http1_only()` method.
