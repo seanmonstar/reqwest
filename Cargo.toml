@@ -46,11 +46,11 @@ blocking = ["futures-util/io", "tokio/rt-multi-thread", "tokio/sync"]
 
 cookies = ["cookie_crate", "cookie_store", "time"]
 
-gzip = ["async-compression", "async-compression/gzip", "tokio-util"]
+gzip = ["async-compression", "async-compression/gzip"]
 
-brotli = ["async-compression", "async-compression/brotli", "tokio-util"]
+brotli = ["async-compression", "async-compression/brotli"]
 
-deflate = ["async-compression", "async-compression/zlib", "tokio-util"]
+deflate = ["async-compression", "async-compression/zlib"]
 
 json = ["serde_json"]
 
@@ -100,7 +100,8 @@ lazy_static = "1.4"
 log = "0.4"
 mime = "0.3.16"
 percent-encoding = "2.1"
-tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
+tokio = { version = "1.0", default-features = false, features = ["net", "time", "fs"] }
+tokio-util = { version = "0.6.0", default-features = false, features = ["codec", "io"] }
 pin-project-lite = "0.2.0"
 ipnet = "2.3"
 
@@ -125,7 +126,6 @@ time = { version = "0.2.11", optional = true }
 
 ## compression
 async-compression = { version = "0.3.7", default-features = false, features = ["tokio"], optional = true }
-tokio-util = { version = "0.6.0", default-features = false, features = ["codec", "io"], optional = true }
 
 ## socks
 tokio-socks = { version = "0.5.1", optional = true }
