@@ -55,6 +55,14 @@ impl Error {
     pub fn url(&self) -> Option<&Url> {
         self.inner.url.as_ref()
     }
+    
+    /// Take out a possible URL related from this error.
+    ///
+    /// This is different from [Error::url].
+    /// after calling this method, there will be no url information when formatting `Error` content.
+    pub fn take_url(&mut self) -> Option<Url> {
+        self.inner.url.take()
+    }
 
     /// Returns true if the error is from a type Builder.
     pub fn is_builder(&self) -> bool {
