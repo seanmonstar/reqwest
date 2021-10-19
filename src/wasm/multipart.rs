@@ -277,4 +277,84 @@ impl PartMetadata {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+
+    use wasm_bindgen_test::*;
+
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
+    async fn test_multipart_js() {
+        use super::{Form, Part};
+        use js_sys::Uint8Array;
+        use wasm_bindgen::JsValue;
+        use web_sys::{File, FormData};
+
+        let text_file_name = "test.txt";
+        let text_file_type = "text/plain";
+        let text_content = "TEST";
+        let text_part = Part::text(text_content)
+            .file_name(text_file_name)
+            .mime_str(text_file_type)
+            .expect("invalid mime type");
+
+        let binary_file_name = "binary.bin";
+        let binary_file_type = "application/octet-stream";
+        let binary_content = vec![0u8, 42];
+        let binary_part = Part::bytes(binary_content.clone())
+            .file_name(binary_file_name)
+            .mime_str(binary_file_type)
+            .expect("invalid mime type");
+
+        let text_name = "text part";
+        let binary_name = "binary part";
+        let form = Form::new()
+            .part(text_name, text_part)
+            .part(binary_name, binary_part);
+
+        let mut init = web_sys::RequestInit::new();
+        init.method("POST");
+        init.body(Some(
+            form.to_form_data()
+                .expect("could not convert to FormData")
+                .as_ref(),
+        ));
+
+        let js_req = web_sys::Request::new_with_str_and_init("", &init)
+            .expect("could not create JS request");
+
+        let form_data_promise = js_req.form_data().expect("could not get form_data promise");
+
+        let form_data = crate::wasm::promise::<FormData>(form_data_promise)
+            .await
+            .expect("could not get body as form data");
+
+        // check text part
+        let text_file = File::from(form_data.get(text_name));
+        assert_eq!(text_file.name(), text_file_name);
+        assert_eq!(text_file.type_(), text_file_type);
+
+        let text_promise = text_file.text();
+        let text = crate::wasm::promise::<JsValue>(text_promise)
+            .await
+            .expect("could not get text body as text");
+        assert_eq!(
+            text.as_string().expect("text is not a string"),
+            text_content
+        );
+
+        // check binary part
+        let binary_file = File::from(form_data.get(binary_name));
+        assert_eq!(binary_file.name(), binary_file_name);
+        assert_eq!(binary_file.type_(), binary_file_type);
+
+        let binary_array_buffer_promise = binary_file.array_buffer();
+        let array_buffer = crate::wasm::promise::<JsValue>(binary_array_buffer_promise)
+            .await
+            .expect("could not get request body as array buffer");
+
+        let binary = Uint8Array::new(&array_buffer).to_vec();
+
+        assert_eq!(binary, binary_content);
+    }
+}
