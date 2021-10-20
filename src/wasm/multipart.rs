@@ -150,7 +150,7 @@ impl Part {
     fn new(value: Body) -> Part {
         Part {
             meta: PartMetadata::new(),
-            value,
+            value: value.into_part(),
         }
     }
 
@@ -191,7 +191,7 @@ impl Part {
         }
 
         // BUG: the return value of to_js_value() is not valid if
-        // it is a Multipart variant.
+        // it is a MultipartForm variant.
         let js_value = self.value.to_js_value()?;
         Blob::new_with_u8_array_sequence_and_options(&js_value, &properties)
             .map_err(crate::error::wasm)

@@ -20,7 +20,9 @@ pub struct Body {
 enum Inner {
     Bytes(Bytes),
     #[cfg(feature = "multipart")]
-    Multipart(Form),
+    MultipartForm(Form),
+    #[cfg(feature = "multipart")]
+    MultipartPart(Bytes),
 }
 
 impl Body {
@@ -32,7 +34,9 @@ impl Body {
         match &self.inner {
             Inner::Bytes(bytes) => Some(bytes.as_ref()),
             #[cfg(feature = "multipart")]
-            Inner::Multipart(_) => None,
+            Inner::MultipartForm(_) => None,
+            #[cfg(feature = "multipart")]
+            Inner::MultipartPart(bytes) => Some(bytes.as_ref()),
         }
     }
     pub(crate) fn to_js_value(&self) -> crate::Result<JsValue> {
@@ -40,24 +44,22 @@ impl Body {
             Inner::Bytes(body_bytes) => {
                 let body_bytes: &[u8] = body_bytes.as_ref();
                 let body_uint8_array: Uint8Array = body_bytes.into();
-
-                // // 1
-                // let js_value: &JsValue = body_uint8_array.as_ref();
-
-                // // 2
-                // let body_array = js_sys::Array::from(&body_uint8_array);
-                // let js_value: &JsValue = body_array.as_ref();
-
-                // 3
-                let body_array = js_sys::Array::new();
-                body_array.push(&body_uint8_array);
-                let js_value: &JsValue = body_array.as_ref();
+                let js_value: &JsValue = body_uint8_array.as_ref();
                 Ok(js_value.to_owned())
             }
             #[cfg(feature = "multipart")]
-            Inner::Multipart(form) => {
+            Inner::MultipartForm(form) => {
                 let form_data = form.to_form_data()?;
                 let js_value: &JsValue = form_data.as_ref();
+                Ok(js_value.to_owned())
+            }
+            #[cfg(feature = "multipart")]
+            Inner::MultipartPart(body_bytes) => {
+                let body_bytes: &[u8] = body_bytes.as_ref();
+                let body_uint8_array: Uint8Array = body_bytes.into();
+                let body_array = js_sys::Array::new();
+                body_array.push(&body_uint8_array);
+                let js_value: &JsValue = body_array.as_ref();
                 Ok(js_value.to_owned())
             }
         }
@@ -67,7 +69,22 @@ impl Body {
     #[cfg(feature = "multipart")]
     pub(crate) fn from_form(f: Form) -> Body {
         Self {
-            inner: Inner::Multipart(f),
+            inner: Inner::MultipartForm(f),
+        }
+    }
+
+    #[cfg(feature = "multipart")]
+    pub(crate) fn into_part(self) -> Body {
+        match self.inner {
+            Inner::Bytes(bytes) => Self {
+                inner: Inner::MultipartPart(bytes),
+            },
+            Inner::MultipartForm(form) => Self {
+                inner: Inner::MultipartForm(form),
+            },
+            Inner::MultipartPart(bytes) => Self {
+                inner: Inner::MultipartPart(bytes),
+            },
         }
     }
 
@@ -75,7 +92,9 @@ impl Body {
         match &self.inner {
             Inner::Bytes(bytes) => bytes.is_empty(),
             #[cfg(feature = "multipart")]
-            Inner::Multipart(form) => form.is_empty(),
+            Inner::MultipartForm(form) => form.is_empty(),
+            #[cfg(feature = "multipart")]
+            Inner::MultipartPart(bytes) => bytes.is_empty(),
         }
     }
 
@@ -85,7 +104,11 @@ impl Body {
                 inner: Inner::Bytes(bytes.clone()),
             }),
             #[cfg(feature = "multipart")]
-            Inner::Multipart(_) => None,
+            Inner::MultipartForm(_) => None,
+            #[cfg(feature = "multipart")]
+            Inner::MultipartPart(bytes) => Some(Self {
+                inner: Inner::MultipartPart(bytes.clone()),
+            }),
         }
     }
 }
