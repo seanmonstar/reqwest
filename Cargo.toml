@@ -58,7 +58,7 @@ multipart = ["mime_guess"]
 
 trust-dns = ["trust-dns-resolver"]
 
-stream = []
+stream = ["tokio/fs", "tokio-util"]
 
 socks = ["tokio-socks"]
 
