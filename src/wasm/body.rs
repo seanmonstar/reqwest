@@ -19,8 +19,10 @@ pub struct Body {
 
 enum Inner {
     Bytes(Bytes),
+    /// MultipartForm holds a multipart/form-data body.
     #[cfg(feature = "multipart")]
     MultipartForm(Form),
+    /// MultipartPart holds the body of a multipart/form-data part.
     #[cfg(feature = "multipart")]
     MultipartPart(Bytes),
 }
@@ -73,6 +75,7 @@ impl Body {
         }
     }
 
+    /// into_part turns a regular body into the body of a mutlipart/form-data part.
     #[cfg(feature = "multipart")]
     pub(crate) fn into_part(self) -> Body {
         match self.inner {
