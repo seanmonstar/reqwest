@@ -8,6 +8,7 @@ pub trait IntoUrl: IntoUrlSealed {}
 
 impl IntoUrl for Url {}
 impl IntoUrl for String {}
+impl<'a> IntoUrl for &'a Url {}
 impl<'a> IntoUrl for &'a str {}
 impl<'a> IntoUrl for &'a String {}
 
@@ -25,6 +26,20 @@ impl IntoUrlSealed for Url {
             Ok(self)
         } else {
             Err(crate::error::url_bad_scheme(self))
+        }
+    }
+
+    fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+impl<'a> IntoUrlSealed for &'a Url {
+    fn into_url(self) -> crate::Result<Url> {
+        if self.has_host() {
+            Ok(self.clone())
+        } else {
+            Err(crate::error::url_bad_scheme(self.clone()))
         }
     }
 
