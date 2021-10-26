@@ -13,6 +13,7 @@ use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use pin_project_lite::pin_project;
+use std::convert::TryFrom;
 use std::io::IoSlice;
 use std::net::IpAddr;
 use std::pin::Pin;
@@ -479,23 +480,22 @@ impl Connector {
                 tls_proxy,
             } => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
-                    use tokio_rustls::webpki::DnsNameRef;
                     use tokio_rustls::TlsConnector as RustlsConnector;
 
-                    let host = dst.host().ok_or("no host in url")?.to_string();
+                    let host = dst.host().ok_or("no host in url")?;
                     let port = dst.port().map(|r| r.as_u16()).unwrap_or(443);
                     let http = http.clone();
                     let mut http = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
                     let tls = tls.clone();
                     let conn = http.call(proxy_dst).await?;
                     log::trace!("tunneling HTTPS over proxy");
-                    let maybe_dnsname = DnsNameRef::try_from_ascii_str(&host)
-                        .map(|dnsname| dnsname.to_owned())
+                    let maybe_server_name = rustls::ServerName::try_from(host)
+                        .map(|serve_name| serve_name.to_owned())
                         .map_err(|_| "Invalid DNS Name");
-                    let tunneled = tunnel(conn, host, port, self.user_agent.clone(), auth).await?;
-                    let dnsname = maybe_dnsname?;
+                    let tunneled = tunnel(conn, host.to_string(), port, self.user_agent.clone(), auth).await?;
+                    let serve_name = maybe_server_name?;
                     let io = RustlsConnector::from(tls)
-                        .connect(dnsname.as_ref(), tunneled)
+                        .connect(serve_name, tunneled)
                         .await?;
 
                     return Ok(Conn {
