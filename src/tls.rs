@@ -12,13 +12,11 @@
 //!   `ClientBuilder`.
 
 #[cfg(feature = "__rustls")]
-use rustls::{
-    internal::msgs::handshake::DigitallySignedStruct, HandshakeSignatureValid, RootCertStore,
-    ServerCertVerified, ServerCertVerifier, TLSError,
-};
+use rustls::client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::{internal::msgs::handshake::DigitallySignedStruct, RootCertStore};
 use std::fmt;
 #[cfg(feature = "__rustls")]
-use tokio_rustls::webpki::DNSNameRef;
+use tokio_rustls::webpki::DnsNameRef;
 
 /// Represents a server X509 certificate.
 #[derive(Clone)]
@@ -112,7 +110,7 @@ impl Certificate {
 
     #[cfg(feature = "__rustls")]
     pub(crate) fn add_to_rustls(self, tls: &mut rustls::ClientConfig) -> crate::Result<()> {
-        use rustls::internal::pemfile;
+        
         use std::io::Cursor;
 
         match self.original {
@@ -122,7 +120,7 @@ impl Certificate {
                 .map_err(|e| crate::error::builder(TLSError::WebPKIError(e)))?,
             Cert::Pem(buf) => {
                 let mut pem = Cursor::new(buf);
-                let certs = pemfile::certs(&mut pem).map_err(|_| {
+                let certs = rustls_pemfile::certs(&mut pem).map_err(|_| {
                     crate::error::builder(TLSError::General(String::from(
                         "No valid certificate was found",
                     )))
@@ -207,16 +205,15 @@ impl Identity {
     /// This requires the `rustls-tls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
     pub fn from_pem(buf: &[u8]) -> crate::Result<Identity> {
-        use rustls::internal::pemfile;
         use std::io::Cursor;
 
         let (key, certs) = {
             let mut pem = Cursor::new(buf);
-            let certs = pemfile::certs(&mut pem)
+            let certs = rustls_pemfile::certs(&mut pem)
                 .map_err(|_| TLSError::General(String::from("No valid certificate was found")))
                 .map_err(crate::error::builder)?;
             pem.set_position(0);
-            let mut sk = pemfile::pkcs8_private_keys(&mut pem)
+            let mut sk = rustls_pemfile::pkcs8_private_keys(&mut pem)
                 .and_then(|pkcs8_keys| {
                     if pkcs8_keys.is_empty() {
                         Err(())
@@ -226,7 +223,7 @@ impl Identity {
                 })
                 .or_else(|_| {
                     pem.set_position(0);
-                    pemfile::rsa_private_keys(&mut pem)
+                    rustls_pemfile::rsa_private_keys(&mut pem)
                 })
                 .map_err(|_| TLSError::General(String::from("No valid private key was found")))
                 .map_err(crate::error::builder)?;
@@ -385,12 +382,14 @@ pub(crate) struct NoVerifier;
 impl ServerCertVerifier for NoVerifier {
     fn verify_server_cert(
         &self,
-        _roots: &RootCertStore,
-        _presented_certs: &[rustls::Certificate],
-        _dns_name: DNSNameRef,
+        _end_entity: &rustls::Certificate,
+        _intermediates: &[rustls::Certificate],
+        _server_name: &rustls::ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp_response: &[u8],
-    ) -> Result<ServerCertVerified, TLSError> {
-        Ok(ServerCertVerified::assertion())
+        _now: std::time::SystemTime,
+    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::ServerCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -398,7 +397,7 @@ impl ServerCertVerifier for NoVerifier {
         _message: &[u8],
         _cert: &rustls::Certificate,
         _dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TLSError> {
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
         Ok(HandshakeSignatureValid::assertion())
     }
 
@@ -407,7 +406,7 @@ impl ServerCertVerifier for NoVerifier {
         _message: &[u8],
         _cert: &rustls::Certificate,
         _dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TLSError> {
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
         Ok(HandshakeSignatureValid::assertion())
     }
 }

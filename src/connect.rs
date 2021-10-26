@@ -325,13 +325,13 @@ impl Connector {
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { tls_proxy, .. } => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
-                    use tokio_rustls::webpki::DNSNameRef;
+                    use tokio_rustls::webpki::DnsNameRef;
                     use tokio_rustls::TlsConnector as RustlsConnector;
 
                     let tls = tls_proxy.clone();
                     let host = dst.host().ok_or("no host in url")?.to_string();
                     let conn = socks::connect(proxy, dst, dns).await?;
-                    let dnsname = DNSNameRef::try_from_ascii_str(&host)
+                    let dnsname = DnsNameRef::try_from_ascii_str(&host)
                         .map(|dnsname| dnsname.to_owned())
                         .map_err(|_| "Invalid DNS Name")?;
                     let io = RustlsConnector::from(tls)
@@ -479,7 +479,7 @@ impl Connector {
                 tls_proxy,
             } => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
-                    use tokio_rustls::webpki::DNSNameRef;
+                    use tokio_rustls::webpki::DnsNameRef;
                     use tokio_rustls::TlsConnector as RustlsConnector;
 
                     let host = dst.host().ok_or("no host in url")?.to_string();
@@ -489,7 +489,7 @@ impl Connector {
                     let tls = tls.clone();
                     let conn = http.call(proxy_dst).await?;
                     log::trace!("tunneling HTTPS over proxy");
-                    let maybe_dnsname = DNSNameRef::try_from_ascii_str(&host)
+                    let maybe_dnsname = DnsNameRef::try_from_ascii_str(&host)
                         .map(|dnsname| dnsname.to_owned())
                         .map_err(|_| "Invalid DNS Name");
                     let tunneled = tunnel(conn, host, port, self.user_agent.clone(), auth).await?;
@@ -820,7 +820,6 @@ mod native_tls_conn {
 mod rustls_tls_conn {
     use hyper::client::connect::{Connected, Connection};
     use pin_project_lite::pin_project;
-    use rustls::Session;
     use std::{
         io::{self, IoSlice},
         pin::Pin,
@@ -837,7 +836,7 @@ mod rustls_tls_conn {
 
     impl<T: Connection + AsyncRead + AsyncWrite + Unpin> Connection for RustlsTlsConn<T> {
         fn connected(&self) -> Connected {
-            if self.inner.get_ref().1.get_alpn_protocol() == Some(b"h2") {
+            if self.inner.get_ref().1.alpn_protocol() == Some(b"h2") {
                 self.inner.get_ref().0.connected().negotiated_h2()
             } else {
                 self.inner.get_ref().0.connected()
