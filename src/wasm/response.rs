@@ -1,9 +1,12 @@
 use std::fmt;
 
 use bytes::Bytes;
+use futures::StreamExt;
 use http::{HeaderMap, StatusCode};
 use js_sys::Uint8Array;
 use url::Url;
+use wasm_bindgen::JsCast;
+use wasm_streams::ReadableStream;
 
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
@@ -116,6 +119,25 @@ impl Response {
         let mut bytes = vec![0; buffer.length() as usize];
         buffer.copy_to(&mut bytes);
         Ok(bytes.into())
+    }
+
+    /// Convert the response into a `Stream` of `Bytes` from the body.
+    #[cfg(feature = "stream")]
+    pub fn bytes_stream(self) -> Option<impl futures::Stream<Item = crate::Result<Bytes>>> {
+        let web_response = self.http.into_body();
+        let body = web_response.body()?;
+        let body = ReadableStream::from_raw(body.unchecked_into());
+
+        Some(body.into_stream().map(|buf_js| {
+            let buffer = Uint8Array::new(
+                &buf_js
+                    .map_err(crate::error::wasm)
+                    .map_err(crate::error::decode)?,
+            );
+            let mut bytes = vec![0; buffer.length() as usize];
+            buffer.copy_to(&mut bytes);
+            Ok(bytes.into())
+        }))
     }
 
     // util methods
