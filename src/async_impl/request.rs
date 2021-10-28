@@ -438,6 +438,19 @@ impl RequestBuilder {
         self
     }
 
+
+    /// Map the current request over the given function
+    pub async fn map_request<F, R>(mut self, f: F) -> RequestBuilder
+    where
+        F: FnOnce(Request) -> R,
+        R: Future<Output = Result<Request, Box<dyn std::error::Error + Send + Sync>>>
+    {
+        if let Ok(req) = self.request {
+            self.request = f(req).await.map_err(crate::error::builder);
+        }
+        self
+    }
+
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
     pub fn build(self) -> crate::Result<Request> {
