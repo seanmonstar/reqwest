@@ -2,6 +2,7 @@
 use std::borrow::Cow;
 use std::fmt;
 
+use bytes::Bytes;
 use mime_guess::Mime;
 use url::percent_encoding::{self, EncodeSet, PATH_SEGMENT_ENCODE_SET};
 use uuid::Uuid;
@@ -20,6 +21,7 @@ pub struct Form {
 pub struct Part {
     meta: PartMetadata,
     value: Body,
+    body_length: Option<u64>,
 }
 
 pub(crate) struct FormParts<P> {
@@ -166,7 +168,7 @@ impl Part {
             Cow::Borrowed(slice) => Body::from(slice),
             Cow::Owned(string) => Body::from(string),
         };
-        Part::new(body)
+        Part::new(body, None)
     }
 
     /// Makes a new parameter from arbitrary bytes.
@@ -178,7 +180,7 @@ impl Part {
             Cow::Borrowed(slice) => Body::from(slice),
             Cow::Owned(vec) => Body::from(vec),
         };
-        Part::new(body)
+        Part::new(body, None)
     }
 
     /// Makes a new parameter from an arbitrary stream.
@@ -188,13 +190,26 @@ impl Part {
         T::Error: std::error::Error + Send + Sync,
         hyper::Chunk: std::convert::From<T::Item>,
     {
-        Part::new(Body::wrap(hyper::Body::wrap_stream(value)))
+        Part::new(Body::wrap(hyper::Body::wrap_stream(value)), None)
     }
 
-    fn new(value: Body) -> Part {
+    /// Makes a new parameter from an arbitrary stream with a known length. This is particularly
+    /// useful when adding something like file contents as a stream, where you can know the content
+    /// length beforehand.
+    pub fn stream_with_length<T>(value: T, length: u64) -> Part
+    where
+        T: Stream + Send + 'static,
+        T::Error: std::error::Error + Send + Sync,
+        hyper::Chunk: std::convert::From<T::Item>,
+    {
+        Part::new(Body::wrap(hyper::Body::wrap_stream(value)), Some(length))
+    }
+
+    fn new(value: Body, body_length: Option<u64>) -> Part {
         Part {
             meta: PartMetadata::new(),
             value,
+            body_length,
         }
     }
 
@@ -222,7 +237,7 @@ impl Part {
     {
         Part {
             meta: func(self.meta),
-            value: self.value,
+            ..self
         }
     }
 }
@@ -238,7 +253,11 @@ impl fmt::Debug for Part {
 
 impl PartProps for Part {
     fn value_len(&self) -> Option<u64> {
-        self.value.content_length()
+        if self.body_length.is_some() {
+            self.body_length
+        } else {
+            self.value.content_length()
+        }
     }
 
     fn metadata(&self) -> &PartMetadata {
@@ -542,6 +561,35 @@ mod tests {
         );
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
         assert_eq!(::std::str::from_utf8(&out).unwrap(), expected);
+    }
+
+    #[test]
+    fn correct_content_length() {
+        // Setup an arbitrary data stream
+        let stream_data = b"just some stream data";
+        let stream_len = stream_data.len();
+        let stream_data: Box<dyn Stream<Item = Bytes, Error = std::io::Error> + Send>
+            = Box::new(futures::stream::iter_ok::<_, std::io::Error>(
+                vec![Bytes::from_static(b"jus"), 
+                Bytes::from_static(b"t s"), 
+                Bytes::from_static(b"ome"), 
+                Bytes::from_static(b" st"),
+                Bytes::from_static(b"rea"),
+                Bytes::from_static(b"m d"),
+                Bytes::from_static(b"ata"),
+                ]));
+
+        let bytes_data = b"some bytes data".to_vec();
+        let bytes_len = bytes_data.len();
+
+        let stream_part = Part::stream_with_length(Body::from(stream_data), stream_len as u64);
+        let body_part = Part::bytes(bytes_data);
+
+        // A simple check to make sure we get the configured body length
+        assert_eq!(stream_part.value_len().unwrap(), stream_len as u64);
+
+        // Make sure it delegates to the underlying body if length is not specified
+        assert_eq!(body_part.value_len().unwrap(), bytes_len as u64);
     }
 
     #[test]
