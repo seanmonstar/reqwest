@@ -58,7 +58,7 @@ multipart = ["mime_guess"]
 
 trust-dns = ["trust-dns-resolver"]
 
-stream = ["tokio/fs", "tokio-util", "futures", "wasm-streams"]
+stream = ["tokio/fs", "tokio-util", "wasm-streams"]
 
 socks = ["tokio-socks"]
 
@@ -148,7 +148,8 @@ winreg = "0.7"
 # wasm
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-futures = { version = "0.3", default-features = false, optional = true }
+futures-core = "0.3.0" #Same dep as tokio-util 0.6.0
+futures-util = "0.3.0" #Same dep as tokio-util 0.6.0
 js-sys = "0.3.45"
 serde_json = "1.0"
 wasm-bindgen = "0.2.68"
