@@ -234,3 +234,7 @@ required-features = ["deflate"]
 name = "multipart"
 path = "tests/multipart.rs"
 required-features = ["multipart"]
+
+# TODO: Remove once a new version w/ https://github.com/hyperium/hyper/pull/2680 gets released
+[patch.crates-io]
+hyper = { git = "https://github.com/hyperium/hyper.git", branch = "master" }

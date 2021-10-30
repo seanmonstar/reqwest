@@ -13,3 +13,4 @@ pub mod decoder;
 pub mod multipart;
 pub(crate) mod request;
 mod response;
+mod upgrade;

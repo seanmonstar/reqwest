@@ -24,7 +24,7 @@ use crate::response::ResponseUrl;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
-    res: hyper::Response<Decoder>,
+    pub(super) res: hyper::Response<Decoder>,
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
