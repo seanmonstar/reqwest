@@ -56,6 +56,13 @@ impl Error {
         self.inner.url.as_ref()
     }
 
+    /// Returns the kind of error that has been raised.
+    ///
+    /// Useful to handle error types more precisely.
+    pub fn kind(&self) -> &Kind {
+        &self.inner.kind
+    }
+
     /// Returns true if the error is from a type Builder.
     pub fn is_builder(&self) -> bool {
         matches!(self.inner.kind, Kind::Builder)
@@ -218,7 +225,7 @@ impl From<crate::error::Error> for js_sys::Error {
 }
 
 #[derive(Debug)]
-pub(crate) enum Kind {
+pub enum Kind {
     Builder,
     Request,
     Redirect,
