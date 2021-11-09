@@ -714,6 +714,8 @@ where
         // else read more
         } else if recvd.starts_with(b"HTTP/1.1 407") {
             return Err("proxy authentication required".into());
+        } else if recvd.starts_with(b"HTTP/1.1 404") || recvd.starts_with(b"HTTP/1.1 523") {
+            return Err("proxy can't reach destination".into());
         } else {
             return Err("unsuccessful tunnel".into());
         }
