@@ -348,7 +348,7 @@ impl ClientBuilder {
                         }
                     }
 
-                    // Set supported TLS versions.
+                    // Set TLS versions.
                     let mut versions = rustls::ALL_VERSIONS.to_vec();
                     if let Some(min_tls_version) = config.min_tls_version {
                         versions
@@ -397,16 +397,6 @@ impl ClientBuilder {
                             tls.alpn_protocols = vec!["h2".into(), "http/1.1".into()];
                         }
                     }
-
-                    // rustls does not support TLS versions <1.2 and this is unlikely to change.
-                    // https://github.com/rustls/rustls/issues/33
-
-                    // As of writing, TLS 1.2 and 1.3 are the only implemented versions and are both
-                    // enabled by default.
-                    // rustls 0.20 will add ALL_VERSIONS and DEFAULT_VERSIONS. That will enable a more
-                    // sophisticated approach.
-                    // For now we assume the default tls.versions matches the future ALL_VERSIONS and
-                    // act based on that.
 
                     Connector::new_rustls_tls(
                         http,
