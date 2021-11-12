@@ -17,6 +17,7 @@ use hyper::client::ResponseFuture;
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
+use rustls::OwnedTrustAnchor;
 #[cfg(feature = "rustls-tls-native-roots")]
 use rustls::RootCertStore;
 use std::future::Future;
@@ -322,40 +323,81 @@ impl ClientBuilder {
                 TlsBackend::Rustls => {
                     use crate::tls::NoVerifier;
 
-                    let mut tls = rustls::ClientConfig::new();
-                    match config.http_version_pref {
-                        HttpVersionPref::Http1 => {
-                            tls.set_protocols(&["http/1.1".into()]);
-                        }
-                        HttpVersionPref::Http2 => {
-                            tls.set_protocols(&["h2".into()]);
-                        }
-                        HttpVersionPref::All => {
-                            tls.set_protocols(&["h2".into(), "http/1.1".into()]);
-                        }
+                    // Set root certificates.
+                    let mut root_store = rustls::RootCertStore::empty();
+                    for cert in config.root_certs {
+                        cert.add_to_rustls(&mut root_store)?;
                     }
                     #[cfg(feature = "rustls-tls-webpki-roots")]
                     if config.tls_built_in_root_certs {
-                        tls.root_store
-                            .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+                        let mut trust_anchors = Vec::with_capacity(webpki_roots::TLS_SERVER_ROOTS.0.len());
+                        for cert in webpki_roots::TLS_SERVER_ROOTS.0 {
+                            trust_anchors.push(
+                                OwnedTrustAnchor::from_subject_spki_name_constraints(
+                                    cert.subject,
+                                    cert.spki,
+                                    cert.name_constraints
+                                )
+                            );
+                        }
+                        root_store.add_server_trust_anchors(trust_anchors.into_iter());
                     }
                     #[cfg(feature = "rustls-tls-native-roots")]
                     if config.tls_built_in_root_certs {
-                        let roots_slice = NATIVE_ROOTS.as_ref().unwrap().roots.as_slice();
-                        tls.root_store.roots.extend_from_slice(roots_slice);
+                        for cert in rustls_native_certs::load_native_certs().unwrap() {
+                            root_store.add(&rustls::Certificate(cert.0))
+                            .map_err(|e| crate::error::builder(e))?
+                        }
                     }
+
+                    // Set supported TLS versions.
+                    let mut versions = rustls::ALL_VERSIONS.to_vec();
+                    if let Some(min_tls_version) = config.min_tls_version {
+                        versions
+                            .retain(|&supported_version| match tls::Version::from_rustls(supported_version.version) {
+                                Some(version) => version >= min_tls_version,
+                                // Assume it's so new we don't know about it, allow it
+                                // (as of writing this is unreachable)
+                                None => true,
+                            });
+                    }
+                    if let Some(max_tls_version) = config.max_tls_version {
+                        versions
+                            .retain(|&supported_version| match tls::Version::from_rustls(supported_version.version) {
+                                Some(version) => version <= max_tls_version,
+                                None => false,
+                            });
+                    }
+
+                    let config_builder = rustls::ClientConfig::builder()
+                    .with_safe_default_cipher_suites()
+                    .with_safe_default_kx_groups()
+                    .with_protocol_versions(&versions)
+                    .unwrap()
+                    .with_root_certificates(root_store);
+
+                   let mut tls = if let Some(id) = config.identity {
+                       let (key, certs) = id.get_pem()?;
+                       config_builder.with_single_cert(certs, key).unwrap()
+                    } else {
+                        config_builder.with_no_client_auth()
+                    };
 
                     if !config.certs_verification {
                         tls.dangerous()
                             .set_certificate_verifier(Arc::new(NoVerifier));
                     }
 
-                    for cert in config.root_certs {
-                        cert.add_to_rustls(&mut tls)?;
-                    }
-
-                    if let Some(id) = config.identity {
-                        id.add_to_rustls(&mut tls)?;
+                    match config.http_version_pref {
+                        HttpVersionPref::Http1 => {
+                             tls.alpn_protocols = vec!["http/1.1".into()];
+                        }
+                        HttpVersionPref::Http2 => {
+                            tls.alpn_protocols = vec!["h2".into()];
+                        }
+                        HttpVersionPref::All => {
+                            tls.alpn_protocols = vec!["h2".into(), "http/1.1".into()];
+                        }
                     }
 
                     // rustls does not support TLS versions <1.2 and this is unlikely to change.
@@ -367,24 +409,6 @@ impl ClientBuilder {
                     // sophisticated approach.
                     // For now we assume the default tls.versions matches the future ALL_VERSIONS and
                     // act based on that.
-
-                    if let Some(min_tls_version) = config.min_tls_version {
-                        tls.versions
-                            .retain(|&version| match tls::Version::from_rustls(version) {
-                                Some(version) => version >= min_tls_version,
-                                // Assume it's so new we don't know about it, allow it
-                                // (as of writing this is unreachable)
-                                None => true,
-                            });
-                    }
-
-                    if let Some(max_tls_version) = config.max_tls_version {
-                        tls.versions
-                            .retain(|&version| match tls::Version::from_rustls(version) {
-                                Some(version) => version <= max_tls_version,
-                                None => false,
-                            });
-                    }
 
                     Connector::new_rustls_tls(
                         http,
@@ -1846,12 +1870,6 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &dyn cookie::CookieS
     if let Some(header) = cookie_store.cookies(url) {
         headers.insert(crate::header::COOKIE, header);
     }
-}
-
-#[cfg(feature = "rustls-tls-native-roots")]
-lazy_static! {
-    static ref NATIVE_ROOTS: std::io::Result<RootCertStore> =
-        rustls_native_certs::load_native_certs().map_err(|e| e.1);
 }
 
 #[cfg(test)]

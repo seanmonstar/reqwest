@@ -490,7 +490,7 @@ impl Connector {
                     let conn = http.call(proxy_dst).await?;
                     log::trace!("tunneling HTTPS over proxy");
                     let maybe_server_name = rustls::ServerName::try_from(host)
-                        .map(|serve_name| serve_name.to_owned())
+                        .map(|serve_name| serve_name)
                         .map_err(|_| "Invalid DNS Name");
                     let tunneled = tunnel(conn, host.to_string(), port, self.user_agent.clone(), auth).await?;
                     let serve_name = maybe_server_name?;
