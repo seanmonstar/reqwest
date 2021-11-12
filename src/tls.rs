@@ -12,8 +12,9 @@
 //!   `ClientBuilder`.
 
 #[cfg(feature = "__rustls")]
-use rustls::client::HandshakeSignatureValid;
-use rustls::{client::ServerCertVerifier, internal::msgs::handshake::DigitallySignedStruct};
+use rustls::{
+    client::HandshakeSignatureValid, client::ServerCertVerifier, internal::msgs::handshake::DigitallySignedStruct
+};
 use std::fmt;
 
 /// Represents a server X509 certificate.

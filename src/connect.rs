@@ -13,7 +13,6 @@ use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use pin_project_lite::pin_project;
-use std::convert::TryFrom;
 use std::io::IoSlice;
 use std::net::IpAddr;
 use std::pin::Pin;
@@ -481,6 +480,7 @@ impl Connector {
             } => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     use tokio_rustls::TlsConnector as RustlsConnector;
+                    use std::convert::TryFrom;
 
                     let host = dst.host().ok_or("no host in url")?;
                     let port = dst.port().map(|r| r.as_u16()).unwrap_or(443);

@@ -17,9 +17,6 @@ use hyper::client::ResponseFuture;
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
-use rustls::OwnedTrustAnchor;
-#[cfg(feature = "rustls-tls-native-roots")]
-use rustls::RootCertStore;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -330,6 +327,7 @@ impl ClientBuilder {
                     }
                     #[cfg(feature = "rustls-tls-webpki-roots")]
                     if config.tls_built_in_root_certs {
+                        use rustls::OwnedTrustAnchor;
                         let mut trust_anchors = Vec::with_capacity(webpki_roots::TLS_SERVER_ROOTS.0.len());
                         for cert in webpki_roots::TLS_SERVER_ROOTS.0 {
                             trust_anchors.push(
