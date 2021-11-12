@@ -479,8 +479,8 @@ impl Connector {
                 tls_proxy,
             } => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
-                    use tokio_rustls::TlsConnector as RustlsConnector;
                     use std::convert::TryFrom;
+                    use tokio_rustls::TlsConnector as RustlsConnector;
 
                     let host = dst.host().ok_or("no host in url")?;
                     let port = dst.port().map(|r| r.as_u16()).unwrap_or(443);
@@ -492,7 +492,8 @@ impl Connector {
                     let maybe_server_name = rustls::ServerName::try_from(host)
                         .map(|serve_name| serve_name)
                         .map_err(|_| "Invalid DNS Name");
-                    let tunneled = tunnel(conn, host.to_string(), port, self.user_agent.clone(), auth).await?;
+                    let tunneled =
+                        tunnel(conn, host.to_string(), port, self.user_agent.clone(), auth).await?;
                     let serve_name = maybe_server_name?;
                     let io = RustlsConnector::from(tls)
                         .connect(serve_name, tunneled)

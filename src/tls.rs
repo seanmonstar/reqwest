@@ -13,7 +13,8 @@
 
 #[cfg(feature = "__rustls")]
 use rustls::{
-    client::HandshakeSignatureValid, client::ServerCertVerifier, internal::msgs::handshake::DigitallySignedStruct
+    client::HandshakeSignatureValid, client::ServerCertVerifier,
+    internal::msgs::handshake::DigitallySignedStruct,
 };
 use std::fmt;
 
@@ -112,12 +113,10 @@ impl Certificate {
         use std::io::Cursor;
 
         match self.original {
-            Cert::Der(buf) => {
-                root_store
+            Cert::Der(buf) => root_store
                 .add(&rustls::Certificate(buf))
-                .map_err(|e| crate::error::builder(e))?
-            },
-                Cert::Pem(buf) => {
+                .map_err(|e| crate::error::builder(e))?,
+            Cert::Pem(buf) => {
                 let mut pem = Cursor::new(buf);
                 let certs = rustls_pemfile::certs(&mut pem).map_err(|_| {
                     crate::error::builder(rustls::Error::General(String::from(
@@ -125,7 +124,9 @@ impl Certificate {
                     )))
                 })?;
                 for c in certs {
-                    root_store.add(&rustls::Certificate(c)).map_err(|e| crate::error::builder(e.to_string()))?;
+                    root_store
+                        .add(&rustls::Certificate(c))
+                        .map_err(|e| crate::error::builder(e.to_string()))?;
                 }
             }
         }
@@ -209,15 +210,19 @@ impl Identity {
             let mut certs = Vec::new();
             for cert in rustls_pemfile::certs(&mut pem)
                 .map_err(|_| rustls::Error::General(String::from("No valid certificate was found")))
-                .map_err(crate::error::builder)? {
-                    certs.push(rustls::Certificate(cert));
-                }
+                .map_err(crate::error::builder)?
+            {
+                certs.push(rustls::Certificate(cert));
+            }
             pem.set_position(0);
             let mut sks = Vec::new();
             for sk in rustls_pemfile::pkcs8_private_keys(&mut pem)
                 .and_then(|pkcs8_keys| {
                     if pkcs8_keys.is_empty() {
-                        Err(std::io::Error::new(std::io::ErrorKind::NotFound, "No valid private key was found"))
+                        Err(std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            "No valid private key was found",
+                        ))
                     } else {
                         Ok(pkcs8_keys)
                     }
@@ -227,9 +232,10 @@ impl Identity {
                     rustls_pemfile::rsa_private_keys(&mut pem)
                 })
                 .map_err(|_| rustls::Error::General(String::from("No valid private key was found")))
-                .map_err(crate::error::builder)? {
-                    sks.push(rustls::PrivateKey(sk));
-                }
+                .map_err(crate::error::builder)?
+            {
+                sks.push(rustls::PrivateKey(sk));
+            }
 
             if let (Some(sk), false) = (sks.pop(), certs.is_empty()) {
                 (sk, certs)
@@ -244,7 +250,6 @@ impl Identity {
             inner: ClientCert::Pem { key, certs },
         })
     }
-
 
     #[cfg(feature = "native-tls")]
     pub(crate) fn add_to_native_tls(
@@ -264,9 +269,7 @@ impl Identity {
     #[cfg(feature = "__rustls")]
     pub(crate) fn get_pem(self) -> crate::Result<(rustls::PrivateKey, Vec<rustls::Certificate>)> {
         match self.inner {
-            ClientCert::Pem { key, certs } => {
-                Ok((key, certs))
-            }
+            ClientCert::Pem { key, certs } => Ok((key, certs)),
             #[cfg(feature = "native-tls")]
             ClientCert::Pkcs12(..) => Err(crate::error::builder("incompatible TLS identity type")),
         }

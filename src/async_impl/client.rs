@@ -328,14 +328,15 @@ impl ClientBuilder {
                     #[cfg(feature = "rustls-tls-webpki-roots")]
                     if config.tls_built_in_root_certs {
                         use rustls::OwnedTrustAnchor;
-                        let mut trust_anchors = Vec::with_capacity(webpki_roots::TLS_SERVER_ROOTS.0.len());
+                        let mut trust_anchors =
+                            Vec::with_capacity(webpki_roots::TLS_SERVER_ROOTS.0.len());
                         for cert in webpki_roots::TLS_SERVER_ROOTS.0 {
                             trust_anchors.push(
                                 OwnedTrustAnchor::from_subject_spki_name_constraints(
                                     cert.subject,
                                     cert.spki,
-                                    cert.name_constraints
-                                )
+                                    cert.name_constraints,
+                                ),
                             );
                         }
                         root_store.add_server_trust_anchors(trust_anchors.into_iter());
@@ -343,40 +344,43 @@ impl ClientBuilder {
                     #[cfg(feature = "rustls-tls-native-roots")]
                     if config.tls_built_in_root_certs {
                         for cert in rustls_native_certs::load_native_certs().unwrap() {
-                            root_store.add(&rustls::Certificate(cert.0))
-                            .map_err(|e| crate::error::builder(e))?
+                            root_store
+                                .add(&rustls::Certificate(cert.0))
+                                .map_err(|e| crate::error::builder(e))?
                         }
                     }
 
                     // Set TLS versions.
                     let mut versions = rustls::ALL_VERSIONS.to_vec();
                     if let Some(min_tls_version) = config.min_tls_version {
-                        versions
-                            .retain(|&supported_version| match tls::Version::from_rustls(supported_version.version) {
+                        versions.retain(|&supported_version| {
+                            match tls::Version::from_rustls(supported_version.version) {
                                 Some(version) => version >= min_tls_version,
                                 // Assume it's so new we don't know about it, allow it
                                 // (as of writing this is unreachable)
                                 None => true,
-                            });
+                            }
+                        });
                     }
                     if let Some(max_tls_version) = config.max_tls_version {
-                        versions
-                            .retain(|&supported_version| match tls::Version::from_rustls(supported_version.version) {
+                        versions.retain(|&supported_version| {
+                            match tls::Version::from_rustls(supported_version.version) {
                                 Some(version) => version <= max_tls_version,
                                 None => false,
-                            });
+                            }
+                        });
                     }
 
                     let config_builder = rustls::ClientConfig::builder()
-                    .with_safe_default_cipher_suites()
-                    .with_safe_default_kx_groups()
-                    .with_protocol_versions(&versions)
-                    .unwrap()
-                    .with_root_certificates(root_store);
+                        .with_safe_default_cipher_suites()
+                        .with_safe_default_kx_groups()
+                        .with_protocol_versions(&versions)
+                        .unwrap()
+                        .with_root_certificates(root_store);
 
-                   let mut tls = if let Some(id) = config.identity {
-                       let (key, certs) = id.get_pem()?;
-                       config_builder.with_single_cert(certs, key).unwrap()
+                    let mut tls = if let Some(id) = config.identity {
+                        let (key, certs) = id.get_pem()?;
+                        config_builder.with_single_cert(certs, key).unwrap()
                     } else {
                         config_builder.with_no_client_auth()
                     };
@@ -388,7 +392,7 @@ impl ClientBuilder {
 
                     match config.http_version_pref {
                         HttpVersionPref::Http1 => {
-                             tls.alpn_protocols = vec!["http/1.1".into()];
+                            tls.alpn_protocols = vec!["http/1.1".into()];
                         }
                         HttpVersionPref::Http2 => {
                             tls.alpn_protocols = vec!["h2".into()];
