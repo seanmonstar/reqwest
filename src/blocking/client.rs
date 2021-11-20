@@ -23,6 +23,7 @@ use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
 use crate::{async_impl, header, redirect, IntoUrl, Method, Proxy};
+use crate::connect::CustomerDnsOverridesResolver;
 
 /// A `Client` to make Requests with.
 ///
@@ -753,6 +754,19 @@ impl ClientBuilder {
     /// to the conventional port for the given scheme (e.g. 80 for http).
     pub fn resolve(self, domain: &str, addr: SocketAddr) -> ClientBuilder {
         self.with_inner(|inner| inner.resolve(domain, addr))
+    }
+
+    /// Override DNS resolution for specific domains to particular IP addresses
+    /// if return value not NONE
+    ///
+    /// Warning
+    ///
+    /// Since the DNS protocol has no notion of ports, if you wish to send
+    /// traffic to a particular port you must include this port in the URL
+    /// itself, any port in the overridden addr will be ignored and traffic sent
+    /// to the conventional port for the given scheme (e.g. 80 for http).
+    pub fn resolver(self, overrides_resolver: Box<dyn CustomerDnsOverridesResolver>) -> ClientBuilder {
+        self.with_inner(|inner| inner.resolver(overrides_resolver))
     }
 
     // private

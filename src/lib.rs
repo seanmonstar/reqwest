@@ -310,6 +310,7 @@ if_hyper! {
     #[cfg(feature = "blocking")]
     pub mod blocking;
     mod connect;
+    pub use connect::CustomerDnsOverridesResolver;
     #[cfg(feature = "cookies")]
     pub mod cookie;
     #[cfg(feature = "trust-dns")]
