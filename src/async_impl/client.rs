@@ -1222,11 +1222,13 @@ impl ClientBuilder {
     /// traffic to a particular port you must include this port in the URL
     /// itself, any port in the overridden addr will be ignored and traffic sent
     /// to the conventional port for the given scheme (e.g. 80 for http).
-        pub fn resolver(mut self, overrides_resolver: Box<dyn CustomerDnsOverridesResolver>) -> ClientBuilder {
+    pub fn resolver(
+        mut self,
+        overrides_resolver: Box<dyn CustomerDnsOverridesResolver>,
+    ) -> ClientBuilder {
         self.config.dns_overrides_resolver = Some(overrides_resolver);
         self
     }
-
 }
 
 type HyperClient = hyper::Client<Connector, super::body::ImplStream>;

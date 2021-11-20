@@ -51,8 +51,7 @@ impl HttpConnector {
         overrides_resolver: Option<Box<dyn CustomerDnsOverridesResolver>>,
     ) -> Self {
         let gai = hyper::client::connect::dns::GaiResolver::new();
-        let overridden_resolver =
-            DnsResolverWithOverrides::new(gai, overrides, overrides_resolver);
+        let overridden_resolver = DnsResolverWithOverrides::new(gai, overrides, overrides_resolver);
         Self::GaiWithDnsOverrides(hyper::client::HttpConnector::new_with_resolver(
             overridden_resolver,
         ))
@@ -72,8 +71,7 @@ impl HttpConnector {
         overrides_resolver: Option<Box<dyn CustomerDnsOverridesResolver>>,
     ) -> crate::Result<HttpConnector> {
         TrustDnsResolver::new()
-            .map(|resolver|
-                DnsResolverWithOverrides::new(resolver, overrides, overrides_resolver))
+            .map(|resolver| DnsResolverWithOverrides::new(resolver, overrides, overrides_resolver))
             .map(hyper::client::HttpConnector::new_with_resolver)
             .map(Self::TrustDnsWithOverrides)
             .map_err(crate::error::builder)
@@ -1032,12 +1030,8 @@ impl<Resolver: Clone> DnsResolverWithOverrides<Resolver> {
             dns_resolver,
             overrides: Arc::new(overrides),
             overrides_resolver: match overrides_resolver {
-                None => {
-                    Arc::new(Box::new(BlankCustomerDnsOverridesResolver))
-                }
-                Some(overrides_resolver) => {
-                    Arc::new(overrides_resolver)
-                }
+                None => Arc::new(Box::new(BlankCustomerDnsOverridesResolver)),
+                Some(overrides_resolver) => Arc::new(overrides_resolver),
             },
         }
     }
@@ -1068,7 +1062,7 @@ where
                 let fut = futures_util::future::ready(Ok(itertools::Either::Right(
                     std::iter::once(dest.to_owned()),
                 )));
-                return Either::Right(fut)
+                return Either::Right(fut);
             }
             None => {}
         }
@@ -1077,7 +1071,7 @@ where
                 let fut = futures_util::future::ready(Ok(itertools::Either::Right(
                     std::iter::once(dest.to_owned()),
                 )));
-                return Either::Right(fut)
+                return Either::Right(fut);
             }
             None => {}
         }
@@ -1085,11 +1079,12 @@ where
         let y = WrappedResolverFuture { fut: resolver_fut };
         Either::Left(y)
     }
-
 }
 
-pub trait CustomerDnsOverridesResolver : Sync + Send {
-    fn resolve(&self, domain:&str)->Option<SocketAddr>;
+/// Overrides domains' ip with a function
+pub trait CustomerDnsOverridesResolver: Sync + Send {
+    /// rule
+    fn resolve(&self, domain: &str) -> Option<SocketAddr>;
 }
 
 struct BlankCustomerDnsOverridesResolver;

@@ -16,6 +16,7 @@ use tokio::sync::{mpsc, oneshot};
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::wait;
+use crate::connect::CustomerDnsOverridesResolver;
 #[cfg(feature = "__tls")]
 use crate::tls;
 #[cfg(feature = "__tls")]
@@ -23,7 +24,6 @@ use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
 use crate::{async_impl, header, redirect, IntoUrl, Method, Proxy};
-use crate::connect::CustomerDnsOverridesResolver;
 
 /// A `Client` to make Requests with.
 ///
@@ -765,7 +765,10 @@ impl ClientBuilder {
     /// traffic to a particular port you must include this port in the URL
     /// itself, any port in the overridden addr will be ignored and traffic sent
     /// to the conventional port for the given scheme (e.g. 80 for http).
-    pub fn resolver(self, overrides_resolver: Box<dyn CustomerDnsOverridesResolver>) -> ClientBuilder {
+    pub fn resolver(
+        self,
+        overrides_resolver: Box<dyn CustomerDnsOverridesResolver>,
+    ) -> ClientBuilder {
         self.with_inner(|inner| inner.resolver(overrides_resolver))
     }
 
