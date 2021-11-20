@@ -166,7 +166,8 @@ features = [
     "Blob",
     "BlobPropertyBag",
     "ServiceWorkerGlobalScope",
-    "RequestCredentials"
+    "RequestCredentials",
+    "File"
 ]
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
