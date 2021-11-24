@@ -112,7 +112,7 @@ native-tls-crate = { version = "0.2.8", optional = true, package = "native-tls" 
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
-hyper-rustls = { version = "0.22.1", default-features = false, optional = true, git = "https://github.com/g2p/hyper-rustls", rev = "344d4934b5b3ccb43f99cf242f4c84cf3ecd6264"}
+hyper-rustls = { version = "0.23", default-features = false, optional = true }
 rustls = { version = "0.20", features = ["dangerous_configuration"], optional = true }
 tokio-rustls = { version = "0.23", optional = true }
 webpki-roots = { version = "0.21", optional = true }
