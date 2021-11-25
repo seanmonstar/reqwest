@@ -44,7 +44,7 @@ rustls-tls-native-roots = ["rustls-native-certs", "__rustls"]
 
 blocking = ["futures-util/io", "tokio/rt-multi-thread", "tokio/sync"]
 
-cookies = ["cookie_crate", "cookie_store"]
+cookies = ["cookie_crate", "cookie_store", "proc-macro-hack"]
 
 gzip = ["async-compression", "async-compression/gzip", "tokio-util"]
 
@@ -70,7 +70,7 @@ __tls = []
 
 # Enables common rustls code.
 # Equivalent to rustls-tls-manual-roots but shorter :)
-__rustls = ["hyper-rustls", "tokio-rustls", "rustls", "__tls"]
+__rustls = ["hyper-rustls", "tokio-rustls", "rustls", "__tls", "rustls-pemfile"]
 
 # When enabled, disable using the cached SYS_PROXIES.
 __internal_proxy_sys_no_cache = []
@@ -112,15 +112,17 @@ native-tls-crate = { version = "0.2.8", optional = true, package = "native-tls" 
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
-hyper-rustls = { version = "0.22.1", default-features = false, optional = true }
-rustls = { version = "0.19", features = ["dangerous_configuration"], optional = true }
-tokio-rustls = { version = "0.22", optional = true }
+hyper-rustls = { version = "0.23", default-features = false, optional = true }
+rustls = { version = "0.20", features = ["dangerous_configuration"], optional = true }
+tokio-rustls = { version = "0.23", optional = true }
 webpki-roots = { version = "0.21", optional = true }
-rustls-native-certs = { version = "0.5", optional = true }
+rustls-native-certs = { version = "0.6", optional = true }
+rustls-pemfile = { version = "0.2", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.15", package = "cookie", optional = true }
 cookie_store = { version = "0.15", optional = true }
+proc-macro-hack = { version = "0.5.19", optional = true }
 
 ## compression
 async-compression = { version = "0.3.7", default-features = false, features = ["tokio"], optional = true }
