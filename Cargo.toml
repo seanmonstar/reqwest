@@ -44,7 +44,7 @@ rustls-tls-native-roots = ["rustls-native-certs", "__rustls"]
 
 blocking = ["futures-util/io", "tokio/rt-multi-thread", "tokio/sync"]
 
-cookies = ["cookie_crate", "cookie_store", "time"]
+cookies = ["cookie_crate", "cookie_store"]
 
 gzip = ["async-compression", "async-compression/gzip", "tokio-util"]
 
@@ -121,7 +121,6 @@ rustls-native-certs = { version = "0.5", optional = true }
 ## cookies
 cookie_crate = { version = "0.15", package = "cookie", optional = true }
 cookie_store = { version = "0.15", optional = true }
-time = { version = "0.2.11", optional = true }
 
 ## compression
 async-compression = { version = "0.3.7", default-features = false, features = ["tokio"], optional = true }
