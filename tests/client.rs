@@ -246,7 +246,11 @@ fn use_preconfigured_native_tls_default() {
 fn use_preconfigured_rustls_default() {
     extern crate rustls;
 
-    let tls = rustls::ClientConfig::new();
+    let root_cert_store = rustls::RootCertStore::empty();
+    let tls = rustls::ClientConfig::builder()
+        .with_safe_defaults()
+        .with_root_certificates(root_cert_store)
+        .with_no_client_auth();
 
     reqwest::Client::builder()
         .use_preconfigured_tls(tls)
