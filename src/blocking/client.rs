@@ -1039,7 +1039,7 @@ impl ClientHandle {
             Ok(Err(err)) => Err(err.with_url(url)),
             Ok(Ok(res)) => Ok(Response::new(
                 res,
-                self.timeout.0,
+                timeout,
                 KeepCoreThreadAlive(Some(self.inner.clone())),
             )),
             Err(wait::Waited::TimedOut(e)) => Err(crate::error::request(e).with_url(url)),
