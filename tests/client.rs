@@ -134,6 +134,54 @@ async fn user_agent() {
 }
 
 #[tokio::test]
+async fn basic_auth() {
+    let server = server::http(move |req| async move {
+        assert_eq!(
+            req.headers()["authorization"],
+            "Basic YWRtaW46Z29vZCBwYXNzd29yZA=="
+        );
+        http::Response::default()
+    });
+
+    let url = format!("http://{}/basic", server.addr());
+    let res = reqwest::Client::builder()
+        .basic_auth("admin", Some("good password"))
+        .build()
+        .expect("client builder")
+        .get(&url)
+        .send()
+        .await
+        .expect("request");
+
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
+#[tokio::test]
+async fn bearer_auth() {
+    let bearer_token = "iwefOJASndcsde645f";
+
+    let server = server::http(move |req| async move {
+        assert_eq!(
+            req.headers()["authorization"],
+            format!("Bearer {}", bearer_token)
+        );
+        http::Response::default()
+    });
+
+    let url = format!("http://{}/basic", server.addr());
+    let res = reqwest::Client::builder()
+        .bearer_auth(bearer_token)
+        .build()
+        .expect("client builder")
+        .get(&url)
+        .send()
+        .await
+        .expect("request");
+
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
+#[tokio::test]
 async fn response_text() {
     let _ = env_logger::try_init();
 
