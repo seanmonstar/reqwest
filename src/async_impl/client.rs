@@ -1381,7 +1381,10 @@ impl Client {
             }
         }
 
-        let uri = expect_uri(&url);
+        let uri = match expect_uri(&url) {
+            Ok(uri) => uri,
+            _ => return Pending::new_err(error::url_invalid_uri(url)),
+        };
 
         let (reusable, body) = match body {
             Some(body) => {
@@ -1794,7 +1797,7 @@ impl Future for PendingRequest {
                                 std::mem::replace(self.as_mut().headers(), HeaderMap::new());
 
                             remove_sensitive_headers(&mut headers, &self.url, &self.urls);
-                            let uri = expect_uri(&self.url);
+                            let uri = expect_uri(&self.url)?;
                             let body = match self.body {
                                 Some(Some(ref body)) => Body::reusable(body.clone()),
                                 _ => Body::empty(),
