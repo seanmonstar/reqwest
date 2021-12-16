@@ -36,6 +36,7 @@
 //! # async fn run() -> Result<(), reqwest::Error> {
 //! let body = reqwest::get("https://www.rust-lang.org")
 //!     .await?
+//!     .error_for_status()?
 //!     .text()
 //!     .await?;
 //!
@@ -246,6 +247,7 @@ pub use self::response::ResponseBuilderExt;
 /// ```rust
 /// # async fn run() -> Result<(), reqwest::Error> {
 /// let body = reqwest::get("https://www.rust-lang.org").await?
+///     .error_for_status()?
 ///     .text().await?;
 /// # Ok(())
 /// # }
