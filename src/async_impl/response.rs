@@ -6,6 +6,7 @@ use std::pin::Pin;
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
 use futures_util::stream::StreamExt;
+use http::header::{CONTENT_ENCODING, CONTENT_LENGTH};
 use hyper::client::connect::HttpInfo;
 use hyper::{HeaderMap, StatusCode, Version};
 use mime::Mime;
@@ -47,7 +48,11 @@ impl Response {
         let extensions = parts.extensions;
 
         let mut headers = parts.headers;
-        let decoder = Decoder::detect(&mut headers, Body::response(body, timeout), accepts);
+        let decoder = Decoder::detect(&headers, Body::response(body, timeout), accepts);
+        if !decoder.is_plain_text_decoder() && !accepts.decompress_without_header_modification {
+            headers.remove(CONTENT_ENCODING);
+            headers.remove(CONTENT_LENGTH);
+        }
 
         Response {
             status,
@@ -404,6 +409,10 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
         let (mut parts, body) = r.into_parts();
         let body = body.into();
         let body = Decoder::detect(&mut parts.headers, body, Accepts::none());
+        if !body.is_plain_text_decoder() {
+            parts.headers.remove(CONTENT_ENCODING);
+            parts.headers.remove(CONTENT_LENGTH);
+        }
         let url = parts
             .extensions
             .remove::<ResponseUrl>()

@@ -706,6 +706,20 @@ impl ClientBuilder {
         self
     }
 
+    /// Disable response headers modifications when decompressing the body.
+    ///
+    /// If used, `Content-Encoding` and `Content-Length` will not be removed after decompressing
+    /// the response body.
+    #[cfg(any(feature = "gzip", feature = "brotli", feature = "deflate"))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "gzip", feature = "brotli", feature = "deflate")))
+    )]
+    pub fn decompress_without_header_modification(mut self) -> ClientBuilder {
+        self.config.accepts.decompress_without_header_modification = true;
+        self
+    }
+
     /// Disable auto response body gzip decompression.
     ///
     /// This method exists even if the optional `gzip` feature is not enabled.

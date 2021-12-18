@@ -34,6 +34,8 @@ pub(super) struct Accepts {
     pub(super) brotli: bool,
     #[cfg(feature = "deflate")]
     pub(super) deflate: bool,
+
+    pub(super) decompress_without_header_modification: bool,
 }
 
 /// A response decompressor over a non-blocking stream of chunks.
@@ -92,6 +94,10 @@ impl Decoder {
         }
     }
 
+    pub(crate) fn is_plain_text_decoder(&self) -> bool {
+        matches!(self.inner, Inner::PlainText(..))
+    }
+
     /// A plain text decoder.
     ///
     /// This decoder will emit the underlying chunks as-is.
@@ -147,7 +153,7 @@ impl Decoder {
     }
 
     #[cfg(any(feature = "brotli", feature = "gzip", feature = "deflate"))]
-    fn detect_encoding(headers: &mut HeaderMap, encoding_str: &str) -> bool {
+    fn detect_encoding(headers: &HeaderMap, encoding_str: &str) -> bool {
         use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
         use log::warn;
 
@@ -169,10 +175,6 @@ impl Decoder {
                 }
             }
         }
-        if is_content_encoded {
-            headers.remove(CONTENT_ENCODING);
-            headers.remove(CONTENT_LENGTH);
-        }
         is_content_encoded
     }
 
@@ -182,7 +184,7 @@ impl Decoder {
     /// how to decode the content body of the request.
     ///
     /// Uses the correct variant by inspecting the Content-Encoding header.
-    pub(super) fn detect(_headers: &mut HeaderMap, body: Body, _accepts: Accepts) -> Decoder {
+    pub(super) fn detect(_headers: &HeaderMap, body: Body, _accepts: Accepts) -> Decoder {
         #[cfg(feature = "gzip")]
         {
             if _accepts.gzip && Decoder::detect_encoding(_headers, "gzip") {
@@ -351,6 +353,7 @@ impl Accepts {
             brotli: false,
             #[cfg(feature = "deflate")]
             deflate: false,
+            decompress_without_header_modification: false,
         }
     }
 
@@ -413,6 +416,7 @@ impl Default for Accepts {
             brotli: true,
             #[cfg(feature = "deflate")]
             deflate: true,
+            decompress_without_header_modification: false,
         }
     }
 }
