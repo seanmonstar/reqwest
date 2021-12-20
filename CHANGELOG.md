@@ -1,3 +1,7 @@
+## v0.11.8
+
+- Update internal webpki-roots dependency.
+
 ## v0.11.7
 
 - Add `blocking::ClientBuilder::resolve()` option, matching the async builder.
