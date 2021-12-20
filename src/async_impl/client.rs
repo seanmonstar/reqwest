@@ -103,6 +103,7 @@ struct Config {
     #[cfg(feature = "__tls")]
     tls: TlsBackend,
     http_version_pref: HttpVersionPref,
+    http09_responses: bool,
     http1_title_case_headers: bool,
     http2_initial_stream_window_size: Option<u32>,
     http2_initial_connection_window_size: Option<u32>,
@@ -166,6 +167,7 @@ impl ClientBuilder {
                 #[cfg(feature = "__tls")]
                 tls: TlsBackend::default(),
                 http_version_pref: HttpVersionPref::All,
+                http09_responses: false,
                 http1_title_case_headers: false,
                 http2_initial_stream_window_size: None,
                 http2_initial_connection_window_size: None,
@@ -457,6 +459,10 @@ impl ClientBuilder {
         builder.pool_idle_timeout(config.pool_idle_timeout);
         builder.pool_max_idle_per_host(config.pool_max_idle_per_host);
         connector.set_keepalive(config.tcp_keepalive);
+
+        if config.http09_responses {
+            builder.http09_responses(true);
+        }
 
         if config.http1_title_case_headers {
             builder.http1_title_case_headers(true);
@@ -839,6 +845,12 @@ impl ClientBuilder {
     /// Only use HTTP/1.
     pub fn http1_only(mut self) -> ClientBuilder {
         self.config.http_version_pref = HttpVersionPref::Http1;
+        self
+    }
+
+    /// Allow HTTP/0.9 responses
+    pub fn http09_responses(mut self) -> ClientBuilder {
+        self.config.http09_responses = true;
         self
     }
 
