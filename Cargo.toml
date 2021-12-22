@@ -57,6 +57,8 @@ json = ["serde_json"]
 multipart = ["mime_guess"]
 
 trust-dns = ["trust-dns-resolver"]
+# Enable trust-dns, but don't set it as the default resolver
+trust-dns-optional = ["trust-dns"]
 
 stream = ["tokio/fs", "tokio-util"]
 
