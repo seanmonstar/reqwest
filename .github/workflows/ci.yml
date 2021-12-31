@@ -130,6 +130,8 @@ jobs:
             features: "--features native-tls"
           - name: "feat.: default-tls and rustls-tls"
             features: "--features rustls-tls"
+          - name: "feat.: default-tls, rustls-tls, native-tls, and unstable-tls-config"
+            features: "--features rustls-tls,native-tls,unstable_tls_config"
           - name: "feat.: cookies"
             features: "--features cookies"
           - name: "feat.: blocking"

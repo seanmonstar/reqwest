@@ -179,6 +179,9 @@
 //!   while using root certificates from the `webpki-roots` crate.
 //! - **rustls-tls-native-roots**: Enables TLS functionality provided by `rustls`,
 //!   while using root certificates from the `rustls-native-certs` crate.
+//! - **unstable-tls-config**: In conjunction with `rustls-tls` or `native-tls`,
+//!   enables manual configuration of TLS connectors.  *Warning:* the methods
+//!   provided by this feature are not guaranteed to be semver compatible.  
 //! - **blocking**: Provides the [blocking][] client API.
 //! - **cookies**: Provides cookie session support.
 //! - **gzip**: Provides response body gzip decompression.

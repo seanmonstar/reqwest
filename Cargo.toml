@@ -42,6 +42,8 @@ rustls-tls-manual-roots = ["__rustls"]
 rustls-tls-webpki-roots = ["webpki-roots", "__rustls"]
 rustls-tls-native-roots = ["rustls-native-certs", "__rustls"]
 
+unstable-tls-config = []
+
 blocking = ["futures-util/io", "tokio/rt-multi-thread", "tokio/sync"]
 
 cookies = ["cookie_crate", "cookie_store", "proc-macro-hack"]

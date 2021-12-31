@@ -714,6 +714,72 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.use_preconfigured_tls(tls))
     }
 
+    /// Use a preconfigured Rustls backend.
+    ///
+    /// ```rust
+    /// let root_cert_store = rustls::RootCertStore::empty();
+    /// let tls = rustls::ClientConfig::builder()
+    ///     .with_safe_defaults()
+    ///     .with_root_certificates(root_cert_store)
+    ///     .with_no_client_auth();
+    /// let client = reqwest::blocking::Client::builder()
+    ///     .use_preconfigured_rustls_tls(tls)
+    ///     .build()
+    ///     .unwrap();
+    /// ```
+    ///
+    /// # Semver-exempt
+    ///
+    /// This method is exempt from semver compatiblity guarantees.
+    /// Minor or patch version updates to reqwest may update the version
+    /// of rustls to a semver incompatible version, which will manifest
+    /// as a compile-time type mismatch on the [`rustls::ClientConfig`].  
+    ///
+    /// # Optional
+    ///
+    /// This method requires both the `rustls-tls` and `unstable-tls-config` features
+    /// to be enabled.  Enabling the `unstable-tls-config` feature means opting
+    /// into the semver compatibility risks of this method.
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    #[cfg(all(feature = "unstable-tls-config", feature = "__rustls"))]
+    pub fn use_preconfigured_rustls_tls(self, tls: rustls::ClientConfig) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_preconfigured_rustls_tls(tls))
+    }
+
+    /// Use a preconfigured Native TLS backend.
+    ///
+    /// ```rust
+    /// # use native_tls_crate as native_tls;
+    /// let tls = native_tls::TlsConnector::builder()
+    ///     .build()
+    ///     .expect("tls builder");
+    /// let client = reqwest::blocking::Client::builder()
+    ///     .use_preconfigured_native_tls(tls)
+    ///     .build()
+    ///     .unwrap();
+    /// ```
+    ///
+    /// # Semver-exempt
+    ///
+    ///
+    /// This method is exempt from semver compatiblity guarantees.  Minor or 
+    /// patch version updates to reqwest may update the version of rustls to a 
+    /// semver incompatible version, which will manifest as a compile-time type
+    /// mismatch on the [`native_tls::TlsConnector`](native_tls_crate::TlsConnector).  
+    /// 
+    /// # Optional
+    ///
+    /// This method requires both the `native-tls` and `unstable-tls-config` features
+    /// to be enabled.  Enabling the `unstable-tls-config` feature means opting
+    /// into the semver compatibility risks of this method.
+    #[cfg(all(feature = "unstable-tls-config", feature = "native-tls"))]
+    pub fn use_preconfigured_native_tls(
+        self,
+        tls: native_tls_crate::TlsConnector,
+    ) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_preconfigured_native_tls(tls))
+    }
+
     /// Enables the [trust-dns](trust_dns_resolver) async resolver instead of a default threadpool using `getaddrinfo`.
     ///
     /// If the `trust-dns` feature is turned on, the default option is enabled.
