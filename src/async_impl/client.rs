@@ -1154,9 +1154,7 @@ impl ClientBuilder {
                 (&mut tls as &mut dyn Any).downcast_mut::<Option<native_tls_crate::TlsConnector>>()
             {
                 let tls = conn.take().expect("is definitely Some");
-                let tls = crate::tls::TlsBackend::BuiltNativeTls(tls);
-                self.config.tls = tls;
-                return self;
+                return self.use_preconfigured_native_tls(tls);
             }
         }
         #[cfg(feature = "__rustls")]
@@ -1165,9 +1163,7 @@ impl ClientBuilder {
                 (&mut tls as &mut dyn Any).downcast_mut::<Option<rustls::ClientConfig>>()
             {
                 let tls = conn.take().expect("is definitely Some");
-                let tls = crate::tls::TlsBackend::BuiltRustls(tls);
-                self.config.tls = tls;
-                return self;
+                return self.use_preconfigured_rustls_tls(tls);
             }
         }
 
