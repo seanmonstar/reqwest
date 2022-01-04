@@ -2,7 +2,7 @@
 #![deny(missing_debug_implementations)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(test, deny(warnings))]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.11.8")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.11.9")]
 
 //! # reqwest
 //!
@@ -313,7 +313,7 @@ if_hyper! {
     #[cfg(feature = "cookies")]
     pub mod cookie;
     #[cfg(feature = "trust-dns")]
-    mod dns;
+    pub mod dns;
     mod proxy;
     pub mod redirect;
     #[cfg(feature = "__tls")]

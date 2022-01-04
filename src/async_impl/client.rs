@@ -42,6 +42,9 @@ use crate::Certificate;
 use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
 
+#[cfg(feature = "trust-dns")]
+use crate::dns::{ResolverConfig, ResolverOpts};
+
 /// An asynchronous `Client` to make Requests with.
 ///
 /// The Client has various configuration values to tweak, but the defaults
@@ -115,7 +118,10 @@ struct Config {
     trust_dns: bool,
     error: Option<crate::Error>,
     https_only: bool,
+    /// Manually resolved (Domain, IpAddr) pairs
     dns_overrides: HashMap<String, SocketAddr>,
+    #[cfg(feature = "trust-dns")]
+    dns_config: Option<(ResolverConfig, ResolverOpts)>,
 }
 
 impl Default for ClientBuilder {
@@ -178,6 +184,8 @@ impl ClientBuilder {
                 cookie_store: None,
                 https_only: false,
                 dns_overrides: HashMap::new(),
+                #[cfg(feature = "trust-dns")]
+                dns_config: None,
             },
         }
     }
@@ -218,9 +226,12 @@ impl ClientBuilder {
                 #[cfg(feature = "trust-dns")]
                 true => {
                     if config.dns_overrides.is_empty() {
-                        HttpConnector::new_trust_dns()?
+                        HttpConnector::new_trust_dns(config.dns_config)?
                     } else {
-                        HttpConnector::new_trust_dns_with_overrides(config.dns_overrides)?
+                        HttpConnector::new_trust_dns_with_overrides(
+                            config.dns_config,
+                            config.dns_overrides,
+                        )?
                     }
                 }
                 #[cfg(not(feature = "trust-dns"))]
@@ -1225,6 +1236,13 @@ impl ClientBuilder {
     /// to the conventional port for the given scheme (e.g. 80 for http).
     pub fn resolve(mut self, domain: &str, addr: SocketAddr) -> ClientBuilder {
         self.config.dns_overrides.insert(domain.to_string(), addr);
+        self
+    }
+
+    /// Override trust DNS resolver configuration
+    #[cfg(feature = "trust-dns")]
+    pub fn dns_config(mut self, config: ResolverConfig, opts: ResolverOpts) -> ClientBuilder {
+        self.config.dns_config = Some((config, opts));
         self
     }
 }

@@ -1,3 +1,7 @@
+## v0.11.9
+
+- Add `client.dns_config()` for custom configuration
+
 ## v0.11.8
 
 - Update internal webpki-roots dependency.

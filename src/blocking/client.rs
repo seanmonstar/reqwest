@@ -24,6 +24,9 @@ use crate::Certificate;
 use crate::Identity;
 use crate::{async_impl, header, redirect, IntoUrl, Method, Proxy};
 
+#[cfg(feature = "trust-dns")]
+use crate::dns::{ResolverConfig, ResolverOpts};
+
 /// A `Client` to make Requests with.
 ///
 /// The Client has various configuration values to tweak, but the defaults
@@ -753,6 +756,12 @@ impl ClientBuilder {
     /// to the conventional port for the given scheme (e.g. 80 for http).
     pub fn resolve(self, domain: &str, addr: SocketAddr) -> ClientBuilder {
         self.with_inner(|inner| inner.resolve(domain, addr))
+    }
+
+    /// Override trust DNS resolver configuration
+    #[cfg(feature = "trust-dns")]
+    pub fn dns_config(self, config: ResolverConfig, opts: ResolverOpts) -> ClientBuilder {
+        self.with_inner(|inner| inner.dns_config(config, opts))
     }
 
     // private
