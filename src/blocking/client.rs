@@ -4,6 +4,7 @@ use std::convert::TryInto;
 use std::fmt;
 use std::future::Future;
 use std::net::IpAddr;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -742,6 +743,18 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.https_only(enabled))
     }
 
+    /// Override DNS resolution for specific domains to particular IP addresses.
+    ///
+    /// Warning
+    ///
+    /// Since the DNS protocol has no notion of ports, if you wish to send
+    /// traffic to a particular port you must include this port in the URL
+    /// itself, any port in the overridden addr will be ignored and traffic sent
+    /// to the conventional port for the given scheme (e.g. 80 for http).
+    pub fn resolve(self, domain: &str, addr: SocketAddr) -> ClientBuilder {
+        self.with_inner(|inner| inner.resolve(domain, addr))
+    }
+
     // private
 
     fn with_inner<F>(mut self, func: F) -> ClientBuilder
@@ -1026,7 +1039,7 @@ impl ClientHandle {
             Ok(Err(err)) => Err(err.with_url(url)),
             Ok(Ok(res)) => Ok(Response::new(
                 res,
-                self.timeout.0,
+                timeout,
                 KeepCoreThreadAlive(Some(self.inner.clone())),
             )),
             Err(wait::Waited::TimedOut(e)) => Err(crate::error::request(e).with_url(url)),

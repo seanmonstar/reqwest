@@ -1,3 +1,15 @@
+## v0.11.8
+
+- Update internal webpki-roots dependency.
+
+## v0.11.7
+
+- Add `blocking::ClientBuilder::resolve()` option, matching the async builder.
+- Implement `From<tokio::fs::File>` for `Body`.
+- Fix `blocking` request-scoped timeout applying to bodies as well.
+- (wasm) Fix request bodies using multipart vs formdata.
+- Update internal `rustls` to 0.20.
+
 ## v0.11.6
 
 - (wasm) Fix request bodies more.
