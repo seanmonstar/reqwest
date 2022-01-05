@@ -775,7 +775,10 @@ fn get_sys_proxies(
 }
 
 fn insert_proxy(proxies: &mut SystemProxyMap, scheme: impl Into<String>, addr: String) -> bool {
-    if let Ok(valid_addr) = addr.into_proxy_scheme() {
+    if addr.trim().is_empty() {
+        // do not accept empty or whitespace proxy address
+        false
+    } else if let Ok(valid_addr) = addr.into_proxy_scheme() {
         proxies.insert(scheme.into(), valid_addr);
         true
     } else {
