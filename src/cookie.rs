@@ -166,10 +166,11 @@ impl Jar {
 
 impl CookieStore for Jar {
     fn set_cookies(&self, cookie_headers: &mut dyn Iterator<Item = &HeaderValue>, url: &url::Url) {
-        let iter =
-            cookie_headers.filter_map(|val| Cookie::parse(val).map(|c| c.0.into_owned()).ok());
+        let mut iter =
+            cookie_headers.filter_map(|val| Cookie::parse(val).map(|c| c.0.into_owned()).ok()).collect::<Vec<_>>();
+        iter.dedup_by(|a, b| a.name() == b.name());
 
-        self.0.write().unwrap().store_response_cookies(iter, url);
+        self.0.write().unwrap().store_response_cookies(iter.into_iter(), url);
     }
 
     fn cookies(&self, url: &url::Url) -> Option<HeaderValue> {
