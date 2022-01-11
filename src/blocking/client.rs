@@ -413,6 +413,11 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.http1_only())
     }
 
+    /// Allow HTTP/0.9 responses
+    pub fn http09_responses(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.http09_responses())
+    }
+
     /// Only use HTTP/2.
     pub fn http2_prior_knowledge(self) -> ClientBuilder {
         self.with_inner(|inner| inner.http2_prior_knowledge())
@@ -1056,7 +1061,7 @@ impl ClientHandle {
             Ok(Err(err)) => Err(err.with_url(url)),
             Ok(Ok(res)) => Ok(Response::new(
                 res,
-                self.timeout.0,
+                timeout,
                 KeepCoreThreadAlive(Some(self.inner.clone())),
             )),
             Err(wait::Waited::TimedOut(e)) => Err(crate::error::request(e).with_url(url)),
