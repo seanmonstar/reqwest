@@ -14,6 +14,8 @@ pub trait CookieStore: Send + Sync {
     fn set_cookies(&self, cookie_headers: &mut dyn Iterator<Item = &HeaderValue>, url: &url::Url);
     /// Get any Cookie values in the store for `url`
     fn cookies(&self, url: &url::Url) -> Option<HeaderValue>;
+    /// Clear the contents of the `CookieStore`
+    fn clear(&self);
 }
 
 /// A single HTTP cookie.
@@ -187,5 +189,9 @@ impl CookieStore for Jar {
         }
 
         HeaderValue::from_maybe_shared(Bytes::from(s)).ok()
+    }
+
+    fn clear(&self) {
+        self.0.write().unwrap().clear()
     }
 }
