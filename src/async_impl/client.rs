@@ -117,6 +117,7 @@ struct Config {
     error: Option<crate::Error>,
     https_only: bool,
     dns_overrides: HashMap<String, SocketAddr>,
+    dns_overrides_fn: Option<Box<dyn Fn(String) -> Option<SocketAddr> + Send + Sync>>,
 }
 
 impl Default for ClientBuilder {
@@ -180,6 +181,7 @@ impl ClientBuilder {
                 cookie_store: None,
                 https_only: false,
                 dns_overrides: HashMap::new(),
+                dns_overrides_fn: None,
             },
         }
     }
@@ -211,18 +213,24 @@ impl ClientBuilder {
 
             let http = match config.trust_dns {
                 false => {
-                    if config.dns_overrides.is_empty() {
+                    if config.dns_overrides.is_empty() && config.dns_overrides_fn.is_none() {
                         HttpConnector::new_gai()
                     } else {
-                        HttpConnector::new_gai_with_overrides(config.dns_overrides)
+                        HttpConnector::new_gai_with_overrides(
+                            config.dns_overrides,
+                            config.dns_overrides_fn,
+                        )
                     }
                 }
                 #[cfg(feature = "trust-dns")]
                 true => {
-                    if config.dns_overrides.is_empty() {
+                    if config.dns_overrides.is_empty() && config.dns_overrides_fn.is_none() {
                         HttpConnector::new_trust_dns()?
                     } else {
-                        HttpConnector::new_trust_dns_with_overrides(config.dns_overrides)?
+                        HttpConnector::new_trust_dns_with_overrides(
+                            config.dns_overrides,
+                            config.dns_overrides_fn,
+                        )?
                     }
                 }
                 #[cfg(not(feature = "trust-dns"))]
@@ -1237,6 +1245,24 @@ impl ClientBuilder {
     /// to the conventional port for the given scheme (e.g. 80 for http).
     pub fn resolve(mut self, domain: &str, addr: SocketAddr) -> ClientBuilder {
         self.config.dns_overrides.insert(domain.to_string(), addr);
+        self
+    }
+
+    /// Override DNS resolution for specific domains to particular IP addresses.
+    /// If both are specified, overrides has priority.
+    /// Results will be cached, rebuild the client to apply the modified rules.
+    ///
+    /// Warning
+    ///
+    /// Since the DNS protocol has no notion of ports, if you wish to send
+    /// traffic to a particular port you must include this port in the URL
+    /// itself, any port in the overridden addr will be ignored and traffic sent
+    /// to the conventional port for the given scheme (e.g. 80 for http).
+    pub fn resolve_fn(
+        mut self,
+        func: Box<dyn Fn(String) -> Option<SocketAddr> + Send + Sync>,
+    ) -> ClientBuilder {
+        self.config.dns_overrides_fn = Some(func);
         self
     }
 }

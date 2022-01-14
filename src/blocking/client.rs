@@ -760,6 +760,23 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.resolve(domain, addr))
     }
 
+    /// Override DNS resolution for specific domains to particular IP addresses.
+    /// If both are specified, overrides has priority.
+    /// Results will be cached, rebuild the client to apply the modified rules.
+    ///
+    /// Warning
+    ///
+    /// Since the DNS protocol has no notion of ports, if you wish to send
+    /// traffic to a particular port you must include this port in the URL
+    /// itself, any port in the overridden addr will be ignored and traffic sent
+    /// to the conventional port for the given scheme (e.g. 80 for http).
+    pub fn resolve_fn(
+        self,
+        func: Box<dyn Fn(String) -> Option<SocketAddr> + Send + Sync>,
+    ) -> ClientBuilder {
+        self.with_inner(|inner| inner.resolve_fn(func))
+    }
+
     // private
 
     fn with_inner<F>(mut self, func: F) -> ClientBuilder
