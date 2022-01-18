@@ -228,7 +228,7 @@ mod error;
 mod into_url;
 mod response;
 
-pub use self::error::{Error, Result};
+pub use self::error::{Error, Result, UrlFormattedError, UrlHiddenError, UrlMaskedError};
 pub use self::into_url::IntoUrl;
 pub use self::response::ResponseBuilderExt;
 
