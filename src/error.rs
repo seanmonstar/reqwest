@@ -12,10 +12,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// Note: Errors may include the full URL used to make the `Request`. If the URL
 /// contains sensitive information (e.g. an API key as a query parameter), be
-/// sure to remove it ([`clear_url`](Error::clear_url),
-/// [`without_url`](Error::without_url), etc.) or use a formatter (
-/// [`as_url_masked`](Error::as_url_masked),
-/// [`as_url_hidden`](Error::as_url_hidden) that does not display the full url).
+/// sure to remove it ([`without_url`](Error::without_url))
 pub struct Error {
     inner: Box<Inner>,
 }
@@ -72,19 +69,6 @@ impl Error {
         self.inner.url.as_mut()
     }
 
-    /// Set the URL related to this error
-    pub fn set_url(&mut self, url: Url) -> &mut Self {
-        self.inner.url = Some(url);
-        self
-    }
-
-    /// Clear a possible URL related to the error (in case it contains sensitive
-    /// information)
-    pub fn clear_url(&mut self) -> &mut Self {
-        self.inner.url = None;
-        self
-    }
-
     /// Add a url related to this error (overwriting any existing)
     pub fn with_url(mut self, url: Url) -> Self {
         self.inner.url = Some(url);
@@ -96,28 +80,6 @@ impl Error {
     pub fn without_url(mut self) -> Self {
         self.inner.url = None;
         self
-    }
-
-    /// Return a formatter for the error that masks any related URL
-    pub fn as_url_masked(&self) -> UrlMaskedError<'_> {
-        UrlMaskedError(self)
-    }
-
-    /// Return a formatter for the error that omits any related URL
-    pub fn as_url_hidden(&self) -> UrlHiddenError<'_> {
-        UrlHiddenError(self)
-    }
-
-    /// Return a formatter for the error with a custom display format for
-    /// any related URL.
-    pub fn as_url_formatted<F: Fn(&Url, &mut fmt::Formatter) -> fmt::Result>(
-        &self,
-        formatter: F,
-    ) -> UrlFormattedError<'_, F> {
-        UrlFormattedError {
-            error: self,
-            formatter,
-        }
     }
 
     /// Returns true if the error is from a type Builder.
@@ -196,51 +158,6 @@ impl Error {
     pub(crate) fn into_io(self) -> io::Error {
         io::Error::new(io::ErrorKind::Other, self)
     }
-
-    fn write_kind(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.inner.kind {
-            Kind::Builder => f.write_str("builder error")?,
-            Kind::Request => f.write_str("error sending request")?,
-            Kind::Body => f.write_str("request or response body error")?,
-            Kind::Decode => f.write_str("error decoding response body")?,
-            Kind::Redirect => f.write_str("error following redirect")?,
-            Kind::Status(ref code) => {
-                let prefix = if code.is_client_error() {
-                    "HTTP status client error"
-                } else {
-                    debug_assert!(code.is_server_error());
-                    "HTTP status server error"
-                };
-                write!(f, "{} ({})", prefix, code)?;
-            }
-        };
-        Ok(())
-    }
-
-    fn write_url_plain(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(url) = &self.inner.url {
-            write!(f, " for url ({})", url.as_str())
-        } else {
-            Ok(())
-        }
-    }
-
-    fn write_url_masked(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.inner.url.is_some() {
-            write!(f, " for url (<MASKED>)")
-        } else {
-            Ok(())
-        }
-    }
-
-    // fn write_url_formatted ?
-
-    fn write_source(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(ref e) = self.inner.source {
-            write!(f, ": {}", e)?;
-        }
-        Ok(())
-    }
 }
 
 impl fmt::Debug for Error {
@@ -262,59 +179,38 @@ impl fmt::Debug for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.write_kind(f)?;
-        self.write_url_plain(f)?;
-        self.write_source(f)
-    }
-}
+        struct ForUrl<'a>(Option<&'a Url>);
 
-/// Display formatter for an [`Error`] with a possible related URL masked. This
-/// formatter shows that a related URL is present, but the URL itself is not
-/// shown (in case it contains sensitive information)
-#[derive(Debug)]
-pub struct UrlMaskedError<'a>(&'a Error);
-
-impl<'a> fmt::Display for UrlMaskedError<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.write_kind(f)?;
-        self.0.write_url_masked(f)?;
-        self.0.write_source(f)
-    }
-}
-
-/// Display formatter for an [`Error`] with a possible related URL completely
-/// omitted (in case it contains sensitive information).
-#[derive(Debug)]
-pub struct UrlHiddenError<'a>(&'a Error);
-
-impl<'a> fmt::Display for UrlHiddenError<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.write_kind(f)?;
-        self.0.write_source(f)
-    }
-}
-
-/// Display formatter for an [`Error`] with a custom formatting for any related
-/// URL that may be present
-#[derive(Debug)]
-pub struct UrlFormattedError<'a, F> {
-    error: &'a Error,
-    formatter: F,
-}
-
-impl<'a, F> fmt::Display for UrlFormattedError<'a, F>
-where
-    F: Fn(&Url, &mut fmt::Formatter<'_>) -> fmt::Result,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.error.write_kind(f)?;
-        if let Some(url) = &self.error.inner.url {
-            let formatter = &self.formatter;
-            write!(f, " for url (")?;
-            formatter(url, f)?;
-            write!(f, ")")?;
+        impl fmt::Display for ForUrl<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {}
         }
-        self.error.write_source(f)
+
+        match self.inner.kind {
+            Kind::Builder => f.write_str("builder error")?,
+            Kind::Request => f.write_str("error sending request")?,
+            Kind::Body => f.write_str("request or response body error")?,
+            Kind::Decode => f.write_str("error decoding response body")?,
+            Kind::Redirect => f.write_str("error following redirect")?,
+            Kind::Status(ref code) => {
+                let prefix = if code.is_client_error() {
+                    "HTTP status client error"
+                } else {
+                    debug_assert!(code.is_server_error());
+                    "HTTP status server error"
+                };
+                write!(f, "{} ({})", prefix, code)?;
+            }
+        };
+
+        if let Some(url) = &self.inner.url {
+            write!(f, " for url ({})", url.as_str())?;
+        }
+
+        if let Some(e) = &self.inner.source {
+            write!(f, ": {}", e)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -472,37 +368,5 @@ mod tests {
         let io = io::Error::new(io::ErrorKind::Other, err);
         let nested = super::request(io);
         assert!(nested.is_timeout());
-    }
-
-    #[test]
-    fn formats() {
-        let err =
-            super::request("inner").with_url(Url::parse("https://api.test?secret=1234").unwrap());
-
-        assert_eq!(
-            format!("{}", err),
-            "error sending request for url (https://api.test/?secret=1234): inner"
-        );
-        assert_eq!(
-            format!("{}", err.as_url_masked()),
-            "error sending request for url (<MASKED>): inner"
-        );
-        assert_eq!(
-            format!("{}", err.as_url_hidden()),
-            "error sending request: inner"
-        );
-
-        let formatted = err.as_url_formatted(|url, f| {
-            if let Some(host) = url.host() {
-                write!(f, "{}", host)
-            } else {
-                write!(f, "no host")
-            }
-        });
-
-        assert_eq!(
-            format!("{}", formatted),
-            "error sending request for url (api.test): inner"
-        );
     }
 }
