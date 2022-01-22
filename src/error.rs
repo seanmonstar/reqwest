@@ -271,36 +271,8 @@ impl fmt::Display for Error {
 /// Display formatter for an [`Error`] with a possible related URL masked. This
 /// formatter shows that a related URL is present, but the URL itself is not
 /// shown (in case it contains sensitive information)
-///
-/// This also implements `Debug` with the URL masked
+#[derive(Debug)]
 pub struct UrlMaskedError<'a>(&'a Error);
-struct Masked;
-
-impl fmt::Debug for Masked {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<MASKED>")
-    }
-}
-
-impl<'a> fmt::Debug for UrlMaskedError<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "reqwest::UrlMaskedError(")?;
-
-        let mut builder = f.debug_struct("reqwest::Error");
-        builder.field("kind", &self.0.inner.kind);
-
-        if self.0.inner.url.is_some() {
-            builder.field("url", &Masked);
-        }
-        if let Some(ref source) = self.0.inner.source {
-            builder.field("source", source);
-        }
-
-        builder.finish()?;
-
-        write!(f, ")")
-    }
-}
 
 impl<'a> fmt::Display for UrlMaskedError<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -312,37 +284,8 @@ impl<'a> fmt::Display for UrlMaskedError<'a> {
 
 /// Display formatter for an [`Error`] with a possible related URL completely
 /// omitted (in case it contains sensitive information).
-///
-/// This also implements `Debug`, which does not omit the URL, but rather masks
-/// it (similar to [`UrlMaskedError`]) with `"<HIDDEN>"`
+#[derive(Debug)]
 pub struct UrlHiddenError<'a>(&'a Error);
-struct Hidden;
-
-impl fmt::Debug for Hidden {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<HIDDEN>")
-    }
-}
-
-impl<'a> fmt::Debug for UrlHiddenError<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "reqwest::UrlMaskedError(")?;
-
-        let mut builder = f.debug_struct("reqwest::Error");
-        builder.field("kind", &self.0.inner.kind);
-
-        if self.0.inner.url.is_some() {
-            builder.field("url", &Hidden);
-        }
-        if let Some(ref source) = self.0.inner.source {
-            builder.field("source", source);
-        }
-
-        builder.finish()?;
-
-        write!(f, ")")
-    }
-}
 
 impl<'a> fmt::Display for UrlHiddenError<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -353,23 +296,10 @@ impl<'a> fmt::Display for UrlHiddenError<'a> {
 
 /// Display formatter for an [`Error`] with a custom formatting for any related
 /// URL that may be present
-///
-/// Note: Unlike [`UrlMaskedError`] and [`UrlHiddenError`], the `Debug`
-/// implementation of this formatter WILL show the plain URL.
+#[derive(Debug)]
 pub struct UrlFormattedError<'a, F> {
     error: &'a Error,
     formatter: F,
-}
-
-impl<'a, F> fmt::Debug for UrlFormattedError<'a, F> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "reqwest::UrlFormattedError {{ error: {:?}, formatter: {} }}",
-            self.error,
-            std::any::type_name::<F>()
-        )
-    }
 }
 
 impl<'a, F> fmt::Display for UrlFormattedError<'a, F>
@@ -553,18 +483,14 @@ mod tests {
             format!("{}", err),
             "error sending request for url (https://api.test/?secret=1234): inner"
         );
-        assert_eq!(format!("{:?}", err), "reqwest::Error { kind: Request, url: Url { scheme: \"https\", cannot_be_a_base: false, username: \"\", password: None, host: Some(Domain(\"api.test\")), port: None, path: \"/\", query: Some(\"secret=1234\"), fragment: None }, source: \"inner\" }");
-
-        let masked = err.as_url_masked();
         assert_eq!(
-            format!("{}", masked),
+            format!("{}", err.as_url_masked()),
             "error sending request for url (<MASKED>): inner"
         );
-        assert_eq!(format!("{:?}", masked), "reqwest::UrlMaskedError(reqwest::Error { kind: Request, url: <MASKED>, source: \"inner\" })");
-
-        let hidden = err.as_url_hidden();
-        assert_eq!(format!("{}", hidden), "error sending request: inner");
-        assert_eq!(format!("{:?}", hidden), "reqwest::UrlMaskedError(reqwest::Error { kind: Request, url: <HIDDEN>, source: \"inner\" })");
+        assert_eq!(
+            format!("{}", err.as_url_hidden()),
+            "error sending request: inner"
+        );
 
         let formatted = err.as_url_formatted(|url, f| {
             if let Some(host) = url.host() {
@@ -573,17 +499,10 @@ mod tests {
                 write!(f, "no host")
             }
         });
+
         assert_eq!(
             format!("{}", formatted),
             "error sending request for url (api.test): inner"
-        );
-        // TODO: this could be flaky, with trying to get the type name of the closure
-        assert_eq!(
-            format!("{:?}", formatted),
-            format!(
-                "reqwest::UrlFormattedError {{ error: {:?}, formatter: {}::formats::{{{{closure}}}} }}",
-                err, module_path!()
-            ),
         );
     }
 }
