@@ -772,7 +772,7 @@ impl ClientBuilder {
     /// to the conventional port for the given scheme (e.g. 80 for http).
     pub fn resolve_fn(
         self,
-        func: Box<dyn Fn(String) -> Option<SocketAddr> + Send + Sync>,
+        func: impl Fn(String) -> Option<SocketAddr> + Send + Sync + 'static,
     ) -> ClientBuilder {
         self.with_inner(|inner| inner.resolve_fn(func))
     }

@@ -1260,9 +1260,9 @@ impl ClientBuilder {
     /// to the conventional port for the given scheme (e.g. 80 for http).
     pub fn resolve_fn(
         mut self,
-        func: Box<dyn Fn(String) -> Option<SocketAddr> + Send + Sync>,
+        func: impl Fn(String) -> Option<SocketAddr> + Send + Sync + 'static,
     ) -> ClientBuilder {
-        self.config.dns_overrides_fn = Some(func);
+        self.config.dns_overrides_fn = Some(Box::new(func));
         self
     }
 }
