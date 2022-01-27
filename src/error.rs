@@ -179,12 +179,6 @@ impl fmt::Debug for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        struct ForUrl<'a>(Option<&'a Url>);
-
-        impl fmt::Display for ForUrl<'_> {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {}
-        }
-
         match self.inner.kind {
             Kind::Builder => f.write_str("builder error")?,
             Kind::Request => f.write_str("error sending request")?,
