@@ -346,12 +346,31 @@ impl ClientBuilder {
 
                     #[cfg(feature = "rustls-tls-native-roots")]
                     if config.tls_built_in_root_certs {
+                        let mut valid_count = 0;
+                        let mut invalid_count = 0;
                         for cert in rustls_native_certs::load_native_certs()
                             .map_err(crate::error::builder)?
                         {
-                            root_cert_store
-                                .add(&rustls::Certificate(cert.0))
-                                .map_err(crate::error::builder)?
+                            let cert = rustls::Certificate(cert.0);
+                            // Continue on parsing errors, as native stores often include ancient or syntactically
+                            // invalid certificates, like root certificates without any X509 extensions.
+                            // Inspiration: https://github.com/rustls/rustls/blob/633bf4ba9d9521a95f68766d04c22e2b01e68318/rustls/src/anchors.rs#L105-L112
+                            match root_cert_store.add(&cert) {
+                                Ok(_) => valid_count += 1,
+                                Err(err) => {
+                                    invalid_count += 1;
+                                    log::warn!(
+                                        "rustls failed to parse DER certificate {:?} {:?}",
+                                        &err,
+                                        &cert
+                                    );
+                                }
+                            }
+                        }
+                        if valid_count == 0 && invalid_count > 0 {
+                            return Err(crate::error::builder(
+                                "zero valid certificates found in native root store",
+                            ));
                         }
                     }
 
