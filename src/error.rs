@@ -9,6 +9,10 @@ use crate::{StatusCode, Url};
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// The Errors that may occur when processing a `Request`.
+///
+/// Note: Errors may include the full URL used to make the `Request`. If the URL
+/// contains sensitive information (e.g. an API key as a query parameter), be
+/// sure to remove it ([`without_url`](Error::without_url))
 pub struct Error {
     inner: Box<Inner>,
 }
@@ -54,6 +58,28 @@ impl Error {
     /// ```
     pub fn url(&self) -> Option<&Url> {
         self.inner.url.as_ref()
+    }
+
+    /// Returns a mutable referene to the URL related to this error
+    ///
+    /// This is useful if you need to remove sensitive information from the URL
+    /// (e.g. an API key in the query), but do not want to remove the URL
+    /// entirely.
+    pub fn url_mut(&mut self) -> Option<&mut Url> {
+        self.inner.url.as_mut()
+    }
+
+    /// Add a url related to this error (overwriting any existing)
+    pub fn with_url(mut self, url: Url) -> Self {
+        self.inner.url = Some(url);
+        self
+    }
+
+    /// Strip the related url from this error (if, for example, it contains
+    /// sensitive information)
+    pub fn without_url(mut self) -> Self {
+        self.inner.url = None;
+        self
     }
 
     /// Returns true if the error is from a type Builder.
@@ -128,11 +154,6 @@ impl Error {
 
     // private
 
-    pub(crate) fn with_url(mut self, url: Url) -> Error {
-        self.inner.url = Some(url);
-        self
-    }
-
     #[allow(unused)]
     pub(crate) fn into_io(self) -> io::Error {
         io::Error::new(io::ErrorKind::Other, self)
@@ -158,18 +179,6 @@ impl fmt::Debug for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        struct ForUrl<'a>(Option<&'a Url>);
-
-        impl fmt::Display for ForUrl<'_> {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                if let Some(url) = self.0 {
-                    write!(f, " for url ({})", url.as_str())
-                } else {
-                    Ok(())
-                }
-            }
-        }
-
         match self.inner.kind {
             Kind::Builder => f.write_str("builder error")?,
             Kind::Request => f.write_str("error sending request")?,
@@ -187,9 +196,11 @@ impl fmt::Display for Error {
             }
         };
 
-        ForUrl(self.inner.url.as_ref()).fmt(f)?;
+        if let Some(url) = &self.inner.url {
+            write!(f, " for url ({})", url.as_str())?;
+        }
 
-        if let Some(ref e) = self.inner.source {
+        if let Some(e) = &self.inner.source {
             write!(f, ": {}", e)?;
         }
 

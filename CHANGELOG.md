@@ -1,3 +1,13 @@
+## v0.11.9
+
+- Add `ClientBuilder::http09_responses(bool)` option to allow receiving HTTP/0.9 responses.
+- Fix HTTP/2 to retry requests interrupted by an HTTP/2 graceful shutdown.
+- Fix proxy loading from environment variables to ignore empty values.
+
+## v0.11.8
+
+- Update internal webpki-roots dependency.
+
 ## v0.11.7
 
 - Add `blocking::ClientBuilder::resolve()` option, matching the async builder.
