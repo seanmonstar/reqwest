@@ -289,7 +289,7 @@ impl Proxy {
         }
     }
 
-    pub(crate) fn http_basic_auth<D: Dst>(&self, uri: &D) -> Option<HeaderValue> {
+    pub(crate) fn http_basic_auth(&self, uri: &Uri) -> Option<HeaderValue> {
         match self.intercept {
             Intercept::All(ProxyScheme::Http { ref auth, .. })
             | Intercept::Http(ProxyScheme::Http { ref auth, .. }) => auth.clone(),
@@ -313,18 +313,19 @@ impl Proxy {
         }
     }
 
-    pub(crate) fn intercept<D: Dst>(&self, uri: &D) -> Option<ProxyScheme> {
+    pub(crate) fn intercept(&self, uri: &Uri) -> Option<ProxyScheme> {
+        let scheme = uri.scheme().expect("Invalid scheme").as_str();
         match self.intercept {
             Intercept::All(ref u) => Some(u.clone()),
             Intercept::Http(ref u) => {
-                if uri.scheme() == "http" {
+                if scheme == "http" {
                     Some(u.clone())
                 } else {
                     None
                 }
             }
             Intercept::Https(ref u) => {
-                if uri.scheme() == "https" {
+                if scheme == "https" {
                     Some(u.clone())
                 } else {
                     None
@@ -334,23 +335,24 @@ impl Proxy {
                 let in_no_proxy = self
                     .no_proxy
                     .as_ref()
-                    .map_or(false, |np| np.contains(uri.host()));
+                    .map_or(false, |np| np.contains(uri.host().expect("Invalid host")));
                 if in_no_proxy {
                     None
                 } else {
-                    map.get(uri.scheme()).cloned()
+                    map.get(scheme).cloned()
                 }
             }
             Intercept::Custom(ref custom) => custom.call(uri),
         }
     }
 
-    pub(crate) fn is_match<D: Dst>(&self, uri: &D) -> bool {
+    pub(crate) fn is_match(&self, uri: &Uri) -> bool {
+        let scheme = uri.scheme().expect("Invalid scheme").as_str();
         match self.intercept {
             Intercept::All(_) => true,
-            Intercept::Http(_) => uri.scheme() == "http",
-            Intercept::Https(_) => uri.scheme() == "https",
-            Intercept::System(ref map) => map.contains_key(uri.scheme()),
+            Intercept::Http(_) => scheme == "http",
+            Intercept::Https(_) => scheme == "https",
+            Intercept::System(ref map) => map.contains_key(scheme),
             Intercept::Custom(ref custom) => custom.call(uri).is_some(),
         }
     }
@@ -686,11 +688,11 @@ struct Custom {
 }
 
 impl Custom {
-    fn call<D: Dst>(&self, uri: &D) -> Option<ProxyScheme> {
+    fn call(&self, uri: &Uri) -> Option<ProxyScheme> {
         let url = format!(
             "{}://{}{}{}",
-            uri.scheme(),
-            uri.host(),
+            uri.scheme().expect("Invalid scheme").as_str(),
+            uri.host().expect("Invalid hostname"),
             uri.port().map(|_| ":").unwrap_or(""),
             uri.port().map(|p| p.to_string()).unwrap_or_default()
         )
@@ -716,29 +718,6 @@ pub(crate) fn encode_basic_auth(username: &str, password: &str) -> HeaderValue {
         .expect("base64 is always valid HeaderValue");
     header.set_sensitive(true);
     header
-}
-
-/// A helper trait to allow testing `Proxy::intercept` without having to
-/// construct `hyper::client::connect::Destination`s.
-pub(crate) trait Dst {
-    fn scheme(&self) -> &str;
-    fn host(&self) -> &str;
-    fn port(&self) -> Option<u16>;
-}
-
-#[doc(hidden)]
-impl Dst for Uri {
-    fn scheme(&self) -> &str {
-        self.scheme().expect("Uri should have a scheme").as_str()
-    }
-
-    fn host(&self) -> &str {
-        Uri::host(self).expect("<Uri as Dst>::host should have a str")
-    }
-
-    fn port(&self) -> Option<u16> {
-        self.port().map(|p| p.as_u16())
-    }
 }
 
 lazy_static! {
@@ -923,26 +902,12 @@ mod tests {
     use lazy_static::lazy_static;
     use std::sync::Mutex;
 
-    impl Dst for Url {
-        fn scheme(&self) -> &str {
-            Url::scheme(self)
-        }
-
-        fn host(&self) -> &str {
-            Url::host_str(self).expect("<Url as Dst>::host should have a str")
-        }
-
-        fn port(&self) -> Option<u16> {
-            Url::port(self)
-        }
-    }
-
-    fn url(s: &str) -> Url {
+    fn uri(s: &str) -> Uri {
         s.parse().unwrap()
     }
 
     fn intercepted_uri(p: &Proxy, s: &str) -> Uri {
-        let (scheme, host) = match p.intercept(&url(s)).unwrap() {
+        let (scheme, host) = match p.intercept(&uri(s)).unwrap() {
             ProxyScheme::Http { host, .. } => ("http", host),
             ProxyScheme::Https { host, .. } => ("https", host),
             #[cfg(feature = "socks")]
@@ -965,7 +930,7 @@ mod tests {
         let other = "https://hyper.rs";
 
         assert_eq!(intercepted_uri(&p, http), target);
-        assert!(p.intercept(&url(other)).is_none());
+        assert!(p.intercept(&uri(other)).is_none());
     }
 
     #[test]
@@ -976,7 +941,7 @@ mod tests {
         let http = "http://hyper.rs";
         let other = "https://hyper.rs";
 
-        assert!(p.intercept(&url(http)).is_none());
+        assert!(p.intercept(&uri(http)).is_none());
         assert_eq!(intercepted_uri(&p, other), target);
     }
 
@@ -1014,7 +979,7 @@ mod tests {
 
         assert_eq!(intercepted_uri(&p, http), target2);
         assert_eq!(intercepted_uri(&p, https), target1);
-        assert!(p.intercept(&url(other)).is_none());
+        assert!(p.intercept(&uri(other)).is_none());
     }
 
     #[test]
@@ -1232,23 +1197,23 @@ mod tests {
         assert_eq!(intercepted_uri(&p, "http://[2005:db8:a0b:12f0::1]"), target);
 
         // make sure subdomains (with leading .) match
-        assert!(p.intercept(&url("http://hello.foo.bar")).is_none());
+        assert!(p.intercept(&uri("http://hello.foo.bar")).is_none());
         // make sure exact matches (without leading .) match (also makes sure spaces between entries work)
-        assert!(p.intercept(&url("http://bar.baz")).is_none());
+        assert!(p.intercept(&uri("http://bar.baz")).is_none());
         // check case sensitivity
-        assert!(p.intercept(&url("http://BAR.baz")).is_none());
+        assert!(p.intercept(&uri("http://BAR.baz")).is_none());
         // make sure subdomains (without leading . in no_proxy) match
-        assert!(p.intercept(&url("http://foo.bar.baz")).is_none());
-        // make sure subdomains (without leading . in no_proxy) match - this differs from cURL
-        assert!(p.intercept(&url("http://foo.bar")).is_none());
+        assert!(p.intercept(&uri("http://foo.bar.baz")).is_none());
+        // make sure subdomains (without leading . in no_proxy) match - this differs from curi
+        assert!(p.intercept(&uri("http://foo.bar")).is_none());
         // ipv4 address match within range
-        assert!(p.intercept(&url("http://10.42.1.100")).is_none());
+        assert!(p.intercept(&uri("http://10.42.1.100")).is_none());
         // ipv6 address exact match
-        assert!(p.intercept(&url("http://[::1]")).is_none());
+        assert!(p.intercept(&uri("http://[::1]")).is_none());
         // ipv6 address match within range
-        assert!(p.intercept(&url("http://[2001:db8:a0b:12f0::1]")).is_none());
+        assert!(p.intercept(&uri("http://[2001:db8:a0b:12f0::1]")).is_none());
         // ipv4 address exact match
-        assert!(p.intercept(&url("http://10.124.7.8")).is_none());
+        assert!(p.intercept(&uri("http://10.124.7.8")).is_none());
 
         // reset user setting when guards drop
         drop(_g1);
@@ -1274,7 +1239,7 @@ mod tests {
         let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
         p.no_proxy = NoProxy::new();
 
-        assert!(p.intercept(&url("http://foo.bar")).is_none());
+        assert!(p.intercept(&uri("http://foo.bar")).is_none());
 
         // reset user setting when guards drop
         drop(_g1);
