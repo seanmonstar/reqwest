@@ -689,15 +689,7 @@ struct Custom {
 
 impl Custom {
     fn call(&self, uri: &Uri) -> Option<ProxyScheme> {
-        let url = format!(
-            "{}://{}{}{}",
-            uri.scheme().expect("Invalid scheme").as_str(),
-            uri.host().expect("Invalid hostname"),
-            uri.port().map(|_| ":").unwrap_or(""),
-            uri.port().map(|p| p.to_string()).unwrap_or_default()
-        )
-        .parse()
-        .expect("should be valid Url");
+        let url: Url = uri.to_string().parse().expect("should be valid Url");
 
         (self.func)(&url)
             .and_then(|result| result.ok())
