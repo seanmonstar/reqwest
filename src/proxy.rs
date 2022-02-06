@@ -1200,8 +1200,8 @@ mod tests {
         assert!(p.intercept(&uri("http://hello.foo.bar")).is_none());
         // make sure exact matches (without leading .) match (also makes sure spaces between entries work)
         assert!(p.intercept(&uri("http://bar.baz")).is_none());
-        // check case sensitivity
-        assert!(p.intercept(&uri("http://BAR.baz")).is_none());
+        // hostnames are case insensitive
+        assert!(p.intercept(&uri("http://BAR.baz")).is_some());
         // make sure subdomains (without leading . in no_proxy) match
         assert!(p.intercept(&uri("http://foo.bar.baz")).is_none());
         // make sure subdomains (without leading . in no_proxy) match - this differs from curi
