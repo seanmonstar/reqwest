@@ -146,6 +146,7 @@ tokio = { version = "1.0", default-features = false, features = ["macros", "rt-m
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.10"
+wildmatch = "2.1.0"
 
 # wasm
 
