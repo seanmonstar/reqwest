@@ -50,6 +50,8 @@ gzip = ["async-compression", "async-compression/gzip", "tokio-util"]
 
 brotli = ["async-compression", "async-compression/brotli", "tokio-util"]
 
+zstd = ["async-compression", "async-compression/zstd", "tokio-util"]
+
 deflate = ["async-compression", "async-compression/zlib", "tokio-util"]
 
 json = ["serde_json"]
