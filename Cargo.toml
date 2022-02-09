@@ -143,6 +143,7 @@ hyper = { version = "0.14", default-features = false, features = ["tcp", "stream
 serde = { version = "1.0", features = ["derive"] }
 libflate = "1.0"
 brotli_crate = { package = "brotli", version = "3.3.0" }
+zstd_crate = { package = "zstd", version = "0.10" }
 doc-comment = "0.3"
 tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
 
@@ -225,6 +226,11 @@ required-features = ["gzip"]
 name = "brotli"
 path = "tests/brotli.rs"
 required-features = ["brotli"]
+
+[[test]]
+name = "zstd"
+path = "tests/zstd.rs"
+required-features = ["zstd"]
 
 [[test]]
 name = "deflate"
