@@ -60,7 +60,7 @@ enum Inner {
     #[cfg(feature = "brotli")]
     Brotli(FramedRead<BrotliDecoder<StreamReader<Peekable<IoStream>, Bytes>>, BytesCodec>),
 
-        /// A `Zstd` decoder will uncompress the brotlied response content before returning it.
+        /// A `Zstd` decoder will uncompress the zstd compressed response content before returning it.
         #[cfg(feature = "zstd")]
         Zstd(FramedRead<ZstdDecoder<StreamReader<Peekable<IoStream>, Bytes>>, BytesCodec>),
 
