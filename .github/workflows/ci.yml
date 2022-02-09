@@ -80,6 +80,7 @@ jobs:
           - "feat.: blocking"
           - "feat.: gzip"
           - "feat.: brotli"
+          - "feat.: zstd"
           - "feat.: deflate"
           - "feat.: json"
           - "feat.: multipart"
@@ -104,21 +105,21 @@ jobs:
           - name: windows / stable-x86_64-msvc
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            features: "--features blocking,gzip,brotli,deflate,json,multipart"
+            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart"
           - name: windows / stable-i686-msvc
             os: windows-latest
             target: i686-pc-windows-msvc
-            features: "--features blocking,gzip,brotli,deflate,json,multipart"
+            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart"
           - name: windows / stable-x86_64-gnu
             os: windows-latest
             rust: stable-x86_64-pc-windows-gnu
             target: x86_64-pc-windows-gnu
-            features: "--features blocking,gzip,brotli,deflate,json,multipart"
+            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart"
           - name: windows / stable-i686-gnu
             os: windows-latest
             rust: stable-i686-pc-windows-gnu
             target: i686-pc-windows-gnu
-            features: "--features blocking,gzip,brotli,deflate,json,multipart"
+            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart"
 
           - name: "feat.: default-tls disabled"
             features: "--no-default-features"
@@ -138,6 +139,8 @@ jobs:
             features: "--features gzip"
           - name: "feat.: brotli"
             features: "--features brotli"
+          - name: "feat.: zstd"
+            features: "--features zstd"
           - name: "feat.: deflate"
             features: "--features deflate"
           - name: "feat.: json"
