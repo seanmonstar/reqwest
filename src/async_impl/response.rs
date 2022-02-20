@@ -122,6 +122,16 @@ impl Response {
             .map(|info| info.remote_addr())
     }
 
+    /// Returns a reference to the associated extensions.
+    pub fn extensions(&self) -> &http::Extensions {
+        &self.extensions
+    }
+
+    /// Returns a mutable reference to the associated extensions.
+    pub fn extensions_mut(&mut self) -> &mut http::Extensions {
+        &mut self.extensions
+    }
+
     // body methods
 
     /// Get the full response text.
