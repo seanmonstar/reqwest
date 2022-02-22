@@ -1353,7 +1353,7 @@ impl Client {
     /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
         let req = url.into_url().map(move |url| Request::new(method, url));
-        RequestBuilder::new(self.clone(), req)
+        RequestBuilder::new(self.clone(), req, self.inner.request_timeout)
     }
 
     /// Executes a `Request`.
@@ -1431,10 +1431,7 @@ impl Client {
             .body(body.into_stream())
             .expect("valid request parts");
 
-        let timeout = timeout
-            .or(self.inner.request_timeout)
-            .map(tokio::time::sleep)
-            .map(Box::pin);
+        let timeout = timeout.map(tokio::time::sleep).map(Box::pin);
 
         *req.headers_mut() = headers.clone();
 
