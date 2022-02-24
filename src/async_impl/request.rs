@@ -333,7 +333,7 @@ impl RequestBuilder {
     /// be called multiple times and that existing query parameters are not
     /// overwritten if the same key is used. The key will simply show up
     /// twice in the query string.
-    /// Calling `.query([("foo", "a"), ("foo", "b")])` gives `"foo=a&foo=b"`.
+    /// Calling `.query(&[("foo", "a"), ("foo", "b")])` gives `"foo=a&foo=b"`.
     ///
     /// # Note
     /// This method does not support serializing a single key-value
