@@ -403,7 +403,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
     fn from(r: http::Response<T>) -> Response {
         let (mut parts, body) = r.into_parts();
         let body = body.into();
-        let body = Decoder::detect(&mut parts.headers, body, Accepts::none());
+        let body = Decoder::detect(&mut parts.headers, body, Accepts::all());
         let url = parts
             .extensions
             .remove::<ResponseUrl>()

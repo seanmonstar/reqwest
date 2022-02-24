@@ -343,14 +343,14 @@ impl Stream for IoStream {
 // ===== impl Accepts =====
 
 impl Accepts {
-    pub(super) fn none() -> Self {
+    pub(super) fn all() -> Self {
         Accepts {
             #[cfg(feature = "gzip")]
-            gzip: false,
+            gzip: true,
             #[cfg(feature = "brotli")]
-            brotli: false,
+            brotli: true,
             #[cfg(feature = "deflate")]
-            deflate: false,
+            deflate: true,
         }
     }
 
