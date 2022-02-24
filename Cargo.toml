@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.11.8" # remember to update html_root_url
+version = "0.11.9" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -80,7 +80,7 @@ http = "0.2"
 url = "2.2"
 bytes = "1.0"
 serde = "1.0"
-serde_urlencoded = "0.7"
+serde_urlencoded = "0.7.1"
 
 # Optional deps...
 
@@ -95,7 +95,8 @@ encoding_rs = "0.8"
 futures-core = { version = "0.3.0", default-features = false }
 futures-util = { version = "0.3.0", default-features = false }
 http-body = "0.4.0"
-hyper = { version = "0.14", default-features = false, features = ["tcp", "http1", "http2", "client", "runtime"] }
+hyper = { version = "0.14.5", default-features = false, features = ["tcp", "http1", "http2", "client", "runtime"] }
+h2 = "0.3.10"
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3.16"
@@ -117,7 +118,7 @@ rustls = { version = "0.20", features = ["dangerous_configuration"], optional = 
 tokio-rustls = { version = "0.23", optional = true }
 webpki-roots = { version = "0.22", optional = true }
 rustls-native-certs = { version = "0.6", optional = true }
-rustls-pemfile = { version = "0.2", optional = true }
+rustls-pemfile = { version = "0.3", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.15", package = "cookie", optional = true }

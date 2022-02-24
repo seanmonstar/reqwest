@@ -412,6 +412,11 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.http1_only())
     }
 
+    /// Allow HTTP/0.9 responses
+    pub fn http09_responses(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.http09_responses())
+    }
+
     /// Only use HTTP/2.
     pub fn http2_prior_knowledge(self) -> ClientBuilder {
         self.with_inner(|inner| inner.http2_prior_knowledge())
