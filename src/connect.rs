@@ -19,7 +19,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use std::{collections::HashMap, io};
+use std::io;
 use std::{future::Future, net::SocketAddr};
 
 #[cfg(feature = "default-tls")]
@@ -46,9 +46,9 @@ impl HttpConnector {
         Self::Gai(hyper::client::HttpConnector::new())
     }
 
-    pub(crate) fn new_gai_with_overrides(overrides: HashMap<String, SocketAddr>) -> Self {
+    pub(crate) fn new_gai_with_overrides(overrides_callback: Arc<DnsOverrideCallback>) -> Self {
         let gai = hyper::client::connect::dns::GaiResolver::new();
-        let overridden_resolver = DnsResolverWithOverrides::new(gai, overrides);
+        let overridden_resolver = DnsResolverWithOverrides::new(gai, overrides_callback);
         Self::GaiWithDnsOverrides(hyper::client::HttpConnector::new_with_resolver(
             overridden_resolver,
         ))
@@ -1004,20 +1004,22 @@ where
     }
 }
 
+pub(crate) type DnsOverrideCallback = dyn Fn(&str) -> Option<SocketAddr> + Send + Sync;
+
 #[derive(Clone)]
 pub(crate) struct DnsResolverWithOverrides<Resolver>
 where
     Resolver: Clone,
 {
     dns_resolver: Resolver,
-    overrides: Arc<HashMap<String, SocketAddr>>,
+    overrides_callback: Arc<DnsOverrideCallback>,
 }
 
 impl<Resolver: Clone> DnsResolverWithOverrides<Resolver> {
-    fn new(dns_resolver: Resolver, overrides: HashMap<String, SocketAddr>) -> Self {
+    fn new(dns_resolver: Resolver, overrides_callback: Arc<DnsOverrideCallback>) -> Self {
         DnsResolverWithOverrides {
             dns_resolver,
-            overrides: Arc::new(overrides),
+            overrides_callback,
         }
     }
 }
@@ -1041,7 +1043,8 @@ where
     }
 
     fn call(&mut self, name: Name) -> Self::Future {
-        match self.overrides.get(name.as_str()) {
+        let callback = &self.overrides_callback;
+        match callback(name.as_str()) {
             Some(dest) => {
                 let fut = futures_util::future::ready(Ok(itertools::Either::Right(
                     std::iter::once(dest.to_owned()),

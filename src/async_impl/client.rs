@@ -117,6 +117,7 @@ struct Config {
     error: Option<crate::Error>,
     https_only: bool,
     dns_overrides: HashMap<String, SocketAddr>,
+    dns_overrides_callback: Option<Arc<crate::connect::DnsOverrideCallback>>,
 }
 
 impl Default for ClientBuilder {
@@ -180,6 +181,7 @@ impl ClientBuilder {
                 cookie_store: None,
                 https_only: false,
                 dns_overrides: HashMap::new(),
+                dns_overrides_callback: None,
             },
         }
     }
@@ -211,18 +213,28 @@ impl ClientBuilder {
 
             let http = match config.trust_dns {
                 false => {
-                    if config.dns_overrides.is_empty() {
+                    if config.dns_overrides.is_empty() && config.dns_overrides_callback.is_none() {
                         HttpConnector::new_gai()
                     } else {
-                        HttpConnector::new_gai_with_overrides(config.dns_overrides)
+                        let dns_overrides = config.dns_overrides;
+                        let dns_overrides_callback = config.dns_overrides_callback
+                            .or_else(|| Some(
+                                Arc::new(move |name| dns_overrides.get(name).cloned())
+                            )).unwrap();
+                        HttpConnector::new_gai_with_overrides(dns_overrides_callback)
                     }
                 }
                 #[cfg(feature = "trust-dns")]
                 true => {
-                    if config.dns_overrides.is_empty() {
+                    if config.dns_overrides.is_empty() && config.dns_overrides_callback.is_none()  {
                         HttpConnector::new_trust_dns()?
                     } else {
-                        HttpConnector::new_trust_dns_with_overrides(config.dns_overrides)?
+                        let dns_overrides = config.dns_overrides;
+                        let dns_overrides_callback = config.dns_overrides_callback
+                            .or_else(||
+                                Some(Arc::new(move |name| dns_overrides.get(name).cloned()))
+                            ).unwrap();
+                        HttpConnector::new_trust_dns_with_overrides(dns_overrides_callback)?
                     }
                 }
                 #[cfg(not(feature = "trust-dns"))]
@@ -1256,6 +1268,38 @@ impl ClientBuilder {
     /// to the conventional port for the given scheme (e.g. 80 for http).
     pub fn resolve(mut self, domain: &str, addr: SocketAddr) -> ClientBuilder {
         self.config.dns_overrides.insert(domain.to_string(), addr);
+        self
+    }
+
+    /// Callback to Override DNS resolution for specific domains to particular IP addresses.
+    /// If set, previous calls to `ClientBuilder::resolve` will be ignored
+    /// 
+    /// Warning
+    ///
+    /// Since the DNS protocol has no notion of ports, if you wish to send
+    /// traffic to a particular port you must include this port in the URL
+    /// itself, any port in the overridden addr will be ignored and traffic sent
+    /// to the conventional port for the given scheme (e.g. 80 for http).
+    /// # Example
+    ///
+    /// ```rust
+    /// # async fn doc() -> Result<(), reqwest::Error> {
+    /// // Predefined resolves
+    /// let dns_overrides: HashMap<String, SocketAddr> = [
+    ///     ("example.com", "127.0.0.1"),
+    /// ].iter().cloned().collect();
+    /// 
+    /// let client = reqwest::Client::builder()
+    ///     .resolve_callback(|name| dns_overrides.get(name).cloned())
+    ///     .build()?;
+    /// let res = client.get("https://www.rust-lang.org").send().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn resolve_callback<F>(mut self, dns_overrides_callback: F) -> ClientBuilder 
+        where F : Fn(&str) -> Option<SocketAddr> + Send + Sync + 'static,
+    {
+        self.config.dns_overrides_callback = Some(Arc::new(dns_overrides_callback));
         self
     }
 }
