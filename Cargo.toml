@@ -62,6 +62,8 @@ stream = ["tokio/fs", "tokio-util"]
 
 socks = ["tokio-socks"]
 
+url-serde = ["url/serde"]
+
 # Internal (PRIVATE!) features used to aid testing.
 # Don't rely on these whatsoever. They may disappear at anytime.
 
