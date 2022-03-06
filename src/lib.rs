@@ -137,6 +137,16 @@
 //!
 //! `HTTP_PROXY` or `http_proxy` provide http proxies for http connections while
 //! `HTTPS_PROXY` or `https_proxy` provide HTTPS proxies for HTTPS connections.
+//! `NO_PROXY` or `no_proxy` gives a comma-separated list of IP addresses and domains.
+//! Hostnames that match any entry in the list will bypass the proxies.
+//! Reqwest follows [cURL rules](https://curl.se/libcurl/c/CURLOPT_NOPROXY.html)
+//! when interpreting entries with the exception that Reqwest supports CIDR blocks
+//! and parsing IPv6 addresses while cURL does not.
+//!
+//! On Windows, if none of the environment variables is found, Reqwest will try
+//! parsing Windows system proxy settings from the registry.
+//! See this [Microsoft support article](https://docs.microsoft.com/en-us/troubleshoot/developer/browsers/connectivity-navigation/use-proxy-servers-with-ie)
+//! on how to configure it. But note that Reqwest does not support PAC scripts.
 //!
 //! These can be overwritten by adding a [`Proxy`](Proxy) to `ClientBuilder`
 //! i.e. `let proxy = reqwest::Proxy::http("https://secure.example")?;`
