@@ -250,7 +250,8 @@ impl RequestBuilder {
         self
     }
 
-    /// Enable HTTP basic authentication.
+    /// Enable HTTP basic authentication. Beware authentication
+    /// headers are stripped on redirection.
     ///
     /// ```rust
     /// # fn run() -> Result<(), Box<std::error::Error>> {

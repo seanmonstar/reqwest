@@ -227,7 +227,8 @@ impl RequestBuilder {
         self
     }
 
-    /// Enable HTTP basic authentication.
+    /// Enable HTTP basic authentication. Beware authentication
+    /// headers are stripped on redirection.
     ///
     /// ```rust
     /// # use reqwest::Error;

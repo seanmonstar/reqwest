@@ -124,6 +124,10 @@
 //! maximum redirect chain of 10 hops. To customize this behavior, a
 //! [`redirect::Policy`][redirect] can be used with a `ClientBuilder`.
 //!
+//! **NOTE**: unlike some clients like `libcurl`, when `reqwest`
+//! performs redirects, it strips out sensitive headers, including
+//! those used for authentication.
+//!
 //! ## Cookies
 //!
 //! The automatic storing and sending of session cookies can be enabled with
