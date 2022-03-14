@@ -101,6 +101,16 @@ pub enum ProxyScheme {
     },
 }
 
+impl ProxyScheme {
+    fn maybe_http_auth(&self) -> Option<&HeaderValue> {
+        match self {
+            ProxyScheme::Http { auth, .. } | ProxyScheme::Https { auth, .. } => auth.as_ref(),
+            #[cfg(feature = "socks")]
+            _ => None,
+        }
+    }
+}
+
 /// Trait used for converting into a proxy scheme. This trait supports
 /// parsing from a URL-like type, whilst also supporting proxy schemes
 /// built directly using the factory methods.
@@ -273,42 +283,27 @@ impl Proxy {
     }
 
     pub(crate) fn maybe_has_http_auth(&self) -> bool {
-        match self.intercept {
-            Intercept::All(ProxyScheme::Http { auth: Some(..), .. })
-            | Intercept::Http(ProxyScheme::Http { auth: Some(..), .. })
+        match &self.intercept {
+            Intercept::All(p) | Intercept::Http(p) => p.maybe_http_auth().is_some(),
             // Custom *may* match 'http', so assume so.
-            | Intercept::Custom(_) => true,
-            Intercept::System(ref system) => {
-                if let Some(ProxyScheme::Http { auth, .. }) = system.get("http") {
-                    auth.is_some()
-                } else {
-                    false
-                }
-            }
+            Intercept::Custom(_) => true,
+            Intercept::System(system) => system
+                .get("http")
+                .and_then(|s| s.maybe_http_auth())
+                .is_some(),
             _ => false,
         }
     }
 
     pub(crate) fn http_basic_auth<D: Dst>(&self, uri: &D) -> Option<HeaderValue> {
-        match self.intercept {
-            Intercept::All(ProxyScheme::Http { ref auth, .. })
-            | Intercept::Http(ProxyScheme::Http { ref auth, .. }) => auth.clone(),
-            Intercept::System(ref system) => {
-                if let Some(proxy) = system.get("http") {
-                    match proxy {
-                        ProxyScheme::Http { auth, .. } => auth.clone(),
-                        _ => None,
-                    }
-                } else {
-                    None
-                }
+        match &self.intercept {
+            Intercept::All(p) | Intercept::Http(p) => p.maybe_http_auth().cloned(),
+            Intercept::System(system) => system
+                .get("http")
+                .and_then(|s| s.maybe_http_auth().cloned()),
+            Intercept::Custom(custom) => {
+                custom.call(uri).and_then(|s| s.maybe_http_auth().cloned())
             }
-            Intercept::Custom(ref custom) => custom.call(uri).and_then(|scheme| match scheme {
-                ProxyScheme::Http { auth, .. } => auth,
-                ProxyScheme::Https { auth, .. } => auth,
-                #[cfg(feature = "socks")]
-                _ => None,
-            }),
             _ => None,
         }
     }
@@ -1430,10 +1425,10 @@ mod tests {
             }),
             no_proxy: None,
         };
-        assert!(!https_proxy_with_auth.maybe_has_http_auth());
+        assert!(https_proxy_with_auth.maybe_has_http_auth());
         assert_eq!(
             https_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
-            None
+            Some(HeaderValue::from_static("auth2"))
         );
 
         let all_http_proxy_with_auth = Proxy {
@@ -1456,10 +1451,10 @@ mod tests {
             }),
             no_proxy: None,
         };
-        assert!(!all_https_proxy_with_auth.maybe_has_http_auth());
+        assert!(all_https_proxy_with_auth.maybe_has_http_auth());
         assert_eq!(
             all_https_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
-            None
+            Some(HeaderValue::from_static("auth4"))
         );
 
         let all_https_proxy_without_auth = Proxy {

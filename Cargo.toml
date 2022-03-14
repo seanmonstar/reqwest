@@ -145,7 +145,7 @@ doc-comment = "0.3"
 tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
 
 [target.'cfg(windows)'.dependencies]
-winreg = "0.7"
+winreg = "0.10"
 
 # wasm
 
