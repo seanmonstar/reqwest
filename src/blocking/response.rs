@@ -178,6 +178,16 @@ impl Response {
         self.inner.remote_addr()
     }
 
+    /// Returns a reference to the associated extensions.
+    pub fn extensions(&self) -> &http::Extensions {
+        self.inner.extensions()
+    }
+
+    /// Returns a mutable reference to the associated extensions.
+    pub fn extensions_mut(&mut self) -> &mut http::Extensions {
+        self.inner.extensions_mut()
+    }
+
     /// Get the content-length of the response, if it is known.
     ///
     /// Reasons it may not be known:

@@ -18,7 +18,7 @@ jobs:
       - style
       - test
       - nightly
-      - minversion
+      - msrv
       - android
       - wasm
       - docs
@@ -239,15 +239,15 @@ jobs:
           cargo check
           cargo check --all-features
 
-  minversion:
-    name: Minimum version ${{ matrix.rust }}
+  msrv:
+    name: MSRV ${{ matrix.rust }}
     needs: [style]
 
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        rust: [1.46.0]
+        rust: [1.49.0]
 
     steps:
       - name: Checkout

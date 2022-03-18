@@ -1,3 +1,16 @@
+## v0.11.10
+
+- Add `Error::url()` to access the URL of an error.
+- Add `Response::extensions()` to access the `http::Extensions` of a response.
+- Fix `rustls-native-certs` to log an error instead of panicking when loading an invalid system certificate.
+- Fix passing Basic Authorization header to proxies.
+
+## v0.11.9
+
+- Add `ClientBuilder::http09_responses(bool)` option to allow receiving HTTP/0.9 responses.
+- Fix HTTP/2 to retry requests interrupted by an HTTP/2 graceful shutdown.
+- Fix proxy loading from environment variables to ignore empty values.
+
 ## v0.11.8
 
 - Update internal webpki-roots dependency.

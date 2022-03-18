@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.11.8" # remember to update html_root_url
+version = "0.11.10" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -82,7 +82,7 @@ http = "0.2"
 url = "2.2"
 bytes = "1.0"
 serde = "1.0"
-serde_urlencoded = "0.7"
+serde_urlencoded = "0.7.1"
 
 # Optional deps...
 
@@ -120,7 +120,7 @@ rustls = { version = "0.20", features = ["dangerous_configuration"], optional = 
 tokio-rustls = { version = "0.23", optional = true }
 webpki-roots = { version = "0.22", optional = true }
 rustls-native-certs = { version = "0.6", optional = true }
-rustls-pemfile = { version = "0.2", optional = true }
+rustls-pemfile = { version = "0.3", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.15", package = "cookie", optional = true }
@@ -147,7 +147,7 @@ doc-comment = "0.3"
 tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
 
 [target.'cfg(windows)'.dependencies]
-winreg = "0.7"
+winreg = "0.10"
 
 # wasm
 

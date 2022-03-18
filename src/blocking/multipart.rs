@@ -1,7 +1,7 @@
 //! multipart/form-data
 //!
-//! To send a `multipart/form-data` body, a [`Form`](crate::multipart::Form) is built up, adding
-//! fields or customized [`Part`](crate::multipart::Part)s, and then calling the
+//! To send a `multipart/form-data` body, a [`Form`](crate::blocking::multipart::Form) is built up, adding
+//! fields or customized [`Part`](crate::blocking::multipart::Part)s, and then calling the
 //! [`multipart`][builder] method on the `RequestBuilder`.
 //!
 //! # Example
