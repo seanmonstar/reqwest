@@ -122,7 +122,7 @@ rustls-pemfile = { version = "0.3", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.16", package = "cookie", optional = true }
-cookie_store = { version = "0.15", optional = true }
+cookie_store = { version = "0.16", optional = true }
 proc-macro-hack = { version = "0.5.19", optional = true }
 
 ## compression
