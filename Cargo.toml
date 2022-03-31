@@ -121,19 +121,19 @@ rustls-native-certs = { version = "0.6", optional = true }
 rustls-pemfile = { version = "0.3", optional = true }
 
 ## cookies
-cookie_crate = { version = "0.15", package = "cookie", optional = true }
-cookie_store = { version = "0.15", optional = true }
+cookie_crate = { version = "0.16", package = "cookie", optional = true }
+cookie_store = { version = "0.16", optional = true }
 proc-macro-hack = { version = "0.5.19", optional = true }
 
 ## compression
 async-compression = { version = "0.3.7", default-features = false, features = ["tokio"], optional = true }
-tokio-util = { version = "0.6.0", default-features = false, features = ["codec", "io"], optional = true }
+tokio-util = { version = "0.7.1", default-features = false, features = ["codec", "io"], optional = true }
 
 ## socks
 tokio-socks = { version = "0.5.1", optional = true }
 
 ## trust-dns
-trust-dns-resolver = { version = "0.20", optional = true }
+trust-dns-resolver = { version = "0.21", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.8"
