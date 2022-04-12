@@ -407,6 +407,15 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.http1_title_case_headers())
     }
 
+    /// Set whether HTTP/1 connections will accept obsolete line folding for
+    /// header values.
+    ///
+    /// Newline codepoints (`\r` and `\n`) will be transformed to spaces when
+    /// parsing.
+    pub fn http1_allow_obsolete_multiline_headers_in_responses(self, value: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.http1_allow_obsolete_multiline_headers_in_responses(value))
+    }
+
     /// Only use HTTP/1.
     pub fn http1_only(self) -> ClientBuilder {
         self.with_inner(|inner| inner.http1_only())
