@@ -82,7 +82,7 @@ impl Response {
     }
 
     /// Get the response text.
-    pub async fn text(self) -> crate::Result<String> {
+    pub async fn text(&self) -> crate::Result<String> {
         let p = self
             .http
             .body()

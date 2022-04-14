@@ -279,7 +279,7 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn text(self) -> crate::Result<String> {
+    pub fn text(&self) -> crate::Result<String> {
         self.text_with_charset("utf-8")
     }
 
