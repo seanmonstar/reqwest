@@ -184,7 +184,7 @@ impl Identity {
     /// The input should contain a PEM encoded private key
     /// and at least one PEM encoded certificate.
     ///
-    /// Note: The private key must be in RSA or PKCS#8 format.
+    /// Note: The private key must be in RSA, SEC1 Elliptic Curve or PKCS#8 format.
     ///
     /// # Examples
     ///
@@ -210,33 +210,29 @@ impl Identity {
 
         let (key, certs) = {
             let mut pem = Cursor::new(buf);
-            let certs = rustls_pemfile::certs(&mut pem)
-                .map_err(|_| TLSError::General(String::from("No valid certificate was found")))
-                .map_err(crate::error::builder)?
-                .into_iter()
-                .map(rustls::Certificate)
-                .collect::<Vec<_>>();
-            pem.set_position(0);
-            let mut sk = rustls_pemfile::pkcs8_private_keys(&mut pem)
-                .and_then(|pkcs8_keys| {
-                    if pkcs8_keys.is_empty() {
-                        Err(std::io::Error::new(
-                            std::io::ErrorKind::NotFound,
-                            "No valid private key was found",
-                        ))
-                    } else {
-                        Ok(pkcs8_keys)
+            let mut sk = Vec::<rustls::PrivateKey>::new();
+            let mut certs = Vec::<rustls::Certificate>::new();
+
+            for item in std::iter::from_fn(|| rustls_pemfile::read_one(&mut pem).transpose()) {
+                match item.map_err(|_| {
+                    crate::error::builder(TLSError::General(String::from(
+                        "Invalid identity PEM file",
+                    )))
+                })? {
+                    rustls_pemfile::Item::X509Certificate(cert) => {
+                        certs.push(rustls::Certificate(cert))
                     }
-                })
-                .or_else(|_| {
-                    pem.set_position(0);
-                    rustls_pemfile::rsa_private_keys(&mut pem)
-                })
-                .map_err(|_| TLSError::General(String::from("No valid private key was found")))
-                .map_err(crate::error::builder)?
-                .into_iter()
-                .map(rustls::PrivateKey)
-                .collect::<Vec<_>>();
+                    rustls_pemfile::Item::PKCS8Key(key) => sk.push(rustls::PrivateKey(key)),
+                    rustls_pemfile::Item::RSAKey(key) => sk.push(rustls::PrivateKey(key)),
+                    rustls_pemfile::Item::ECKey(key) => sk.push(rustls::PrivateKey(key)),
+                    _ => {
+                        return Err(crate::error::builder(TLSError::General(String::from(
+                            "No valid certificate was found",
+                        ))))
+                    }
+                }
+            }
+
             if let (Some(sk), false) = (sk.pop(), certs.is_empty()) {
                 (sk, certs)
             } else {
