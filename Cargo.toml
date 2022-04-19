@@ -95,7 +95,7 @@ encoding_rs = "0.8"
 futures-core = { version = "0.3.0", default-features = false }
 futures-util = { version = "0.3.0", default-features = false }
 http-body = "0.4.0"
-hyper = { version = "0.14.5", default-features = false, features = ["tcp", "http1", "http2", "client", "runtime"] }
+hyper = { version = "0.14.18", default-features = false, features = ["tcp", "http1", "http2", "client", "runtime"] }
 h2 = "0.3.10"
 lazy_static = "1.4"
 log = "0.4"

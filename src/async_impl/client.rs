@@ -105,6 +105,7 @@ struct Config {
     http_version_pref: HttpVersionPref,
     http09_responses: bool,
     http1_title_case_headers: bool,
+    http1_allow_obsolete_multiline_headers_in_responses: bool,
     http2_initial_stream_window_size: Option<u32>,
     http2_initial_connection_window_size: Option<u32>,
     http2_adaptive_window: bool,
@@ -169,6 +170,7 @@ impl ClientBuilder {
                 http_version_pref: HttpVersionPref::All,
                 http09_responses: false,
                 http1_title_case_headers: false,
+                http1_allow_obsolete_multiline_headers_in_responses: false,
                 http2_initial_stream_window_size: None,
                 http2_initial_connection_window_size: None,
                 http2_adaptive_window: false,
@@ -485,6 +487,10 @@ impl ClientBuilder {
 
         if config.http1_title_case_headers {
             builder.http1_title_case_headers(true);
+        }
+
+        if config.http1_allow_obsolete_multiline_headers_in_responses {
+            builder.http1_allow_obsolete_multiline_headers_in_responses(true);
         }
 
         let hyper_client = builder.build(connector);
@@ -858,6 +864,20 @@ impl ClientBuilder {
     /// Send headers as title case instead of lowercase.
     pub fn http1_title_case_headers(mut self) -> ClientBuilder {
         self.config.http1_title_case_headers = true;
+        self
+    }
+
+    /// Set whether HTTP/1 connections will accept obsolete line folding for
+    /// header values.
+    ///
+    /// Newline codepoints (`\r` and `\n`) will be transformed to spaces when
+    /// parsing.
+    pub fn http1_allow_obsolete_multiline_headers_in_responses(
+        mut self,
+        value: bool,
+    ) -> ClientBuilder {
+        self.config
+            .http1_allow_obsolete_multiline_headers_in_responses = value;
         self
     }
 
@@ -1533,6 +1553,10 @@ impl Config {
 
         if self.http1_title_case_headers {
             f.field("http1_title_case_headers", &true);
+        }
+
+        if self.http1_allow_obsolete_multiline_headers_in_responses {
+            f.field("http1_allow_obsolete_multiline_headers_in_responses", &true);
         }
 
         if matches!(self.http_version_pref, HttpVersionPref::Http1) {
