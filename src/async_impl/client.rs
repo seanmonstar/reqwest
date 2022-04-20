@@ -1515,6 +1515,20 @@ impl fmt::Debug for Client {
     }
 }
 
+impl tower_service::Service<Request> for Client {
+    type Response = Response;
+    type Error = crate::Error;
+    type Future = Pending;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, req: Request) -> Self::Future {
+        self.execute_request(req)
+    }
+}
+
 impl fmt::Debug for ClientBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut builder = f.debug_struct("ClientBuilder");
@@ -1665,7 +1679,7 @@ impl ClientRef {
 }
 
 pin_project! {
-    pub(super) struct Pending {
+    pub struct Pending {
         #[pin]
         inner: PendingInner,
     }
