@@ -60,7 +60,7 @@ impl Error {
         self.inner.url.as_ref()
     }
 
-    /// Returns a mutable referene to the URL related to this error
+    /// Returns a mutable reference to the URL related to this error
     ///
     /// This is useful if you need to remove sensitive information from the URL
     /// (e.g. an API key in the query), but do not want to remove the URL
