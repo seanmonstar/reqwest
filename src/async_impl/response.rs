@@ -3,7 +3,7 @@ use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
 
-use bytes::Bytes;
+use bytes::{BufMut, Bytes};
 use encoding_rs::{Encoding, UTF_8};
 use futures_util::stream::StreamExt;
 use hyper::client::connect::HttpInfo;
@@ -30,6 +30,7 @@ pub struct Response {
     // frequently internally.
     url: Box<Url>,
     body: Decoder,
+    body_limit: Option<usize>,
     version: Version,
     extensions: http::Extensions,
 }
@@ -39,6 +40,7 @@ impl Response {
         res: hyper::Response<hyper::Body>,
         url: Url,
         accepts: Accepts,
+        body_limit: Option<usize>,
         timeout: Option<Pin<Box<Sleep>>>,
     ) -> Response {
         let (parts, body) = res.into_parts();
@@ -54,6 +56,7 @@ impl Response {
             headers,
             url: Box::new(url),
             body: decoder,
+            body_limit,
             version,
             extensions,
         }
@@ -270,8 +273,35 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn bytes(self) -> crate::Result<Bytes> {
-        hyper::body::to_bytes(self.body).await
+    pub async fn bytes(mut self) -> crate::Result<Bytes> {
+        match self.body_limit {
+            None => hyper::body::to_bytes(self.body).await,
+            Some(body_limit) => {
+                if self.content_length() > Some(body_limit as u64) {
+                    Err(crate::error::body(
+                        "Content length exceeds response body limit",
+                    ))?
+                };
+
+                let cap = self.content_length().unwrap_or_default() as usize;
+                let mut vec = Vec::with_capacity(cap);
+
+                while let Some(buf) = self.body.next().await {
+                    match buf {
+                        Err(e) => return Err(e),
+                        Ok(buf) => {
+                            if vec.len() + buf.len() > body_limit {
+                                Err(crate::error::body(
+                                    "Content length exceeds response body limit",
+                                ))?
+                            }
+                            vec.put(buf);
+                        }
+                    }
+                }
+                Ok(vec.into())
+            }
+        }
     }
 
     /// Stream a chunk of the response body.
@@ -424,6 +454,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
             headers: parts.headers,
             url: Box::new(url),
             body,
+            body_limit: None,
             version: parts.version,
             extensions: parts.extensions,
         }

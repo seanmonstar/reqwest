@@ -106,6 +106,44 @@ async fn response_bytes() {
 }
 
 #[tokio::test]
+async fn response_body_limit() {
+    let _ = env_logger::try_init();
+
+    let server = server::http(move |_req| async { http::Response::new("HelloWorld".into()) });
+
+    let client = Client::new();
+
+    let res = client
+        .get(&format!("http://{}/bytes", server.addr()))
+        .response_body_limit(15)
+        .send()
+        .await
+        .expect("Failed to get");
+    assert_eq!(res.content_length(), Some(10));
+    let bytes = res.bytes().await.expect("res.bytes()");
+    assert_eq!("HelloWorld", bytes);
+}
+
+#[tokio::test]
+async fn response_body_limit_fail() {
+    let _ = env_logger::try_init();
+
+    let server = server::http(move |_req| async { http::Response::new("HelloWorld".into()) });
+
+    let client = Client::new();
+
+    let res = client
+        .get(&format!("http://{}/bytesbytes", server.addr()))
+        .response_body_limit(5)
+        .send()
+        .await
+        .expect("Failed to get");
+    assert_eq!(res.content_length(), Some(10));
+    let bytes = res.bytes().await;
+    assert!(bytes.unwrap_err().is_body());
+}
+
+#[tokio::test]
 #[cfg(feature = "json")]
 async fn response_json() {
     let _ = env_logger::try_init();
