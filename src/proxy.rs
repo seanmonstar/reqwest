@@ -1588,8 +1588,7 @@ mod test {
 
                 #[test]
                 fn loopback_username_password_port_works() {
-                    let _ =
-                        Proxy::http("ldap%5Cgremlin:pass%3Bword@127.0.0.1:8080").unwrap();
+                    let _ = Proxy::http("ldap%5Cgremlin:pass%3Bword@127.0.0.1:8080").unwrap();
                 }
 
                 #[test]
@@ -1638,17 +1637,14 @@ mod test {
 
                 #[test]
                 fn ip_v4_address() {
-                    check_parse_error(
-                        "421.627.718.469",
-                        url::ParseError::RelativeUrlWithoutBase
-                    );
+                    check_parse_error("421.627.718.469", url::ParseError::RelativeUrlWithoutBase);
                 }
 
                 #[test]
                 fn ip_v6_address() {
                     check_parse_error(
                         "[56FE::2159:5BBC::6594]",
-                        url::ParseError::RelativeUrlWithoutBase
+                        url::ParseError::RelativeUrlWithoutBase,
                     );
                 }
 
@@ -1711,7 +1707,9 @@ mod test {
 
                 #[test]
                 fn domain_username_password_port_works() {
-                    let _ = Proxy::http("https://ldap%5Cgremlin:pass%3Bword@proxy.example.com:8080").unwrap();
+                    let _ =
+                        Proxy::http("https://ldap%5Cgremlin:pass%3Bword@proxy.example.com:8080")
+                            .unwrap();
                 }
             }
             mod and_url_has_bad {
@@ -1734,14 +1732,17 @@ mod test {
 
                 #[test]
                 fn ip_v4_address() {
-                    check_parse_error("http://421.627.718.469", url::ParseError::InvalidIpv4Address);
+                    check_parse_error(
+                        "http://421.627.718.469",
+                        url::ParseError::InvalidIpv4Address,
+                    );
                 }
 
                 #[test]
                 fn ip_v6_address() {
                     check_parse_error(
                         "http://[56FE::2159:5BBC::6594]",
-                        url::ParseError::InvalidIpv6Address
+                        url::ParseError::InvalidIpv6Address,
                     );
                 }
 
