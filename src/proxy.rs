@@ -144,15 +144,13 @@ impl<S: IntoUrl> IntoProxyScheme for S {
                     }
                     source = err.source();
                 }
-                if ! presumed_to_have_schema {
+                if !presumed_to_have_schema {
                     // the issue could have been caused by a missing scheme, so we try adding http://
                     let try_this = format!("http://{}", self.as_str());
-                    try_this
-                        .into_url()
-                        .map_err(|_| {
-                            // return the original error
-                            crate::error::builder(e)
-                        })?
+                    try_this.into_url().map_err(|_| {
+                        // return the original error
+                        crate::error::builder(e)
+                    })?
                 } else {
                     return Err(crate::error::builder(e));
                 }
@@ -1540,9 +1538,9 @@ mod tests {
 #[cfg(test)]
 mod test {
     mod into_proxy_scheme {
+        use crate::Proxy;
         use std::error::Error;
         use std::mem::discriminant;
-        use crate::Proxy;
 
         fn includes(haystack: &crate::error::Error, needle: url::ParseError) -> bool {
             let mut source = haystack.source();
@@ -1559,7 +1557,7 @@ mod test {
 
         fn check_parse_error(url: &str, needle: url::ParseError) {
             let error = Proxy::http(url).unwrap_err();
-            if !includes(&error, needle ) {
+            if !includes(&error, needle) {
                 panic!("{:?} expected; {:?}, {} found", needle, error, error);
             }
         }
@@ -1590,7 +1588,8 @@ mod test {
 
                 #[test]
                 fn loopback_username_password_port_works() {
-                    let _ = Proxy::http("ldap%5Cgremlin:pass%3Bword@127.0.0.1:8080").unwrap();
+                    let _ =
+                        Proxy::http("ldap%5Cgremlin:pass%3Bword@127.0.0.1:8080").unwrap();
                 }
 
                 #[test]
@@ -1615,7 +1614,8 @@ mod test {
 
                 #[test]
                 fn domain_username_password_port_works() {
-                    let _ = Proxy::http("ldap%5Cgremlin:pass%3Bword@proxy.example.com:8080").unwrap();
+                    let _ =
+                        Proxy::http("ldap%5Cgremlin:pass%3Bword@proxy.example.com:8080").unwrap();
                 }
             }
             mod and_url_has_bad {
@@ -1623,7 +1623,7 @@ mod test {
 
                 #[test]
                 fn host() {
-                    check_parse_error("username@", url::ParseError::RelativeUrlWithoutBase );
+                    check_parse_error("username@", url::ParseError::RelativeUrlWithoutBase);
                 }
 
                 #[test]
@@ -1638,12 +1638,18 @@ mod test {
 
                 #[test]
                 fn ip_v4_address() {
-                    check_parse_error("421.627.718.469", url::ParseError::RelativeUrlWithoutBase);
+                    check_parse_error(
+                        "421.627.718.469",
+                        url::ParseError::RelativeUrlWithoutBase
+                    );
                 }
 
                 #[test]
                 fn ip_v6_address() {
-                    check_parse_error("[56FE::2159:5BBC::6594]", url::ParseError::RelativeUrlWithoutBase);
+                    check_parse_error(
+                        "[56FE::2159:5BBC::6594]",
+                        url::ParseError::RelativeUrlWithoutBase
+                    );
                 }
 
                 #[test]
@@ -1679,7 +1685,8 @@ mod test {
 
                 #[test]
                 fn loopback_username_password_port_works() {
-                    let _ = Proxy::http("http://ldap%5Cgremlin:pass%3Bword@127.0.0.1:8080").unwrap();
+                    let _ =
+                        Proxy::http("http://ldap%5Cgremlin:pass%3Bword@127.0.0.1:8080").unwrap();
                 }
 
                 #[test]
@@ -1732,7 +1739,10 @@ mod test {
 
                 #[test]
                 fn ip_v6_address() {
-                    check_parse_error("http://[56FE::2159:5BBC::6594]", url::ParseError::InvalidIpv6Address);
+                    check_parse_error(
+                        "http://[56FE::2159:5BBC::6594]",
+                        url::ParseError::InvalidIpv6Address
+                    );
                 }
 
                 #[test]
