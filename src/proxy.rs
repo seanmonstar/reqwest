@@ -10,7 +10,6 @@ use ipnet::IpNet;
 use percent_encoding::percent_decode;
 use std::collections::HashMap;
 use std::env;
-#[cfg(target_os = "windows")]
 use std::error::Error;
 use std::net::IpAddr;
 #[cfg(target_os = "windows")]
