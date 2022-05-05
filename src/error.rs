@@ -265,7 +265,7 @@ pub(crate) fn status_code(url: Url, status: StatusCode) -> Error {
 }
 
 pub(crate) fn url_bad_scheme(url: Url) -> Error {
-    Error::new(Kind::Builder, Some("URL scheme is not allowed")).with_url(url)
+    Error::new(Kind::Builder, Some(BadScheme)).with_url(url)
 }
 
 if_wasm! {
@@ -305,6 +305,17 @@ impl fmt::Display for TimedOut {
 }
 
 impl StdError for TimedOut {}
+
+#[derive(Debug)]
+pub(crate) struct BadScheme;
+
+impl fmt::Display for BadScheme {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("URL scheme is not allowed")
+    }
+}
+
+impl StdError for BadScheme {}
 
 #[cfg(test)]
 mod tests {

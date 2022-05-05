@@ -123,27 +123,24 @@ impl<S: IntoUrl> IntoProxyScheme for S {
         let url = match self.as_str().into_url() {
             Ok(ok) => ok,
             Err(e) => {
-                let mut presumed_to_have_schema = true;
+                let mut presumed_to_have_scheme = true;
                 let mut source = e.source();
                 while let Some(err) = source {
                     if let Some(parse_error) = err.downcast_ref::<url::ParseError>() {
                         match parse_error {
                             url::ParseError::RelativeUrlWithoutBase => {
-                                presumed_to_have_schema = false;
+                                presumed_to_have_scheme = false;
                                 break;
                             }
                             _ => {}
                         }
-                    } else {
-                        let text = format!("{}", err);
-                        if text == "URL scheme is not allowed" {
-                            presumed_to_have_schema = false;
-                            break;
-                        }
+                    } else if let Some(_) = err.downcast_ref::<crate::error::BadScheme>() {
+                        presumed_to_have_scheme = false;
+                        break;
                     }
                     source = err.source();
                 }
-                if !presumed_to_have_schema {
+                if !presumed_to_have_scheme {
                     // the issue could have been caused by a missing scheme, so we try adding http://
                     let try_this = format!("http://{}", self.as_str());
                     try_this.into_url().map_err(|_| {
@@ -1129,14 +1126,14 @@ mod tests {
         let disabled_proxies = get_sys_proxies(Some((0, String::from("http://127.0.0.1/"))));
         // set valid proxy
         let valid_proxies = get_sys_proxies(Some((1, String::from("http://127.0.0.1/"))));
-        let valid_proxies_no_schema = get_sys_proxies(Some((1, String::from("127.0.0.1"))));
+        let valid_proxies_no_scheme = get_sys_proxies(Some((1, String::from("127.0.0.1"))));
         let valid_proxies_explicit_https =
             get_sys_proxies(Some((1, String::from("https://127.0.0.1/"))));
         let multiple_proxies = get_sys_proxies(Some((
             1,
             String::from("http=127.0.0.1:8888;https=127.0.0.2:8888"),
         )));
-        let multiple_proxies_explicit_schema = get_sys_proxies(Some((
+        let multiple_proxies_explicit_scheme = get_sys_proxies(Some((
             1,
             String::from("http=http://127.0.0.1:8888;https=https://127.0.0.2:8888"),
         )));
@@ -1154,11 +1151,11 @@ mod tests {
         assert_eq!(p.scheme(), "http");
         assert_eq!(p.host(), "127.0.0.1");
 
-        let p = &valid_proxies_no_schema["http"];
+        let p = &valid_proxies_no_scheme["http"];
         assert_eq!(p.scheme(), "http");
         assert_eq!(p.host(), "127.0.0.1");
 
-        let p = &valid_proxies_no_schema["https"];
+        let p = &valid_proxies_no_scheme["https"];
         assert_eq!(p.scheme(), "http");
         assert_eq!(p.host(), "127.0.0.1");
 
@@ -1174,11 +1171,11 @@ mod tests {
         assert_eq!(p.scheme(), "http");
         assert_eq!(p.host(), "127.0.0.2:8888");
 
-        let p = &multiple_proxies_explicit_schema["http"];
+        let p = &multiple_proxies_explicit_scheme["http"];
         assert_eq!(p.scheme(), "http");
         assert_eq!(p.host(), "127.0.0.1:8888");
 
-        let p = &multiple_proxies_explicit_schema["https"];
+        let p = &multiple_proxies_explicit_scheme["https"];
         assert_eq!(p.scheme(), "https");
         assert_eq!(p.host(), "127.0.0.2:8888");
     }
@@ -1561,7 +1558,7 @@ mod test {
             }
         }
 
-        mod when_schema_missing {
+        mod when_scheme_missing {
             mod and_url_is_valid {
                 use crate::Proxy;
 
@@ -1654,7 +1651,7 @@ mod test {
             }
         }
 
-        mod when_schema_present {
+        mod when_scheme_present {
             mod and_url_is_valid {
                 use crate::Proxy;
 
