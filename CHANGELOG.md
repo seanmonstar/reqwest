@@ -579,7 +579,7 @@
 ### Breaking Changes
 
 - hyper has been upgraded to 0.11, so `header`, `StatusCode`, and `Method` have breaking changes.
-- `mime` has been ugpraded to 0.3, with a very different API.
+- `mime` has been upgraded to 0.3, with a very different API.
 - All configuration methods have been removed from the `Client`, and moved to the `ClientBuilder`.
 - The `HttpVersion` type was completely removed.
 - `Error::cause()` now returns `Error::get_ref().cause()`.

@@ -10,7 +10,6 @@ use ipnet::IpNet;
 use percent_encoding::percent_decode;
 use std::collections::HashMap;
 use std::env;
-#[cfg(target_os = "windows")]
 use std::error::Error;
 use std::net::IpAddr;
 #[cfg(target_os = "windows")]
@@ -124,13 +123,33 @@ impl<S: IntoUrl> IntoProxyScheme for S {
         let url = match self.as_str().into_url() {
             Ok(ok) => ok,
             Err(e) => {
-                // the issue could have been caused by a missing scheme, so we try adding http://
-                format!("http://{}", self.as_str())
-                    .into_url()
-                    .map_err(|_| {
+                let mut presumed_to_have_scheme = true;
+                let mut source = e.source();
+                while let Some(err) = source {
+                    if let Some(parse_error) = err.downcast_ref::<url::ParseError>() {
+                        match parse_error {
+                            url::ParseError::RelativeUrlWithoutBase => {
+                                presumed_to_have_scheme = false;
+                                break;
+                            }
+                            _ => {}
+                        }
+                    } else if let Some(_) = err.downcast_ref::<crate::error::BadScheme>() {
+                        presumed_to_have_scheme = false;
+                        break;
+                    }
+                    source = err.source();
+                }
+                if !presumed_to_have_scheme {
+                    // the issue could have been caused by a missing scheme, so we try adding http://
+                    let try_this = format!("http://{}", self.as_str());
+                    try_this.into_url().map_err(|_| {
                         // return the original error
                         crate::error::builder(e)
                     })?
+                } else {
+                    return Err(crate::error::builder(e));
+                }
             }
         };
         ProxyScheme::parse(url)
@@ -1107,14 +1126,14 @@ mod tests {
         let disabled_proxies = get_sys_proxies(Some((0, String::from("http://127.0.0.1/"))));
         // set valid proxy
         let valid_proxies = get_sys_proxies(Some((1, String::from("http://127.0.0.1/"))));
-        let valid_proxies_no_schema = get_sys_proxies(Some((1, String::from("127.0.0.1"))));
+        let valid_proxies_no_scheme = get_sys_proxies(Some((1, String::from("127.0.0.1"))));
         let valid_proxies_explicit_https =
             get_sys_proxies(Some((1, String::from("https://127.0.0.1/"))));
         let multiple_proxies = get_sys_proxies(Some((
             1,
             String::from("http=127.0.0.1:8888;https=127.0.0.2:8888"),
         )));
-        let multiple_proxies_explicit_schema = get_sys_proxies(Some((
+        let multiple_proxies_explicit_scheme = get_sys_proxies(Some((
             1,
             String::from("http=http://127.0.0.1:8888;https=https://127.0.0.2:8888"),
         )));
@@ -1132,11 +1151,11 @@ mod tests {
         assert_eq!(p.scheme(), "http");
         assert_eq!(p.host(), "127.0.0.1");
 
-        let p = &valid_proxies_no_schema["http"];
+        let p = &valid_proxies_no_scheme["http"];
         assert_eq!(p.scheme(), "http");
         assert_eq!(p.host(), "127.0.0.1");
 
-        let p = &valid_proxies_no_schema["https"];
+        let p = &valid_proxies_no_scheme["https"];
         assert_eq!(p.scheme(), "http");
         assert_eq!(p.host(), "127.0.0.1");
 
@@ -1152,11 +1171,11 @@ mod tests {
         assert_eq!(p.scheme(), "http");
         assert_eq!(p.host(), "127.0.0.2:8888");
 
-        let p = &multiple_proxies_explicit_schema["http"];
+        let p = &multiple_proxies_explicit_scheme["http"];
         assert_eq!(p.scheme(), "http");
         assert_eq!(p.host(), "127.0.0.1:8888");
 
-        let p = &multiple_proxies_explicit_schema["https"];
+        let p = &multiple_proxies_explicit_scheme["https"];
         assert_eq!(p.scheme(), "https");
         assert_eq!(p.host(), "127.0.0.2:8888");
     }
@@ -1509,5 +1528,225 @@ mod tests {
             system_https_proxy_with_auth.http_basic_auth(&Uri::from_static("http://example.com")),
             None
         );
+    }
+}
+
+#[cfg(test)]
+mod test {
+    mod into_proxy_scheme {
+        use crate::Proxy;
+        use std::error::Error;
+        use std::mem::discriminant;
+
+        fn includes(haystack: &crate::error::Error, needle: url::ParseError) -> bool {
+            let mut source = haystack.source();
+            while let Some(error) = source {
+                if let Some(parse_error) = error.downcast_ref::<url::ParseError>() {
+                    if discriminant(parse_error) == discriminant(&needle) {
+                        return true;
+                    }
+                }
+                source = error.source();
+            }
+            false
+        }
+
+        fn check_parse_error(url: &str, needle: url::ParseError) {
+            let error = Proxy::http(url).unwrap_err();
+            if !includes(&error, needle) {
+                panic!("{:?} expected; {:?}, {} found", needle, error, error);
+            }
+        }
+
+        mod when_scheme_missing {
+            mod and_url_is_valid {
+                use crate::Proxy;
+
+                #[test]
+                fn lookback_works() {
+                    let _ = Proxy::http("127.0.0.1").unwrap();
+                }
+
+                #[test]
+                fn loopback_port_works() {
+                    let _ = Proxy::http("127.0.0.1:8080").unwrap();
+                }
+
+                #[test]
+                fn loopback_username_works() {
+                    let _ = Proxy::http("username@127.0.0.1").unwrap();
+                }
+
+                #[test]
+                fn loopback_username_password_works() {
+                    let _ = Proxy::http("username:password@127.0.0.1").unwrap();
+                }
+
+                #[test]
+                fn loopback_username_password_port_works() {
+                    let _ = Proxy::http("ldap%5Cgremlin:pass%3Bword@127.0.0.1:8080").unwrap();
+                }
+
+                #[test]
+                fn domain_works() {
+                    let _ = Proxy::http("proxy.example.com").unwrap();
+                }
+
+                #[test]
+                fn domain_port_works() {
+                    let _ = Proxy::http("proxy.example.com:8080").unwrap();
+                }
+
+                #[test]
+                fn domain_username_works() {
+                    let _ = Proxy::http("username@proxy.example.com").unwrap();
+                }
+
+                #[test]
+                fn domain_username_password_works() {
+                    let _ = Proxy::http("username:password@proxy.example.com").unwrap();
+                }
+
+                #[test]
+                fn domain_username_password_port_works() {
+                    let _ =
+                        Proxy::http("ldap%5Cgremlin:pass%3Bword@proxy.example.com:8080").unwrap();
+                }
+            }
+            mod and_url_has_bad {
+                use super::super::check_parse_error;
+
+                #[test]
+                fn host() {
+                    check_parse_error("username@", url::ParseError::RelativeUrlWithoutBase);
+                }
+
+                #[test]
+                fn idna_encoding() {
+                    check_parse_error("xn---", url::ParseError::RelativeUrlWithoutBase);
+                }
+
+                #[test]
+                fn port() {
+                    check_parse_error("127.0.0.1:808080", url::ParseError::RelativeUrlWithoutBase);
+                }
+
+                #[test]
+                fn ip_v4_address() {
+                    check_parse_error("421.627.718.469", url::ParseError::RelativeUrlWithoutBase);
+                }
+
+                #[test]
+                fn ip_v6_address() {
+                    check_parse_error(
+                        "[56FE::2159:5BBC::6594]",
+                        url::ParseError::RelativeUrlWithoutBase,
+                    );
+                }
+
+                #[test]
+                fn invalid_domain_character() {
+                    check_parse_error("abc 123", url::ParseError::RelativeUrlWithoutBase);
+                }
+            }
+        }
+
+        mod when_scheme_present {
+            mod and_url_is_valid {
+                use crate::Proxy;
+
+                #[test]
+                fn loopback_works() {
+                    let _ = Proxy::http("http://127.0.0.1").unwrap();
+                }
+
+                #[test]
+                fn loopback_port_works() {
+                    let _ = Proxy::http("https://127.0.0.1:8080").unwrap();
+                }
+
+                #[test]
+                fn loopback_username_works() {
+                    let _ = Proxy::http("http://username@127.0.0.1").unwrap();
+                }
+
+                #[test]
+                fn loopback_username_password_works() {
+                    let _ = Proxy::http("https://username:password@127.0.0.1").unwrap();
+                }
+
+                #[test]
+                fn loopback_username_password_port_works() {
+                    let _ =
+                        Proxy::http("http://ldap%5Cgremlin:pass%3Bword@127.0.0.1:8080").unwrap();
+                }
+
+                #[test]
+                fn domain_works() {
+                    let _ = Proxy::http("https://proxy.example.com").unwrap();
+                }
+
+                #[test]
+                fn domain_port_works() {
+                    let _ = Proxy::http("http://proxy.example.com:8080").unwrap();
+                }
+
+                #[test]
+                fn domain_username_works() {
+                    let _ = Proxy::http("https://username@proxy.example.com").unwrap();
+                }
+
+                #[test]
+                fn domain_username_password_works() {
+                    let _ = Proxy::http("http://username:password@proxy.example.com").unwrap();
+                }
+
+                #[test]
+                fn domain_username_password_port_works() {
+                    let _ =
+                        Proxy::http("https://ldap%5Cgremlin:pass%3Bword@proxy.example.com:8080")
+                            .unwrap();
+                }
+            }
+            mod and_url_has_bad {
+                use super::super::check_parse_error;
+
+                #[test]
+                fn host() {
+                    check_parse_error("http://username@", url::ParseError::EmptyHost);
+                }
+
+                #[test]
+                fn idna_encoding() {
+                    check_parse_error("http://xn---", url::ParseError::IdnaError);
+                }
+
+                #[test]
+                fn port() {
+                    check_parse_error("http://127.0.0.1:808080", url::ParseError::InvalidPort);
+                }
+
+                #[test]
+                fn ip_v4_address() {
+                    check_parse_error(
+                        "http://421.627.718.469",
+                        url::ParseError::InvalidIpv4Address,
+                    );
+                }
+
+                #[test]
+                fn ip_v6_address() {
+                    check_parse_error(
+                        "http://[56FE::2159:5BBC::6594]",
+                        url::ParseError::InvalidIpv6Address,
+                    );
+                }
+
+                #[test]
+                fn invalid_domain_character() {
+                    check_parse_error("http://abc 123/", url::ParseError::InvalidDomainCharacter);
+                }
+            }
+        }
     }
 }
