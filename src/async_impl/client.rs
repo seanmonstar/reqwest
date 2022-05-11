@@ -954,11 +954,14 @@ impl ClientBuilder {
     ///
     /// Pass `None` to disable HTTP2 keep-alive.
     /// Default is currently disabled.
-    pub fn http2_keep_alive_interval(mut self, interval: impl Into<Option<Duration>>) -> ClientBuilder {
+    pub fn http2_keep_alive_interval(
+        mut self,
+        interval: impl Into<Option<Duration>>,
+    ) -> ClientBuilder {
         self.config.http2_keep_alive_interval = interval.into();
         self
     }
-    
+
     /// Sets a timeout for receiving an acknowledgement of the keep-alive ping.
     ///
     /// If the ping is not acknowledged within the timeout, the connection will be closed.
@@ -968,7 +971,7 @@ impl ClientBuilder {
         self.config.http2_keep_alive_timeout = Some(timeout);
         self
     }
-    
+
     /// Sets whether HTTP2 keep-alive should apply while the connection is idle.
     ///
     /// If disabled, keep-alive pings are only sent while there are open request/responses streams.
