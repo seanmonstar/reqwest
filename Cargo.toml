@@ -129,7 +129,7 @@ cookie_store = { version = "0.16", optional = true }
 proc-macro-hack = { version = "0.5.19", optional = true }
 
 ## compression
-async-compression = { version = "0.3.7", default-features = false, features = ["tokio"], optional = true }
+async-compression = { version = "0.3.13", default-features = false, features = ["tokio"], optional = true }
 tokio-util = { version = "0.7.1", default-features = false, features = ["codec", "io"], optional = true }
 
 ## socks
@@ -144,7 +144,7 @@ hyper = { version = "0.14", default-features = false, features = ["tcp", "stream
 serde = { version = "1.0", features = ["derive"] }
 libflate = "1.0"
 brotli_crate = { package = "brotli", version = "3.3.0" }
-zstd_crate = { package = "zstd", version = "0.10" }
+zstd_crate = { package = "zstd", version = "0.11" }
 doc-comment = "0.3"
 tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
 
