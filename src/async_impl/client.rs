@@ -110,6 +110,9 @@ struct Config {
     http2_initial_connection_window_size: Option<u32>,
     http2_adaptive_window: bool,
     http2_max_frame_size: Option<u32>,
+    http2_keep_alive_interval: Option<Duration>,
+    http2_keep_alive_timeout: Option<Duration>,
+    http2_keep_alive_while_idle: bool,
     local_address: Option<IpAddr>,
     nodelay: bool,
     #[cfg(feature = "cookies")]
@@ -175,6 +178,9 @@ impl ClientBuilder {
                 http2_initial_connection_window_size: None,
                 http2_adaptive_window: false,
                 http2_max_frame_size: None,
+                http2_keep_alive_interval: None,
+                http2_keep_alive_timeout: None,
+                http2_keep_alive_while_idle: false,
                 local_address: None,
                 nodelay: true,
                 trust_dns: cfg!(feature = "trust-dns"),
@@ -475,6 +481,15 @@ impl ClientBuilder {
         }
         if let Some(http2_max_frame_size) = config.http2_max_frame_size {
             builder.http2_max_frame_size(http2_max_frame_size);
+        }
+        if let Some(http2_keep_alive_interval) = config.http2_keep_alive_interval {
+            builder.http2_keep_alive_interval(http2_keep_alive_interval);
+        }
+        if let Some(http2_keep_alive_timeout) = config.http2_keep_alive_timeout {
+            builder.http2_keep_alive_timeout(http2_keep_alive_timeout);
+        }
+        if config.http2_keep_alive_while_idle {
+            builder.http2_keep_alive_while_idle(true);
         }
 
         builder.pool_idle_timeout(config.pool_idle_timeout);
@@ -972,6 +987,39 @@ impl ClientBuilder {
     /// Default is currently 16,384 but may change internally to optimize for common uses.
     pub fn http2_max_frame_size(mut self, sz: impl Into<Option<u32>>) -> ClientBuilder {
         self.config.http2_max_frame_size = sz.into();
+        self
+    }
+
+    /// Sets an interval for HTTP2 Ping frames should be sent to keep a connection alive.
+    ///
+    /// Pass `None` to disable HTTP2 keep-alive.
+    /// Default is currently disabled.
+    pub fn http2_keep_alive_interval(
+        mut self,
+        interval: impl Into<Option<Duration>>,
+    ) -> ClientBuilder {
+        self.config.http2_keep_alive_interval = interval.into();
+        self
+    }
+
+    /// Sets a timeout for receiving an acknowledgement of the keep-alive ping.
+    ///
+    /// If the ping is not acknowledged within the timeout, the connection will be closed.
+    /// Does nothing if `http2_keep_alive_interval` is disabled.
+    /// Default is currently disabled.
+    pub fn http2_keep_alive_timeout(mut self, timeout: Duration) -> ClientBuilder {
+        self.config.http2_keep_alive_timeout = Some(timeout);
+        self
+    }
+
+    /// Sets whether HTTP2 keep-alive should apply while the connection is idle.
+    ///
+    /// If disabled, keep-alive pings are only sent while there are open request/responses streams.
+    /// If enabled, pings are also sent when no streams are active.
+    /// Does nothing if `http2_keep_alive_interval` is disabled.
+    /// Default is `false`.
+    pub fn http2_keep_alive_while_idle(mut self, enabled: bool) -> ClientBuilder {
+        self.config.http2_keep_alive_while_idle = enabled;
         self
     }
 
