@@ -1,4 +1,5 @@
 #![cfg_attr(target_arch = "wasm32", allow(unused))]
+use bytes::Bytes;
 use std::error::Error as StdError;
 use std::fmt;
 use std::io;
@@ -141,7 +142,15 @@ impl Error {
 
     /// Returns true if the error is related to decoding the response's body
     pub fn is_decode(&self) -> bool {
-        matches!(self.inner.kind, Kind::Decode)
+        matches!(self.inner.kind, Kind::Decode(_))
+    }
+
+    /// Returns a possible body related to this error.
+    pub fn body(&self) -> Option<Bytes> {
+        match self.inner.kind {
+            Kind::Decode(Some(ref body)) => Some(body.clone()),
+            _ => None,
+        }
     }
 
     /// Returns the status code, if the error was generated from a response.
@@ -183,7 +192,7 @@ impl fmt::Display for Error {
             Kind::Builder => f.write_str("builder error")?,
             Kind::Request => f.write_str("error sending request")?,
             Kind::Body => f.write_str("request or response body error")?,
-            Kind::Decode => f.write_str("error decoding response body")?,
+            Kind::Decode(_) => f.write_str("error decoding response body")?,
             Kind::Redirect => f.write_str("error following redirect")?,
             Kind::Status(ref code) => {
                 let prefix = if code.is_client_error() {
@@ -235,7 +244,7 @@ pub(crate) enum Kind {
     Redirect,
     Status(StatusCode),
     Body,
-    Decode,
+    Decode(Option<Bytes>),
 }
 
 // constructors
@@ -249,7 +258,12 @@ pub(crate) fn body<E: Into<BoxError>>(e: E) -> Error {
 }
 
 pub(crate) fn decode<E: Into<BoxError>>(e: E) -> Error {
-    Error::new(Kind::Decode, Some(e))
+    Error::new(Kind::Decode(None), Some(e))
+}
+
+#[cfg(feature = "json")]
+pub(crate) fn decode_body<E: Into<BoxError>>(e: E, data: Bytes) -> Error {
+    Error::new(Kind::Decode(Some(data)), Some(e))
 }
 
 pub(crate) fn request<E: Into<BoxError>>(e: E) -> Error {
@@ -360,7 +374,7 @@ mod tests {
         let orig = io::Error::new(io::ErrorKind::Other, "orly");
         let err = super::decode_io(orig);
         match err.inner.kind {
-            Kind::Decode => (),
+            Kind::Decode(_) => (),
             _ => panic!("{:?}", err),
         }
     }
