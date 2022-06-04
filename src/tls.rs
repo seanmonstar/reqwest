@@ -350,8 +350,6 @@ pub(crate) enum TlsBackend {
     Rustls,
     #[cfg(feature = "__rustls")]
     BuiltRustls(rustls::ClientConfig),
-    #[cfg(any(feature = "native-tls", feature = "__rustls",))]
-    UnknownPreconfigured,
 }
 
 impl fmt::Debug for TlsBackend {
@@ -365,8 +363,6 @@ impl fmt::Debug for TlsBackend {
             TlsBackend::Rustls => write!(f, "Rustls"),
             #[cfg(feature = "__rustls")]
             TlsBackend::BuiltRustls(_) => write!(f, "BuiltRustls"),
-            #[cfg(any(feature = "native-tls", feature = "__rustls",))]
-            TlsBackend::UnknownPreconfigured => write!(f, "UnknownPreconfigured"),
         }
     }
 }
