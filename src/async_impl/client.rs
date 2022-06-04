@@ -129,6 +129,24 @@ impl Default for ClientBuilder {
     }
 }
 
+trait TlsConfig {
+    fn to_tls_backend(self) -> crate::tls::TlsBackend;
+}
+
+#[cfg(feature = "native-tls")]
+impl TlsConfig for native_tls_crate::TlsConnector {
+    fn to_tls_backend(self) {
+        crate::tls::TlsBackend::BuiltNativeTls(tls)
+    }
+}
+
+#[cfg(feature = "__rustls")]
+impl TlsConfig for native_tls_crate::ClientBuilder {
+    fn to_tls_backend(self) {
+        crate::tls::TlsBackend::BuiltRustls(tls)
+    }
+}
+
 impl ClientBuilder {
     /// Constructs a new `ClientBuilder`.
     ///
@@ -1245,33 +1263,8 @@ impl ClientBuilder {
     /// `rustls-tls(-...)` to be enabled.
     #[cfg(any(feature = "native-tls", feature = "__rustls",))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
-    pub fn use_preconfigured_tls(mut self, tls: impl Any) -> ClientBuilder {
-        let mut tls = Some(tls);
-        #[cfg(feature = "native-tls")]
-        {
-            if let Some(conn) =
-                (&mut tls as &mut dyn Any).downcast_mut::<Option<native_tls_crate::TlsConnector>>()
-            {
-                let tls = conn.take().expect("is definitely Some");
-                let tls = crate::tls::TlsBackend::BuiltNativeTls(tls);
-                self.config.tls = tls;
-                return self;
-            }
-        }
-        #[cfg(feature = "__rustls")]
-        {
-            if let Some(conn) =
-                (&mut tls as &mut dyn Any).downcast_mut::<Option<rustls::ClientConfig>>()
-            {
-                let tls = conn.take().expect("is definitely Some");
-                let tls = crate::tls::TlsBackend::BuiltRustls(tls);
-                self.config.tls = tls;
-                return self;
-            }
-        }
-
-        // Otherwise, we don't recognize the TLS backend!
-        self.config.tls = crate::tls::TlsBackend::UnknownPreconfigured;
+    pub fn use_preconfigured_tls(mut self, tls: impl TlsConfig) -> ClientBuilder {
+        self.config.tls = tls.to_tls_backend();
         self
     }
 
