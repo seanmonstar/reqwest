@@ -341,8 +341,7 @@ impl Version {
     }
 }
 
-#[allow(missing_docs)]
-pub enum TlsBackend {
+pub(crate) enum TlsBackend {
     #[cfg(feature = "default-tls")]
     Default,
     #[cfg(feature = "native-tls")]

@@ -128,20 +128,20 @@ impl Default for ClientBuilder {
 }
 
 pub trait TlsConfig {
-    fn to_tls_backend(self) -> crate::tls::TlsBackend;
+    fn to_tls_backend(self, builder: &mut ClientBuilder);
 }
 
 #[cfg(feature = "native-tls")]
 impl TlsConfig for native_tls_crate::TlsConnector {
-    fn to_tls_backend(self) -> crate::tls::TlsBackend {
-        crate::tls::TlsBackend::BuiltNativeTls(self)
+    fn to_tls_backend(self, builder: &mut ClientBuilder) {
+        builder.config.tls = crate::tls::TlsBackend::BuiltNativeTls(self)
     }
 }
 
 #[cfg(feature = "__rustls")]
 impl TlsConfig for rustls::ClientConfig {
-    fn to_tls_backend(self) -> crate::tls::TlsBackend {
-        crate::tls::TlsBackend::BuiltRustls(self)
+    fn to_tls_backend(self, builder: &mut ClientBuilder) {
+        builder.config.tls = crate::tls::TlsBackend::BuiltRustls(self);
     }
 }
 
@@ -1256,7 +1256,7 @@ impl ClientBuilder {
     #[cfg(any(feature = "native-tls", feature = "__rustls",))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
     pub fn use_preconfigured_tls(mut self, tls: impl TlsConfig) -> ClientBuilder {
-        self.config.tls = tls.to_tls_backend();
+        tls.to_tls_backend(&mut self);
         self
     }
 
