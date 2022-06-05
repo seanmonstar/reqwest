@@ -1,5 +1,3 @@
-#[cfg(any(feature = "native-tls", feature = "__rustls",))]
-use std::any::Any;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -129,21 +127,21 @@ impl Default for ClientBuilder {
     }
 }
 
-trait TlsConfig {
+pub trait TlsConfig {
     fn to_tls_backend(self) -> crate::tls::TlsBackend;
 }
 
 #[cfg(feature = "native-tls")]
 impl TlsConfig for native_tls_crate::TlsConnector {
-    fn to_tls_backend(self) {
-        crate::tls::TlsBackend::BuiltNativeTls(tls)
+    fn to_tls_backend(self) -> crate::tls::TlsBackend {
+        crate::tls::TlsBackend::BuiltNativeTls(self)
     }
 }
 
 #[cfg(feature = "__rustls")]
-impl TlsConfig for native_tls_crate::ClientBuilder {
-    fn to_tls_backend(self) {
-        crate::tls::TlsBackend::BuiltRustls(tls)
+impl TlsConfig for rustls::ClientConfig {
+    fn to_tls_backend(self) -> crate::tls::TlsBackend {
+        crate::tls::TlsBackend::BuiltRustls(self)
     }
 }
 
