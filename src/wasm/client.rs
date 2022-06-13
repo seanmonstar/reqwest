@@ -4,6 +4,9 @@ use std::{fmt, future::Future, sync::Arc};
 use url::Url;
 use wasm_bindgen::prelude::{wasm_bindgen, UnwrapThrowExt as _};
 
+#[cfg(feature = "cookies")]
+use crate::cookie;
+
 use super::{Request, RequestBuilder, Response};
 use crate::IntoUrl;
 
@@ -154,6 +157,19 @@ impl Client {
         mut req: Request,
     ) -> impl Future<Output = crate::Result<Response>> {
         self.merge_headers(&mut req);
+
+        // Add cookies from the cookie store.
+        #[cfg(feature = "cookies")]
+        {
+            if let Some(cookie_store) = self.config.cookie_store.as_ref() {
+                if req.headers.get(crate::header::COOKIE).is_none() {
+                    if let Some(header) = cookie_store.cookies(req.url()) {
+                        req.headers.insert(crate::header::COOKIE, header);
+                    }
+                }
+            }
+        }
+
         fetch(req)
     }
 }
@@ -261,12 +277,45 @@ impl ClientBuilder {
         }
     }
 
-    /// Returns a 'Client' that uses this ClientBuilder configuration
-    pub fn build(mut self) -> Result<Client, crate::Error> {
-        let config = std::mem::take(&mut self.config);
-        Ok(Client {
-            config: Arc::new(config),
-        })
+    /// Enable a persistent cookie store for the client.
+    ///
+    /// Cookies received in responses will be preserved and included in
+    /// additional requests.
+    ///
+    /// By default, no cookie store is used.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled.
+    #[cfg(feature = "cookies")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
+    pub fn cookie_store(mut self, enable: bool) -> ClientBuilder {
+        if enable {
+            self.cookie_provider(Arc::new(cookie::Jar::default()))
+        } else {
+            self.config.cookie_store = None;
+            self
+        }
+    }
+
+    /// Set the persistent cookie store for the client.
+    ///
+    /// Cookies received in responses will be passed to this store, and
+    /// additional requests will query this store for cookies.
+    ///
+    /// By default, no cookie store is used.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `cookies` feature to be enabled.
+    #[cfg(feature = "cookies")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
+    pub fn cookie_provider<C: cookie::CookieStore + 'static>(
+        mut self,
+        cookie_store: Arc<C>,
+    ) -> ClientBuilder {
+        self.config.cookie_store = Some(cookie_store as _);
+        self
     }
 
     /// Sets the default headers for every request
@@ -276,6 +325,14 @@ impl ClientBuilder {
         }
         self
     }
+
+    /// Returns a 'Client' that uses this ClientBuilder configuration
+    pub fn build(mut self) -> Result<Client, crate::Error> {
+        let config = std::mem::take(&mut self.config);
+        Ok(Client {
+            config: Arc::new(config),
+        })
+    }
 }
 
 impl Default for ClientBuilder {
@@ -284,15 +341,30 @@ impl Default for ClientBuilder {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct Config {
     headers: HeaderMap,
+    #[cfg(feature = "cookies")]
+    cookie_store: Option<Arc<dyn cookie::CookieStore>>,
+}
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut build = f.debug_struct("Config");
+
+        if cfg!(feature = "cookies") {
+            build.field("cookie_store", &self.cookie_store.is_some());
+        }
+
+        build.field("headers", &self.headers).finish()
+    }
 }
 
 impl Default for Config {
     fn default() -> Config {
         Config {
             headers: HeaderMap::new(),
+            #[cfg(feature = "cookies")]
+            cookie_store: None,
         }
     }
 }
