@@ -156,7 +156,7 @@ impl Error {
 
     #[allow(unused)]
     pub(crate) fn into_io(self) -> io::Error {
-        io::Error::new(io::ErrorKind::Other, self)
+        self.into()
     }
 }
 
@@ -205,6 +205,16 @@ impl fmt::Display for Error {
         }
 
         Ok(())
+    }
+}
+
+impl Into<io::Error> for Error {
+    fn into(self) -> io::Error {
+        if self.is_timeout() {
+            io::Error::new(io::ErrorKind::TimedOut, self)
+        } else {
+            io::Error::new(io::ErrorKind::Other, self)
+        }
     }
 }
 
@@ -272,13 +282,6 @@ if_wasm! {
     pub(crate) fn wasm(js_val: wasm_bindgen::JsValue) -> BoxError {
         format!("{:?}", js_val).into()
     }
-}
-
-// io::Error helpers
-
-#[allow(unused)]
-pub(crate) fn into_io(e: Error) -> io::Error {
-    e.into_io()
 }
 
 #[allow(unused)]
