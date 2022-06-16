@@ -138,7 +138,7 @@ impl Response {
     ///
     /// This method decodes the response body with BOM sniffing
     /// and with malformed sequences replaced with the REPLACEMENT CHARACTER.
-    /// Encoding is determinated from the `charset` parameter of `Content-Type` header,
+    /// Encoding is determined from the `charset` parameter of `Content-Type` header,
     /// and defaults to `utf-8` if not presented.
     ///
     /// # Example
