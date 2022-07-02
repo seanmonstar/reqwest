@@ -183,17 +183,17 @@ impl Decoder {
     ///
     /// Uses the correct variant by inspecting the Content-Encoding header.
     pub(super) fn detect(_headers: &mut HeaderMap, body: Body, _accepts: Accepts) -> Decoder {
-        #[cfg(feature = "gzip")]
-        {
-            if _accepts.gzip && Decoder::detect_encoding(_headers, "gzip") {
-                return Decoder::gzip(body);
-            }
-        }
-
         #[cfg(feature = "brotli")]
         {
             if _accepts.brotli && Decoder::detect_encoding(_headers, "br") {
                 return Decoder::brotli(body);
+            }
+        }
+
+        #[cfg(feature = "gzip")]
+        {
+            if _accepts.gzip && Decoder::detect_encoding(_headers, "gzip") {
+                return Decoder::gzip(body);
             }
         }
 
@@ -226,16 +226,16 @@ impl Stream for Decoder {
                 Poll::Pending => return Poll::Pending,
             },
             Inner::PlainText(ref mut body) => Pin::new(body).poll_next(cx),
-            #[cfg(feature = "gzip")]
-            Inner::Gzip(ref mut decoder) => {
+            #[cfg(feature = "brotli")]
+            Inner::Brotli(ref mut decoder) => {
                 return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.freeze()))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                     None => Poll::Ready(None),
                 };
             }
-            #[cfg(feature = "brotli")]
-            Inner::Brotli(ref mut decoder) => {
+            #[cfg(feature = "gzip")]
+            Inner::Gzip(ref mut decoder) => {
                 return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.freeze()))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
