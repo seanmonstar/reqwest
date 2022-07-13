@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.11.10" # remember to update html_root_url
+version = "0.11.11" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -78,6 +78,7 @@ __rustls = ["hyper-rustls", "tokio-rustls", "rustls", "__tls", "rustls-pemfile"]
 __internal_proxy_sys_no_cache = []
 
 [dependencies]
+base64 = "0.13"
 http = "0.2"
 url = "2.2"
 bytes = "1.0"
@@ -93,7 +94,6 @@ serde_json = { version = "1.0", optional = true }
 mime_guess = { version = "2.0", default-features = false, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-base64 = "0.13"
 encoding_rs = "0.8"
 futures-core = { version = "0.3.0", default-features = false }
 futures-util = { version = "0.3.0", default-features = false }
