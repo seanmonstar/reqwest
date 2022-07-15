@@ -7,7 +7,7 @@ use url::Url;
 
 use wasm_bindgen::JsCast;
 use wasm_streams::ReadableStream;
-use futures_util::stream::StreamExt;
+use futures_util::stream::{StreamExt, LocalBoxStream};
 
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
@@ -124,12 +124,12 @@ impl Response {
    
     /// Convert the response into a `Stream` of `Bytes` from the body.
     #[cfg(feature = "stream")]
-    pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
+    pub fn bytes_stream<'a>(self) -> LocalBoxStream<'a, crate::Result<Bytes>> {
         let web_response = self.http.into_body();
         let body = web_response.body()
             .expect("could not create wasm byte stream");
         let body = ReadableStream::from_raw(body.unchecked_into());
-        body.into_stream().map(|buf_js| {
+        Box::pin(body.into_stream().map(|buf_js| {
             let buffer = Uint8Array::new(
                 &buf_js
                     .map_err(crate::error::wasm)
@@ -138,7 +138,7 @@ impl Response {
             let mut bytes = vec![0; buffer.length() as usize];
             buffer.copy_to(&mut bytes);
             Ok(bytes.into())
-        })
+        }))
     }
 
     // util methods
