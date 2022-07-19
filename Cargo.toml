@@ -100,7 +100,7 @@ futures-util = { version = "0.3.0", default-features = false }
 http-body = "0.4.0"
 hyper = { version = "0.14.18", default-features = false, features = ["tcp", "http1", "http2", "client", "runtime"] }
 h2 = "0.3.10"
-lazy_static = "1.4"
+once_cell = "1"
 log = "0.4"
 mime = "0.3.16"
 percent-encoding = "2.1"

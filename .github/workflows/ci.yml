@@ -267,7 +267,7 @@ jobs:
 
     strategy:
       matrix:
-        rust: [1.49.0]
+        rust: [1.56.0]
 
     steps:
       - name: Checkout
