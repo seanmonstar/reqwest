@@ -7,6 +7,7 @@ use std::task::{self, Poll};
 
 use hyper::client::connect::dns as hyper_dns;
 use hyper::service::Service;
+use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
 use trust_dns_resolver::{
     config::{ResolverConfig, ResolverOpts},
@@ -18,10 +19,8 @@ use crate::error::BoxError;
 
 type SharedResolver = Arc<AsyncResolver<TokioConnection, TokioConnectionProvider>>;
 
-lazy_static! {
-    static ref SYSTEM_CONF: io::Result<(ResolverConfig, ResolverOpts)> =
-        system_conf::read_system_conf().map_err(io::Error::from);
-}
+static SYSTEM_CONF: Lazy<io::Result<(ResolverConfig, ResolverOpts)>> =
+    Lazy::new(|| system_conf::read_system_conf().map_err(io::Error::from));
 
 #[derive(Clone)]
 pub(crate) struct TrustDnsResolver {
