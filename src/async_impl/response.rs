@@ -252,7 +252,8 @@ impl Response {
     pub async fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
         let full = self.bytes().await?;
 
-        serde_json::from_slice(&full).map_err(crate::error::decode)
+        serde_json::from_slice(&full).map_err(|err|
+                                              crate::error::decode_body(err, full))
     }
 
     /// Get the full response body as `Bytes`.
