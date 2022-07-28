@@ -373,6 +373,10 @@ impl Connector {
                     http.set_nodelay(true);
                 }
 
+                if self.nodelay {
+                    http.set_nodelay(true);
+                }
+
                 let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                 let mut http = hyper_tls::HttpsConnector::from((http, tls_connector));
                 let io = http.call(dst).await?;
@@ -400,6 +404,10 @@ impl Connector {
                 //
                 // https://www.openssl.org/docs/man1.1.1/man3/SSL_connect.html#NOTES
                 if !self.nodelay && (dst.scheme() == Some(&Scheme::HTTPS)) {
+                    http.set_nodelay(true);
+                }
+
+                if self.nodelay {
                     http.set_nodelay(true);
                 }
 
