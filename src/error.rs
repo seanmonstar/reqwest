@@ -185,6 +185,7 @@ impl fmt::Display for Error {
             Kind::Body => f.write_str("request or response body error")?,
             Kind::Decode => f.write_str("error decoding response body")?,
             Kind::Redirect => f.write_str("error following redirect")?,
+            Kind::Upgrade => f.write_str("error upgrading connection")?,
             Kind::Status(ref code) => {
                 let prefix = if code.is_client_error() {
                     "HTTP status client error"
@@ -236,6 +237,7 @@ pub(crate) enum Kind {
     Status(StatusCode),
     Body,
     Decode,
+    Upgrade,
 }
 
 // constructors
@@ -272,6 +274,10 @@ if_wasm! {
     pub(crate) fn wasm(js_val: wasm_bindgen::JsValue) -> BoxError {
         format!("{:?}", js_val).into()
     }
+}
+
+pub(crate) fn upgrade<E: Into<BoxError>>(e: E) -> Error {
+    Error::new(Kind::Upgrade, Some(e))
 }
 
 // io::Error helpers
