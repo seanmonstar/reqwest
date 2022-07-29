@@ -136,6 +136,11 @@ tokio-socks = { version = "0.5.1", optional = true }
 ## trust-dns
 trust-dns-resolver = { version = "0.21", optional = true }
 
+# http3 experimental support
+h3 = { git = "https://github.com/hyperium/h3" }
+h3-quinn = { git = "https://github.com/hyperium/h3" }
+quinn = { version = "0.8", default-features = false, features = ["tls-rustls", "ring"] }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.8"
 hyper = { version = "0.14", default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server", "runtime"] }

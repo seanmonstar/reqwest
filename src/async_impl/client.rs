@@ -13,7 +13,7 @@ use http::header::{
 };
 use http::uri::Scheme;
 use http::Uri;
-use hyper::client::ResponseFuture;
+use hyper::client::ResponseFuture as HyperResponseFuture;
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
@@ -23,7 +23,7 @@ use std::task::{Context, Poll};
 use tokio::time::Sleep;
 
 use log::{debug, trace};
-
+use super::h3_client;
 use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
@@ -518,6 +518,7 @@ impl ClientBuilder {
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store,
                 hyper: hyper_client,
+                h3_client: h3_client::H3Client::new(),
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
@@ -1492,21 +1493,33 @@ impl Client {
 
         self.proxy_auth(&uri, &mut headers);
 
-        let mut req = hyper::Request::builder()
-            .method(method.clone())
-            .uri(uri)
-            .version(version)
-            .body(body.into_stream())
-            .expect("valid request parts");
+        let in_flight = match version {
+            http::Version::HTTP_3 => {
+                let req = hyper::Request::builder()
+                    .method(method.clone())
+                    .uri(uri)
+                    .version(version)
+                    .body(())
+                    .expect("valid request parts");
+                ResponseFuture::H3(self.inner.h3_client.request(req))
+            }
+            _ => {
+                let mut req = hyper::Request::builder()
+                    .method(method.clone())
+                    .uri(uri)
+                    .version(version)
+                    .body(body.into_stream())
+                    .expect("valid request parts");
+
+                *req.headers_mut() = headers.clone();
+                ResponseFuture::Default(self.inner.hyper.request(req))
+            }
+        };
 
         let timeout = timeout
             .or(self.inner.request_timeout)
             .map(tokio::time::sleep)
             .map(Box::pin);
-
-        *req.headers_mut() = headers.clone();
-
-        let in_flight = self.inner.hyper.request(req);
 
         Pending {
             inner: PendingInner::Request(PendingRequest {
@@ -1698,6 +1711,7 @@ struct ClientRef {
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     headers: HeaderMap,
     hyper: HyperClient,
+    h3_client: h3_client::H3Client,
     redirect_policy: redirect::Policy,
     referer: bool,
     request_timeout: Option<Duration>,
@@ -1772,6 +1786,11 @@ pin_project! {
     }
 }
 
+enum ResponseFuture {
+    Default(HyperResponseFuture),
+    H3(h3_client::H3ResponseFuture),
+}
+
 impl PendingRequest {
     fn in_flight(self: Pin<&mut Self>) -> Pin<&mut ResponseFuture> {
         self.project().in_flight
@@ -1820,7 +1839,7 @@ impl PendingRequest {
 
         *req.headers_mut() = self.headers.clone();
 
-        *self.as_mut().in_flight().get_mut() = self.client.hyper.request(req);
+        *self.as_mut().in_flight().get_mut() = ResponseFuture::Default(self.client.hyper.request(req));
 
         true
     }
@@ -1877,15 +1896,29 @@ impl Future for PendingRequest {
         }
 
         loop {
-            let res = match self.as_mut().in_flight().as_mut().poll(cx) {
-                Poll::Ready(Err(e)) => {
-                    if self.as_mut().retry_error(&e) {
-                        continue;
+            let res = match self.as_mut().in_flight().get_mut() {
+                ResponseFuture::Default(r) => {
+                    match Pin::new(r).poll(cx) {
+                        Poll::Ready(Err(e)) => {
+                            if self.as_mut().retry_error(&e) {
+                                continue;
+                            }
+                            return Poll::Ready(Err(crate::error::request(e).with_url(self.url.clone())));
+                        }
+                        Poll::Ready(Ok(res)) => res,
+                        Poll::Pending => return Poll::Pending,
                     }
-                    return Poll::Ready(Err(crate::error::request(e).with_url(self.url.clone())));
                 }
-                Poll::Ready(Ok(res)) => res,
-                Poll::Pending => return Poll::Pending,
+                ResponseFuture::H3(r) => match Pin::new(r).poll(cx) {
+                    Poll::Ready(Err(e)) => {
+                        if self.as_mut().retry_error(&e) {
+                            continue;
+                        }
+                        return Poll::Ready(Err(crate::error::request(e).with_url(self.url.clone())));
+                    }
+                    Poll::Ready(Ok(res)) => res,
+                    Poll::Pending => return Poll::Pending,
+                }
             };
 
             #[cfg(feature = "cookies")]
@@ -2001,7 +2034,7 @@ impl Future for PendingRequest {
 
                             *req.headers_mut() = headers.clone();
                             std::mem::swap(self.as_mut().headers(), &mut headers);
-                            *self.as_mut().in_flight().get_mut() = self.client.hyper.request(req);
+                            *self.as_mut().in_flight().get_mut() =  ResponseFuture::Default(self.client.hyper.request(req));
                             continue;
                         }
                         redirect::ActionKind::Stop => {

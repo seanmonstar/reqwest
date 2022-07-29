@@ -31,6 +31,8 @@ use crate::dns::TrustDnsResolver;
 use crate::error::BoxError;
 use crate::proxy::{Proxy, ProxyScheme};
 
+
+// TODO: add http3 connector
 #[derive(Clone)]
 pub(crate) enum HttpConnector {
     Gai(hyper::client::HttpConnector),
@@ -170,6 +172,7 @@ pub(crate) struct Connector {
     user_agent: Option<HeaderValue>,
 }
 
+// TODO: add http3 connector
 #[derive(Clone)]
 enum Inner {
     #[cfg(not(feature = "__tls"))]
@@ -286,6 +289,28 @@ impl Connector {
         }
     }
 
+    // TODO: add connector for http3
+    // pub(crate) fn new_http3_connector<T>(
+    //     mut http: h3_client::Http3Connector,
+    //     proxies: Arc<Vec<Proxy>>,
+    //     user_agent: Option<HeaderValue>,
+    //     nodelay: bool,
+    // ) -> Connector
+    //     where
+    //         T: Into<Option<IpAddr>>,
+    // {
+    //     Connector {
+    //         inner: Inner::TlsForH3 {
+    //             http,
+    //         },
+    //         proxies,
+    //         verbose: verbose::OFF,
+    //         timeout: None,
+    //         nodelay,
+    //         user_agent,
+    //     }
+    // }
+
     pub(crate) fn set_timeout(&mut self, timeout: Option<Duration>) {
         self.timeout = timeout;
     }
@@ -352,6 +377,7 @@ impl Connector {
         })
     }
 
+    // TODO: add http3 logic
     async fn connect_with_maybe_proxy(self, dst: Uri, is_proxy: bool) -> Result<Conn, BoxError> {
         match self.inner {
             #[cfg(not(feature = "__tls"))]
