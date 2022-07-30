@@ -13,31 +13,22 @@ use hyper::Body;
 use bytes::Buf;
 use futures_util::future;
 
-static ALPN: &[u8] = b"h3";
-
 // hyper Client
 #[derive(Clone)]
 pub struct H3Client {
     connector: H3Connector,
+    // TODO: Since resolution is perform internally in Hyper,
+    // we have no way of leveraging that functionality here.
+    // resolver: Box<dyn Resolve>,
 }
 
 impl H3Client {
-    #[cfg(feature = "__rustls")]
-    pub fn new() -> Self {
-        let tls_config_builder = rustls::ClientConfig::builder()
-            .with_safe_default_cipher_suites()
-            .with_safe_default_kx_groups()
-            .with_protocol_versions(&[&rustls::version::TLS13]).unwrap();
-        let mut tls_config = tls_config_builder
-            .with_custom_certificate_verifier(Arc::new(YesVerifier))
-            .with_no_client_auth();
-
-        tls_config.enable_early_data = true;
-        tls_config.alpn_protocols = vec![ALPN.into()];
-
+    #[cfg(feature = "http3")]
+    pub fn new(mut tls: rustls::ClientConfig) -> Self {
+        tls.enable_early_data = true;
         Self {
             connector: H3Connector {
-                config: quinn::ClientConfig::new(Arc::new(tls_config)),
+                config: quinn::ClientConfig::new(Arc::new(tls)),
             },
         }
     }

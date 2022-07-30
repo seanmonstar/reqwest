@@ -69,6 +69,7 @@ pub struct ClientBuilder {
 enum HttpVersionPref {
     Http1,
     Http2,
+    Http3,
     All,
 }
 
@@ -222,7 +223,7 @@ impl ClientBuilder {
                     if config.dns_overrides.is_empty() {
                         HttpConnector::new_gai()
                     } else {
-                        HttpConnector::new_gai_with_overrides(config.dns_overrides)
+                        HttpConnector::new_gai_with_overrides(config.dns_overrides.clone())
                     }
                 }
                 #[cfg(feature = "trust-dns")]
@@ -230,14 +231,14 @@ impl ClientBuilder {
                     if config.dns_overrides.is_empty() {
                         HttpConnector::new_trust_dns()?
                     } else {
-                        HttpConnector::new_trust_dns_with_overrides(config.dns_overrides)?
+                        HttpConnector::new_trust_dns_with_overrides(config.dns_overrides.clone())?
                     }
                 }
                 #[cfg(not(feature = "trust-dns"))]
                 true => unreachable!("trust-dns shouldn't be enabled unless the feature is"),
             };
 
-            #[cfg(feature = "__tls")]
+            #[cfg(any(feature = "__tls", feature = "http3"))]
             match config.tls {
                 #[cfg(feature = "default-tls")]
                 TlsBackend::Default => {
@@ -252,6 +253,9 @@ impl ClientBuilder {
                             HttpVersionPref::Http2 => {
                                 tls.request_alpns(&["h2"]);
                             }
+                            HttpVersionPref::Http3 => {
+                                unreachable!("HTTP/3 shouldn't be enabled unless the feature is")
+                            },
                             HttpVersionPref::All => {
                                 tls.request_alpns(&["h2", "http/1.1"]);
                             }
@@ -326,7 +330,7 @@ impl ClientBuilder {
                     config.local_address,
                     config.nodelay,
                 ),
-                #[cfg(feature = "__rustls")]
+                #[cfg(any(feature = "__rustls", feature = "http3"))]
                 TlsBackend::Rustls => {
                     use crate::tls::NoVerifier;
 
@@ -434,6 +438,9 @@ impl ClientBuilder {
                         HttpVersionPref::Http2 => {
                             tls.alpn_protocols = vec!["h2".into()];
                         }
+                        HttpVersionPref::Http3 => {
+                            tls.alpn_protocols = vec!["h3".into()];
+                        }
                         HttpVersionPref::All => {
                             tls.alpn_protocols = vec!["h2".into(), "http/1.1".into()];
                         }
@@ -456,7 +463,7 @@ impl ClientBuilder {
                 }
             }
 
-            #[cfg(not(feature = "__tls"))]
+            #[cfg(all(not(feature = "__tls"), not(feature = "http3")))]
             Connector::new(http, proxies.clone(), config.local_address, config.nodelay)
         };
 
@@ -508,6 +515,7 @@ impl ClientBuilder {
             builder.http1_allow_obsolete_multiline_headers_in_responses(true);
         }
 
+        let h3_client = h3_client::H3Client::new(connector.deep_clone_tls());
         let hyper_client = builder.build(connector);
 
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
@@ -518,7 +526,8 @@ impl ClientBuilder {
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store,
                 hyper: hyper_client,
-                h3_client: h3_client::H3Client::new(),
+                #[cfg(feature = "http3")]
+                h3_client,
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
@@ -912,6 +921,12 @@ impl ClientBuilder {
     /// Only use HTTP/2.
     pub fn http2_prior_knowledge(mut self) -> ClientBuilder {
         self.config.http_version_pref = HttpVersionPref::Http2;
+        self
+    }
+
+    /// Only use HTTP/3.
+    pub fn http3_prior_knowledge(mut self) -> ClientBuilder {
+        self.config.http_version_pref = HttpVersionPref::Http3;
         self
     }
 
@@ -1711,6 +1726,7 @@ struct ClientRef {
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     headers: HeaderMap,
     hyper: HyperClient,
+    #[cfg(feature = "http3")]
     h3_client: h3_client::H3Client,
     redirect_policy: redirect::Policy,
     referer: bool,

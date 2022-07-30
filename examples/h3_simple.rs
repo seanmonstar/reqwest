@@ -4,7 +4,13 @@ use http::Version;
 use reqwest::{Client, IntoUrl, Response};
 
 async fn get<T: IntoUrl>(url: T) -> reqwest::Result<Response> {
-    Client::builder().build()?.get(url).version(Version::HTTP_3).send().await
+    Client::builder()
+        .http3_prior_knowledge()
+        .build()?
+        .get(url)
+        .version(Version::HTTP_3)
+        .send()
+        .await
 }
 
 
@@ -25,10 +31,6 @@ async fn main() -> Result<(), reqwest::Error> {
 
     eprintln!("Fetching {:?}...", url);
 
-    // reqwest::get() is a convenience function.
-    //
-    // In most cases, you should create/build a reqwest::Client and reuse
-    // it for all requests.
     let res = get(url).await?;
 
     eprintln!("Response: {:?} {}", res.version(), res.status());

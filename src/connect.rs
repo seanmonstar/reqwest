@@ -32,7 +32,6 @@ use crate::error::BoxError;
 use crate::proxy::{Proxy, ProxyScheme};
 
 
-// TODO: add http3 connector
 #[derive(Clone)]
 pub(crate) enum HttpConnector {
     Gai(hyper::client::HttpConnector),
@@ -289,28 +288,6 @@ impl Connector {
         }
     }
 
-    // TODO: add connector for http3
-    // pub(crate) fn new_http3_connector<T>(
-    //     mut http: h3_client::Http3Connector,
-    //     proxies: Arc<Vec<Proxy>>,
-    //     user_agent: Option<HeaderValue>,
-    //     nodelay: bool,
-    // ) -> Connector
-    //     where
-    //         T: Into<Option<IpAddr>>,
-    // {
-    //     Connector {
-    //         inner: Inner::TlsForH3 {
-    //             http,
-    //         },
-    //         proxies,
-    //         verbose: verbose::OFF,
-    //         timeout: None,
-    //         nodelay,
-    //         user_agent,
-    //     }
-    // }
-
     pub(crate) fn set_timeout(&mut self, timeout: Option<Duration>) {
         self.timeout = timeout;
     }
@@ -544,6 +521,15 @@ impl Connector {
             Inner::RustlsTls { http, .. } => http.set_keepalive(dur),
             #[cfg(not(feature = "__tls"))]
             Inner::Http(http) => http.set_keepalive(dur),
+        }
+    }
+
+    #[cfg(feature = "http3")]
+    pub fn deep_clone_tls(&self) -> rustls::ClientConfig {
+        match &self.inner {
+            Inner::RustlsTls { tls, .. } => {
+                (*(*tls)).clone()
+            }
         }
     }
 }
