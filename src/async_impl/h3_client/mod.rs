@@ -9,19 +9,18 @@ use crate::error::{BoxError, Error};
 use hyper::Body;
 use futures_util::future;
 use h3_quinn::Connection;
-use crate::async_impl::h3_client::pool::{Key, PoolClient};
+use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
 
 #[derive(Clone)]
 pub struct H3Client {
     endpoint: quinn::Endpoint,
-    // pool: Arc<Mutex<PoolInner>>
+    pool: Pool,
     // TODO: Since resolution is perform internally in Hyper,
     // we have no way of leveraging that functionality here.
     // resolver: Box<dyn Resolve>,
 }
 
 impl H3Client {
-    #[cfg(feature = "http3")]
     pub fn new(mut tls: rustls::ClientConfig) -> Self {
         tls.enable_early_data = true;
         let config = quinn::ClientConfig::new(Arc::new(tls));
@@ -29,11 +28,17 @@ impl H3Client {
         endpoint.set_default_client_config(config);
         Self {
             endpoint,
+            pool: Pool::new()
         }
     }
 
     async fn get_pooled_client(&self, key: Key) -> Result<PoolClient, BoxError> {
-        let dest = pool::domain_as_uri(key);
+        if let Some(client) = self.pool.try_pool(&key) {
+            eprintln!("found a client for {:?} in the pool", key);
+            return Ok(client);
+        }
+
+        let dest = pool::domain_as_uri(key.clone());
         let auth = dest
             .authority()
             .ok_or("destination must have a host")?
@@ -54,7 +59,9 @@ impl H3Client {
             future::poll_fn(|cx| driver.poll_close(cx)).await.unwrap();
         });
 
-        Ok(PoolClient::new(tx))
+        let client = PoolClient::new(tx);
+        self.pool.put(key, client.clone());
+        Ok(client)
     }
 
     async fn send_request(self, key: Key, req: Request<()>) -> Result<Response<Body>, Error> {
@@ -63,11 +70,10 @@ impl H3Client {
             Ok(client) => client,
             Err(_) => panic!("failed to get pooled client")
         };
-        // TODO: how will requests pass
         pooled.send_request(req).await
     }
 
-    pub(super) fn request(&self, mut req: Request<()>) -> H3ResponseFuture {
+    pub fn request(&self, mut req: Request<()>) -> H3ResponseFuture {
         let pool_key = match pool::extract_domain(req.uri_mut(), false) {
             Ok(s) => s,
             Err(_) => panic!("invalid pool key")
@@ -77,11 +83,11 @@ impl H3Client {
 }
 
 pub struct H3ResponseFuture {
-    inner: Pin<Box<dyn Future<Output = Result<Response<Body>, crate::Error>> + Send>>,
+    inner: Pin<Box<dyn Future<Output = Result<Response<Body>, Error>> + Send>>,
 }
 
 impl Future for H3ResponseFuture {
-    type Output = Result<Response<Body>, crate::Error>;
+    type Output = Result<Response<Body>, Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.inner.as_mut().poll(cx)

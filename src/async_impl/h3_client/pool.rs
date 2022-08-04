@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::mem;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -10,26 +10,52 @@ use http::{Request, Response, Uri};
 use http::uri::{Authority, Scheme};
 use hyper::Body;
 use crate::error::{Kind, Error};
-use bytes::Buf;
 
-pub(super) type Key = (Scheme, Authority); //Arc<String>;
+pub(super) type Key = (Scheme, Authority);
 
-struct Pool {
+#[derive(Clone)]
+pub struct Pool {
     inner: Arc<Mutex<PoolInner>>
 }
 
 impl Pool {
-    fn connecting(&self, key: Key) -> bool {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(PoolInner {
+                idle: HashMap::new(),
+                // TODO: we should get this from some config.
+                max_idle_per_host: std::usize::MAX,
+                timeout: None,
+            }))
+        }
+    }
+
+    pub fn put(&self, key: Key, client: PoolClient) {
         let mut inner = self.inner.lock().unwrap();
-        inner.connecting.insert(key)
+        inner.put(key, client)
+    }
+
+    pub fn try_pool(&self, key: &Key) -> Option<PoolClient> {
+        let mut inner = self.inner.lock().unwrap();
+        let timeout = inner.timeout;
+        inner.idle.get_mut(&key).and_then(|list| {
+            match list.pop() {
+                Some(idle) => {
+                    if let Some(duration) = timeout {
+                        if Instant::now().saturating_duration_since(idle.idle_at) > duration {
+                            eprintln!("pooled client expired");
+                            return None;
+                        }
+                    }
+                    Some(idle.value)
+                },
+                None => None,
+            }
+        })
     }
 }
 
 struct PoolInner {
-    // A flag that a connection is being established, and the connection
-    // should be shared. This prevents making multiple HTTP/2 connections
-    // to the same host.
-    connecting: HashSet<Key>,
     // These are internal Conns sitting in the event loop in the KeepAlive
     // state, waiting to receive a new Request to send on the socket.
     idle: HashMap<Key, Vec<Idle>>,
@@ -44,7 +70,13 @@ impl PoolInner {
             return;
         }
 
-        let idle_list = self.idle.entry(key).or_default();
+        let idle_list = self.idle.entry(key.clone()).or_default();
+
+        if idle_list.len() >= self.max_idle_per_host {
+            eprintln!("max idle per host for {:?}, dropping connection", key);
+            return;
+        }
+
         idle_list.push(Idle {
             idle_at: Instant::now(),
             value: client
@@ -52,7 +84,8 @@ impl PoolInner {
     }
 }
 
-pub(crate) struct PoolClient {
+#[derive(Clone)]
+pub struct PoolClient {
     tx: SendRequest<h3_quinn::OpenStreams, Bytes>
 }
 
@@ -71,8 +104,9 @@ impl PoolClient {
         let resp = stream.recv_response().await.unwrap();
         eprintln!("Response h3 {:?}", resp);
 
-        while let Some(chunk) = stream.recv_data().await.unwrap() {
-            eprintln!("Chunk: {:?}", chunk.chunk());
+        while let Some(_chunk) = stream.recv_data().await.unwrap() {
+            // eprintln!("Chunk: {:?}", chunk.chunk());
+            //eprintln!("A chunk");
         }
 
         Ok(resp.map(|_| {
@@ -117,7 +151,7 @@ pub(crate) fn extract_domain(uri: &mut Uri, is_http_connect: bool) -> Result<Key
             Ok((scheme, auth.clone()))
         }
         _ => {
-            Err(crate::Error::new(Kind::Request, None::<crate::Error>))
+            Err(Error::new(Kind::Request, None::<Error>))
         }
     }
 }

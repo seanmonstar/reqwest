@@ -3,11 +3,16 @@
 use http::Version;
 use reqwest::{Client, IntoUrl, Response};
 
-async fn get<T: IntoUrl>(url: T) -> reqwest::Result<Response> {
-    Client::builder()
+async fn get<T: IntoUrl + Clone>(url: T) -> reqwest::Result<Response> {
+    let client = Client::builder()
         .http3_prior_knowledge()
-        .build()?
-        .get(url)
+        .build()?;
+
+    client.get(url.clone())
+        .version(Version::HTTP_3)
+        .send()
+        .await.unwrap();
+    client.get(url)
         .version(Version::HTTP_3)
         .send()
         .await
