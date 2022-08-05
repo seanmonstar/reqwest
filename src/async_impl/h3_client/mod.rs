@@ -7,6 +7,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::time::Duration;
 use http::{Request, Response};
 use crate::error::{BoxError, Error, Kind};
 use hyper::Body;
@@ -15,6 +16,53 @@ use h3_quinn::Connection;
 use log::debug;
 use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
 use crate::error;
+
+pub struct H3Builder {
+    pool_idle_timeout: Option<Duration>,
+    pool_max_idle_per_host: usize,
+    local_addr: Option<IpAddr>,
+}
+
+impl Default for H3Builder {
+    fn default() -> Self {
+        Self {
+            pool_idle_timeout: Some(Duration::from_secs(90)),
+            pool_max_idle_per_host: usize::MAX,
+            local_addr: None,
+        }
+    }
+}
+
+impl H3Builder {
+    pub fn build(self, tls: rustls::ClientConfig) -> H3Client {
+        let config = quinn::ClientConfig::new(Arc::new(tls));
+        let socket_addr = match self.local_addr {
+            Some(ip) => SocketAddr::new(ip, 0),
+            None => "[::]:0".parse::<SocketAddr>().unwrap(),
+        };
+
+        let mut endpoint = quinn::Endpoint::client(socket_addr)
+            .expect("unable to create QUIC endpoint");
+        endpoint.set_default_client_config(config);
+
+        H3Client {
+            endpoint,
+            pool: Pool::new(self.pool_max_idle_per_host, self.pool_idle_timeout),
+        }
+    }
+
+    pub fn set_pool_idle_timeout(&mut self, timeout: Option<Duration>) {
+        self.pool_idle_timeout = timeout;
+    }
+
+    pub fn set_pool_max_idle_per_host(&mut self, max: usize) {
+        self.pool_max_idle_per_host = max;
+    }
+
+    pub fn set_local_addr(&mut self, addr: Option<IpAddr>) {
+        self.local_addr = addr;
+    }
+}
 
 #[derive(Clone)]
 pub struct H3Client {
@@ -26,21 +74,6 @@ pub struct H3Client {
 }
 
 impl H3Client {
-    pub fn new(tls: rustls::ClientConfig, local_addr: Option<IpAddr>) -> Self {
-        let config = quinn::ClientConfig::new(Arc::new(tls));
-        let socket_addr = match local_addr {
-            Some(ip) => SocketAddr::new(ip, 0),
-            None => "[::]:0".parse::<SocketAddr>().unwrap(),
-        };
-        let mut endpoint = quinn::Endpoint::client(socket_addr)
-            .expect("unable to create QUIC endpoint");
-        endpoint.set_default_client_config(config);
-        Self {
-            endpoint,
-            pool: Pool::new()
-        }
-    }
-
     async fn get_pooled_client(&self, key: Key) -> Result<PoolClient, BoxError> {
         if let Some(client) = self.pool.try_pool(&key) {
             debug!("getting client from pool with key {:?}", key);

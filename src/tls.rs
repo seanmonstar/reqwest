@@ -342,6 +342,8 @@ impl Version {
 }
 
 pub(crate) enum TlsBackend {
+    // This is the default and HTTP/3 feature does not use it so suppress it.
+    #[allow(dead_code)]
     #[cfg(feature = "default-tls")]
     Default,
     #[cfg(feature = "native-tls")]

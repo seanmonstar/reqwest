@@ -41,7 +41,7 @@ use crate::Certificate;
 use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
 #[cfg(feature = "http3")]
-use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
+use crate::async_impl::h3_client::{H3Builder, H3Client, H3ResponseFuture};
 
 /// An asynchronous `Client` to make Requests with.
 ///
@@ -123,6 +123,8 @@ struct Config {
     error: Option<crate::Error>,
     https_only: bool,
     dns_overrides: HashMap<String, SocketAddr>,
+    #[cfg(feature = "http3")]
+    tls_enable_early_data: bool
 }
 
 impl Default for ClientBuilder {
@@ -190,6 +192,8 @@ impl ClientBuilder {
                 cookie_store: None,
                 https_only: false,
                 dns_overrides: HashMap::new(),
+                #[cfg(feature = "http3")]
+                tls_enable_early_data: false
             },
         }
     }
@@ -331,7 +335,7 @@ impl ClientBuilder {
                     config.local_address,
                     config.nodelay,
                 ),
-                #[cfg(any(feature = "__rustls", feature = "http3"))]
+                #[cfg(feature = "__rustls")]
                 TlsBackend::Rustls => {
                     use crate::tls::NoVerifier;
 
@@ -447,6 +451,11 @@ impl ClientBuilder {
                         }
                     }
 
+                    #[cfg(feature = "http3")]
+                    {
+                        tls.enable_early_data = config.tls_enable_early_data;
+                    }
+
                     Connector::new_rustls_tls(
                         http,
                         tls,
@@ -518,13 +527,22 @@ impl ClientBuilder {
 
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
 
+        #[cfg(feature = "http3")]
+        let h3_builder = {
+            let mut h3_builder = H3Builder::default();
+            h3_builder.set_local_addr(config.local_address);
+            h3_builder.set_pool_idle_timeout(config.pool_idle_timeout);
+            h3_builder.set_pool_max_idle_per_host(config.pool_max_idle_per_host);
+            h3_builder
+        };
+
         Ok(Client {
             inner: Arc::new(ClientRef {
                 accepts: config.accepts,
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store,
                 #[cfg(feature = "http3")]
-                h3_client: H3Client::new(connector.deep_clone_tls(), config.local_address.into()),
+                h3_client: h3_builder.build(connector.deep_clone_tls()),
                 hyper: builder.build(connector),
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
@@ -1716,6 +1734,13 @@ impl Config {
 
         if !self.dns_overrides.is_empty() {
             f.field("dns_overrides", &self.dns_overrides);
+        }
+
+        #[cfg(feature = "http3")]
+        {
+            if self.tls_enable_early_data {
+                f.field("tls_enable_early_data", &true);
+            }
         }
     }
 }

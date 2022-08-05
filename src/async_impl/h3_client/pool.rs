@@ -1,5 +1,3 @@
-#![cfg(feature = "http3")]
-
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -22,13 +20,12 @@ pub struct Pool {
 }
 
 impl Pool {
-    pub fn new() -> Self {
+    pub fn new(max_idle_per_host: usize, timeout: Option<Duration>) -> Self {
         Self {
             inner: Arc::new(Mutex::new(PoolInner {
                 idle: HashMap::new(),
-                // TODO: we should get this from some config.
-                max_idle_per_host: std::usize::MAX,
-                timeout: None,
+                max_idle_per_host,
+                timeout,
             }))
         }
     }
