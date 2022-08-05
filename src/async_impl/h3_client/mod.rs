@@ -8,11 +8,13 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use http::{Request, Response};
-use crate::error::{BoxError, Error};
+use crate::error::{BoxError, Error, Kind};
 use hyper::Body;
 use futures_util::future;
 use h3_quinn::Connection;
+use log::debug;
 use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
+use crate::error;
 
 #[derive(Clone)]
 pub struct H3Client {
@@ -30,7 +32,8 @@ impl H3Client {
             Some(ip) => SocketAddr::new(ip, 0),
             None => "[::]:0".parse::<SocketAddr>().unwrap(),
         };
-        let mut endpoint = quinn::Endpoint::client(socket_addr).unwrap();
+        let mut endpoint = quinn::Endpoint::client(socket_addr)
+            .expect("unable to create QUIC endpoint");
         endpoint.set_default_client_config(config);
         Self {
             endpoint,
@@ -40,7 +43,7 @@ impl H3Client {
 
     async fn get_pooled_client(&self, key: Key) -> Result<PoolClient, BoxError> {
         if let Some(client) = self.pool.try_pool(&key) {
-            log::debug!("getting client from pool with key {:?}", key);
+            debug!("getting client from pool with key {:?}", key);
             return Ok(client);
         }
 
@@ -73,15 +76,18 @@ impl H3Client {
     async fn send_request(self, key: Key, req: Request<()>) -> Result<Response<Body>, Error> {
         let mut pooled = match self.get_pooled_client(key).await {
             Ok(client) => client,
-            Err(_) => panic!("failed to get pooled client")
+            Err(e) => return Err(error::request(e)),
         };
-        pooled.send_request(req).await
+        pooled
+            .send_request(req)
+            .await
+            .map_err(|e| Error::new(Kind::Request, Some(e)))
     }
 
     pub fn request(&self, mut req: Request<()>) -> H3ResponseFuture {
-        let pool_key = match pool::extract_domain(req.uri_mut(), false) {
+        let pool_key = match pool::extract_domain(req.uri_mut()) {
             Ok(s) => s,
-            Err(_) => panic!("invalid pool key")
+            Err(e) => return H3ResponseFuture{inner: Box::pin(future::err(e))},
         };
         H3ResponseFuture{inner: Box::pin(self.clone().send_request(pool_key, req))}
     }

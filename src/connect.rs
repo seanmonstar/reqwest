@@ -171,7 +171,6 @@ pub(crate) struct Connector {
     user_agent: Option<HeaderValue>,
 }
 
-// TODO: add http3 connector
 #[derive(Clone)]
 enum Inner {
     #[cfg(not(feature = "__tls"))]
@@ -354,7 +353,6 @@ impl Connector {
         })
     }
 
-    // TODO: add http3 logic
     async fn connect_with_maybe_proxy(self, dst: Uri, is_proxy: bool) -> Result<Conn, BoxError> {
         match self.inner {
             #[cfg(not(feature = "__tls"))]

@@ -1,7 +1,6 @@
 #![cfg(feature = "http3")]
 
 use std::collections::HashMap;
-use std::mem;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use bytes::Bytes;
@@ -11,8 +10,9 @@ use h3::client::SendRequest;
 use http::{Request, Response, Uri};
 use http::uri::{Authority, Scheme};
 use hyper::Body;
-use crate::error::{Kind, Error};
+use crate::error::{BoxError, Error, Kind};
 use bytes::Buf;
+use log::debug;
 
 pub(super) type Key = (Scheme, Authority);
 
@@ -46,7 +46,7 @@ impl Pool {
                 Some(idle) => {
                     if let Some(duration) = timeout {
                         if Instant::now().saturating_duration_since(idle.idle_at) > duration {
-                            eprintln!("pooled client expired");
+                            debug!("pooled client expired");
                             return None;
                         }
                     }
@@ -69,14 +69,14 @@ struct PoolInner {
 impl PoolInner {
     fn put(&mut self, key: Key, client: PoolClient) {
         if self.idle.contains_key(&key) {
-            eprintln!("connection alread exists for key {:?}", key);
+            debug!("connection already exists for key {:?}", key);
             return;
         }
 
         let idle_list = self.idle.entry(key.clone()).or_default();
 
         if idle_list.len() >= self.max_idle_per_host {
-            eprintln!("max idle per host for {:?}, dropping connection", key);
+            debug!("max idle per host for {:?}, dropping connection", key);
             return;
         }
 
@@ -99,19 +99,19 @@ impl PoolClient {
         }
     }
 
-    pub async fn send_request(&mut self, req: Request<()>) -> Result<Response<Body>, Error> {
-        let mut stream = self.tx.send_request(req).await.unwrap();
-        stream.finish().await.unwrap();
+    pub async fn send_request(&mut self, req: Request<()>) -> Result<Response<Body>, BoxError> {
+        let mut stream = self.tx.send_request(req).await?;
+        stream.finish().await?;
 
-        let resp = stream.recv_response().await.unwrap();
+        let resp = stream.recv_response().await?;
 
-        let mut data = Vec::new();
-        while let Some(chunk) = stream.recv_data().await.unwrap() {
-            data.extend(chunk.chunk())
+        let mut body = Vec::new();
+        while let Some(chunk) = stream.recv_data().await? {
+            body.extend(chunk.chunk())
         }
 
         Ok(resp.map(|_| {
-            Body::from(data)
+            Body::from(body)
         }))
     }
 }
@@ -121,39 +121,11 @@ struct Idle {
     value: PoolClient,
 }
 
-
-fn set_scheme(uri: &mut Uri, scheme: Scheme) {
-    debug_assert!(
-        uri.scheme().is_none(),
-        "set_scheme expects no existing scheme"
-    );
-    let old = mem::replace(uri, Uri::default());
-    let mut parts: ::http::uri::Parts = old.into();
-    parts.scheme = Some(scheme);
-    parts.path_and_query = Some("/".parse().expect("slash is a valid path"));
-    *uri = Uri::from_parts(parts).expect("scheme is valid");
-}
-
-pub(crate) fn extract_domain(uri: &mut Uri, is_http_connect: bool) -> Result<Key, Error> {
+pub(crate) fn extract_domain(uri: &mut Uri) -> Result<Key, Error> {
     let uri_clone = uri.clone();
     match (uri_clone.scheme(), uri_clone.authority()) {
         (Some(scheme), Some(auth)) => Ok((scheme.clone(), auth.clone())),
-        (None, Some(auth)) if is_http_connect => {
-            let scheme = match auth.port_u16() {
-                Some(443) => {
-                    set_scheme(uri, Scheme::HTTPS);
-                    Scheme::HTTPS
-                }
-                _ => {
-                    set_scheme(uri, Scheme::HTTP);
-                    Scheme::HTTP
-                }
-            };
-            Ok((scheme, auth.clone()))
-        }
-        _ => {
-            Err(Error::new(Kind::Request, None::<Error>))
-        }
+        _ => Err(Error::new(Kind::Request, None::<Error>)),
     }
 }
 
