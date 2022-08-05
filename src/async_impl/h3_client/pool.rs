@@ -10,6 +10,7 @@ use http::{Request, Response, Uri};
 use http::uri::{Authority, Scheme};
 use hyper::Body;
 use crate::error::{Kind, Error};
+use bytes::Buf;
 
 pub(super) type Key = (Scheme, Authority);
 
@@ -100,17 +101,15 @@ impl PoolClient {
         let mut stream = self.tx.send_request(req).await.unwrap();
         stream.finish().await.unwrap();
 
-        eprintln!("Receiving response ...");
         let resp = stream.recv_response().await.unwrap();
-        eprintln!("Response h3 {:?}", resp);
 
-        while let Some(_chunk) = stream.recv_data().await.unwrap() {
-            // eprintln!("Chunk: {:?}", chunk.chunk());
-            //eprintln!("A chunk");
+        let mut data = Vec::new();
+        while let Some(chunk) = stream.recv_data().await.unwrap() {
+            data.extend(chunk.chunk())
         }
 
         Ok(resp.map(|_| {
-            Body::empty()
+            Body::from(data)
         }))
     }
 }

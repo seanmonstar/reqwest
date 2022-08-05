@@ -24,6 +24,7 @@ impl H3Client {
     pub fn new(mut tls: rustls::ClientConfig) -> Self {
         tls.enable_early_data = true;
         let config = quinn::ClientConfig::new(Arc::new(tls));
+        // TODO: local address should be configurable.
         let mut endpoint = quinn::Endpoint::client("[::]:0".parse().unwrap()).unwrap();
         endpoint.set_default_client_config(config);
         Self {
@@ -34,7 +35,7 @@ impl H3Client {
 
     async fn get_pooled_client(&self, key: Key) -> Result<PoolClient, BoxError> {
         if let Some(client) = self.pool.try_pool(&key) {
-            eprintln!("found a client for {:?} in the pool", key);
+            log::debug!("getting client from pool with key {:?}", key);
             return Ok(client);
         }
 
@@ -65,7 +66,6 @@ impl H3Client {
     }
 
     async fn send_request(self, key: Key, req: Request<()>) -> Result<Response<Body>, Error> {
-        eprintln!("Trying http3 ...");
         let mut pooled = match self.get_pooled_client(key).await {
             Ok(client) => client,
             Err(_) => panic!("failed to get pooled client")
