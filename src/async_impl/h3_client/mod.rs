@@ -1,6 +1,9 @@
+#![cfg(feature = "http3")]
+
 mod pool;
 
 use std::future::Future;
+use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -21,11 +24,13 @@ pub struct H3Client {
 }
 
 impl H3Client {
-    pub fn new(mut tls: rustls::ClientConfig) -> Self {
-        tls.enable_early_data = true;
+    pub fn new(tls: rustls::ClientConfig, local_addr: Option<IpAddr>) -> Self {
         let config = quinn::ClientConfig::new(Arc::new(tls));
-        // TODO: local address should be configurable.
-        let mut endpoint = quinn::Endpoint::client("[::]:0".parse().unwrap()).unwrap();
+        let socket_addr = match local_addr {
+            Some(ip) => SocketAddr::new(ip, 0),
+            None => "[::]:0".parse::<SocketAddr>().unwrap(),
+        };
+        let mut endpoint = quinn::Endpoint::client(socket_addr).unwrap();
         endpoint.set_default_client_config(config);
         Self {
             endpoint,

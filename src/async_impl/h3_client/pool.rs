@@ -1,3 +1,5 @@
+#![cfg(feature = "http3")]
+
 use std::collections::HashMap;
 use std::mem;
 use std::sync::{Arc, Mutex};

@@ -530,6 +530,8 @@ impl Connector {
             Inner::RustlsTls { tls, .. } => {
                 (*(*tls)).clone()
             }
+            #[cfg(feature = "default-tls")]
+            _ => unreachable!("HTTP/3 should only be enabled with Rustls")
         }
     }
 }

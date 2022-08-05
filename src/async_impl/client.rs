@@ -23,7 +23,6 @@ use std::task::{Context, Poll};
 use tokio::time::Sleep;
 
 use log::{debug, trace};
-use super::h3_client;
 use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
@@ -41,6 +40,8 @@ use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
+#[cfg(feature = "http3")]
+use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
 
 /// An asynchronous `Client` to make Requests with.
 ///
@@ -238,7 +239,7 @@ impl ClientBuilder {
                 true => unreachable!("trust-dns shouldn't be enabled unless the feature is"),
             };
 
-            #[cfg(any(feature = "__tls", feature = "http3"))]
+            #[cfg(feature = "__tls")]
             match config.tls {
                 #[cfg(feature = "default-tls")]
                 TlsBackend::Default => {
@@ -463,7 +464,7 @@ impl ClientBuilder {
                 }
             }
 
-            #[cfg(all(not(feature = "__tls"), not(feature = "http3")))]
+            #[cfg(not(feature = "__tls"))]
             Connector::new(http, proxies.clone(), config.local_address, config.nodelay)
         };
 
@@ -515,9 +516,6 @@ impl ClientBuilder {
             builder.http1_allow_obsolete_multiline_headers_in_responses(true);
         }
 
-        let h3_client = h3_client::H3Client::new(connector.deep_clone_tls());
-        let hyper_client = builder.build(connector);
-
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
 
         Ok(Client {
@@ -525,9 +523,9 @@ impl ClientBuilder {
                 accepts: config.accepts,
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store,
-                hyper: hyper_client,
                 #[cfg(feature = "http3")]
-                h3_client,
+                h3_client: H3Client::new(connector.deep_clone_tls(), config.local_address.into()),
+                hyper: builder.build(connector),
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
@@ -1509,13 +1507,15 @@ impl Client {
         self.proxy_auth(&uri, &mut headers);
 
         let in_flight = match version {
+            #[cfg(feature = "http3")]
             http::Version::HTTP_3 => {
-                let req = hyper::Request::builder()
+                let mut req = hyper::Request::builder()
                     .method(method.clone())
                     .uri(uri)
                     .version(version)
                     .body(())
                     .expect("valid request parts");
+                *req.headers_mut() = headers.clone();
                 ResponseFuture::H3(self.inner.h3_client.request(req))
             }
             _ => {
@@ -1727,7 +1727,7 @@ struct ClientRef {
     headers: HeaderMap,
     hyper: HyperClient,
     #[cfg(feature = "http3")]
-    h3_client: h3_client::H3Client,
+    h3_client: H3Client,
     redirect_policy: redirect::Policy,
     referer: bool,
     request_timeout: Option<Duration>,
@@ -1804,7 +1804,8 @@ pin_project! {
 
 enum ResponseFuture {
     Default(HyperResponseFuture),
-    H3(h3_client::H3ResponseFuture),
+    #[cfg(feature = "http3")]
+    H3(H3ResponseFuture),
 }
 
 impl PendingRequest {
@@ -1925,6 +1926,7 @@ impl Future for PendingRequest {
                         Poll::Pending => return Poll::Pending,
                     }
                 }
+                #[cfg(feature = "http3")]
                 ResponseFuture::H3(r) => match Pin::new(r).poll(cx) {
                     Poll::Ready(Err(e)) => {
                         if self.as_mut().retry_error(&e) {
