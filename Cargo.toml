@@ -63,7 +63,7 @@ stream = ["tokio/fs", "tokio-util"]
 socks = ["tokio-socks"]
 
 # Experimental HTTP/3 client.
-http3 = ["rustls-tls"]
+http3 = ["rustls-tls", "h3", "h3-quinn", "quinn", "futures-channel"]
 
 # Internal (PRIVATE!) features used to aid testing.
 # Don't rely on these whatsoever. They may disappear at anytime.
@@ -140,10 +140,10 @@ tokio-socks = { version = "0.5.1", optional = true }
 trust-dns-resolver = { version = "0.21", optional = true }
 
 # HTTP/3 experimental support
-h3 = { git = "https://github.com/hyperium/h3" }
-h3-quinn = { git = "https://github.com/hyperium/h3" }
-quinn = { version = "0.8", default-features = false, features = ["tls-rustls", "ring"] }
-futures-channel = "0.3"
+h3 = { git = "https://github.com/hyperium/h3", optional = true }
+h3-quinn = { git = "https://github.com/hyperium/h3", optional = true }
+quinn = { version = "0.8", default-features = false, features = ["tls-rustls", "ring"], optional = true  }
+futures-channel = { version="0.3", optional = true}
 
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
