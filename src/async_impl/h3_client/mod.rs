@@ -2,20 +2,20 @@
 
 mod pool;
 
+use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
+use crate::error;
+use crate::error::{BoxError, Error, Kind};
+use futures_util::future;
+use h3_quinn::Connection;
+use http::{Request, Response};
+use hyper::Body;
+use log::debug;
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use http::{Request, Response};
-use crate::error::{BoxError, Error, Kind};
-use hyper::Body;
-use futures_util::future;
-use h3_quinn::Connection;
-use log::debug;
-use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
-use crate::error;
 
 pub struct H3Builder {
     pool_idle_timeout: Option<Duration>,
@@ -41,8 +41,8 @@ impl H3Builder {
             None => "[::]:0".parse::<SocketAddr>().unwrap(),
         };
 
-        let mut endpoint = quinn::Endpoint::client(socket_addr)
-            .expect("unable to create QUIC endpoint");
+        let mut endpoint =
+            quinn::Endpoint::client(socket_addr).expect("unable to create QUIC endpoint");
         endpoint.set_default_client_config(config);
 
         H3Client {
@@ -91,9 +91,7 @@ impl H3Client {
             .next()
             .ok_or("dns found no addresses")?;
 
-        let quinn_conn = Connection::new(
-            self.endpoint.connect(addr, auth.host())?.await?
-        );
+        let quinn_conn = Connection::new(self.endpoint.connect(addr, auth.host())?.await?);
         let (mut driver, tx) = h3::client::new(quinn_conn).await?;
 
         // TODO: What does poll_close() do?
@@ -120,9 +118,15 @@ impl H3Client {
     pub fn request(&self, mut req: Request<()>) -> H3ResponseFuture {
         let pool_key = match pool::extract_domain(req.uri_mut()) {
             Ok(s) => s,
-            Err(e) => return H3ResponseFuture{inner: Box::pin(future::err(e))},
+            Err(e) => {
+                return H3ResponseFuture {
+                    inner: Box::pin(future::err(e)),
+                }
+            }
         };
-        H3ResponseFuture{inner: Box::pin(self.clone().send_request(pool_key, req))}
+        H3ResponseFuture {
+            inner: Box::pin(self.clone().send_request(pool_key, req)),
+        }
     }
 }
 

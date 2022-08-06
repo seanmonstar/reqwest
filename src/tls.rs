@@ -380,7 +380,10 @@ impl Default for TlsBackend {
             TlsBackend::Default
         }
 
-        #[cfg(any(all(feature = "__rustls", not(feature = "default-tls")), feature = "http3"))]
+        #[cfg(any(
+            all(feature = "__rustls", not(feature = "default-tls")),
+            feature = "http3"
+        ))]
         {
             TlsBackend::Rustls
         }

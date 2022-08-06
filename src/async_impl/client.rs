@@ -22,11 +22,12 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::time::Sleep;
 
-use log::{debug, trace};
 use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
+#[cfg(feature = "http3")]
+use crate::async_impl::h3_client::{H3Builder, H3Client, H3ResponseFuture};
 use crate::connect::{Connector, HttpConnector};
 #[cfg(feature = "cookies")]
 use crate::cookie;
@@ -40,8 +41,7 @@ use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
-#[cfg(feature = "http3")]
-use crate::async_impl::h3_client::{H3Builder, H3Client, H3ResponseFuture};
+use log::{debug, trace};
 
 /// An asynchronous `Client` to make Requests with.
 ///
@@ -70,6 +70,7 @@ pub struct ClientBuilder {
 enum HttpVersionPref {
     Http1,
     Http2,
+    #[cfg(feature = "http3")]
     Http3,
     All,
 }
@@ -124,7 +125,7 @@ struct Config {
     https_only: bool,
     dns_overrides: HashMap<String, SocketAddr>,
     #[cfg(feature = "http3")]
-    tls_enable_early_data: bool
+    tls_enable_early_data: bool,
 }
 
 impl Default for ClientBuilder {
@@ -193,7 +194,7 @@ impl ClientBuilder {
                 https_only: false,
                 dns_overrides: HashMap::new(),
                 #[cfg(feature = "http3")]
-                tls_enable_early_data: false
+                tls_enable_early_data: false,
             },
         }
     }
@@ -249,7 +250,7 @@ impl ClientBuilder {
                 TlsBackend::Default => {
                     let mut tls = TlsConnector::builder();
 
-                    #[cfg(feature = "native-tls-alpn")]
+                    #[cfg(all(feature = "native-tls-alpn", not(feature = "http3")))]
                     {
                         match config.http_version_pref {
                             HttpVersionPref::Http1 => {
@@ -258,9 +259,6 @@ impl ClientBuilder {
                             HttpVersionPref::Http2 => {
                                 tls.request_alpns(&["h2"]);
                             }
-                            HttpVersionPref::Http3 => {
-                                unreachable!("HTTP/3 shouldn't be enabled unless the feature is")
-                            },
                             HttpVersionPref::All => {
                                 tls.request_alpns(&["h2", "http/1.1"]);
                             }
@@ -443,6 +441,7 @@ impl ClientBuilder {
                         HttpVersionPref::Http2 => {
                             tls.alpn_protocols = vec!["h2".into()];
                         }
+                        #[cfg(feature = "http3")]
                         HttpVersionPref::Http3 => {
                             tls.alpn_protocols = vec!["h3".into()];
                         }
@@ -941,6 +940,7 @@ impl ClientBuilder {
     }
 
     /// Only use HTTP/3.
+    #[cfg(feature = "http3")]
     pub fn http3_prior_knowledge(mut self) -> ClientBuilder {
         self.config.http_version_pref = HttpVersionPref::Http3;
         self
@@ -1535,12 +1535,14 @@ impl Client {
                 let mut req = builder.body(()).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
                 ResponseFuture::H3(self.inner.h3_client.request(req))
-            },
+            }
             _ => {
-                let mut req = builder.body(body.into_stream()).expect("valid request parts");
+                let mut req = builder
+                    .body(body.into_stream())
+                    .expect("valid request parts");
                 *req.headers_mut() = headers.clone();
                 ResponseFuture::Default(self.inner.hyper.request(req))
-            },
+            }
         };
 
         let timeout = timeout
@@ -1875,7 +1877,8 @@ impl PendingRequest {
 
         *req.headers_mut() = self.headers.clone();
 
-        *self.as_mut().in_flight().get_mut() = ResponseFuture::Default(self.client.hyper.request(req));
+        *self.as_mut().in_flight().get_mut() =
+            ResponseFuture::Default(self.client.hyper.request(req));
 
         true
     }
@@ -1933,29 +1936,31 @@ impl Future for PendingRequest {
 
         loop {
             let res = match self.as_mut().in_flight().get_mut() {
-                ResponseFuture::Default(r) => {
-                    match Pin::new(r).poll(cx) {
-                        Poll::Ready(Err(e)) => {
-                            if self.as_mut().retry_error(&e) {
-                                continue;
-                            }
-                            return Poll::Ready(Err(crate::error::request(e).with_url(self.url.clone())));
+                ResponseFuture::Default(r) => match Pin::new(r).poll(cx) {
+                    Poll::Ready(Err(e)) => {
+                        if self.as_mut().retry_error(&e) {
+                            continue;
                         }
-                        Poll::Ready(Ok(res)) => res,
-                        Poll::Pending => return Poll::Pending,
+                        return Poll::Ready(Err(
+                            crate::error::request(e).with_url(self.url.clone())
+                        ));
                     }
-                }
+                    Poll::Ready(Ok(res)) => res,
+                    Poll::Pending => return Poll::Pending,
+                },
                 #[cfg(feature = "http3")]
                 ResponseFuture::H3(r) => match Pin::new(r).poll(cx) {
                     Poll::Ready(Err(e)) => {
                         if self.as_mut().retry_error(&e) {
                             continue;
                         }
-                        return Poll::Ready(Err(crate::error::request(e).with_url(self.url.clone())));
+                        return Poll::Ready(Err(
+                            crate::error::request(e).with_url(self.url.clone())
+                        ));
                     }
                     Poll::Ready(Ok(res)) => res,
                     Poll::Pending => return Poll::Pending,
-                }
+                },
             };
 
             #[cfg(feature = "cookies")]
@@ -2071,7 +2076,8 @@ impl Future for PendingRequest {
 
                             *req.headers_mut() = headers.clone();
                             std::mem::swap(self.as_mut().headers(), &mut headers);
-                            *self.as_mut().in_flight().get_mut() =  ResponseFuture::Default(self.client.hyper.request(req));
+                            *self.as_mut().in_flight().get_mut() =
+                                ResponseFuture::Default(self.client.hyper.request(req));
                             continue;
                         }
                         redirect::ActionKind::Stop => {

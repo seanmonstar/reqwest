@@ -31,7 +31,6 @@ use crate::dns::TrustDnsResolver;
 use crate::error::BoxError;
 use crate::proxy::{Proxy, ProxyScheme};
 
-
 #[derive(Clone)]
 pub(crate) enum HttpConnector {
     Gai(hyper::client::HttpConnector),
@@ -525,11 +524,9 @@ impl Connector {
     #[cfg(feature = "http3")]
     pub fn deep_clone_tls(&self) -> rustls::ClientConfig {
         match &self.inner {
-            Inner::RustlsTls { tls, .. } => {
-                (*(*tls)).clone()
-            }
+            Inner::RustlsTls { tls, .. } => (*(*tls)).clone(),
             #[cfg(feature = "default-tls")]
-            _ => unreachable!("HTTP/3 should only be enabled with Rustls")
+            _ => unreachable!("HTTP/3 should only be enabled with Rustls"),
         }
     }
 }

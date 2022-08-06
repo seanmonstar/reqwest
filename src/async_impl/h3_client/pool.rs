@@ -1,22 +1,22 @@
+use bytes::Bytes;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use bytes::Bytes;
 use tokio::time::Instant;
 
-use h3::client::SendRequest;
-use http::{Request, Response, Uri};
-use http::uri::{Authority, Scheme};
-use hyper::Body;
 use crate::error::{BoxError, Error, Kind};
 use bytes::Buf;
+use h3::client::SendRequest;
+use http::uri::{Authority, Scheme};
+use http::{Request, Response, Uri};
+use hyper::Body;
 use log::debug;
 
 pub(super) type Key = (Scheme, Authority);
 
 #[derive(Clone)]
 pub struct Pool {
-    inner: Arc<Mutex<PoolInner>>
+    inner: Arc<Mutex<PoolInner>>,
 }
 
 impl Pool {
@@ -26,7 +26,7 @@ impl Pool {
                 idle: HashMap::new(),
                 max_idle_per_host,
                 timeout,
-            }))
+            })),
         }
     }
 
@@ -38,19 +38,17 @@ impl Pool {
     pub fn try_pool(&self, key: &Key) -> Option<PoolClient> {
         let mut inner = self.inner.lock().unwrap();
         let timeout = inner.timeout;
-        inner.idle.get_mut(&key).and_then(|list| {
-            match list.pop() {
-                Some(idle) => {
-                    if let Some(duration) = timeout {
-                        if Instant::now().saturating_duration_since(idle.idle_at) > duration {
-                            debug!("pooled client expired");
-                            return None;
-                        }
+        inner.idle.get_mut(&key).and_then(|list| match list.pop() {
+            Some(idle) => {
+                if let Some(duration) = timeout {
+                    if Instant::now().saturating_duration_since(idle.idle_at) > duration {
+                        debug!("pooled client expired");
+                        return None;
                     }
-                    Some(idle.value)
-                },
-                None => None,
+                }
+                Some(idle.value)
             }
+            None => None,
         })
     }
 }
@@ -79,21 +77,19 @@ impl PoolInner {
 
         idle_list.push(Idle {
             idle_at: Instant::now(),
-            value: client
+            value: client,
         });
     }
 }
 
 #[derive(Clone)]
 pub struct PoolClient {
-    tx: SendRequest<h3_quinn::OpenStreams, Bytes>
+    tx: SendRequest<h3_quinn::OpenStreams, Bytes>,
 }
 
 impl PoolClient {
     pub fn new(tx: SendRequest<h3_quinn::OpenStreams, Bytes>) -> Self {
-        Self {
-            tx
-        }
+        Self { tx }
     }
 
     // TODO: add support for sending data.
@@ -108,9 +104,7 @@ impl PoolClient {
             body.extend(chunk.chunk())
         }
 
-        Ok(resp.map(|_| {
-            Body::from(body)
-        }))
+        Ok(resp.map(|_| Body::from(body)))
     }
 }
 
