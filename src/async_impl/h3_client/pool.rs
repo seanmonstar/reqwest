@@ -96,6 +96,7 @@ impl PoolClient {
         }
     }
 
+    // TODO: add support for sending data.
     pub async fn send_request(&mut self, req: Request<()>) -> Result<Response<Body>, BoxError> {
         let mut stream = self.tx.send_request(req).await?;
         stream.finish().await?;

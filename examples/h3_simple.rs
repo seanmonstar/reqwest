@@ -11,15 +11,10 @@ async fn main() -> Result<(), reqwest::Error> {
     use reqwest::{Client, IntoUrl, Response};
 
     async fn get<T: IntoUrl + Clone>(url: T) -> reqwest::Result<Response> {
-        let client = Client::builder()
+        Client::builder()
             .http3_prior_knowledge()
-            .build()?;
-
-        client.get(url.clone())
-            .version(Version::HTTP_3)
-            .send()
-            .await.unwrap();
-        client.get(url)
+            .build()?
+            .get(url)
             .version(Version::HTTP_3)
             .send()
             .await

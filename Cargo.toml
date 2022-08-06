@@ -139,7 +139,7 @@ tokio-socks = { version = "0.5.1", optional = true }
 ## trust-dns
 trust-dns-resolver = { version = "0.21", optional = true }
 
-# http3 experimental support
+# HTTP/3 experimental support
 h3 = { git = "https://github.com/hyperium/h3" }
 h3-quinn = { git = "https://github.com/hyperium/h3" }
 quinn = { version = "0.8", default-features = false, features = ["tls-rustls", "ring"] }

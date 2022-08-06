@@ -1524,29 +1524,23 @@ impl Client {
 
         self.proxy_auth(&uri, &mut headers);
 
+        let builder = hyper::Request::builder()
+            .method(method.clone())
+            .uri(uri)
+            .version(version);
+
         let in_flight = match version {
             #[cfg(feature = "http3")]
             http::Version::HTTP_3 => {
-                let mut req = hyper::Request::builder()
-                    .method(method.clone())
-                    .uri(uri)
-                    .version(version)
-                    .body(())
-                    .expect("valid request parts");
+                let mut req = builder.body(()).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
                 ResponseFuture::H3(self.inner.h3_client.request(req))
-            }
+            },
             _ => {
-                let mut req = hyper::Request::builder()
-                    .method(method.clone())
-                    .uri(uri)
-                    .version(version)
-                    .body(body.into_stream())
-                    .expect("valid request parts");
-
+                let mut req = builder.body(body.into_stream()).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
                 ResponseFuture::Default(self.inner.hyper.request(req))
-            }
+            },
         };
 
         let timeout = timeout
