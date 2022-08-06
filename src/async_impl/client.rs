@@ -1532,7 +1532,7 @@ impl Client {
         let in_flight = match version {
             #[cfg(feature = "http3")]
             http::Version::HTTP_3 => {
-                let mut req = builder.body(()).expect("valid request parts");
+                let mut req = builder.body(body).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
                 ResponseFuture::H3(self.inner.h3_client.request(req))
             }

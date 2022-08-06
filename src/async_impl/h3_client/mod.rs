@@ -3,12 +3,12 @@
 mod pool;
 
 use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
-use crate::error;
 use crate::error::{BoxError, Error, Kind};
+use crate::{error, Body};
 use futures_util::future;
 use h3_quinn::Connection;
 use http::{Request, Response};
-use hyper::Body;
+use hyper::Body as HyperBody;
 use log::debug;
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
@@ -104,7 +104,11 @@ impl H3Client {
         Ok(client)
     }
 
-    async fn send_request(self, key: Key, req: Request<()>) -> Result<Response<Body>, Error> {
+    async fn send_request(
+        self,
+        key: Key,
+        req: Request<Body>,
+    ) -> Result<Response<HyperBody>, Error> {
         let mut pooled = match self.get_pooled_client(key).await {
             Ok(client) => client,
             Err(e) => return Err(error::request(e)),
@@ -115,7 +119,7 @@ impl H3Client {
             .map_err(|e| Error::new(Kind::Request, Some(e)))
     }
 
-    pub fn request(&self, mut req: Request<()>) -> H3ResponseFuture {
+    pub fn request(&self, mut req: Request<Body>) -> H3ResponseFuture {
         let pool_key = match pool::extract_domain(req.uri_mut()) {
             Ok(s) => s,
             Err(e) => {
@@ -131,11 +135,11 @@ impl H3Client {
 }
 
 pub struct H3ResponseFuture {
-    inner: Pin<Box<dyn Future<Output = Result<Response<Body>, Error>> + Send>>,
+    inner: Pin<Box<dyn Future<Output = Result<Response<HyperBody>, Error>> + Send>>,
 }
 
 impl Future for H3ResponseFuture {
-    type Output = Result<Response<Body>, Error>;
+    type Output = Result<Response<HyperBody>, Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.inner.as_mut().poll(cx)

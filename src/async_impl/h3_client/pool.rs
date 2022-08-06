@@ -5,11 +5,12 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 use crate::error::{BoxError, Error, Kind};
+use crate::Body;
 use bytes::Buf;
 use h3::client::SendRequest;
 use http::uri::{Authority, Scheme};
 use http::{Request, Response, Uri};
-use hyper::Body;
+use hyper::Body as HyperBody;
 use log::debug;
 
 pub(super) type Key = (Scheme, Authority);
@@ -92,19 +93,31 @@ impl PoolClient {
         Self { tx }
     }
 
-    // TODO: add support for sending data.
-    pub async fn send_request(&mut self, req: Request<()>) -> Result<Response<Body>, BoxError> {
+    pub async fn send_request(
+        &mut self,
+        req: Request<Body>,
+    ) -> Result<Response<HyperBody>, BoxError> {
+        let (head, req_body) = req.into_parts();
+        let req = Request::from_parts(head, ());
         let mut stream = self.tx.send_request(req).await?;
+
+        match req_body.as_bytes() {
+            Some(b) if !b.is_empty() => {
+                stream.send_data(Bytes::copy_from_slice(b)).await?;
+            }
+            _ => {}
+        }
+
         stream.finish().await?;
 
         let resp = stream.recv_response().await?;
 
-        let mut body = Vec::new();
+        let mut resp_body = Vec::new();
         while let Some(chunk) = stream.recv_data().await? {
-            body.extend(chunk.chunk())
+            resp_body.extend(chunk.chunk())
         }
 
-        Ok(resp.map(|_| Body::from(body)))
+        Ok(resp.map(|_| HyperBody::from(resp_body)))
     }
 }
 
