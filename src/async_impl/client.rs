@@ -1869,16 +1869,28 @@ impl PendingRequest {
         self.retry_count += 1;
 
         let uri = expect_uri(&self.url);
-        let mut req = hyper::Request::builder()
-            .method(self.method.clone())
-            .uri(uri)
-            .body(body.into_stream())
-            .expect("valid request parts");
 
-        *req.headers_mut() = self.headers.clone();
-
-        *self.as_mut().in_flight().get_mut() =
-            ResponseFuture::Default(self.client.hyper.request(req));
+        *self.as_mut().in_flight().get_mut() = match *self.as_mut().in_flight().as_ref() {
+            #[cfg(feature = "http3")]
+            ResponseFuture::H3(_) => {
+                let mut req = hyper::Request::builder()
+                    .method(self.method.clone())
+                    .uri(uri)
+                    .body(body)
+                    .expect("valid request parts");
+                *req.headers_mut() = self.headers.clone();
+                ResponseFuture::H3(self.client.h3_client.request(req))
+            }
+            _ => {
+                let mut req = hyper::Request::builder()
+                    .method(self.method.clone())
+                    .uri(uri)
+                    .body(body.into_stream())
+                    .expect("valid request parts");
+                *req.headers_mut() = self.headers.clone();
+                ResponseFuture::Default(self.client.hyper.request(req))
+            }
+        };
 
         true
     }
@@ -2060,11 +2072,6 @@ impl Future for PendingRequest {
                                 Some(Some(ref body)) => Body::reusable(body.clone()),
                                 _ => Body::empty(),
                             };
-                            let mut req = hyper::Request::builder()
-                                .method(self.method.clone())
-                                .uri(uri.clone())
-                                .body(body.into_stream())
-                                .expect("valid request parts");
 
                             // Add cookies from the cookie store.
                             #[cfg(feature = "cookies")]
@@ -2074,10 +2081,31 @@ impl Future for PendingRequest {
                                 }
                             }
 
-                            *req.headers_mut() = headers.clone();
-                            std::mem::swap(self.as_mut().headers(), &mut headers);
                             *self.as_mut().in_flight().get_mut() =
-                                ResponseFuture::Default(self.client.hyper.request(req));
+                                match *self.as_mut().in_flight().as_ref() {
+                                    #[cfg(feature = "http3")]
+                                    ResponseFuture::H3(_) => {
+                                        let mut req = hyper::Request::builder()
+                                            .method(self.method.clone())
+                                            .uri(uri.clone())
+                                            .body(body)
+                                            .expect("valid request parts");
+                                        *req.headers_mut() = headers.clone();
+                                        std::mem::swap(self.as_mut().headers(), &mut headers);
+                                        ResponseFuture::H3(self.client.h3_client.request(req))
+                                    }
+                                    _ => {
+                                        let mut req = hyper::Request::builder()
+                                            .method(self.method.clone())
+                                            .uri(uri.clone())
+                                            .body(body.into_stream())
+                                            .expect("valid request parts");
+                                        *req.headers_mut() = headers.clone();
+                                        std::mem::swap(self.as_mut().headers(), &mut headers);
+                                        ResponseFuture::Default(self.client.hyper.request(req))
+                                    }
+                                };
+
                             continue;
                         }
                         redirect::ActionKind::Stop => {
