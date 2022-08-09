@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-pub struct H3Builder {
+pub(crate) struct H3Builder {
     pool_idle_timeout: Option<Duration>,
     pool_max_idle_per_host: usize,
     local_addr: Option<IpAddr>,
