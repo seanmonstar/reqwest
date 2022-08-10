@@ -1897,6 +1897,7 @@ impl PendingRequest {
 }
 
 fn is_retryable_error(err: &(dyn std::error::Error + 'static)) -> bool {
+    // TODO: Does the h3 API provide a way to determine this same type of case?
     if let Some(cause) = err.source() {
         if let Some(err) = cause.downcast_ref::<h2::Error>() {
             // They sent us a graceful shutdown, try with a new connection!
