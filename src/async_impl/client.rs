@@ -1389,6 +1389,16 @@ impl ClientBuilder {
         self.config.dns_overrides.insert(domain.to_string(), addr);
         self
     }
+
+    /// Whether to send data on the first flight ("early data") in TLS 1.3 handshakes
+    /// for HTTP/3 connections.
+    ///
+    /// The default is false.
+    #[cfg(feature = "http3")]
+    pub fn set_tls_enable_early_data(mut self, enabled: bool) -> ClientBuilder {
+        self.config.tls_enable_early_data = enabled;
+        self
+    }
 }
 
 type HyperClient = hyper::Client<Connector, super::body::ImplStream>;
