@@ -27,9 +27,9 @@ use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
 #[cfg(feature = "http3")]
-use crate::async_impl::h3_client::dns::Resolver;
+use crate::async_impl::h3_client::connect::H3Connector;
 #[cfg(feature = "http3")]
-use crate::async_impl::h3_client::H3Connector;
+use crate::async_impl::h3_client::dns::Resolver;
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Builder, H3Client, H3ResponseFuture};
 use crate::connect::{Connector, HttpConnector};
