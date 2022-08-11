@@ -252,6 +252,14 @@ impl ClientBuilder {
                 }
                 #[cfg(feature = "trust-dns")]
                 true => {
+                    #[cfg(feature = "http3")]
+                    if config.dns_overrides.is_empty() {
+                        resolver = Resolver::new_trust_dns()?;
+                    } else {
+                        resolver =
+                            Resolver::new_trust_dns_with_overrides(config.dns_overrides.clone())?;
+                    }
+
                     if config.dns_overrides.is_empty() {
                         HttpConnector::new_trust_dns()?
                     } else {
