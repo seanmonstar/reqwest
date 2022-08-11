@@ -27,6 +27,10 @@ use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
 #[cfg(feature = "http3")]
+use crate::async_impl::h3_client::dns::Resolver;
+#[cfg(feature = "http3")]
+use crate::async_impl::h3_client::H3Connector;
+#[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Builder, H3Client, H3ResponseFuture};
 use crate::connect::{Connector, HttpConnector};
 #[cfg(feature = "cookies")]
@@ -218,14 +222,28 @@ impl ClientBuilder {
         }
         let proxies = Arc::new(proxies);
 
+        #[allow(unused)]
+        #[cfg(feature = "http3")]
+        let mut h3_connector = None;
+
         let mut connector = {
             #[cfg(feature = "__tls")]
             fn user_agent(headers: &HeaderMap) -> Option<HeaderValue> {
                 headers.get(USER_AGENT).cloned()
             }
 
+            #[cfg(feature = "http3")]
+            let resolver;
+
             let http = match config.trust_dns {
                 false => {
+                    #[cfg(feature = "http3")]
+                    if config.dns_overrides.is_empty() {
+                        resolver = Resolver::new_gai();
+                    } else {
+                        resolver = Resolver::new_gai_with_overrides(config.dns_overrides.clone())
+                    }
+
                     if config.dns_overrides.is_empty() {
                         HttpConnector::new_gai()
                     } else {
@@ -453,6 +471,12 @@ impl ClientBuilder {
                     #[cfg(feature = "http3")]
                     {
                         tls.enable_early_data = config.tls_enable_early_data;
+
+                        h3_connector = Some(H3Connector::new(
+                            resolver,
+                            tls.clone(),
+                            config.local_address,
+                        ));
                     }
 
                     Connector::new_rustls_tls(
@@ -529,7 +553,6 @@ impl ClientBuilder {
         #[cfg(feature = "http3")]
         let h3_builder = {
             let mut h3_builder = H3Builder::default();
-            h3_builder.set_local_addr(config.local_address);
             h3_builder.set_pool_idle_timeout(config.pool_idle_timeout);
             h3_builder.set_pool_max_idle_per_host(config.pool_max_idle_per_host);
             h3_builder
@@ -541,7 +564,7 @@ impl ClientBuilder {
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store,
                 #[cfg(feature = "http3")]
-                h3_client: h3_builder.build(connector.deep_clone_tls()),
+                h3_client: h3_builder.build(h3_connector.expect("missing HTTP/3 connector")),
                 hyper: builder.build(connector),
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,

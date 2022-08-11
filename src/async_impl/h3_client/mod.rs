@@ -1,9 +1,9 @@
 #![cfg(feature = "http3")]
 
-mod dns;
+pub(crate) mod dns;
 mod pool;
 
-use crate::async_impl::h3_client::dns::Resolve;
+use crate::async_impl::h3_client::dns::Resolver;
 use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
 use crate::error::{BoxError, Error, Kind};
 use crate::{error, Body};
@@ -12,7 +12,6 @@ use futures_util::future;
 use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::{Request, Response, Uri};
-use hyper::client::connect::dns::{GaiResolver, Name};
 use hyper::Body as HyperBody;
 use log::debug;
 use std::future::Future;
@@ -26,7 +25,6 @@ use std::time::Duration;
 pub(crate) struct H3Builder {
     pool_idle_timeout: Option<Duration>,
     pool_max_idle_per_host: usize,
-    local_addr: Option<IpAddr>,
 }
 
 impl Default for H3Builder {
@@ -34,29 +32,15 @@ impl Default for H3Builder {
         Self {
             pool_idle_timeout: Some(Duration::from_secs(90)),
             pool_max_idle_per_host: usize::MAX,
-            local_addr: None,
         }
     }
 }
 
 impl H3Builder {
-    pub fn build(self, tls: rustls::ClientConfig) -> H3Client {
-        let config = quinn::ClientConfig::new(Arc::new(tls));
-        let socket_addr = match self.local_addr {
-            Some(ip) => SocketAddr::new(ip, 0),
-            None => "[::]:0".parse::<SocketAddr>().unwrap(),
-        };
-
-        let mut endpoint =
-            quinn::Endpoint::client(socket_addr).expect("unable to create QUIC endpoint");
-        endpoint.set_default_client_config(config);
-
+    pub fn build(self, connector: H3Connector) -> H3Client {
         H3Client {
             pool: Pool::new(self.pool_max_idle_per_host, self.pool_idle_timeout),
-            connector: H3Connector {
-                resolver: GaiResolver::new(),
-                endpoint,
-            },
+            connector,
         }
     }
 
@@ -66,10 +50,6 @@ impl H3Builder {
 
     pub fn set_pool_max_idle_per_host(&mut self, max: usize) {
         self.pool_max_idle_per_host = max;
-    }
-
-    pub fn set_local_addr(&mut self, addr: Option<IpAddr>) {
-        self.local_addr = addr;
     }
 }
 
@@ -136,15 +116,30 @@ impl Future for H3ResponseFuture {
 }
 
 #[derive(Clone)]
-pub(crate) struct H3Connector<R = GaiResolver> {
-    resolver: R,
+pub(crate) struct H3Connector {
+    resolver: Resolver,
     endpoint: quinn::Endpoint,
 }
 
-impl<R> H3Connector<R>
-where
-    R: Resolve + Clone + Send + Sync + 'static,
-{
+impl H3Connector {
+    pub fn new(
+        resolver: Resolver,
+        tls: rustls::ClientConfig,
+        local_addr: Option<IpAddr>,
+    ) -> H3Connector {
+        let config = quinn::ClientConfig::new(Arc::new(tls));
+        let socket_addr = match local_addr {
+            Some(ip) => SocketAddr::new(ip, 0),
+            None => "[::]:0".parse::<SocketAddr>().unwrap(),
+        };
+
+        let mut endpoint =
+            quinn::Endpoint::client(socket_addr).expect("unable to create QUIC endpoint");
+        endpoint.set_default_client_config(config);
+
+        Self { resolver, endpoint }
+    }
+
     pub async fn connect(
         &mut self,
         dest: Uri,
@@ -154,9 +149,7 @@ where
         let addrs = if let Some(addr) = IpAddr::from_str(host).ok() {
             vec![SocketAddr::new(addr, port)]
         } else {
-            let addrs = dns::resolve(&mut self.resolver, Name::from_str(host)?)
-                .await
-                .map_err(|e| e.into())?;
+            let addrs = self.resolver.resolve(host).await.into_iter();
             let addrs = addrs.map(|mut addr| {
                 addr.set_port(port);
                 addr

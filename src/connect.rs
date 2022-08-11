@@ -520,15 +520,6 @@ impl Connector {
             Inner::Http(http) => http.set_keepalive(dur),
         }
     }
-
-    #[cfg(feature = "http3")]
-    pub fn deep_clone_tls(&self) -> rustls::ClientConfig {
-        match &self.inner {
-            Inner::RustlsTls { tls, .. } => (*(*tls)).clone(),
-            #[cfg(feature = "default-tls")]
-            _ => unreachable!("HTTP/3 should only be enabled with Rustls"),
-        }
-    }
 }
 
 fn into_uri(scheme: Scheme, host: Authority) -> Uri {
@@ -1023,7 +1014,7 @@ where
 }
 
 impl<Resolver: Clone> DnsResolverWithOverrides<Resolver> {
-    fn new(dns_resolver: Resolver, overrides: HashMap<String, SocketAddr>) -> Self {
+    pub(crate) fn new(dns_resolver: Resolver, overrides: HashMap<String, SocketAddr>) -> Self {
         DnsResolverWithOverrides {
             dns_resolver,
             overrides: Arc::new(overrides),
