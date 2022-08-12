@@ -1,13 +1,17 @@
 use crate::async_impl::h3_client::dns::Resolver;
 use crate::error::BoxError;
 use bytes::Bytes;
-use futures_util::future;
 use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::Uri;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
+
+type H3Connection = (
+    h3::client::Connection<Connection, Bytes>,
+    SendRequest<OpenStreams, Bytes>,
+);
 
 #[derive(Clone)]
 pub(crate) struct H3Connector {
@@ -35,10 +39,7 @@ impl H3Connector {
         Self { resolver, endpoint }
     }
 
-    pub async fn connect(
-        &mut self,
-        dest: Uri,
-    ) -> Result<SendRequest<OpenStreams, Bytes>, BoxError> {
+    pub async fn connect(&mut self, dest: Uri) -> Result<H3Connection, BoxError> {
         let host = dest.host().ok_or("destination must have a host")?;
         let port = dest.port_u16().unwrap_or(443);
 
@@ -61,17 +62,13 @@ impl H3Connector {
         &mut self,
         addrs: Vec<SocketAddr>,
         server_name: &str,
-    ) -> Result<SendRequest<OpenStreams, Bytes>, BoxError> {
+    ) -> Result<H3Connection, BoxError> {
         let mut err = None;
         for addr in addrs {
             match self.endpoint.connect(addr, server_name)?.await {
                 Ok(new_conn) => {
                     let quinn_conn = Connection::new(new_conn);
-                    let (mut driver, tx) = h3::client::new(quinn_conn).await?;
-                    tokio::spawn(async move {
-                        future::poll_fn(|cx| driver.poll_close(cx)).await.unwrap();
-                    });
-                    return Ok(tx);
+                    return Ok(h3::client::new(quinn_conn).await?);
                 }
                 Err(e) => err = Some(e),
             }

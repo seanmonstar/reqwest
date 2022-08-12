@@ -562,7 +562,6 @@ impl ClientBuilder {
         let h3_builder = {
             let mut h3_builder = H3Builder::default();
             h3_builder.set_pool_idle_timeout(config.pool_idle_timeout);
-            h3_builder.set_pool_max_idle_per_host(config.pool_max_idle_per_host);
             h3_builder
         };
 
@@ -1938,7 +1937,15 @@ impl PendingRequest {
 }
 
 fn is_retryable_error(err: &(dyn std::error::Error + 'static)) -> bool {
-    // TODO: Does the h3 API provide a way to determine this same type of case?
+    #[cfg(feature = "http3")]
+    if let Some(cause) = err.source() {
+        if let Some(err) = cause.downcast_ref::<h3::Error>() {
+            debug!("determining if HTTP/3 error {} can be retried", err);
+            // TODO: Does h3 provide an API for checking the error?
+            return err.to_string().as_str() == "timeout";
+        }
+    }
+
     if let Some(cause) = err.source() {
         if let Some(err) = cause.downcast_ref::<h2::Error>() {
             // They sent us a graceful shutdown, try with a new connection!

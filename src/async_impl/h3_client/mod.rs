@@ -11,7 +11,7 @@ use connect::H3Connector;
 use futures_util::future;
 use http::{Request, Response};
 use hyper::Body as HyperBody;
-use log::debug;
+use log::trace;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -19,14 +19,12 @@ use std::time::Duration;
 
 pub(crate) struct H3Builder {
     pool_idle_timeout: Option<Duration>,
-    pool_max_idle_per_host: usize,
 }
 
 impl Default for H3Builder {
     fn default() -> Self {
         Self {
             pool_idle_timeout: Some(Duration::from_secs(90)),
-            pool_max_idle_per_host: usize::MAX,
         }
     }
 }
@@ -34,7 +32,7 @@ impl Default for H3Builder {
 impl H3Builder {
     pub fn build(self, connector: H3Connector) -> H3Client {
         H3Client {
-            pool: Pool::new(self.pool_max_idle_per_host, self.pool_idle_timeout),
+            pool: Pool::new(self.pool_idle_timeout),
             connector,
         }
     }
@@ -42,14 +40,10 @@ impl H3Builder {
     pub fn set_pool_idle_timeout(&mut self, timeout: Option<Duration>) {
         self.pool_idle_timeout = timeout;
     }
-
-    pub fn set_pool_max_idle_per_host(&mut self, max: usize) {
-        self.pool_max_idle_per_host = max;
-    }
 }
 
 #[derive(Clone)]
-pub struct H3Client {
+pub(crate) struct H3Client {
     pool: Pool,
     connector: H3Connector,
 }
@@ -57,15 +51,15 @@ pub struct H3Client {
 impl H3Client {
     async fn get_pooled_client(&mut self, key: Key) -> Result<PoolClient, BoxError> {
         if let Some(client) = self.pool.try_pool(&key) {
-            debug!("getting client from pool with key {:?}", key);
+            trace!("getting client from pool with key {:?}", key);
             return Ok(client);
         }
 
+        trace!("did not find connection {:?} in pool so connecting...", key);
+
         let dest = pool::domain_as_uri(key.clone());
-        let tx = self.connector.connect(dest).await?;
-        let client = PoolClient::new(tx);
-        self.pool.put(key, client.clone());
-        Ok(client)
+        let (driver, tx) = self.connector.connect(dest).await?;
+        Ok(self.pool.new_connection(key, driver, tx))
     }
 
     async fn send_request(
@@ -98,7 +92,7 @@ impl H3Client {
     }
 }
 
-pub struct H3ResponseFuture {
+pub(crate) struct H3ResponseFuture {
     inner: Pin<Box<dyn Future<Output = Result<Response<HyperBody>, Error>> + Send>>,
 }
 
