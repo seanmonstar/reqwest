@@ -31,7 +31,7 @@ use crate::async_impl::h3_client::connect::H3Connector;
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::dns::Resolver;
 #[cfg(feature = "http3")]
-use crate::async_impl::h3_client::{H3Builder, H3Client, H3ResponseFuture};
+use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
 use crate::connect::{Connector, HttpConnector};
 #[cfg(feature = "cookies")]
 use crate::cookie;
@@ -599,20 +599,16 @@ impl ClientBuilder {
 
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
 
-        #[cfg(feature = "http3")]
-        let h3_builder = {
-            let mut h3_builder = H3Builder::default();
-            h3_builder.set_pool_idle_timeout(config.pool_idle_timeout);
-            h3_builder
-        };
-
         Ok(Client {
             inner: Arc::new(ClientRef {
                 accepts: config.accepts,
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store,
                 #[cfg(feature = "http3")]
-                h3_client: h3_builder.build(h3_connector.expect("missing HTTP/3 connector")),
+                h3_client: H3Client::new(
+                    h3_connector.expect("missing HTTP/3 connector"),
+                    config.pool_idle_timeout,
+                ),
                 hyper: builder.build(connector),
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,

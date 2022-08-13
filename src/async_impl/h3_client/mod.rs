@@ -17,31 +17,6 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-pub(crate) struct H3Builder {
-    pool_idle_timeout: Option<Duration>,
-}
-
-impl Default for H3Builder {
-    fn default() -> Self {
-        Self {
-            pool_idle_timeout: Some(Duration::from_secs(90)),
-        }
-    }
-}
-
-impl H3Builder {
-    pub fn build(self, connector: H3Connector) -> H3Client {
-        H3Client {
-            pool: Pool::new(self.pool_idle_timeout),
-            connector,
-        }
-    }
-
-    pub fn set_pool_idle_timeout(&mut self, timeout: Option<Duration>) {
-        self.pool_idle_timeout = timeout;
-    }
-}
-
 #[derive(Clone)]
 pub(crate) struct H3Client {
     pool: Pool,
@@ -49,6 +24,13 @@ pub(crate) struct H3Client {
 }
 
 impl H3Client {
+    pub fn new(connector: H3Connector, pool_timeout: Option<Duration>) -> Self {
+        H3Client {
+            pool: Pool::new(pool_timeout),
+            connector,
+        }
+    }
+
     async fn get_pooled_client(&mut self, key: Key) -> Result<PoolClient, BoxError> {
         if let Some(client) = self.pool.try_pool(&key) {
             trace!("getting client from pool with key {:?}", key);
