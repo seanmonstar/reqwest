@@ -46,6 +46,10 @@ use crate::Certificate;
 use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
 use log::{debug, trace};
+#[cfg(feature = "http3")]
+use quinn::TransportConfig;
+#[cfg(feature = "http3")]
+use quinn::VarInt;
 
 /// An asynchronous `Client` to make Requests with.
 ///
@@ -130,6 +134,14 @@ struct Config {
     dns_overrides: HashMap<String, SocketAddr>,
     #[cfg(feature = "http3")]
     tls_enable_early_data: bool,
+    #[cfg(feature = "http3")]
+    quic_max_idle_timeout: Option<Duration>,
+    #[cfg(feature = "http3")]
+    quic_stream_receive_window: Option<VarInt>,
+    #[cfg(feature = "http3")]
+    quic_receive_window: Option<VarInt>,
+    #[cfg(feature = "http3")]
+    quic_send_window: Option<u64>,
 }
 
 impl Default for ClientBuilder {
@@ -199,6 +211,14 @@ impl ClientBuilder {
                 dns_overrides: HashMap::new(),
                 #[cfg(feature = "http3")]
                 tls_enable_early_data: false,
+                #[cfg(feature = "http3")]
+                quic_max_idle_timeout: None,
+                #[cfg(feature = "http3")]
+                quic_stream_receive_window: None,
+                #[cfg(feature = "http3")]
+                quic_receive_window: None,
+                #[cfg(feature = "http3")]
+                quic_send_window: None,
             },
         }
     }
@@ -480,10 +500,31 @@ impl ClientBuilder {
                     {
                         tls.enable_early_data = config.tls_enable_early_data;
 
+                        let mut transport_config = TransportConfig::default();
+
+                        if let Some(max_idle_timeout) = config.quic_max_idle_timeout {
+                            transport_config.max_idle_timeout(Some(
+                                max_idle_timeout.try_into().map_err(error::builder)?,
+                            ));
+                        }
+
+                        if let Some(stream_receive_window) = config.quic_stream_receive_window {
+                            transport_config.stream_receive_window(stream_receive_window);
+                        }
+
+                        if let Some(receive_window) = config.quic_receive_window {
+                            transport_config.receive_window(receive_window);
+                        }
+
+                        if let Some(send_window) = config.quic_send_window {
+                            transport_config.send_window(send_window);
+                        }
+
                         h3_connector = Some(H3Connector::new(
                             resolver,
                             tls.clone(),
                             config.local_address,
+                            transport_config,
                         ));
                     }
 
@@ -1396,6 +1437,52 @@ impl ClientBuilder {
     #[cfg(feature = "http3")]
     pub fn set_tls_enable_early_data(mut self, enabled: bool) -> ClientBuilder {
         self.config.tls_enable_early_data = enabled;
+        self
+    }
+
+    /// Maximum duration of inactivity to accept before timing out the QUIC connection.
+    ///
+    /// Please see docs in [`TransportConfig`] in [`quinn`].
+    ///
+    /// [`TransportConfig`]: https://docs.rs/quinn/latest/quinn/struct.TransportConfig.html
+    #[cfg(feature = "http3")]
+    pub fn set_quic_max_idle_timeout(mut self, value: Duration) -> ClientBuilder {
+        self.config.quic_max_idle_timeout = Some(value);
+        self
+    }
+
+    /// Maximum number of bytes the peer may transmit without acknowledgement on any one stream
+    /// before becoming blocked.
+    ///
+    /// Please see docs in [`TransportConfig`] in [`quinn`].
+    ///
+    /// [`TransportConfig`]: https://docs.rs/quinn/latest/quinn/struct.TransportConfig.html
+    #[cfg(feature = "http3")]
+    pub fn set_quic_stream_receive_window(mut self, value: VarInt) -> ClientBuilder {
+        self.config.quic_stream_receive_window = Some(value);
+        self
+    }
+
+    /// Maximum number of bytes the peer may transmit across all streams of a connection before
+    /// becoming blocked.
+    ///
+    /// Please see docs in [`TransportConfig`] in [`quinn`].
+    ///
+    /// [`TransportConfig`]: https://docs.rs/quinn/latest/quinn/struct.TransportConfig.html
+    #[cfg(feature = "http3")]
+    pub fn set_quic_receive_window(mut self, value: VarInt) -> ClientBuilder {
+        self.config.quic_receive_window = Some(value);
+        self
+    }
+
+    /// Maximum number of bytes to transmit to a peer without acknowledgment
+    ///
+    /// Please see docs in [`TransportConfig`] in [`quinn`].
+    ///
+    /// [`TransportConfig`]: https://docs.rs/quinn/latest/quinn/struct.TransportConfig.html
+    #[cfg(feature = "http3")]
+    pub fn set_quic_send_window(mut self, value: u64) -> ClientBuilder {
+        self.config.quic_send_window = Some(value);
         self
     }
 }

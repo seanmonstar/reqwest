@@ -4,6 +4,7 @@ use bytes::Bytes;
 use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::Uri;
+use quinn::{ClientConfig, Endpoint, TransportConfig};
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -16,7 +17,7 @@ type H3Connection = (
 #[derive(Clone)]
 pub(crate) struct H3Connector {
     resolver: Resolver,
-    endpoint: quinn::Endpoint,
+    endpoint: Endpoint,
 }
 
 impl H3Connector {
@@ -24,16 +25,18 @@ impl H3Connector {
         resolver: Resolver,
         tls: rustls::ClientConfig,
         local_addr: Option<IpAddr>,
+        transport_config: TransportConfig,
     ) -> H3Connector {
-        let config = quinn::ClientConfig::new(Arc::new(tls));
+        let mut config = ClientConfig::new(Arc::new(tls));
+        // FIXME: Replace this when there is a setter.
+        config.transport = Arc::new(transport_config);
 
         let socket_addr = match local_addr {
             Some(ip) => SocketAddr::new(ip, 0),
             None => "[::]:0".parse::<SocketAddr>().unwrap(),
         };
 
-        let mut endpoint =
-            quinn::Endpoint::client(socket_addr).expect("unable to create QUIC endpoint");
+        let mut endpoint = Endpoint::client(socket_addr).expect("unable to create QUIC endpoint");
         endpoint.set_default_client_config(config);
 
         Self { resolver, endpoint }
