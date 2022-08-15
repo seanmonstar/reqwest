@@ -40,6 +40,7 @@ impl H3Client {
         trace!("did not find connection {:?} in pool so connecting...", key);
 
         let dest = pool::domain_as_uri(key.clone());
+        self.pool.connecting(key.clone())?;
         let (driver, tx) = self.connector.connect(dest).await?;
         Ok(self.pool.new_connection(key, driver, tx))
     }

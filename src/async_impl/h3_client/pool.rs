@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -27,10 +27,19 @@ impl Pool {
     pub fn new(timeout: Option<Duration>) -> Self {
         Self {
             inner: Arc::new(Mutex::new(PoolInner {
+                connecting: HashSet::new(),
                 idle_conns: HashMap::new(),
                 timeout,
             })),
         }
+    }
+
+    pub fn connecting(&self, key: Key) -> Result<(), BoxError> {
+        let mut inner = self.inner.lock().unwrap();
+        if !inner.connecting.insert(key.clone()) {
+            return Err(format!("HTTP/3 connecting already in progress for {:?}", key).into());
+        }
+        return Ok(());
     }
 
     pub fn try_pool(&self, key: &Key) -> Option<PoolClient> {
@@ -77,13 +86,18 @@ impl Pool {
 
         let client = PoolClient::new(tx);
         let conn = PoolConnection::new(client.clone(), close_rx);
-        inner.insert(key, conn);
+        inner.insert(key.clone(), conn);
+
+        // We clean up "connecting" here so we don't have to acquire the lock again.
+        let existed = inner.connecting.remove(&key);
+        debug_assert!(existed, "key not in connecting set");
 
         client
     }
 }
 
 struct PoolInner {
+    connecting: HashSet<Key>,
     idle_conns: HashMap<Key, PoolConnection>,
     timeout: Option<Duration>,
 }
