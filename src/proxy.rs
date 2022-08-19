@@ -255,6 +255,7 @@ impl Proxy {
     /// # Ok(())
     /// # }
     /// # fn main() {}
+    /// ```
     pub fn custom<F, U: IntoProxyScheme>(fun: F) -> Proxy
     where
         F: Fn(&Url) -> Option<U> + Send + Sync + 'static,
