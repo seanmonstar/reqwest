@@ -418,6 +418,16 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
     }
 }
 
+/// Converts a reqwest::Response into an http::Response<T>.
+/// Type that you want to put inside http::Response<T> must implement From<Decoder>
+impl<T: From<Decoder>> Into<http::Response<T>> for Response {
+    fn into(self) -> http::Response<T> {
+        let parts = self.res.into_parts();
+        let body: T = (parts.1).into();
+        http::Response::from_parts(parts.0, body)
+    }
+}
+
 /// A `Response` can be piped as the `Body` of another request.
 impl From<Response> for Body {
     fn from(r: Response) -> Body {
