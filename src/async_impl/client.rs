@@ -744,6 +744,11 @@ impl ClientBuilder {
 
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
 
+        let base_url = config.base_url.map(|base| match base.ends_with('/') {
+            true => base,
+            false => base + "/",
+        });
+
         Ok(Client {
             inner: Arc::new(ClientRef {
                 accepts: config.accepts,
@@ -767,7 +772,7 @@ impl ClientBuilder {
                 proxies,
                 proxies_maybe_http_auth,
                 https_only: config.https_only,
-                base_url: config.base_url,
+                base_url,
             }),
         })
     }
@@ -1995,7 +2000,12 @@ impl Client {
     /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
         let url = if let Some(base_url) = &self.inner.base_url {
-            (base_url.to_owned() + url.as_str()).into_url()
+            let url = url.as_str().to_string();
+            let path = match url.strip_prefix('/') {
+                Some(s) => s,
+                None => url.as_str(),
+            };
+            (base_url.to_owned() + path).into_url()
         } else {
             url.into_url()
         };

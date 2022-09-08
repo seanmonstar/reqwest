@@ -165,7 +165,7 @@ async fn base_url() {
         .build()
         .expect("client builder");
 
-    let res = client.get("/a").send().await.expect("Failed to get");
+    let res = client.get("a").send().await.expect("Failed to get");
     assert_eq!(res.content_length(), Some(2));
     let text = res.text().await.expect("Failed to get text");
     assert_eq!("/a", text);
@@ -174,6 +174,11 @@ async fn base_url() {
     assert_eq!(res.content_length(), Some(2));
     let text = res.text().await.expect("Failed to get text");
     assert_eq!("/b", text);
+
+    let res = client.get("").send().await.expect("Failed to get");
+    assert_eq!(res.content_length(), Some(1));
+    let text = res.text().await.expect("Failed to get text");
+    assert_eq!("/", text);
 }
 
 #[tokio::test]
