@@ -152,6 +152,31 @@ async fn response_text() {
 }
 
 #[tokio::test]
+async fn base_url() {
+    let _ = env_logger::try_init();
+
+    let server = server::http(move |req| {
+        let path = req.uri().path().to_string();
+        async { http::Response::new(path.into()) }
+    });
+
+    let client = reqwest::Client::builder()
+        .base_url(format!("http://{}", server.addr()))
+        .build()
+        .expect("client builder");
+
+    let res = client.get("/a").send().await.expect("Failed to get");
+    assert_eq!(res.content_length(), Some(2));
+    let text = res.text().await.expect("Failed to get text");
+    assert_eq!("/a", text);
+
+    let res = client.get("/b").send().await.expect("Failed to get");
+    assert_eq!(res.content_length(), Some(2));
+    let text = res.text().await.expect("Failed to get text");
+    assert_eq!("/b", text);
+}
+
+#[tokio::test]
 async fn response_bytes() {
     let _ = env_logger::try_init();
 
