@@ -250,6 +250,26 @@ impl Proxy {
         )))
     }
 
+    /// Proxy **all** traffic to the passed unix domain socket.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # extern crate reqwest;
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// let client = reqwest::Client::builder()
+    ///     .proxy(reqwest::Proxy::unix("/run/snapd.socket")?)
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// # fn main() {}
+    /// ```
+    pub fn unix<Path: Into<PathBuf>>(socket_path: Path) -> Proxy {
+        Proxy::new(Intercept::All(
+            ProxyScheme::unix_socket(socket_path),
+        ))
+    }
+
     /// Provide a custom function to determine what traffic to proxy to where.
     ///
     /// # Example
