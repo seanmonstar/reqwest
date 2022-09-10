@@ -258,7 +258,7 @@ impl Proxy {
     /// # extern crate reqwest;
     /// # fn run() -> Result<(), Box<std::error::Error>> {
     /// let client = reqwest::Client::builder()
-    ///     .proxy(reqwest::Proxy::unix("/run/snapd.socket")?)
+    ///     .proxy(reqwest::Proxy::unix("/run/snapd.socket"))
     ///     .build()?;
     /// # Ok(())
     /// # }
