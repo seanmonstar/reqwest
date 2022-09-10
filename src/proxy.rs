@@ -53,10 +53,12 @@ use winreg::RegKey;
 /// # }
 /// ```
 ///
-/// On unix, it is also possible to send request to a unix socket:
+/// On unix, it is also possible to send request to a unix socket via url or [Proxy::unix]:
 /// ```rust
 /// # fn run() -> Result<(), Box<std::error::Error>> {
-/// let proxy = reqwest::Proxy::http("unix:///run/snapd.socket")?;
+/// let proxy = reqwest::Proxy::all("unix:///run/snapd.socket")?;
+/// // equivalent to:
+/// let proxy = reqwest::Proxy::unix("/run/snapd.socket");
 /// # Ok(())
 /// # }
 /// ```
