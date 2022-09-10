@@ -148,6 +148,8 @@
 //! export https_proxy=socks5://127.0.0.1:1086
 //! ```
 //!
+//! You can aso configure a proxy to send requests through unix domain sockets (see [Proxy](Proxy) for details).
+//!
 //! ## TLS
 //!
 //! By default, a `Client` will make use of system-native transport layer

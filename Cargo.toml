@@ -191,6 +191,11 @@ features = [
 wasm-bindgen = { version = "0.2.68", features = ["serde-serialize"] }
 wasm-bindgen-test = "0.3"
 
+# to test unix domain sockets
+[target.'cfg(unix)'.dev-dependencies]
+hyperlocal = "0.8"
+tempfile = "3.3"
+
 [[example]]
 name = "blocking"
 path = "examples/blocking.rs"

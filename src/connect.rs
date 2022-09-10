@@ -16,6 +16,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
+#[cfg(unix)]
+use std::path::Path;
 
 #[cfg(feature = "default-tls")]
 use self::native_tls_conn::NativeTlsConn;
@@ -163,6 +165,15 @@ impl Connector {
         self.verbose.0 = enabled;
     }
 
+    #[cfg(unix)]
+    async fn connect_unix_socket<P: AsRef<Path>>(&self, socket: P) -> Result<Conn, BoxError> {
+        let tcp_stream = unix_socket_conn::connect(socket).await?;
+        Ok(Conn {
+            inner: self.verbose.wrap(tcp_stream),
+            is_proxy: false, // defaults to false to have the same behavior as curl's --unix-socket
+        })
+    }
+
     #[cfg(feature = "socks")]
     async fn connect_socks(&self, dst: Uri, proxy: ProxyScheme) -> Result<Conn, BoxError> {
         let dns = match proxy {
@@ -173,6 +184,10 @@ impl Connector {
                 remote_dns: true, ..
             } => socks::DnsResolve::Proxy,
             ProxyScheme::Http { .. } | ProxyScheme::Https { .. } => {
+                unreachable!("connect_socks is only called for socks proxies");
+            }
+            #[cfg(unix)]
+            ProxyScheme::UnixSocket { .. } => {
                 unreachable!("connect_socks is only called for socks proxies");
             }
         };
@@ -306,6 +321,8 @@ impl Connector {
             ProxyScheme::Https { host, auth } => (into_uri(Scheme::HTTPS, host), auth),
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => return self.connect_socks(dst, proxy_scheme).await,
+            #[cfg(unix)]
+            ProxyScheme::UnixSocket { socket } => return self.connect_unix_socket(socket).await,
         };
 
         #[cfg(feature = "__tls")]
@@ -826,6 +843,21 @@ mod socks {
         };
 
         Ok(stream.into_inner())
+    }
+}
+
+#[cfg(unix)]
+mod unix_socket_conn {
+    use std::os::unix::io::OwnedFd;
+    use std::path::Path;
+    use tokio::net::{TcpStream, UnixStream};
+    use crate::error::BoxError;
+
+    pub async fn connect<P: AsRef<Path>>(socket: P) -> Result<TcpStream, BoxError> {
+        let target_stream = UnixStream::connect(&socket).await?;
+        let owned_fd: OwnedFd = target_stream.into_std()?.into();
+        let stream = std::net::TcpStream::from(owned_fd);
+        Ok(TcpStream::from_std(stream)?)
     }
 }
 

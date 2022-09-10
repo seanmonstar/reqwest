@@ -1,4 +1,6 @@
 pub mod server;
+#[cfg(unix)]
+pub mod unix_server;
 
 // TODO: remove once done converting to new support server?
 #[allow(unused)]
