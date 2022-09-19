@@ -46,7 +46,7 @@ impl HttpConnector {
         Self::Gai(hyper::client::HttpConnector::new())
     }
 
-    pub(crate) fn new_gai_with_overrides(overrides: HashMap<String, SocketAddr>) -> Self {
+    pub(crate) fn new_gai_with_overrides(overrides: HashMap<String, Vec<SocketAddr>>) -> Self {
         let gai = hyper::client::connect::dns::GaiResolver::new();
         let overridden_resolver = DnsResolverWithOverrides::new(gai, overrides);
         Self::GaiWithDnsOverrides(hyper::client::HttpConnector::new_with_resolver(
@@ -64,7 +64,7 @@ impl HttpConnector {
 
     #[cfg(feature = "trust-dns")]
     pub(crate) fn new_trust_dns_with_overrides(
-        overrides: HashMap<String, SocketAddr>,
+        overrides: HashMap<String, Vec<SocketAddr>>,
     ) -> crate::Result<HttpConnector> {
         TrustDnsResolver::new()
             .map(|resolver| DnsResolverWithOverrides::new(resolver, overrides))
@@ -994,7 +994,7 @@ where
     Fut: std::future::Future<Output = Result<FutOutput, FutError>>,
     FutOutput: Iterator<Item = SocketAddr>,
 {
-    type Output = Result<itertools::Either<FutOutput, std::iter::Once<SocketAddr>>, FutError>;
+    type Output = Result<itertools::Either<FutOutput, std::vec::IntoIter<SocketAddr>>, FutError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
@@ -1010,11 +1010,11 @@ where
     Resolver: Clone,
 {
     dns_resolver: Resolver,
-    overrides: Arc<HashMap<String, SocketAddr>>,
+    overrides: Arc<HashMap<String, Vec<SocketAddr>>>,
 }
 
 impl<Resolver: Clone> DnsResolverWithOverrides<Resolver> {
-    fn new(dns_resolver: Resolver, overrides: HashMap<String, SocketAddr>) -> Self {
+    fn new(dns_resolver: Resolver, overrides: HashMap<String, Vec<SocketAddr>>) -> Self {
         DnsResolverWithOverrides {
             dns_resolver,
             overrides: Arc::new(overrides),
@@ -1027,12 +1027,12 @@ where
     Resolver: Service<Name, Response = Iter> + Clone,
     Iter: Iterator<Item = SocketAddr>,
 {
-    type Response = itertools::Either<Iter, std::iter::Once<SocketAddr>>;
+    type Response = itertools::Either<Iter, std::vec::IntoIter<SocketAddr>>;
     type Error = <Resolver as Service<Name>>::Error;
     type Future = Either<
         WrappedResolverFuture<<Resolver as Service<Name>>::Future>,
         futures_util::future::Ready<
-            Result<itertools::Either<Iter, std::iter::Once<SocketAddr>>, Self::Error>,
+            Result<itertools::Either<Iter, std::vec::IntoIter<SocketAddr>>, Self::Error>,
         >,
     >;
 
@@ -1044,7 +1044,7 @@ where
         match self.overrides.get(name.as_str()) {
             Some(dest) => {
                 let fut = futures_util::future::ready(Ok(itertools::Either::Right(
-                    std::iter::once(dest.to_owned()),
+                    dest.clone().into_iter(),
                 )));
                 Either::Right(fut)
             }

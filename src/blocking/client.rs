@@ -757,7 +757,7 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.https_only(enabled))
     }
 
-    /// Override DNS resolution for specific domains to particular IP addresses.
+    /// Override DNS resolution for specific domains to a particular IP address.
     ///
     /// Warning
     ///
@@ -766,7 +766,19 @@ impl ClientBuilder {
     /// itself, any port in the overridden addr will be ignored and traffic sent
     /// to the conventional port for the given scheme (e.g. 80 for http).
     pub fn resolve(self, domain: &str, addr: SocketAddr) -> ClientBuilder {
-        self.with_inner(|inner| inner.resolve(domain, addr))
+        self.resolve_to_addrs(domain, &[addr])
+    }
+
+    /// Override DNS resolution for specific domains to particular IP addresses.
+    ///
+    /// Warning
+    ///
+    /// Since the DNS protocol has no notion of ports, if you wish to send
+    /// traffic to a particular port you must include this port in the URL
+    /// itself, any port in the overridden addresses will be ignored and traffic sent
+    /// to the conventional port for the given scheme (e.g. 80 for http).
+    pub fn resolve_to_addrs(self, domain: &str, addrs: &[SocketAddr]) -> ClientBuilder {
+        self.with_inner(|inner| inner.resolve_to_addrs(domain, addrs))
     }
 
     // private
