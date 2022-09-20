@@ -1,3 +1,8 @@
+## v0.11.12
+
+- Add `ClientBuilder::resolve_to_addrs()` which allows a slice of IP addresses to be specified for a single host.
+- Add `Response::upgrade()` to await whether the server agrees to an HTTP upgrade.
+
 ## v0.11.11
 
 - Add HTTP/2 keep-alive configuration methods on `ClientBuilder`.
