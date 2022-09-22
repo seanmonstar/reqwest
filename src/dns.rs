@@ -11,7 +11,6 @@ use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
 use trust_dns_resolver::{
     config::{ResolverConfig, ResolverOpts},
-    lookup_ip::LookupIpIntoIter,
     system_conf, AsyncResolver, TokioConnection, TokioConnectionProvider, TokioHandle,
 };
 
@@ -25,10 +24,6 @@ static SYSTEM_CONF: Lazy<io::Result<(ResolverConfig, ResolverOpts)>> =
 #[derive(Clone)]
 pub(crate) struct TrustDnsResolver {
     state: Arc<Mutex<State>>,
-}
-
-pub(crate) struct SocketAddrs {
-    iter: LookupIpIntoIter,
 }
 
 enum State {
@@ -52,7 +47,7 @@ impl TrustDnsResolver {
 }
 
 impl Service<hyper_dns::Name> for TrustDnsResolver {
-    type Response = SocketAddrs;
+    type Response = std::vec::IntoIter<SocketAddr>;
     type Error = BoxError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
@@ -79,18 +74,19 @@ impl Service<hyper_dns::Name> for TrustDnsResolver {
             drop(lock);
 
             let lookup = resolver.lookup_ip(name.as_str()).await?;
-            Ok(SocketAddrs {
-                iter: lookup.into_iter(),
+
+            let iter = lookup.into_iter().filter_map(|ip| {
+                if ip.is_global() {
+                    Some(SocketAddr::new(ip, 0))
+                } else {
+                    None
+                }
             })
+            .collect::<Vec<_>>()
+            .into_iter();
+
+            Ok(iter)
         })
-    }
-}
-
-impl Iterator for SocketAddrs {
-    type Item = SocketAddr;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|ip_addr| SocketAddr::new(ip_addr, 0))
     }
 }
 
