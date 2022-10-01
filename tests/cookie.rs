@@ -201,3 +201,28 @@ async fn cookie_store_path() {
     let url = format!("http://{}/subpath", server.addr());
     client.get(&url).send().await.unwrap();
 }
+
+#[tokio::test]
+async fn cookie_store_do_not_overwrite_on_same_request(){
+    let server = server::http(move |req| async move {
+        if req.uri() == "/2" {
+            assert_eq!(req.headers()["cookie"], "key=val");
+        }
+        http::Response::builder()
+            .header("Set-Cookie", "key=val; HttpOnly")
+            .header("Set-Cookie", "key=val2")
+            .body(Default::default())
+            .unwrap()
+    });
+    let client = reqwest::Client::builder()
+        .cookie_store(true)
+        .build()
+        .unwrap();
+    let url = format!("http://{}/", server.addr());
+
+    client.get(&url).send().await.unwrap();
+
+    let url = format!("http://{}/2", server.addr());
+    client.get(&url).send().await.unwrap();
+}
+
