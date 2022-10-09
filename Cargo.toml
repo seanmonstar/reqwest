@@ -1,6 +1,6 @@
 [package]
 name = "reqwest-wasm"
-version = "0.11.12"                                   # remember to update html_root_url
+version = "0.11.13"                                   # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -53,8 +53,6 @@ multipart = ["mime_guess"]
 
 trust-dns = ["trust-dns-resolver"]
 
-stream = ["wasm-streams"]
-
 socks = ["tokio-socks"]
 
 # Internal (PRIVATE!) features used to aid testing.
@@ -69,6 +67,12 @@ __rustls = ["hyper-rustls", "tokio-rustls", "rustls", "__tls", "rustls-pemfile"]
 
 # When enabled, disable using the cached SYS_PROXIES.
 __internal_proxy_sys_no_cache = []
+
+[target.'cfg(not(target_arch = "wasm32"))'.features]
+stream = ["tokio/fs", "tokio-util"]
+
+[target.'cfg(target_arch = "wasm32")'.features]
+stream = ["wasm-streams"]
 
 [dependencies]
 base64 = "0.13"
