@@ -26,7 +26,9 @@ features = [
 ]
 
 [features]
-default = ["default-tls"]
+default = ["default-tls", "http2"]
+
+http2 = ["h2", "hyper/http2"]
 
 # Note: this doesn't enable the 'native-tls' feature, which adds specific
 # functionality for it.
@@ -96,13 +98,13 @@ encoding_rs = "0.8"
 futures-core = { version = "0.3.0", default-features = false }
 futures-util = { version = "0.3.0", default-features = false }
 http-body = "0.4.0"
-hyper = { version = "0.14.18", default-features = false, features = ["tcp", "http1", "http2", "client", "runtime"] }
-h2 = "0.3.10"
+hyper = { version = "0.14.18", default-features = false, features = ["tcp", "http1", "client", "runtime"] }
+h2 = { version = "0.3.10", optional = true }
 once_cell = "1"
 log = "0.4"
 mime = "0.3.16"
 percent-encoding = "2.1"
-tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
+tokio = { version = "1.0", default-features = false, features = ["io-util", "net", "time"] }
 pin-project-lite = "0.2.0"
 ipnet = "2.3"
 
@@ -138,7 +140,7 @@ trust-dns-resolver = { version = "0.22", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.8"
-hyper = { version = "0.14", default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server", "runtime"] }
+hyper = { version = "0.14", default-features = false, features = ["tcp", "stream", "http1", "client", "server", "runtime"] }
 serde = { version = "1.0", features = ["derive"] }
 libflate = "1.0"
 brotli_crate = { package = "brotli", version = "3.3.0" }
