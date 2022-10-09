@@ -129,7 +129,7 @@ impl Response {
     }
 
     /// Convert the response into a `Stream` of `Bytes` from the body.
-    #[cfg(feature = "stream")]
+    #[cfg(feature = "wasm-stream")]
     pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
         let web_response = self.http.into_body();
         let body = web_response.body()
