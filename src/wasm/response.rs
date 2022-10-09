@@ -4,16 +4,13 @@ use bytes::Bytes;
 use http::{HeaderMap, StatusCode};
 use js_sys::Uint8Array;
 use url::Url;
-use wasm_bindgen::JsCast;
-use wasm_streams::ReadableStream;
-use futures_util::stream::StreamExt;
 
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
 #[cfg(feature = "stream")]
-use wasm_streams::{ReadableStream};
+use wasm_streams::ReadableStream;
 #[cfg(feature = "stream")]
-use futures::StreamExt;
+use futures_util::stream::StreamExt;
 #[cfg(feature = "stream")]
 use wasm_bindgen::JsCast;
 
@@ -129,7 +126,7 @@ impl Response {
     }
 
     /// Convert the response into a `Stream` of `Bytes` from the body.
-    #[cfg(feature = "wasm-stream")]
+    #[cfg(feature = "stream")]
     pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
         let web_response = self.http.into_body();
         let body = web_response.body()

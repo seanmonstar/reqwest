@@ -1,6 +1,6 @@
 [package]
 name = "reqwest-wasm"
-version = "0.11.14"                                   # remember to update html_root_url
+version = "0.11.15"                                   # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -53,8 +53,7 @@ multipart = ["mime_guess"]
 
 trust-dns = ["trust-dns-resolver"]
 
-stream = ["tokio/fs", "tokio-util"]
-wasm-stream = ["wasm-streams"]
+stream = ["tokio/fs", "tokio-util", "wasm-streams"]
 
 socks = ["tokio-socks"]
 
@@ -79,6 +78,8 @@ bytes = "1.0"
 serde = "1.0"
 serde_urlencoded = "0.7.1"
 tower-service = "0.3"
+futures-core = { version = "0.3.0", default-features = false }
+futures-util = { version = "0.3.0", default-features = false }
 
 # Optional deps...
 
@@ -89,8 +90,6 @@ mime_guess = { version = "2.0", default-features = false, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 encoding_rs = "0.8"
-futures-core = { version = "0.3.0", default-features = false }
-futures-util = { version = "0.3.0", default-features = false }
 http-body = "0.4.0"
 hyper = { version = "0.14.18", default-features = false, features = [
     "tcp",
