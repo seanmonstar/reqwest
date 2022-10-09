@@ -179,7 +179,7 @@ wasm-bindgen = "0.2.68"
 wasm-bindgen-futures = "0.4.18"
 futures = { version = "0.3.0", default-features = false }
 futures-core = { version = "0.3.0", default-features = false }
-wasm-streams = { version = "0.1.2", optional = true }
+wasm-streams = { version = "0.2", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3.25"
@@ -189,7 +189,6 @@ features = [
     "RequestInit",
     "RequestMode",
     "Response",
-    "ReadableStream",
     "Window",
     "FormData",
     "Blob",
@@ -197,6 +196,7 @@ features = [
     "ServiceWorkerGlobalScope",
     "RequestCredentials",
     "File",
+    "ReadableStream",
 ]
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
