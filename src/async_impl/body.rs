@@ -7,9 +7,9 @@ use bytes::Bytes;
 use futures_core::Stream;
 use http_body::Body as HttpBody;
 use pin_project_lite::pin_project;
-#[cfg(feature = "stream")]
-use tokio::fs::File;
 use tokio::time::Sleep;
+#[cfg(feature = "stream")]
+use tokio::{fs::File, io::Take};
 #[cfg(feature = "stream")]
 use tokio_util::io::ReaderStream;
 
@@ -222,6 +222,15 @@ impl From<File> for Body {
     }
 }
 
+#[cfg(feature = "stream")]
+#[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
+impl From<Take<File>> for Body {
+    #[inline]
+    fn from(file: Take<File>) -> Body {
+        Body::wrap_stream(ReaderStream::new(file))
+    }
+}
+
 impl fmt::Debug for Body {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Body").finish()
@@ -366,5 +375,39 @@ mod tests {
         let test_data = b"Test body";
         let body = Body::from(&test_data[..]);
         assert_eq!(body.as_bytes(), Some(&test_data[..]));
+    }
+
+    #[cfg(feature = "stream")]
+    #[tokio::test]
+    #[should_panic(expected = "NotFound")]
+    async fn test_impl_tokio_take_file() {
+        use std::io::SeekFrom;
+
+        use tokio::{
+            fs::File,
+            io::{AsyncReadExt as _, AsyncSeekExt as _},
+        };
+
+        match File::open("").await {
+            Ok(mut file) => {
+                file.seek(SeekFrom::Start(10)).await.unwrap();
+                let file = file.take(20);
+
+                #[cfg(feature = "multipart")]
+                {
+                    use super::super::multipart::{Form, Part};
+
+                    let _form = Form::new()
+                        .part("file", Part::stream(file))
+                        .percent_encode_noop();
+                }
+                #[cfg(not(feature = "multipart"))]
+                {
+                    let _body = Body::from(file);
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => panic!("NotFound"),
+            Err(err) => panic!("{}", err),
+        }
     }
 }
