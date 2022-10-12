@@ -2,7 +2,7 @@
 #![deny(missing_debug_implementations)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(test, deny(warnings))]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.11.11")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.11.12")]
 
 //! # reqwest
 //!
@@ -293,7 +293,7 @@ if_hyper! {
     doctest!("../README.md");
 
     pub use self::async_impl::{
-        Body, Client, ClientBuilder, Request, RequestBuilder, Response,
+        Body, Client, ClientBuilder, Request, RequestBuilder, Response, Upgraded,
     };
     pub use self::proxy::Proxy;
     #[cfg(feature = "__tls")]
