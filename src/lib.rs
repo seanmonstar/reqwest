@@ -309,8 +309,7 @@ if_hyper! {
     mod connect;
     #[cfg(feature = "cookies")]
     pub mod cookie;
-    #[cfg(feature = "trust-dns")]
-    mod dns;
+    pub mod dns;
     mod proxy;
     pub mod redirect;
     #[cfg(feature = "__tls")]
