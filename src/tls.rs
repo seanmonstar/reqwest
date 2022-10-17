@@ -179,6 +179,15 @@ impl Identity {
         })
     }
 
+    #[cfg(feature = "native-tls")]
+    pub fn from_pkcs8_pem(pem: &[u8], key: &[u8]) -> crate::Result<Identity> {
+        Ok(Identity {
+            inner: ClientCert::Pkcs12(
+                native_tls_crate::Identity::from_pkcs8(pem, key).map_err(crate::error::builder)?,
+            ),
+        })
+    }
+
     /// Parses PEM encoded private key and certificate.
     ///
     /// The input should contain a PEM encoded private key
