@@ -291,11 +291,7 @@ impl Identity {
         tls: &mut native_tls_crate::TlsConnectorBuilder,
     ) -> crate::Result<()> {
         match self.inner {
-            ClientCert::Pkcs12(id) => {
-                tls.identity(id);
-                Ok(())
-            }
-            ClientCert::Pkcs8(id) => {
+            ClientCert::Pkcs12(id) | ClientCert::Pkcs8(id) => {
                 tls.identity(id);
                 Ok(())
             }
@@ -317,8 +313,9 @@ impl Identity {
                 .with_single_cert(certs, key)
                 .map_err(crate::error::builder),
             #[cfg(feature = "native-tls")]
-            ClientCert::Pkcs12(..) => Err(crate::error::builder("incompatible TLS identity type")),
-            ClientCert::Pkcs8(..) => Err(crate::error::builder("incompatible TLS identity type")),
+            ClientCert::Pkcs12(..) | ClientCert::Pkcs8(..) => {
+                Err(crate::error::builder("incompatible TLS identity type"))
+            }
         }
     }
 }
