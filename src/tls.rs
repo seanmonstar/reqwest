@@ -199,7 +199,7 @@ impl Identity {
     /// File::open("client.pem")?.read_to_end(&mut cert)?;
     /// let mut key = Vec::new();
     /// File::open("client.key")?.read_to_end(&mut key)?;
-    /// let pkcs8 = reqwest::Identity::from_pkcs8_pem(&pem, &cert)?;
+    /// let pkcs8 = reqwest::Identity::from_pkcs8_pem(&cert, &key)?;
     /// # drop(pkcs8);
     /// # Ok(())
     /// # }
