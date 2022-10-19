@@ -192,13 +192,10 @@ impl Identity {
     /// # Examples
     ///
     /// ```
-    /// # use std::fs::File;
-    /// # use std::io::Read;
+    /// # use std::fs;
     /// # fn pkcs8() -> Result<(), Box<std::error::Error>> {
-    /// let mut cert = Vec::new();
-    /// File::open("client.pem")?.read_to_end(&mut cert)?;
-    /// let mut key = Vec::new();
-    /// File::open("client.key")?.read_to_end(&mut key)?;
+    /// let cert = fs::read("client.pem")?;
+    /// let key = fs::read("key.pem")?;
     /// let pkcs8 = reqwest::Identity::from_pkcs8_pem(&cert, &key)?;
     /// # drop(pkcs8);
     /// # Ok(())
