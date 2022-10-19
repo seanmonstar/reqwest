@@ -485,7 +485,7 @@ mod tests {
 
     #[cfg(feature = "native-tls")]
     #[test]
-    fn identity_from_pkcs8_der_invalid() {
+    fn identity_from_pkcs8_pem_invalid() {
         Identity::from_pkcs8_pem(b"not pem", b"not key").unwrap_err();
     }
 
