@@ -307,8 +307,6 @@ if_hyper! {
     #[cfg(feature = "blocking")]
     pub mod blocking;
     mod connect;
-    #[cfg(feature = "cookies")]
-    pub mod cookie;
     #[cfg(feature = "trust-dns")]
     mod dns;
     mod proxy;
@@ -317,6 +315,9 @@ if_hyper! {
     pub mod tls;
     mod util;
 }
+
+#[cfg(feature = "cookies")]
+pub mod cookie;
 
 if_wasm! {
     mod wasm;

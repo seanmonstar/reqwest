@@ -16,10 +16,10 @@ use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
-    method: Method,
-    url: Url,
-    headers: HeaderMap,
-    body: Option<Body>,
+    pub(crate) method: Method,
+    pub(crate) url: Url,
+    pub(crate) headers: HeaderMap,
+    pub(crate) body: Option<Body>,
     pub(super) cors: bool,
     pub(super) credentials: Option<RequestCredentials>,
 }
