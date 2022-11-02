@@ -13,7 +13,7 @@ use http::header::{
 };
 use http::uri::Scheme;
 use http::Uri;
-use hyper::client::ResponseFuture;
+use hyper::client::{HttpConnector, ResponseFuture};
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
@@ -28,9 +28,12 @@ use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
-use crate::connect::{Connector, HttpConnector};
+use crate::connect::Connector;
 #[cfg(feature = "cookies")]
 use crate::cookie;
+#[cfg(feature = "trust-dns")]
+use crate::dns::trust_dns::TrustDnsResolver;
+use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
 use crate::error;
 use crate::into_url::{expect_uri, try_uri};
 use crate::redirect::{self, remove_sensitive_headers};
@@ -121,6 +124,7 @@ struct Config {
     error: Option<crate::Error>,
     https_only: bool,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
+    dns_resolver: Option<Arc<dyn Resolve>>,
 }
 
 impl Default for ClientBuilder {
@@ -188,6 +192,7 @@ impl ClientBuilder {
                 cookie_store: None,
                 https_only: false,
                 dns_overrides: HashMap::new(),
+                dns_resolver: None,
             },
         }
     }
@@ -217,25 +222,23 @@ impl ClientBuilder {
                 headers.get(USER_AGENT).cloned()
             }
 
-            let http = match config.trust_dns {
-                false => {
-                    if config.dns_overrides.is_empty() {
-                        HttpConnector::new_gai()
-                    } else {
-                        HttpConnector::new_gai_with_overrides(config.dns_overrides)
-                    }
-                }
+            let mut resolver: Arc<dyn Resolve> = match config.trust_dns {
+                false => Arc::new(GaiResolver::new()),
                 #[cfg(feature = "trust-dns")]
-                true => {
-                    if config.dns_overrides.is_empty() {
-                        HttpConnector::new_trust_dns()?
-                    } else {
-                        HttpConnector::new_trust_dns_with_overrides(config.dns_overrides)?
-                    }
-                }
+                true => Arc::new(TrustDnsResolver::new().map_err(crate::error::builder)?),
                 #[cfg(not(feature = "trust-dns"))]
                 true => unreachable!("trust-dns shouldn't be enabled unless the feature is"),
             };
+            if let Some(dns_resolver) = config.dns_resolver {
+                resolver = dns_resolver;
+            }
+            if !config.dns_overrides.is_empty() {
+                resolver = Arc::new(DnsResolverWithOverrides::new(
+                    resolver,
+                    config.dns_overrides,
+                ));
+            }
+            let http = HttpConnector::new_with_resolver(DynResolver::new(resolver));
 
             #[cfg(feature = "__tls")]
             match config.tls {
@@ -1338,6 +1341,16 @@ impl ClientBuilder {
         self.config
             .dns_overrides
             .insert(domain.to_string(), addrs.to_vec());
+        self
+    }
+
+    /// Override the DNS resolver implementation.
+    ///
+    /// Pass an `Arc` wrapping a trait object implementing `Resolve`.
+    /// Overrides for specific names passed to `resolve` and `resolve_to_addrs` will
+    /// still be applied on top of this resolver.
+    pub fn dns_resolver<R: Resolve + 'static>(mut self, resolver: Arc<R>) -> ClientBuilder {
+        self.config.dns_resolver = Some(resolver as _);
         self
     }
 }

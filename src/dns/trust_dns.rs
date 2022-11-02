@@ -1,19 +1,19 @@
-use std::future::Future;
-use std::io;
-use std::net::SocketAddr;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{self, Poll};
+//! DNS resolution via the [trust_dns_resolver](https://github.com/bluejekyll/trust-dns) crate
 
-use hyper::client::connect::dns as hyper_dns;
-use hyper::service::Service;
+use hyper::client::connect::dns::Name;
 use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
+pub use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 use trust_dns_resolver::{
-    config::{ResolverConfig, ResolverOpts},
-    lookup_ip::LookupIpIntoIter,
-    system_conf, AsyncResolver, TokioConnection, TokioConnectionProvider, TokioHandle,
+    lookup_ip::LookupIpIntoIter, system_conf, AsyncResolver, TokioConnection,
+    TokioConnectionProvider, TokioHandle,
 };
+
+use std::io;
+use std::net::SocketAddr;
+use std::sync::Arc;
+
+use super::{Addrs, Resolve, Resolving};
 
 use crate::error::BoxError;
 
@@ -22,22 +22,26 @@ type SharedResolver = Arc<AsyncResolver<TokioConnection, TokioConnectionProvider
 static SYSTEM_CONF: Lazy<io::Result<(ResolverConfig, ResolverOpts)>> =
     Lazy::new(|| system_conf::read_system_conf().map_err(io::Error::from));
 
-#[derive(Clone)]
+/// Wrapper around an `AsyncResolver`, which implements the `Resolve` trait.
+#[derive(Debug, Clone)]
 pub(crate) struct TrustDnsResolver {
     state: Arc<Mutex<State>>,
 }
 
-pub(crate) struct SocketAddrs {
+struct SocketAddrs {
     iter: LookupIpIntoIter,
 }
 
+#[derive(Debug)]
 enum State {
     Init,
     Ready(SharedResolver),
 }
 
 impl TrustDnsResolver {
-    pub(crate) fn new() -> io::Result<Self> {
+    /// Create a new resolver with the default configuration,
+    /// which reads from `/etc/resolve.conf`.
+    pub fn new() -> io::Result<Self> {
         SYSTEM_CONF.as_ref().map_err(|e| {
             io::Error::new(e.kind(), format!("error reading DNS system conf: {}", e))
         })?;
@@ -51,16 +55,8 @@ impl TrustDnsResolver {
     }
 }
 
-impl Service<hyper_dns::Name> for TrustDnsResolver {
-    type Response = SocketAddrs;
-    type Error = BoxError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, _: &mut task::Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, name: hyper_dns::Name) -> Self::Future {
+impl Resolve for TrustDnsResolver {
+    fn resolve(&self, name: Name) -> Resolving {
         let resolver = self.clone();
         Box::pin(async move {
             let mut lock = resolver.state.lock().await;
@@ -79,9 +75,10 @@ impl Service<hyper_dns::Name> for TrustDnsResolver {
             drop(lock);
 
             let lookup = resolver.lookup_ip(name.as_str()).await?;
-            Ok(SocketAddrs {
+            let addrs: Addrs = Box::new(SocketAddrs {
                 iter: lookup.into_iter(),
-            })
+            });
+            Ok(addrs)
         })
     }
 }
@@ -99,6 +96,13 @@ async fn new_resolver() -> Result<SharedResolver, BoxError> {
         .as_ref()
         .expect("can't construct TrustDnsResolver if SYSTEM_CONF is error")
         .clone();
+    new_resolver_with_config(config, opts)
+}
+
+fn new_resolver_with_config(
+    config: ResolverConfig,
+    opts: ResolverOpts,
+) -> Result<SharedResolver, BoxError> {
     let resolver = AsyncResolver::new(config, opts, TokioHandle)?;
     Ok(Arc::new(resolver))
 }
