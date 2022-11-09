@@ -83,6 +83,8 @@ struct Config {
     hostname_verification: bool,
     #[cfg(feature = "__tls")]
     certs_verification: bool,
+    #[cfg(feature = "__tls")]
+    tls_sni: bool,
     connect_timeout: Option<Duration>,
     connection_verbose: bool,
     pool_idle_timeout: Option<Duration>,
@@ -150,6 +152,8 @@ impl ClientBuilder {
                 hostname_verification: true,
                 #[cfg(feature = "__tls")]
                 certs_verification: true,
+                #[cfg(feature = "__tls")]
+                tls_sni: true,
                 connect_timeout: None,
                 connection_verbose: false,
                 pool_idle_timeout: Some(Duration::from_secs(90)),
@@ -267,6 +271,8 @@ impl ClientBuilder {
                     }
 
                     tls.danger_accept_invalid_certs(!config.certs_verification);
+
+                    tls.use_sni(config.tls_sni);
 
                     tls.disable_built_in_roots(!config.tls_built_in_root_certs);
 
@@ -428,6 +434,8 @@ impl ClientBuilder {
                         tls.dangerous()
                             .set_certificate_verifier(Arc::new(NoVerifier));
                     }
+
+                    tls.enable_sni = config.tls_sni;
 
                     // ALPN protocol
                     match config.http_version_pref {
@@ -1140,6 +1148,28 @@ impl ClientBuilder {
         self
     }
 
+    /// Controls the use of TLS server name indication.
+    ///
+    /// Defaults to `true`.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
+    pub fn tls_sni(mut self, tls_sni: bool) -> ClientBuilder {
+        self.config.tls_sni = tls_sni;
+        self
+    }
+
     /// Set the minimum required TLS version for connections.
     ///
     /// By default the TLS backend's own default is used.
@@ -1706,6 +1736,8 @@ impl Config {
             if let Some(ref max_tls_version) = self.max_tls_version {
                 f.field("max_tls_version", max_tls_version);
             }
+
+            f.field("tls_sni", &self.tls_sni);
         }
 
         #[cfg(all(feature = "native-tls-crate", feature = "__rustls"))]
