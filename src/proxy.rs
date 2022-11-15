@@ -7,6 +7,7 @@ use crate::into_url::{IntoUrl, IntoUrlSealed};
 use crate::Url;
 use http::{header::HeaderValue, Uri};
 use ipnet::IpNet;
+use once_cell::sync::Lazy;
 use percent_encoding::percent_decode;
 use std::collections::HashMap;
 use std::env;
@@ -254,6 +255,7 @@ impl Proxy {
     /// # Ok(())
     /// # }
     /// # fn main() {}
+    /// ```
     pub fn custom<F, U: IntoProxyScheme>(fun: F) -> Proxy
     where
         F: Fn(&Url) -> Option<U> + Send + Sync + 'static,
@@ -755,9 +757,8 @@ impl Dst for Uri {
     }
 }
 
-lazy_static! {
-    static ref SYS_PROXIES: Arc<SystemProxyMap> = Arc::new(get_sys_proxies(get_from_registry()));
-}
+static SYS_PROXIES: Lazy<Arc<SystemProxyMap>> =
+    Lazy::new(|| Arc::new(get_sys_proxies(get_from_registry())));
 
 /// Get system proxies information.
 ///
@@ -934,7 +935,7 @@ fn parse_registry_values(registry_values: RegistryProxyValues) -> SystemProxyMap
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lazy_static::lazy_static;
+    use once_cell::sync::Lazy;
     use std::sync::Mutex;
 
     impl Dst for Url {
@@ -1074,9 +1075,7 @@ mod tests {
     // Smallest possible content for a mutex
     struct MutexInner;
 
-    lazy_static! {
-        static ref ENVLOCK: Mutex<MutexInner> = Mutex::new(MutexInner);
-    }
+    static ENVLOCK: Lazy<Mutex<MutexInner>> = Lazy::new(|| Mutex::new(MutexInner));
 
     #[test]
     fn test_get_sys_proxies_parsing() {

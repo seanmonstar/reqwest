@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.11.11" # remember to update html_root_url
+version = "0.11.12" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -98,7 +98,7 @@ futures-util = { version = "0.3.0", default-features = false }
 http-body = "0.4.0"
 hyper = { version = "0.14.18", default-features = false, features = ["tcp", "http1", "http2", "client", "runtime"] }
 h2 = "0.3.10"
-lazy_static = "1.4"
+once_cell = "1"
 log = "0.4"
 mime = "0.3.16"
 percent-encoding = "2.1"
@@ -110,7 +110,7 @@ ipnet = "2.3"
 
 ## default-tls
 hyper-tls = { version = "0.5", optional = true }
-native-tls-crate = { version = "0.2.8", optional = true, package = "native-tls" }
+native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls" }
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
@@ -134,7 +134,7 @@ tokio-util = { version = "0.7.1", default-features = false, features = ["codec",
 tokio-socks = { version = "0.5.1", optional = true }
 
 ## trust-dns
-trust-dns-resolver = { version = "0.21", optional = true }
+trust-dns-resolver = { version = "0.22", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.8"
