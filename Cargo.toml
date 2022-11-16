@@ -123,7 +123,7 @@ rustls-pemfile = { version = "1.0", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.16", package = "cookie", optional = true }
-cookie_store = { version = "0.16", optional = true }
+cookie_store = { version = "0.19.0", optional = true }
 proc-macro-hack = { version = "0.5.19", optional = true }
 
 ## compression
@@ -155,6 +155,13 @@ js-sys = "0.3.45"
 serde_json = "1.0"
 wasm-bindgen = "0.2.68"
 wasm-bindgen-futures = "0.4.18"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies.cookie_store]
+version = "0.19.0"
+optional = true
+features = [
+    "wasm-bindgen"
+]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3.25"
