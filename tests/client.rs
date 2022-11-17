@@ -24,6 +24,12 @@ async fn auto_headers() {
                 .unwrap()
                 .contains("br"));
         }
+        if cfg!(feature = "zstd") {
+            assert!(req.headers()["accept-encoding"]
+                .to_str()
+                .unwrap()
+                .contains("zstd"));
+        }
         if cfg!(feature = "deflate") {
             assert!(req.headers()["accept-encoding"]
                 .to_str()

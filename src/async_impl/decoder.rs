@@ -9,6 +9,9 @@ use async_compression::tokio::bufread::GzipDecoder;
 #[cfg(feature = "brotli")]
 use async_compression::tokio::bufread::BrotliDecoder;
 
+#[cfg(feature = "zstd")]
+use async_compression::tokio::bufread::ZstdDecoder;
+
 #[cfg(feature = "deflate")]
 use async_compression::tokio::bufread::ZlibDecoder;
 
@@ -18,9 +21,19 @@ use futures_util::stream::Peekable;
 use http::HeaderMap;
 use hyper::body::HttpBody;
 
-#[cfg(any(feature = "gzip", feature = "brotli", feature = "deflate"))]
+#[cfg(any(
+    feature = "gzip",
+    feature = "brotli",
+    feature = "zstd",
+    feature = "deflate"
+))]
 use tokio_util::codec::{BytesCodec, FramedRead};
-#[cfg(any(feature = "gzip", feature = "brotli", feature = "deflate"))]
+#[cfg(any(
+    feature = "gzip",
+    feature = "brotli",
+    feature = "zstd",
+    feature = "deflate"
+))]
 use tokio_util::io::StreamReader;
 
 use super::super::Body;
@@ -32,6 +45,8 @@ pub(super) struct Accepts {
     pub(super) gzip: bool,
     #[cfg(feature = "brotli")]
     pub(super) brotli: bool,
+    #[cfg(feature = "zstd")]
+    pub(super) zstd: bool,
     #[cfg(feature = "deflate")]
     pub(super) deflate: bool,
 }
@@ -55,12 +70,21 @@ enum Inner {
     #[cfg(feature = "brotli")]
     Brotli(FramedRead<BrotliDecoder<StreamReader<Peekable<IoStream>, Bytes>>, BytesCodec>),
 
+    /// A `Zstd` decoder will uncompress the zstd compressed response content before returning it.
+    #[cfg(feature = "zstd")]
+    Zstd(FramedRead<ZstdDecoder<StreamReader<Peekable<IoStream>, Bytes>>, BytesCodec>),
+
     /// A `Deflate` decoder will uncompress the deflated response content before returning it.
     #[cfg(feature = "deflate")]
     Deflate(FramedRead<ZlibDecoder<StreamReader<Peekable<IoStream>, Bytes>>, BytesCodec>),
 
     /// A decoder that doesn't have a value yet.
-    #[cfg(any(feature = "brotli", feature = "gzip", feature = "deflate"))]
+    #[cfg(any(
+        feature = "brotli",
+        feature = "zstd",
+        feature = "gzip",
+        feature = "deflate"
+    ))]
     Pending(Pending),
 }
 
@@ -74,6 +98,8 @@ enum DecoderType {
     Gzip,
     #[cfg(feature = "brotli")]
     Brotli,
+    #[cfg(feature = "zstd")]
+    Zstd,
     #[cfg(feature = "deflate")]
     Deflate,
 }
@@ -131,6 +157,21 @@ impl Decoder {
         }
     }
 
+    /// A zstd decoder.
+    ///
+    /// This decoder will buffer and decompress chunks that are zstd compressed.
+    #[cfg(feature = "zstd")]
+    fn zstd(body: Body) -> Decoder {
+        use futures_util::StreamExt;
+
+        Decoder {
+            inner: Inner::Pending(Pending(
+                IoStream(body.into_stream()).peekable(),
+                DecoderType::Zstd,
+            )),
+        }
+    }
+
     /// A deflate decoder.
     ///
     /// This decoder will buffer and decompress chunks that are deflated.
@@ -146,7 +187,12 @@ impl Decoder {
         }
     }
 
-    #[cfg(any(feature = "brotli", feature = "gzip", feature = "deflate"))]
+    #[cfg(any(
+        feature = "brotli",
+        feature = "zstd",
+        feature = "gzip",
+        feature = "deflate"
+    ))]
     fn detect_encoding(headers: &mut HeaderMap, encoding_str: &str) -> bool {
         use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
         use log::warn;
@@ -197,6 +243,13 @@ impl Decoder {
             }
         }
 
+        #[cfg(feature = "zstd")]
+        {
+            if _accepts.zstd && Decoder::detect_encoding(_headers, "zstd") {
+                return Decoder::zstd(body);
+            }
+        }
+
         #[cfg(feature = "deflate")]
         {
             if _accepts.deflate && Decoder::detect_encoding(_headers, "deflate") {
@@ -214,7 +267,12 @@ impl Stream for Decoder {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         // Do a read or poll for a pending decoder value.
         match self.inner {
-            #[cfg(any(feature = "brotli", feature = "gzip", feature = "deflate"))]
+            #[cfg(any(
+                feature = "brotli",
+                feature = "zstd",
+                feature = "gzip",
+                feature = "deflate"
+            ))]
             Inner::Pending(ref mut future) => match Pin::new(future).poll(cx) {
                 Poll::Ready(Ok(inner)) => {
                     self.inner = inner;
@@ -236,6 +294,14 @@ impl Stream for Decoder {
             }
             #[cfg(feature = "brotli")]
             Inner::Brotli(ref mut decoder) => {
+                return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
+                    Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.freeze()))),
+                    Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
+                    None => Poll::Ready(None),
+                };
+            }
+            #[cfg(feature = "zstd")]
+            Inner::Zstd(ref mut decoder) => {
                 return match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.freeze()))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
@@ -276,7 +342,12 @@ impl HttpBody for Decoder {
         match self.inner {
             Inner::PlainText(ref body) => HttpBody::size_hint(body),
             // the rest are "unknown", so default
-            #[cfg(any(feature = "brotli", feature = "gzip", feature = "deflate"))]
+            #[cfg(any(
+                feature = "brotli",
+                feature = "zstd",
+                feature = "gzip",
+                feature = "deflate"
+            ))]
             _ => http_body::SizeHint::default(),
         }
     }
@@ -314,6 +385,11 @@ impl Future for Pending {
                 BrotliDecoder::new(StreamReader::new(_body)),
                 BytesCodec::new(),
             )))),
+            #[cfg(feature = "zstd")]
+            DecoderType::Zstd => Poll::Ready(Ok(Inner::Zstd(FramedRead::new(
+                ZstdDecoder::new(StreamReader::new(_body)),
+                BytesCodec::new(),
+            )))),
             #[cfg(feature = "gzip")]
             DecoderType::Gzip => Poll::Ready(Ok(Inner::Gzip(FramedRead::new(
                 GzipDecoder::new(StreamReader::new(_body)),
@@ -349,21 +425,36 @@ impl Accepts {
             gzip: false,
             #[cfg(feature = "brotli")]
             brotli: false,
+            #[cfg(feature = "zstd")]
+            zstd: false,
             #[cfg(feature = "deflate")]
             deflate: false,
         }
     }
 
     pub(super) fn as_str(&self) -> Option<&'static str> {
-        match (self.is_gzip(), self.is_brotli(), self.is_deflate()) {
-            (true, true, true) => Some("gzip, br, deflate"),
-            (true, true, false) => Some("gzip, br"),
-            (true, false, true) => Some("gzip, deflate"),
-            (false, true, true) => Some("br, deflate"),
-            (true, false, false) => Some("gzip"),
-            (false, true, false) => Some("br"),
-            (false, false, true) => Some("deflate"),
-            (false, false, false) => None,
+        match (
+            self.is_gzip(),
+            self.is_brotli(),
+            self.is_zstd(),
+            self.is_deflate(),
+        ) {
+            (true, true, true, true) => Some("gzip, br, zstd, deflate"),
+            (true, true, false, true) => Some("gzip, br, deflate"),
+            (true, true, true, false) => Some("gzip, br, zstd"),
+            (true, true, false, false) => Some("gzip, br"),
+            (true, false, true, true) => Some("gzip, zstd, deflate"),
+            (true, false, false, true) => Some("gzip, zstd, deflate"),
+            (false, true, true, true) => Some("br, zstd, deflate"),
+            (false, true, false, true) => Some("br, zstd, deflate"),
+            (true, false, true, false) => Some("gzip, zstd"),
+            (true, false, false, false) => Some("gzip"),
+            (false, true, true, false) => Some("br, zstd"),
+            (false, true, false, false) => Some("br"),
+            (false, false, true, true) => Some("zstd, deflate"),
+            (false, false, true, false) => Some("zstd"),
+            (false, false, false, true) => Some("deflate"),
+            (false, false, false, false) => None,
         }
     }
 
@@ -391,6 +482,18 @@ impl Accepts {
         }
     }
 
+    fn is_zstd(&self) -> bool {
+        #[cfg(feature = "zstd")]
+        {
+            self.zstd
+        }
+
+        #[cfg(not(feature = "zstd"))]
+        {
+            false
+        }
+    }
+
     fn is_deflate(&self) -> bool {
         #[cfg(feature = "deflate")]
         {
@@ -411,6 +514,8 @@ impl Default for Accepts {
             gzip: true,
             #[cfg(feature = "brotli")]
             brotli: true,
+            #[cfg(feature = "zstd")]
+            zstd: true,
             #[cfg(feature = "deflate")]
             deflate: true,
         }
