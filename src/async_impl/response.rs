@@ -11,8 +11,6 @@ use hyper::{HeaderMap, StatusCode, Version};
 use mime::Mime;
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
-#[cfg(feature = "json")]
-use serde_json;
 use tokio::time::Sleep;
 use url::Url;
 
@@ -23,14 +21,22 @@ use crate::cookie;
 use crate::response::ResponseUrl;
 
 /// A Response to a submitted `Request`.
-pub struct Response {
-    pub(super) res: hyper::Response<Decoder>,
-    // Boxed to save space (11 words to 1 word), and it's not accessed
-    // frequently internally.
-    url: Box<Url>,
+pub struct Response(Box<ResponseInner>);
+
+struct ResponseInner {
+    res: hyper::Response<Decoder>,
+    url: Url,
 }
 
 impl Response {
+    fn new_inner(res: hyper::Response<Decoder>, url: Url) -> Self {
+        Response(Box::new(ResponseInner { res, url }))
+    }
+
+    pub(super) fn into_response(self) -> hyper::Response<Decoder> {
+        self.0.res
+    }
+
     pub(super) fn new(
         res: hyper::Response<hyper::Body>,
         url: Url,
@@ -41,34 +47,31 @@ impl Response {
         let decoder = Decoder::detect(&mut parts.headers, Body::response(body, timeout), accepts);
         let res = hyper::Response::from_parts(parts, decoder);
 
-        Response {
-            res,
-            url: Box::new(url),
-        }
+        Self::new_inner(res, url)
     }
 
     /// Get the `StatusCode` of this `Response`.
     #[inline]
     pub fn status(&self) -> StatusCode {
-        self.res.status()
+        self.0.res.status()
     }
 
     /// Get the HTTP `Version` of this `Response`.
     #[inline]
     pub fn version(&self) -> Version {
-        self.res.version()
+        self.0.res.version()
     }
 
     /// Get the `Headers` of this `Response`.
     #[inline]
     pub fn headers(&self) -> &HeaderMap {
-        self.res.headers()
+        self.0.res.headers()
     }
 
     /// Get a mutable reference to the `Headers` of this `Response`.
     #[inline]
     pub fn headers_mut(&mut self) -> &mut HeaderMap {
-        self.res.headers_mut()
+        self.0.res.headers_mut()
     }
 
     /// Get the content-length of this response, if known.
@@ -81,7 +84,7 @@ impl Response {
     pub fn content_length(&self) -> Option<u64> {
         use hyper::body::HttpBody;
 
-        HttpBody::size_hint(self.res.body()).exact()
+        HttpBody::size_hint(self.0.res.body()).exact()
     }
 
     /// Retrieve the cookies contained in the response.
@@ -94,18 +97,19 @@ impl Response {
     #[cfg(feature = "cookies")]
     #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
     pub fn cookies<'a>(&'a self) -> impl Iterator<Item = cookie::Cookie<'a>> + 'a {
-        cookie::extract_response_cookies(self.res.headers()).filter_map(Result::ok)
+        cookie::extract_response_cookies(self.0.res.headers()).filter_map(Result::ok)
     }
 
     /// Get the final `Url` of this `Response`.
     #[inline]
     pub fn url(&self) -> &Url {
-        &self.url
+        &self.0.url
     }
 
     /// Get the remote address used to get this `Response`.
     pub fn remote_addr(&self) -> Option<SocketAddr> {
-        self.res
+        self.0
+            .res
             .extensions()
             .get::<HttpInfo>()
             .map(|info| info.remote_addr())
@@ -113,12 +117,12 @@ impl Response {
 
     /// Returns a reference to the associated extensions.
     pub fn extensions(&self) -> &http::Extensions {
-        self.res.extensions()
+        self.0.res.extensions()
     }
 
     /// Returns a mutable reference to the associated extensions.
     pub fn extensions_mut(&mut self) -> &mut http::Extensions {
-        self.res.extensions_mut()
+        self.0.res.extensions_mut()
     }
 
     // body methods
@@ -260,7 +264,7 @@ impl Response {
     /// # }
     /// ```
     pub async fn bytes(self) -> crate::Result<Bytes> {
-        hyper::body::to_bytes(self.res.into_body()).await
+        hyper::body::to_bytes(self.0.res.into_body()).await
     }
 
     /// Stream a chunk of the response body.
@@ -280,7 +284,7 @@ impl Response {
     /// # }
     /// ```
     pub async fn chunk(&mut self) -> crate::Result<Option<Bytes>> {
-        if let Some(item) = self.res.body_mut().next().await {
+        if let Some(item) = self.0.res.body_mut().next().await {
             Ok(Some(item?))
         } else {
             Ok(None)
@@ -312,7 +316,7 @@ impl Response {
     #[cfg(feature = "stream")]
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
-        self.res.into_body()
+        self.0.res.into_body()
     }
 
     // util methods
@@ -341,7 +345,7 @@ impl Response {
     pub fn error_for_status(self) -> crate::Result<Self> {
         let status = self.status();
         if status.is_client_error() || status.is_server_error() {
-            Err(crate::error::status_code(*self.url, status))
+            Err(crate::error::status_code(self.0.url, status))
         } else {
             Ok(self)
         }
@@ -371,7 +375,7 @@ impl Response {
     pub fn error_for_status_ref(&self) -> crate::Result<&Self> {
         let status = self.status();
         if status.is_client_error() || status.is_server_error() {
-            Err(crate::error::status_code(*self.url.clone(), status))
+            Err(crate::error::status_code(self.0.url.clone(), status))
         } else {
             Ok(self)
         }
@@ -386,7 +390,7 @@ impl Response {
     // This method is just used by the blocking API.
     #[cfg(feature = "blocking")]
     pub(crate) fn body_mut(&mut self) -> &mut Decoder {
-        self.res.body_mut()
+        self.0.res.body_mut()
     }
 }
 
@@ -411,17 +415,14 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
             .unwrap_or_else(|| ResponseUrl(Url::parse("http://no.url.provided.local").unwrap()));
         let url = url.0;
         let res = hyper::Response::from_parts(parts, decoder);
-        Response {
-            res,
-            url: Box::new(url),
-        }
+        Self::new_inner(res, url)
     }
 }
 
 /// A `Response` can be piped as the `Body` of another request.
 impl From<Response> for Body {
     fn from(r: Response) -> Body {
-        Body::stream(r.res.into_body())
+        Body::stream(r.0.res.into_body())
     }
 }
 

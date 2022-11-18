@@ -65,7 +65,7 @@ impl From<hyper::upgrade::Upgraded> for Upgraded {
 impl super::response::Response {
     /// Consumes the response and returns a future for a possible HTTP upgrade.
     pub async fn upgrade(self) -> crate::Result<Upgraded> {
-        hyper::upgrade::on(self.res)
+        hyper::upgrade::on(self.into_response())
             .map_ok(Upgraded::from)
             .map_err(crate::error::upgrade)
             .await
