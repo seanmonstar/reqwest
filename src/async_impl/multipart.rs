@@ -607,7 +607,9 @@ mod tests {
     #[test]
     fn stream_to_end_with_header() {
         let mut part = Part::text("value2").mime(mime::IMAGE_BMP);
-        part.meta.headers.insert("Hdr3", "/a/b/c".parse().unwrap());
+        let mut headers = HeaderMap::new();
+        headers.insert("Hdr3", "/a/b/c".parse().unwrap());
+        part = part.headers(headers);
         let mut form = Form::new().part("key2", part);
         form.inner.boundary = "boundary".to_string();
         let expected = "--boundary\r\n\
