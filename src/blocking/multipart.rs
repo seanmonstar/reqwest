@@ -42,6 +42,7 @@ use std::fs::File;
 use std::io::{self, Cursor, Read};
 use std::path::Path;
 
+use http::HeaderMap;
 use mime_guess::{self, Mime};
 
 use super::Body;
