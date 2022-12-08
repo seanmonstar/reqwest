@@ -338,6 +338,10 @@ impl ClientBuilder {
 
     /// Clear all `Proxies`, so `Client` will use no proxy anymore.
     ///
+    /// # Note
+    /// To add a proxy exclusion list, use [reqwest::proxy::Proxy::no_proxy()]
+    /// on all desired proxies instead.
+    ///
     /// This also disables the automatic usage of the "system" proxy.
     pub fn no_proxy(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.no_proxy())
@@ -544,7 +548,7 @@ impl ClientBuilder {
     }
 
     /// Controls the use of built-in system certificates during certificate validation.
-    ///         
+    ///
     /// Defaults to `true` -- built-in system certs will be used.
     ///
     /// # Optional
