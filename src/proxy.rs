@@ -348,34 +348,42 @@ impl Proxy {
     }
 
     pub(crate) fn intercept<D: Dst>(&self, uri: &D) -> Option<ProxyScheme> {
+        let in_no_proxy = self
+            .no_proxy
+            .as_ref()
+            .map_or(false, |np| np.contains(uri.host()));
         match self.intercept {
-            Intercept::All(ref u) => Some(u.clone()),
+            Intercept::All(ref u) => {
+                Some(u.clone())
+            },
             Intercept::Http(ref u) => {
-                if uri.scheme() == "http" {
+                if !in_no_proxy && uri.scheme() == "http" {
                     Some(u.clone())
                 } else {
                     None
                 }
             }
             Intercept::Https(ref u) => {
-                if uri.scheme() == "https" {
+                if !in_no_proxy && uri.scheme() == "https" {
                     Some(u.clone())
                 } else {
                     None
                 }
             }
             Intercept::System(ref map) => {
-                let in_no_proxy = self
-                    .no_proxy
-                    .as_ref()
-                    .map_or(false, |np| np.contains(uri.host()));
                 if in_no_proxy {
                     None
                 } else {
                     map.get(uri.scheme()).cloned()
                 }
             }
-            Intercept::Custom(ref custom) => custom.call(uri),
+            Intercept::Custom(ref custom) => {
+                if !in_no_proxy {
+                    custom.call(uri)
+                } else {
+                    None
+                }
+            },
         }
     }
 
