@@ -413,7 +413,7 @@ impl fmt::Debug for Proxy {
 
 impl NoProxy {
     /// Returns a new no-proxy configuration based on environment variables (or `None` if no variables are set)
-    /// see [self::from_string()] for the string format
+    /// see [self::NoProxy::from_string()] for the string format
     pub fn from_env() -> Option<NoProxy> {
         let raw = env::var("NO_PROXY")
             .or_else(|_| env::var("no_proxy"))
