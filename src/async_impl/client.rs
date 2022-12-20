@@ -822,6 +822,10 @@ impl ClientBuilder {
 
     /// Clear all `Proxies`, so `Client` will use no proxy anymore.
     ///
+    /// # Note
+    /// To add a proxy exclusion list, use [crate::proxy::Proxy::no_proxy()]
+    /// on all desired proxies instead.
+    ///
     /// This also disables the automatic usage of the "system" proxy.
     pub fn no_proxy(mut self) -> ClientBuilder {
         self.config.proxies.clear();
