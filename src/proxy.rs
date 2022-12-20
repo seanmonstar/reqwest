@@ -359,7 +359,7 @@ impl Proxy {
                 } else {
                     None
                 }
-            },
+            }
             Intercept::Http(ref u) => {
                 if !in_no_proxy && uri.scheme() == "http" {
                     Some(u.clone())
@@ -387,7 +387,7 @@ impl Proxy {
                 } else {
                     None
                 }
-            },
+            }
         }
     }
 
@@ -1308,12 +1308,12 @@ mod tests {
 
     #[test]
     fn test_proxy_no_proxy_interception_for_proxy_types() {
-
         let proxy_url = "http://example.domain/";
         let no_proxy = ".no.proxy.tld";
 
         // test all proxy interception
-        let p = Proxy::all(proxy_url).unwrap()
+        let p = Proxy::all(proxy_url)
+            .unwrap()
             .no_proxy(NoProxy::from_string(no_proxy));
 
         // random url, not in no_proxy
@@ -1323,7 +1323,8 @@ mod tests {
         assert!(p.intercept(&url("https://hello.no.proxy.tld")).is_none());
 
         // test http proxy interception
-        let p = Proxy::http(proxy_url).unwrap()
+        let p = Proxy::http(proxy_url)
+            .unwrap()
             .no_proxy(NoProxy::from_string(no_proxy));
 
         // random url, not in no_proxy
@@ -1336,7 +1337,8 @@ mod tests {
         assert!(p.intercept(&url("https://hyper.rs")).is_none());
 
         // test https proxy interception
-        let p = Proxy::https(proxy_url).unwrap()
+        let p = Proxy::https(proxy_url)
+            .unwrap()
             .no_proxy(NoProxy::from_string(no_proxy));
 
         // random url, not in no_proxy
@@ -1349,8 +1351,7 @@ mod tests {
         assert!(p.intercept(&url("http://hyper.rs")).is_none());
 
         // test custom proxy interception
-        let p = Proxy::custom(move |_url| Some(proxy_url))
-            .no_proxy(NoProxy::from_string(no_proxy));
+        let p = Proxy::custom(move |_url| Some(proxy_url)).no_proxy(NoProxy::from_string(no_proxy));
 
         // random url, not in no_proxy
         assert_eq!(intercepted_uri(&p, "https://hyper.rs"), proxy_url);
