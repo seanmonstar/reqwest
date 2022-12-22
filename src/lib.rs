@@ -2,7 +2,7 @@
 #![deny(missing_debug_implementations)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(test, deny(warnings))]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.11.11")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.11.13")]
 
 //! # reqwest
 //!
@@ -289,16 +289,13 @@ if_hyper! {
     #[macro_use]
     extern crate doc_comment;
 
-    #[macro_use]
-    extern crate lazy_static;
-
     #[cfg(test)]
     doctest!("../README.md");
 
     pub use self::async_impl::{
-        Body, Client, ClientBuilder, Request, RequestBuilder, Response,
+        Body, Client, ClientBuilder, Request, RequestBuilder, Response, Upgraded,
     };
-    pub use self::proxy::Proxy;
+    pub use self::proxy::{Proxy,NoProxy};
     #[cfg(feature = "__tls")]
     // Re-exports, to be removed in a future release
     pub use tls::{Certificate, Identity};
@@ -312,8 +309,7 @@ if_hyper! {
     mod connect;
     #[cfg(feature = "cookies")]
     pub mod cookie;
-    #[cfg(feature = "trust-dns")]
-    mod dns;
+    pub mod dns;
     mod proxy;
     pub mod redirect;
     #[cfg(feature = "__tls")]
