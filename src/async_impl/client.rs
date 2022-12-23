@@ -1497,6 +1497,11 @@ impl Client {
     ///
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
+    ///
+    /// # Panics
+    ///
+    /// When using with Hyper, this method panics if a serialized `url::Url`
+    /// cannot be parsed as a valid `http::Uri`.
     pub fn execute(
         &self,
         request: Request,
