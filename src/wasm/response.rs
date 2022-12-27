@@ -5,15 +5,14 @@ use http::{HeaderMap, StatusCode};
 use js_sys::Uint8Array;
 use url::Url;
 
+#[cfg(feature = "stream")]
+use futures_util::stream::StreamExt;
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
 #[cfg(feature = "stream")]
-use wasm_streams::ReadableStream;
-#[cfg(feature = "stream")]
-use futures_util::stream::StreamExt;
-#[cfg(feature = "stream")]
 use wasm_bindgen::JsCast;
-
+#[cfg(feature = "stream")]
+use wasm_streams::ReadableStream;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -125,12 +124,20 @@ impl Response {
         Ok(bytes.into())
     }
 
+    /// Get the web_sys::ReadableStream of the response body.
+    #[cfg(feature = "stream")]
+    pub fn js_stream(self) -> web_sys::ReadableStream {
+        let web_response = self.http.into_body();
+
+        web_response
+            .body()
+            .expect("could not create wasm byte stream")
+    }
+
     /// Convert the response into a `Stream` of `Bytes` from the body.
     #[cfg(feature = "stream")]
     pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
-        let web_response = self.http.into_body();
-        let body = web_response.body()
-            .expect("could not create wasm byte stream");
+        let body = self.js_stream();
         let body = ReadableStream::from_raw(body.unchecked_into());
         body.into_stream().map(|buf_js| {
             let buffer = Uint8Array::new(
