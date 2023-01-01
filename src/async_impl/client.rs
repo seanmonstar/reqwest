@@ -1000,7 +1000,7 @@ impl ClientBuilder {
 
     // TCP options
 
-    /// Set whether sockets have `SO_NODELAY` enabled.
+    /// Set whether sockets have `TCP_NODELAY` enabled.
     ///
     /// Default is `true`.
     pub fn tcp_nodelay(mut self, enabled: bool) -> ClientBuilder {
