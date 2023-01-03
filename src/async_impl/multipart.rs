@@ -4,7 +4,6 @@ use std::fmt;
 use std::pin::Pin;
 
 use bytes::Bytes;
-use http::HeaderMap;
 use mime_guess::Mime;
 use percent_encoding::{self, AsciiSet, NON_ALPHANUMERIC};
 
@@ -12,6 +11,7 @@ use futures_core::Stream;
 use futures_util::{future, stream, StreamExt};
 
 use super::Body;
+use crate::header::HeaderMap;
 
 /// An async multipart/form-data request.
 pub struct Form {
@@ -245,10 +245,7 @@ impl Part {
     }
 
     /// Sets custom headers for the part.
-    pub fn headers<T>(self, headers: T) -> Part
-    where
-        T: Into<HeaderMap>,
-    {
+    pub fn headers(self, headers: HeaderMap) -> Part {
         self.with_inner(move |inner| inner.headers(headers))
     }
 

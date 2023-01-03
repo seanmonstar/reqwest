@@ -42,11 +42,11 @@ use std::fs::File;
 use std::io::{self, Cursor, Read};
 use std::path::Path;
 
-use http::HeaderMap;
 use mime_guess::{self, Mime};
 
 use super::Body;
 use crate::async_impl::multipart::{FormParts, PartMetadata, PartProps};
+use crate::header::HeaderMap;
 
 /// A multipart/form-data request.
 pub struct Form {
@@ -258,10 +258,7 @@ impl Part {
     }
 
     /// Sets custom headers for the part.
-    pub fn headers<T>(self, headers: T) -> Part
-    where
-        T: Into<HeaderMap>,
-    {
+    pub fn headers(self, headers: HeaderMap) -> Part {
         self.with_inner(move |inner| inner.headers(headers))
     }
 
