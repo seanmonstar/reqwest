@@ -4,7 +4,6 @@ use std::fmt;
 use std::pin::Pin;
 
 use bytes::Bytes;
-use http::HeaderMap;
 use mime_guess::Mime;
 use percent_encoding::{self, AsciiSet, NON_ALPHANUMERIC};
 
@@ -12,6 +11,7 @@ use futures_core::Stream;
 use futures_util::{future, stream, StreamExt};
 
 use super::Body;
+use crate::header::HeaderMap;
 
 /// An async multipart/form-data request.
 pub struct Form {
@@ -244,6 +244,11 @@ impl Part {
         self.with_inner(move |inner| inner.file_name(filename))
     }
 
+    /// Sets custom headers for the part.
+    pub fn headers(self, headers: HeaderMap) -> Part {
+        self.with_inner(move |inner| inner.headers(headers))
+    }
+
     fn with_inner<F>(self, func: F) -> Self
     where
         F: FnOnce(PartMetadata) -> PartMetadata,
@@ -392,6 +397,14 @@ impl PartMetadata {
         T: Into<Cow<'static, str>>,
     {
         self.file_name = Some(filename.into());
+        self
+    }
+
+    pub(crate) fn headers<T>(mut self, headers: T) -> Self
+    where
+        T: Into<HeaderMap>,
+    {
+        self.headers = headers.into();
         self
     }
 }
@@ -591,7 +604,9 @@ mod tests {
     #[test]
     fn stream_to_end_with_header() {
         let mut part = Part::text("value2").mime(mime::IMAGE_BMP);
-        part.meta.headers.insert("Hdr3", "/a/b/c".parse().unwrap());
+        let mut headers = HeaderMap::new();
+        headers.insert("Hdr3", "/a/b/c".parse().unwrap());
+        part = part.headers(headers);
         let mut form = Form::new().part("key2", part);
         form.inner.boundary = "boundary".to_string();
         let expected = "--boundary\r\n\
