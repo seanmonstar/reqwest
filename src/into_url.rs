@@ -10,6 +10,7 @@ pub trait IntoUrl: IntoUrlSealed {}
 impl IntoUrl for Url {}
 impl IntoUrl for Arc<Url> {}
 impl IntoUrl for String {}
+impl IntoUrl for &Arc<Url> {}
 impl<'a> IntoUrl for &'a str {}
 impl<'a> IntoUrl for &'a String {}
 
@@ -42,6 +43,16 @@ impl IntoUrlSealed for Arc<Url> {
 
     fn as_str(&self) -> &str {
         (**self).as_ref()
+    }
+}
+
+impl IntoUrlSealed for &Arc<Url> {
+    fn into_url(self) -> crate::Result<Arc<Url>> {
+        self.clone().into_url()
+    }
+
+    fn as_str(&self) -> &str {
+        (***self).as_ref()
     }
 }
 
