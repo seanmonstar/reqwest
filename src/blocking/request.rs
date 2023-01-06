@@ -126,18 +126,14 @@ impl Request {
     /// None is returned if a body is which can not be cloned. This can be because the body is a
     /// stream.
     pub fn try_clone(&self) -> Option<Request> {
-        let body = if let Some(ref body) = self.body.as_ref() {
-            if let Some(body) = body.try_clone() {
-                Some(body)
-            } else {
-                return None;
-            }
+        let body = if let Some(body) = self.body.as_ref() {
+            Some(body.try_clone()?)
         } else {
             None
         };
         let mut req = Request::new(self.method().clone(), self.url_arc().clone());
         *req.headers_mut() = self.headers().clone();
-        *req.version_mut() = self.version().clone();
+        *req.version_mut() = self.version();
         req.body = body;
         Some(req)
     }
