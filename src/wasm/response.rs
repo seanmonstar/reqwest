@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::Arc;
 
 use bytes::Bytes;
 use http::{HeaderMap, StatusCode};
@@ -19,15 +20,12 @@ pub struct Response {
     http: http::Response<web_sys::Response>,
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
-    url: Box<Url>,
+    url: Arc<Url>,
 }
 
 impl Response {
-    pub(super) fn new(res: http::Response<web_sys::Response>, url: Url) -> Response {
-        Response {
-            http: res,
-            url: Box::new(url),
-        }
+    pub(super) fn new(res: http::Response<web_sys::Response>, url: Arc<Url>) -> Response {
+        Response { http: res, url }
     }
 
     /// Get the `StatusCode` of this `Response`.
@@ -62,6 +60,12 @@ impl Response {
             .ok()?
             .parse()
             .ok()
+    }
+
+    /// Get the final `Url` of this `Response`.
+    #[inline]
+    pub fn url_arc(&self) -> &Arc<Url> {
+        &self.url
     }
 
     /// Get the final `Url` of this `Response`.
@@ -150,7 +154,7 @@ impl Response {
     pub fn error_for_status(self) -> crate::Result<Self> {
         let status = self.status();
         if status.is_client_error() || status.is_server_error() {
-            Err(crate::error::status_code(*self.url, status))
+            Err(crate::error::status_code(self.url, status))
         } else {
             Ok(self)
         }
@@ -160,7 +164,7 @@ impl Response {
     pub fn error_for_status_ref(&self) -> crate::Result<&Self> {
         let status = self.status();
         if status.is_client_error() || status.is_server_error() {
-            Err(crate::error::status_code(*self.url.clone(), status))
+            Err(crate::error::status_code(self.url.clone(), status))
         } else {
             Ok(self)
         }

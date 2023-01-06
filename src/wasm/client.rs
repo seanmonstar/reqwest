@@ -247,7 +247,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     }
 
     resp.body(js_resp)
-        .map(|resp| Response::new(resp, url))
+        .map(|resp| Response::new(resp, Arc::new(url)))
         .map_err(crate::error::request)
 }
 
