@@ -2,12 +2,11 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::future::Future;
 use std::io::Write;
+use std::sync::Arc;
 use std::time::Duration;
 
 use base64::write::EncoderWriter as Base64Encoder;
 use serde::Serialize;
-#[cfg(feature = "json")]
-use serde_json;
 
 use super::body::Body;
 use super::client::{Client, Pending};
@@ -23,7 +22,7 @@ use http::{request::Parts, Request as HttpRequest, Version};
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
     method: Method,
-    url: Url,
+    url: Arc<Url>,
     headers: HeaderMap,
     body: Option<Body>,
     timeout: Option<Duration>,
@@ -42,10 +41,10 @@ pub struct RequestBuilder {
 impl Request {
     /// Constructs a new request.
     #[inline]
-    pub fn new(method: Method, url: Url) -> Self {
+    pub fn new(method: Method, url: impl Into<Arc<Url>>) -> Self {
         Request {
             method,
-            url,
+            url: url.into(),
             headers: HeaderMap::new(),
             body: None,
             timeout: None,
@@ -74,7 +73,7 @@ impl Request {
     /// Get a mutable reference to the url.
     #[inline]
     pub fn url_mut(&mut self) -> &mut Url {
-        &mut self.url
+        Arc::make_mut(&mut self.url)
     }
 
     /// Get the headers.
@@ -133,7 +132,7 @@ impl Request {
             Some(body) => Some(body.try_clone()?),
             None => None,
         };
-        let mut req = Request::new(self.method().clone(), self.url().clone());
+        let mut req = Request::new(self.method().clone(), self.url.clone());
         *req.timeout_mut() = self.timeout().cloned();
         *req.headers_mut() = self.headers().clone();
         *req.version_mut() = self.version();
@@ -145,7 +144,7 @@ impl Request {
         self,
     ) -> (
         Method,
-        Url,
+        Arc<Url>,
         HeaderMap,
         Option<Body>,
         Option<Duration>,
@@ -170,7 +169,7 @@ impl RequestBuilder {
             .request
             .as_mut()
             .ok()
-            .and_then(|req| extract_authority(&mut req.url));
+            .and_then(|req| extract_authority(req.url_mut()));
 
         if let Some((username, password)) = auth {
             builder.basic_auth(username, password)
@@ -603,7 +602,7 @@ where
             version,
             ..
         } = parts;
-        let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
+        let url = Arc::new(Url::parse(&uri.to_string()).map_err(crate::error::builder)?);
         Ok(Request {
             method,
             url,

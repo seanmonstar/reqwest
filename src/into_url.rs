@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use url::Url;
 
 /// A trait to try to convert some type into a `Url`.
@@ -24,7 +25,7 @@ impl IntoUrlSealed for Url {
         if self.has_host() {
             Ok(self)
         } else {
-            Err(crate::error::url_bad_scheme(self))
+            Err(crate::error::url_bad_scheme(Arc::new(self)))
         }
     }
 

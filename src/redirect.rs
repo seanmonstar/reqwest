@@ -6,6 +6,7 @@
 
 use std::error::Error as StdError;
 use std::fmt;
+use std::sync::Arc;
 
 use crate::header::{HeaderMap, AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, WWW_AUTHENTICATE};
 use hyper::StatusCode;
@@ -31,7 +32,7 @@ pub struct Policy {
 pub struct Attempt<'a> {
     status: StatusCode,
     next: &'a Url,
-    previous: &'a [Url],
+    previous: &'a [Arc<Url>],
 }
 
 /// An action to perform when a redirect status code is found.
@@ -138,7 +139,12 @@ impl Policy {
         }
     }
 
-    pub(crate) fn check(&self, status: StatusCode, next: &Url, previous: &[Url]) -> ActionKind {
+    pub(crate) fn check(
+        &self,
+        status: StatusCode,
+        next: &Url,
+        previous: &[Arc<Url>],
+    ) -> ActionKind {
         self.redirect(Attempt {
             status,
             next,
@@ -171,7 +177,7 @@ impl<'a> Attempt<'a> {
     }
 
     /// Get the list of previous URLs that have already been requested in this chain.
-    pub fn previous(&self) -> &[Url] {
+    pub fn previous(&self) -> &[Arc<Url>] {
         self.previous
     }
     /// Returns an action meaning reqwest should follow the next URL.
@@ -231,7 +237,7 @@ pub(crate) enum ActionKind {
     Error(Box<dyn StdError + Send + Sync>),
 }
 
-pub(crate) fn remove_sensitive_headers(headers: &mut HeaderMap, next: &Url, previous: &[Url]) {
+pub(crate) fn remove_sensitive_headers(headers: &mut HeaderMap, next: &Url, previous: &[Arc<Url>]) {
     if let Some(previous) = previous.last() {
         let cross_host = next.host_str() != previous.host_str()
             || next.port_or_known_default() != previous.port_or_known_default();
@@ -262,6 +268,7 @@ fn test_redirect_policy_limit() {
     let next = Url::parse("http://x.y/z").unwrap();
     let mut previous = (0..9)
         .map(|i| Url::parse(&format!("http://a.b/c/{}", i)).unwrap())
+        .map(Arc::new)
         .collect::<Vec<_>>();
 
     match policy.check(StatusCode::FOUND, &next, &previous) {
@@ -269,7 +276,7 @@ fn test_redirect_policy_limit() {
         other => panic!("unexpected {:?}", other),
     }
 
-    previous.push(Url::parse("http://a.b.d/e/33").unwrap());
+    previous.push(Arc::new(Url::parse("http://a.b.d/e/33").unwrap()));
 
     match policy.check(StatusCode::FOUND, &next, &previous) {
         ActionKind::Error(err) if err.is::<TooManyRedirects>() => (),
@@ -281,7 +288,7 @@ fn test_redirect_policy_limit() {
 fn test_redirect_policy_limit_to_0() {
     let policy = Policy::limited(0);
     let next = Url::parse("http://x.y/z").unwrap();
-    let previous = vec![Url::parse("http://a.b/c").unwrap()];
+    let previous = vec![Arc::new(Url::parse("http://a.b/c").unwrap())];
 
     match policy.check(StatusCode::FOUND, &next, &previous) {
         ActionKind::Error(err) if err.is::<TooManyRedirects>() => (),
@@ -322,13 +329,15 @@ fn test_remove_sensitive_headers() {
     headers.insert(COOKIE, HeaderValue::from_static("foo=bar"));
 
     let next = Url::parse("http://initial-domain.com/path").unwrap();
-    let mut prev = vec![Url::parse("http://initial-domain.com/new_path").unwrap()];
+    let mut prev = vec![Arc::new(
+        Url::parse("http://initial-domain.com/new_path").unwrap(),
+    )];
     let mut filtered_headers = headers.clone();
 
     remove_sensitive_headers(&mut headers, &next, &prev);
     assert_eq!(headers, filtered_headers);
 
-    prev.push(Url::parse("http://new-domain.com/path").unwrap());
+    prev.push(Arc::new(Url::parse("http://new-domain.com/path").unwrap()));
     filtered_headers.remove(AUTHORIZATION);
     filtered_headers.remove(COOKIE);
 
