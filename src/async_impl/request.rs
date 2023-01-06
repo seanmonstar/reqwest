@@ -66,6 +66,12 @@ impl Request {
 
     /// Get the url.
     #[inline]
+    pub fn url_arc(&self) -> &Arc<Url> {
+        &self.url
+    }
+
+    /// Get the url.
+    #[inline]
     pub fn url(&self) -> &Url {
         &self.url
     }
