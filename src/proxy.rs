@@ -627,7 +627,7 @@ impl ProxyScheme {
     ///
     /// Supported schemes: HTTP, HTTPS, (SOCKS5, SOCKS5H if `socks` feature is enabled).
     // Private for now...
-    fn parse(url: Url) -> crate::Result<Self> {
+    fn parse(url: Arc<Url>) -> crate::Result<Self> {
         use url::Position;
 
         // Resolve URL to a host and port
