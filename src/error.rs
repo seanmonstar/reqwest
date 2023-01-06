@@ -42,6 +42,33 @@ impl Error {
 
     /// Returns a possible URL related to this error.
     ///
+    /// This is useful when you want to create yet another
+    /// [`reqwest::Request`] or reuse the url without expensive
+    /// [`Url::clone`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # async fn run() {
+    /// // displays last stop of a redirect loop
+    /// let response = reqwest::get("http://site.with.redirect.loop").await;
+    /// if let Err(e) = response {
+    ///     if e.is_redirect() {
+    ///         if let Some(final_stop) = e.url_arc() {
+    ///             println!("redirect loop at {}", final_stop);
+    ///             // Create a new response without `Url::clone`.
+    ///             let response = reqwest::get(final_stop).await;
+    ///         }
+    ///     }
+    /// }
+    /// # }
+    /// ```
+    pub fn url_arc(&self) -> Option<&Arc<Url>> {
+        self.inner.url.as_ref()
+    }
+
+    /// Returns a possible URL related to this error.
+    ///
     /// # Examples
     ///
     /// ```
