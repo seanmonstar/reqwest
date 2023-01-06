@@ -93,6 +93,12 @@ impl Response {
         cookie::extract_response_cookies(self.res.headers()).filter_map(Result::ok)
     }
 
+    /// Get the final `Arc<Url>` of this `Response`.
+    #[inline]
+    pub fn url_arc(&self) -> &Arc<Url> {
+        &self.url
+    }
+
     /// Get the final `Url` of this `Response`.
     #[inline]
     pub fn url(&self) -> &Url {
