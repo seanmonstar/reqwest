@@ -1,5 +1,6 @@
 use std::convert::TryFrom;
 use std::fmt;
+use std::sync::Arc;
 use std::time::Duration;
 
 use base64::encode;
@@ -35,10 +36,10 @@ pub struct RequestBuilder {
 impl Request {
     /// Constructs a new request.
     #[inline]
-    pub fn new(method: Method, url: Url) -> Self {
+    pub fn new(method: Method, url: impl Into<Arc<Url>>) -> Self {
         Request {
             body: None,
-            inner: async_impl::Request::new(method, url),
+            inner: async_impl::Request::new(method, url.into()),
         }
     }
 
@@ -52,6 +53,12 @@ impl Request {
     #[inline]
     pub fn method_mut(&mut self) -> &mut Method {
         self.inner.method_mut()
+    }
+
+    /// Get the url.
+    #[inline]
+    pub fn url_arc(&self) -> &Arc<Url> {
+        self.inner.url_arc()
     }
 
     /// Get the url.
@@ -128,7 +135,7 @@ impl Request {
         } else {
             None
         };
-        let mut req = Request::new(self.method().clone(), self.url().clone());
+        let mut req = Request::new(self.method().clone(), self.url_arc().clone());
         *req.headers_mut() = self.headers().clone();
         *req.version_mut() = self.version().clone();
         req.body = body;
