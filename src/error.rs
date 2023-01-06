@@ -43,7 +43,7 @@ impl Error {
     /// Returns a possible URL related to this error.
     ///
     /// This is useful when you want to create yet another
-    /// [`reqwest::Request`] or reuse the url without expensive
+    /// [`Request`](`crate::Request`) or reuse the url without expensive
     /// [`Url::clone`].
     ///
     /// # Examples
