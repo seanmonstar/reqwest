@@ -22,7 +22,7 @@ use http::{request::Parts, Request as HttpRequest, Version};
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
     method: Method,
-    url: Arc<Url>,
+    pub(crate) url: Arc<Url>,
     headers: HeaderMap,
     body: Option<Body>,
     timeout: Option<Duration>,
@@ -175,7 +175,7 @@ impl RequestBuilder {
             .request
             .as_mut()
             .ok()
-            .and_then(|req| extract_authority(req.url_mut()));
+            .and_then(|req| extract_authority(&mut req.url));
 
         if let Some((username, password)) = auth {
             builder.basic_auth(username, password)
@@ -567,7 +567,7 @@ fn fmt_request_fields<'a, 'b>(
 
 /// Check the request URL for a "username:password" type authority, and if
 /// found, remove it from the URL and return it.
-pub(crate) fn extract_authority(url: &mut Url) -> Option<(String, Option<String>)> {
+pub(crate) fn extract_authority(url: &mut Arc<Url>) -> Option<(String, Option<String>)> {
     use percent_encoding::percent_decode;
 
     if url.has_authority() {
@@ -582,6 +582,8 @@ pub(crate) fn extract_authority(url: &mut Url) -> Option<(String, Option<String>
                 .map(String::from)
         });
         if !username.is_empty() || password.is_some() {
+            let url = Arc::make_mut(url);
+
             url.set_username("")
                 .expect("has_authority means set_username shouldn't fail");
             url.set_password(None)

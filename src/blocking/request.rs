@@ -162,7 +162,7 @@ impl RequestBuilder {
             .request
             .as_mut()
             .ok()
-            .and_then(|req| async_impl::request::extract_authority(req.url_mut()));
+            .and_then(|req| async_impl::request::extract_authority(&mut req.inner.url));
 
         if let Some((username, password)) = auth {
             builder.basic_auth(username, password)
