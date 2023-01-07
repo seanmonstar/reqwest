@@ -155,7 +155,14 @@ impl Error {
     // private
 
     #[allow(unused)]
-    pub(crate) fn into_io(self) -> io::Error {
+    pub(crate) fn into_io(mut self) -> io::Error {
+        if let Some(source) = self.inner.source.take() {
+            match source.downcast::<io::Error>() {
+                Ok(boxed) => return *boxed,
+                Err(source) => self.inner.source = Some(source),
+            }
+        }
+
         io::Error::new(io::ErrorKind::Other, self)
     }
 }
@@ -287,6 +294,9 @@ pub(crate) fn into_io(e: Error) -> io::Error {
     e.into_io()
 }
 
+// TODO: Use
+// [`io::Error::downcast`](https://doc.rust-lang.org/std/io/struct.Error.html#method.downcast)
+// once it stablises.
 #[allow(unused)]
 pub(crate) fn decode_io(e: io::Error) -> Error {
     if e.get_ref().map(|r| r.is::<Error>()).unwrap_or(false) {
