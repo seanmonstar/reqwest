@@ -457,57 +457,57 @@ pub(crate) enum PercentEncoding {
 
 impl PercentEncoding {
     pub(crate) fn encode_headers(&self, name: &str, field: &PartMetadata) -> Vec<u8> {
-        let s = format!(
-            "Content-Disposition: form-data; {}{}{}",
-            self.format_parameter("name", name),
-            match field.file_name {
-                Some(ref file_name) => format!("; {}", self.format_filename(file_name)),
-                None => String::new(),
-            },
-            match field.mime {
-                Some(ref mime) => format!("\r\nContent-Type: {}", mime),
-                None => "".to_string(),
-            },
-        );
-        field
-            .headers
-            .iter()
-            .fold(s.into_bytes(), |mut header, (k, v)| {
-                header.extend_from_slice(b"\r\n");
-                header.extend_from_slice(k.as_str().as_bytes());
-                header.extend_from_slice(b": ");
-                header.extend_from_slice(v.as_bytes());
-                header
-            })
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"Content-Disposition: form-data; ");
+
+        match self.percent_encode(name) {
+            Cow::Borrowed(value) => {
+                // nothing has been percent encoded
+                buf.extend_from_slice(b"name=\"");
+                buf.extend_from_slice(value.as_bytes());
+                buf.extend_from_slice(b"\"");
+            }
+            Cow::Owned(value) => {
+                // something has been percent encoded
+                buf.extend_from_slice(b"name*=utf-8''");
+                buf.extend_from_slice(value.as_bytes());
+            }
+        }
+
+        // According to RFC7578 Section 4.2, `filename*=` syntax is invalid.
+        // See https://github.com/seanmonstar/reqwest/issues/419.
+        if let Some(filename) = &field.file_name {
+            buf.extend_from_slice(b"; filename=\"");
+            let legal_filename = filename
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('\r', "\\\r")
+                .replace('\n', "\\\n");
+            buf.extend_from_slice(legal_filename.as_bytes());
+            buf.extend_from_slice(b"\"");
+        }
+
+        if let Some(mime) = &field.mime {
+            buf.extend_from_slice(b"\r\nContent-Type: ");
+            buf.extend_from_slice(mime.as_ref().as_bytes());
+        }
+
+        for (k, v) in field.headers.iter() {
+            buf.extend_from_slice(b"\r\n");
+            buf.extend_from_slice(k.as_str().as_bytes());
+            buf.extend_from_slice(b": ");
+            buf.extend_from_slice(v.as_bytes());
+        }
+        buf
     }
 
-    // According to RFC7578 Section 4.2, `filename*=` syntax is invalid.
-    // See https://github.com/seanmonstar/reqwest/issues/419.
-    fn format_filename(&self, filename: &str) -> String {
-        let legal_filename = filename
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\r", "\\\r")
-            .replace("\n", "\\\n");
-        format!("filename=\"{}\"", legal_filename)
-    }
+    fn percent_encode<'a>(&self, value: &'a str) -> Cow<'a, str> {
+        use percent_encoding::utf8_percent_encode as percent_encode;
 
-    fn format_parameter(&self, name: &str, value: &str) -> String {
-        let legal_value = match *self {
-            PercentEncoding::PathSegment => {
-                percent_encoding::utf8_percent_encode(value, PATH_SEGMENT_ENCODE_SET).to_string()
-            }
-            PercentEncoding::AttrChar => {
-                percent_encoding::utf8_percent_encode(value, ATTR_CHAR_ENCODE_SET).to_string()
-            }
-            PercentEncoding::NoOp => value.to_string(),
-        };
-        if value.len() == legal_value.len() {
-            // nothing has been percent encoded
-            format!("{}=\"{}\"", name, value)
-        } else {
-            // something has been percent encoded
-            format!("{}*=utf-8''{}", name, legal_value)
+        match self {
+            Self::PathSegment => percent_encode(value, PATH_SEGMENT_ENCODE_SET).into(),
+            Self::AttrChar => percent_encode(value, ATTR_CHAR_ENCODE_SET).into(),
+            Self::NoOp => value.into(),
         }
     }
 }
