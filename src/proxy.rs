@@ -4,7 +4,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crate::into_url::{IntoUrl, IntoUrlSealed};
-use crate::util::base64;
 use crate::Url;
 use http::{header::HeaderValue, Uri};
 use ipnet::IpNet;
@@ -763,12 +762,7 @@ impl fmt::Debug for Custom {
 }
 
 pub(crate) fn encode_basic_auth(username: &str, password: &str) -> HeaderValue {
-    let val = format!("{}:{}", username, password);
-    let mut header = format!("Basic {}", base64::encode(&val))
-        .parse::<HeaderValue>()
-        .expect("base64 is always valid HeaderValue");
-    header.set_sensitive(true);
-    header
+    crate::util::basic_auth(username, Some(password))
 }
 
 /// A helper trait to allow testing `Proxy::intercept` without having to

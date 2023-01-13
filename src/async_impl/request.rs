@@ -1,7 +1,6 @@
 use std::convert::TryFrom;
 use std::fmt;
 use std::future::Future;
-use std::io::Write;
 use std::time::Duration;
 
 use serde::Serialize;
@@ -16,7 +15,6 @@ use super::response::Response;
 #[cfg(feature = "multipart")]
 use crate::header::CONTENT_LENGTH;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
-use crate::util::base64;
 use crate::{Method, Url};
 use http::{request::Parts, Request as HttpRequest, Version};
 
@@ -251,16 +249,7 @@ impl RequestBuilder {
         U: fmt::Display,
         P: fmt::Display,
     {
-        let mut header_value = b"Basic ".to_vec();
-        {
-            let mut encoder = base64::encoder(&mut header_value);
-            // The unwraps here are fine because Vec::write* is infallible.
-            write!(encoder, "{}:", username).unwrap();
-            if let Some(password) = password {
-                write!(encoder, "{}", password).unwrap();
-            }
-        }
-
+        let header_value = crate::util::basic_auth(username, password);
         self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
     }
 
