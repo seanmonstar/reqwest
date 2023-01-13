@@ -1,22 +1,25 @@
-use crate::header::{Entry, HeaderMap, OccupiedEntry};
+use crate::header::{Entry, HeaderMap, HeaderValue, OccupiedEntry};
 
-pub(crate) mod base64 {
-    use std::io;
-
-    use base64::engine::GeneralPurpose;
+pub fn basic_auth<U, P>(username: U, password: Option<P>) -> HeaderValue
+where
+    U: std::fmt::Display,
+    P: std::fmt::Display,
+{
     use base64::prelude::BASE64_STANDARD;
     use base64::write::EncoderWriter;
+    use std::io::Write;
 
-    if_hyper! {
-        pub fn encode<T: AsRef<[u8]>>(input: T) -> String {
-            use base64::Engine;
-            BASE64_STANDARD.encode(input)
+    let mut buf = b"Basic ".to_vec();
+    {
+        let mut encoder = EncoderWriter::new(&mut buf, &BASE64_STANDARD);
+        let _ = write!(encoder, "{}:", username);
+        if let Some(password) = password {
+            let _ = write!(encoder, "{}", password);
         }
     }
-
-    pub fn encoder<'a, W: io::Write>(delegate: W) -> EncoderWriter<'a, GeneralPurpose, W> {
-        EncoderWriter::new(delegate, &BASE64_STANDARD)
-    }
+    let mut header = HeaderValue::from_bytes(&buf).expect("base64 is always valid HeaderValue");
+    header.set_sensitive(true);
+    header
 }
 
 // xor-shift

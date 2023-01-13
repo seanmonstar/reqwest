@@ -13,7 +13,6 @@ use super::body::{self, Body};
 use super::multipart;
 use super::Client;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
-use crate::util::base64;
 use crate::{async_impl, Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
@@ -266,12 +265,8 @@ impl RequestBuilder {
         U: fmt::Display,
         P: fmt::Display,
     {
-        let auth = match password {
-            Some(password) => format!("{}:{}", username, password),
-            None => format!("{}:", username),
-        };
-        let header_value = format!("Basic {}", base64::encode(&auth));
-        self.header_sensitive(crate::header::AUTHORIZATION, &*header_value, true)
+        let header_value = crate::util::basic_auth(username, password);
+        self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
     }
 
     /// Enable HTTP bearer authentication.
