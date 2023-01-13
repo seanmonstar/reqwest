@@ -4,7 +4,6 @@ use std::future::Future;
 use std::io::Write;
 use std::time::Duration;
 
-use base64::write::EncoderWriter as Base64Encoder;
 use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
@@ -17,6 +16,7 @@ use super::response::Response;
 #[cfg(feature = "multipart")]
 use crate::header::CONTENT_LENGTH;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
+use crate::util::base64;
 use crate::{Method, Url};
 use http::{request::Parts, Request as HttpRequest, Version};
 
@@ -253,8 +253,7 @@ impl RequestBuilder {
     {
         let mut header_value = b"Basic ".to_vec();
         {
-            let mut encoder =
-                Base64Encoder::from(&mut header_value, &base64::engine::DEFAULT_ENGINE);
+            let mut encoder = base64::encoder(&mut header_value);
             // The unwraps here are fine because Vec::write* is infallible.
             write!(encoder, "{}:", username).unwrap();
             if let Some(password) = password {

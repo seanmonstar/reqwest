@@ -4,6 +4,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crate::into_url::{IntoUrl, IntoUrlSealed};
+use crate::util::base64;
 use crate::Url;
 use http::{header::HeaderValue, Uri};
 use ipnet::IpNet;

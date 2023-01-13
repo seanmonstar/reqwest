@@ -2,7 +2,6 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::io::Write;
 
-use base64::write::EncoderWriter as Base64Encoder;
 use bytes::Bytes;
 use http::{request::Parts, Method, Request as HttpRequest};
 use serde::Serialize;
@@ -13,6 +12,7 @@ use web_sys::RequestCredentials;
 
 use super::{Body, Client, Response};
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
+use crate::util::base64;
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -216,8 +216,7 @@ impl RequestBuilder {
     {
         let mut header_value = b"Basic ".to_vec();
         {
-            let mut encoder =
-                Base64Encoder::from(&mut header_value, &base64::engine::DEFAULT_ENGINE);
+            let mut encoder = base64::encoder(&mut header_value);
             // The unwraps here are fine because Vec::write* is infallible.
             write!(encoder, "{}:", username).unwrap();
             if let Some(password) = password {

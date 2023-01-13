@@ -2,7 +2,6 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::time::Duration;
 
-use base64::encode;
 use http::{request::Parts, Request as HttpRequest, Version};
 use serde::Serialize;
 #[cfg(feature = "json")]
@@ -14,6 +13,7 @@ use super::body::{self, Body};
 use super::multipart;
 use super::Client;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
+use crate::util::base64;
 use crate::{async_impl, Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
@@ -270,7 +270,7 @@ impl RequestBuilder {
             Some(password) => format!("{}:{}", username, password),
             None => format!("{}:", username),
         };
-        let header_value = format!("Basic {}", encode(&auth));
+        let header_value = format!("Basic {}", base64::encode(&auth));
         self.header_sensitive(crate::header::AUTHORIZATION, &*header_value, true)
     }
 
