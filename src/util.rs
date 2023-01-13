@@ -1,5 +1,24 @@
 use crate::header::{Entry, HeaderMap, OccupiedEntry};
 
+pub(crate) mod base64 {
+    use std::io;
+
+    use base64::engine::GeneralPurpose;
+    use base64::prelude::BASE64_STANDARD;
+    use base64::write::EncoderWriter;
+
+    if_hyper! {
+        pub fn encode<T: AsRef<[u8]>>(input: T) -> String {
+            use base64::Engine;
+            BASE64_STANDARD.encode(input)
+        }
+    }
+
+    pub fn encoder<'a, W: io::Write>(delegate: W) -> EncoderWriter<'a, GeneralPurpose, W> {
+        EncoderWriter::new(delegate, &BASE64_STANDARD)
+    }
+}
+
 // xor-shift
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn fast_random() -> u64 {
