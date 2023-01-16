@@ -1,6 +1,5 @@
 use std::convert::TryFrom;
 use std::fmt;
-use std::io::Write;
 use std::sync::Arc;
 
 use bytes::Bytes;
