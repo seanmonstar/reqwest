@@ -5,7 +5,6 @@ use std::io::Write;
 use std::sync::Arc;
 use std::time::Duration;
 
-use base64::write::EncoderWriter as Base64Encoder;
 use serde::Serialize;
 
 use super::body::Body;
@@ -256,17 +255,7 @@ impl RequestBuilder {
         U: fmt::Display,
         P: fmt::Display,
     {
-        let mut header_value = b"Basic ".to_vec();
-        {
-            let mut encoder =
-                Base64Encoder::from(&mut header_value, &base64::engine::DEFAULT_ENGINE);
-            // The unwraps here are fine because Vec::write* is infallible.
-            write!(encoder, "{}:", username).unwrap();
-            if let Some(password) = password {
-                write!(encoder, "{}", password).unwrap();
-            }
-        }
-
+        let header_value = crate::util::basic_auth(username, password);
         self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
     }
 

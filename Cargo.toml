@@ -76,7 +76,7 @@ __rustls = ["hyper-rustls", "tokio-rustls", "rustls", "__tls", "rustls-pemfile"]
 __internal_proxy_sys_no_cache = []
 
 [dependencies]
-base64 = "0.20"
+base64 = "0.21"
 http = "0.2"
 url = "2.2"
 bytes = "1.0"
