@@ -1,7 +1,6 @@
 use std::convert::TryFrom;
 use std::fmt;
 use std::future::Future;
-use std::io::Write;
 use std::sync::Arc;
 use std::time::Duration;
 
