@@ -8,7 +8,7 @@ repository = "https://github.com/seanmonstar/reqwest"
 documentation = "https://docs.rs/reqwest"
 authors = ["Sean McArthur <sean@seanmonstar.com>"]
 readme = "README.md"
-license = "MIT/Apache-2.0"
+license = "MIT OR Apache-2.0"
 edition = "2018"
 autotests = true
 
