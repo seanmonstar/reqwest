@@ -508,14 +508,14 @@ impl DomainMatcher {
     fn contains(&self, domain: &str) -> bool {
         let domain_len = domain.len();
         for d in self.0.iter() {
-            if d == domain || (d.starts_with('.') && &d[1..] == domain) {
+            if d == domain || d.strip_prefix('.') == Some(domain) {
                 return true;
             } else if domain.ends_with(d) {
                 if d.starts_with('.') {
                     // If the first character of d is a dot, that means the first character of domain
                     // must also be a dot, so we are looking at a subdomain of d and that matches
                     return true;
-                } else if domain.as_bytes()[domain_len - d.len() - 1] == b'.' {
+                } else if domain.as_bytes().get(domain_len - d.len() - 1) == Some(&b'.') {
                     // Given that d is a prefix of domain, if the prior character in domain is a dot
                     // then that means we must be matching a subdomain of d, and that matches
                     return true;
@@ -1101,6 +1101,26 @@ mod tests {
             }
             other => panic!("unexpected: {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_domain_matcher() {
+        let domains = vec![".foo.bar".into(), "bar.foo".into()];
+        let matcher = DomainMatcher(domains);
+
+        // domains match with leading `.`
+        assert!(matcher.contains("foo.bar"));
+        // subdomains match with leading `.`
+        assert!(matcher.contains("www.foo.bar"));
+
+        // domains match with no leading `.`
+        assert!(matcher.contains("bar.foo"));
+        // subdomains match with no leading `.`
+        assert!(matcher.contains("www.bar.foo"));
+
+        // non-subdomain string prefixes don't match
+        assert!(!matcher.contains("notfoo.bar"));
+        assert!(!matcher.contains("notbar.foo"));
     }
 
     // Smallest possible content for a mutex
