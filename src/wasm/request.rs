@@ -115,6 +115,12 @@ impl RequestBuilder {
         RequestBuilder { client, request }
     }
 
+    /// Get the request.
+    #[inline]
+    pub fn request(&self) -> &Method {
+        &self.request
+    }
+
     /// Modify the query string of the URL.
     ///
     /// Modifies the URL of this request, adding the parameters provided.

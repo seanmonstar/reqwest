@@ -177,6 +177,12 @@ impl RequestBuilder {
         }
     }
 
+    /// Get the request.
+    #[inline]
+    pub fn request(&self) -> &crate::Result<Request> {
+        &self.request
+    }
+
     /// Add a `Header` to this Request.
     pub fn header<K, V>(self, key: K, value: V) -> RequestBuilder
     where
