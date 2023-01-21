@@ -905,7 +905,18 @@ mod verbose {
             cx: &mut Context<'_>,
             bufs: &[IoSlice<'_>],
         ) -> Poll<Result<usize, io::Error>> {
-            Pin::new(&mut self.inner).poll_write_vectored(cx, bufs)
+            match Pin::new(&mut self.inner).poll_write_vectored(cx, bufs) {
+                Poll::Ready(Ok(n)) => {
+                    let buf = bufs
+                        .iter()
+                        .find(|b| !b.is_empty())
+                        .map_or(&[][..], |b| &**b);
+                    log::trace!("{:08x} write: {:?}", self.id, Escape(&buf[..n]));
+                    Poll::Ready(Ok(n))
+                }
+                Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+                Poll::Pending => Poll::Pending,
+            }
         }
 
         fn is_write_vectored(&self) -> bool {
