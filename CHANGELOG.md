@@ -1,3 +1,10 @@
+## v0.11.14
+
+- Adds `Proxy::no_proxy(url)` that works like the NO_PROXY environment variable.
+- Adds `multipart::Part::headers(headers)` method to add custom headers.
+- (wasm) Add `Response::bytes_stream()`.
+- Perf: several internal optimizations reducing copies and memory allocations.
+
 ## v0.11.13
 
 - Add `ClientBuilder::dns_resolver()` option for custom DNS resolvers.
