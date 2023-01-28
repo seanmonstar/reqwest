@@ -24,15 +24,11 @@ use crate::response::ResponseUrl;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
-    status: StatusCode,
-    headers: HeaderMap,
+    pub(super) res: hyper::Response<Decoder>,
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
-    body: Decoder,
     body_limit: Option<usize>,
-    version: Version,
-    extensions: http::Extensions,
 }
 
 impl Response {
@@ -43,47 +39,39 @@ impl Response {
         body_limit: Option<usize>,
         timeout: Option<Pin<Box<Sleep>>>,
     ) -> Response {
-        let (parts, body) = res.into_parts();
-        let status = parts.status;
-        let version = parts.version;
-        let extensions = parts.extensions;
-
-        let mut headers = parts.headers;
-        let decoder = Decoder::detect(&mut headers, Body::response(body, timeout), accepts);
+        let (mut parts, body) = res.into_parts();
+        let decoder = Decoder::detect(&mut parts.headers, Body::response(body, timeout), accepts);
+        let res = hyper::Response::from_parts(parts, decoder);
 
         Response {
-            status,
-            headers,
+            res,
             url: Box::new(url),
-            body: decoder,
             body_limit,
-            version,
-            extensions,
         }
     }
 
     /// Get the `StatusCode` of this `Response`.
     #[inline]
     pub fn status(&self) -> StatusCode {
-        self.status
+        self.res.status()
     }
 
     /// Get the HTTP `Version` of this `Response`.
     #[inline]
     pub fn version(&self) -> Version {
-        self.version
+        self.res.version()
     }
 
     /// Get the `Headers` of this `Response`.
     #[inline]
     pub fn headers(&self) -> &HeaderMap {
-        &self.headers
+        self.res.headers()
     }
 
     /// Get a mutable reference to the `Headers` of this `Response`.
     #[inline]
     pub fn headers_mut(&mut self) -> &mut HeaderMap {
-        &mut self.headers
+        self.res.headers_mut()
     }
 
     /// Get the content-length of this response, if known.
@@ -96,7 +84,7 @@ impl Response {
     pub fn content_length(&self) -> Option<u64> {
         use hyper::body::HttpBody;
 
-        HttpBody::size_hint(&self.body).exact()
+        HttpBody::size_hint(self.res.body()).exact()
     }
 
     /// Retrieve the cookies contained in the response.
@@ -109,7 +97,7 @@ impl Response {
     #[cfg(feature = "cookies")]
     #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
     pub fn cookies<'a>(&'a self) -> impl Iterator<Item = cookie::Cookie<'a>> + 'a {
-        cookie::extract_response_cookies(&self.headers).filter_map(Result::ok)
+        cookie::extract_response_cookies(self.res.headers()).filter_map(Result::ok)
     }
 
     /// Get the final `Url` of this `Response`.
@@ -120,19 +108,20 @@ impl Response {
 
     /// Get the remote address used to get this `Response`.
     pub fn remote_addr(&self) -> Option<SocketAddr> {
-        self.extensions
+        self.res
+            .extensions()
             .get::<HttpInfo>()
             .map(|info| info.remote_addr())
     }
 
     /// Returns a reference to the associated extensions.
     pub fn extensions(&self) -> &http::Extensions {
-        &self.extensions
+        self.res.extensions()
     }
 
     /// Returns a mutable reference to the associated extensions.
     pub fn extensions_mut(&mut self) -> &mut http::Extensions {
-        &mut self.extensions
+        self.res.extensions_mut()
     }
 
     // body methods
@@ -141,7 +130,7 @@ impl Response {
     ///
     /// This method decodes the response body with BOM sniffing
     /// and with malformed sequences replaced with the REPLACEMENT CHARACTER.
-    /// Encoding is determinated from the `charset` parameter of `Content-Type` header,
+    /// Encoding is determined from the `charset` parameter of `Content-Type` header,
     /// and defaults to `utf-8` if not presented.
     ///
     /// # Example
@@ -186,7 +175,7 @@ impl Response {
     /// ```
     pub async fn text_with_charset(self, default_encoding: &str) -> crate::Result<String> {
         let content_type = self
-            .headers
+            .headers()
             .get(crate::header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.parse::<Mime>().ok());
@@ -275,7 +264,7 @@ impl Response {
     /// ```
     pub async fn bytes(mut self) -> crate::Result<Bytes> {
         match self.body_limit {
-            None => hyper::body::to_bytes(self.body).await,
+            None => hyper::body::to_bytes(self.res.into_body()).await,
             Some(body_limit) => {
                 if self.content_length() > Some(body_limit as u64) {
                     Err(crate::error::body(
@@ -286,7 +275,7 @@ impl Response {
                 let cap = self.content_length().unwrap_or_default() as usize;
                 let mut vec = Vec::with_capacity(cap);
 
-                while let Some(buf) = self.body.next().await {
+                while let Some(buf) = self.res.body_mut().next().await {
                     match buf {
                         Err(e) => return Err(e),
                         Ok(buf) => {
@@ -321,7 +310,7 @@ impl Response {
     /// # }
     /// ```
     pub async fn chunk(&mut self) -> crate::Result<Option<Bytes>> {
-        if let Some(item) = self.body.next().await {
+        if let Some(item) = self.res.body_mut().next().await {
             Ok(Some(item?))
         } else {
             Ok(None)
@@ -353,7 +342,7 @@ impl Response {
     #[cfg(feature = "stream")]
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
-        self.body
+        self.res.into_body()
     }
 
     // util methods
@@ -380,8 +369,9 @@ impl Response {
     /// # fn main() {}
     /// ```
     pub fn error_for_status(self) -> crate::Result<Self> {
-        if self.status.is_client_error() || self.status.is_server_error() {
-            Err(crate::error::status_code(*self.url, self.status))
+        let status = self.status();
+        if status.is_client_error() || status.is_server_error() {
+            Err(crate::error::status_code(*self.url, status))
         } else {
             Ok(self)
         }
@@ -409,8 +399,9 @@ impl Response {
     /// # fn main() {}
     /// ```
     pub fn error_for_status_ref(&self) -> crate::Result<&Self> {
-        if self.status.is_client_error() || self.status.is_server_error() {
-            Err(crate::error::status_code(*self.url.clone(), self.status))
+        let status = self.status();
+        if status.is_client_error() || status.is_server_error() {
+            Err(crate::error::status_code(*self.url.clone(), status))
         } else {
             Ok(self)
         }
@@ -425,7 +416,7 @@ impl Response {
     // This method is just used by the blocking API.
     #[cfg(feature = "blocking")]
     pub(crate) fn body_mut(&mut self) -> &mut Decoder {
-        &mut self.body
+        self.res.body_mut()
     }
 }
 
@@ -443,20 +434,17 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
     fn from(r: http::Response<T>) -> Response {
         let (mut parts, body) = r.into_parts();
         let body = body.into();
-        let body = Decoder::detect(&mut parts.headers, body, Accepts::none());
+        let decoder = Decoder::detect(&mut parts.headers, body, Accepts::none());
         let url = parts
             .extensions
             .remove::<ResponseUrl>()
             .unwrap_or_else(|| ResponseUrl(Url::parse("http://no.url.provided.local").unwrap()));
         let url = url.0;
+        let res = hyper::Response::from_parts(parts, decoder);
         Response {
-            status: parts.status,
-            headers: parts.headers,
+            res,
             url: Box::new(url),
-            body,
             body_limit: None,
-            version: parts.version,
-            extensions: parts.extensions,
         }
     }
 }
@@ -464,7 +452,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
 /// A `Response` can be piped as the `Body` of another request.
 impl From<Response> for Body {
     fn from(r: Response) -> Body {
-        Body::stream(r.body)
+        Body::stream(r.res.into_body())
     }
 }
 

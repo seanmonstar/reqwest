@@ -206,6 +206,16 @@ impl RequestBuilder {
         self
     }
 
+    /// Enable HTTP basic authentication.
+    pub fn basic_auth<U, P>(self, username: U, password: Option<P>) -> RequestBuilder
+    where
+        U: fmt::Display,
+        P: fmt::Display,
+    {
+        let header_value = crate::util::basic_auth(username, password);
+        self.header(crate::header::AUTHORIZATION, header_value)
+    }
+
     /// Enable HTTP bearer authentication.
     pub fn bearer_auth<T>(self, token: T) -> RequestBuilder
     where

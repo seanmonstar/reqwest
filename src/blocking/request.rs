@@ -2,7 +2,6 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::time::Duration;
 
-use base64::encode;
 use http::{request::Parts, Request as HttpRequest, Version};
 use serde::Serialize;
 #[cfg(feature = "json")]
@@ -278,12 +277,8 @@ impl RequestBuilder {
         U: fmt::Display,
         P: fmt::Display,
     {
-        let auth = match password {
-            Some(password) => format!("{}:{}", username, password),
-            None => format!("{}:", username),
-        };
-        let header_value = format!("Basic {}", encode(&auth));
-        self.header_sensitive(crate::header::AUTHORIZATION, &*header_value, true)
+        let header_value = crate::util::basic_auth(username, password);
+        self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
     }
 
     /// Enable HTTP bearer authentication.

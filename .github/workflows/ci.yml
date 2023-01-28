@@ -32,21 +32,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
 
       - name: Install rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
           components: rustfmt
-          profile: minimal
-          override: true
 
       - name: cargo fmt -- --check
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
+        run: cargo fmt -- --check
 
       - name: temporary workaround - fmt all files under src
         # Workaround for rust-lang/cargo#7732
@@ -155,27 +149,38 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
 
       - name: Install rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust || 'stable' }}
-          target: ${{ matrix.target }}
-          profile: minimal
-          override: true
+          targets: ${{ matrix.target }}
+
+      - name: Add mingw32 to path for i686-gnu
+        run: |
+          echo "C:\msys64\mingw32\bin" >> $GITHUB_PATH
+          echo "C:\msys64\usr\bin" >> $GITHUB_PATH
+        if: matrix.target == 'i686-pc-windows-gnu'
+        shell: bash
+      - name: Add mingw64 to path for x86_64-gnu
+        run: |
+          echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH
+          echo "C:\msys64\usr\bin" >> $GITHUB_PATH
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        shell: bash
+      - name: Update gcc
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        run: pacman.exe -Sy --noconfirm mingw-w64-x86_64-toolchain
+      - name: Update gcc
+        if: matrix.target == 'i686-pc-windows-gnu'
+        run: pacman.exe -Sy --noconfirm mingw-w64-i686-toolchain
 
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: ${{ matrix.features }}
+        run: cargo build ${{ matrix.features }}
 
       - name: Test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: ${{ matrix.features }} ${{ matrix.test-features }} -- --test-threads=1
+        run: cargo test ${{ matrix.features }} ${{ matrix.test-features }} -- --test-threads=1
 
   docs:
     name: Docs
@@ -183,22 +188,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Check documentation
         env:
           RUSTDOCFLAGS: -D warnings
-        uses: actions-rs/cargo@v1
-        with:
-          command: doc
-          args: --no-deps --document-private-items --all-features
+        run: cargo doc --no-deps --document-private-items --all-features
 
   # Separate build job for nightly because of the missing feature for allowed failures at
   # job level. See `jobs.build.strategy.matrix`.
@@ -206,29 +204,22 @@ jobs:
     name: linux / nightly
     needs: [style]
 
-    runs-on: ubuntu-latest
+    # Use Ubuntu 20.04 here, because latest (22.04) uses OpenSSL v3.
+    # Currently OpenSSL v3 causes compile issues with openssl-sys
+    runs-on: ubuntu-20.04
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
 
       - name: Install rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          profile: minimal
-          override: true
+        uses: dtolnay/rust-toolchain@nightly
 
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
+      # - name: Build
+      #   run: cargo build
 
-      - name: Test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --features __internal_proxy_sys_no_cache -- --test-threads=1
+      # - name: Test
+      #   run: cargo test --features __internal_proxy_sys_no_cache -- --test-threads=1
 
       - name: Check minimal versions
         run: |
@@ -245,23 +236,19 @@ jobs:
 
     strategy:
       matrix:
-        rust: [1.49.0]
+        rust: [1.57.0]
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
 
       - name: Install rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
-          profile: minimal
-          override: true
 
       - name: Check
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
+        run: cargo check
 
   android:
     name: Android
@@ -271,23 +258,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
 
       - name: Install rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
           target: aarch64-linux-android
-          profile: minimal
-          override: true
 
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          use-cross: true
-          command: build
-          # disable default-tls feature since cross-compiling openssl is dragons
-          args: --target aarch64-linux-android --no-default-features
+        # disable default-tls feature since cross-compiling openssl is dragons
+        run: cargo build --target aarch64-linux-android --no-default-features
 
   wasm:
     name: WASM
@@ -297,21 +277,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
 
       - name: Install rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: wasm32-unknown-unknown
-          profile: minimal
-          override: true
+          targets: wasm32-unknown-unknown
 
       - name: Check
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --target wasm32-unknown-unknown
+        run: cargo check --target wasm32-unknown-unknown
 
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh

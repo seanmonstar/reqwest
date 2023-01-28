@@ -13,7 +13,7 @@ use http::header::{
 };
 use http::uri::Scheme;
 use http::Uri;
-use hyper::client::ResponseFuture;
+use hyper::client::{HttpConnector, ResponseFuture};
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
@@ -28,9 +28,12 @@ use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
-use crate::connect::{Connector, HttpConnector};
+use crate::connect::Connector;
 #[cfg(feature = "cookies")]
 use crate::cookie;
+#[cfg(feature = "trust-dns")]
+use crate::dns::trust_dns::TrustDnsResolver;
+use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
 use crate::error;
 use crate::into_url::{expect_uri, try_uri};
 use crate::redirect::{self, remove_sensitive_headers};
@@ -80,6 +83,8 @@ struct Config {
     hostname_verification: bool,
     #[cfg(feature = "__tls")]
     certs_verification: bool,
+    #[cfg(feature = "__tls")]
+    tls_sni: bool,
     connect_timeout: Option<Duration>,
     connection_verbose: bool,
     pool_idle_timeout: Option<Duration>,
@@ -110,6 +115,9 @@ struct Config {
     http2_initial_connection_window_size: Option<u32>,
     http2_adaptive_window: bool,
     http2_max_frame_size: Option<u32>,
+    http2_keep_alive_interval: Option<Duration>,
+    http2_keep_alive_timeout: Option<Duration>,
+    http2_keep_alive_while_idle: bool,
     local_address: Option<IpAddr>,
     nodelay: bool,
     #[cfg(feature = "cookies")]
@@ -117,7 +125,8 @@ struct Config {
     trust_dns: bool,
     error: Option<crate::Error>,
     https_only: bool,
-    dns_overrides: HashMap<String, SocketAddr>,
+    dns_overrides: HashMap<String, Vec<SocketAddr>>,
+    dns_resolver: Option<Arc<dyn Resolve>>,
 }
 
 impl Default for ClientBuilder {
@@ -143,6 +152,8 @@ impl ClientBuilder {
                 hostname_verification: true,
                 #[cfg(feature = "__tls")]
                 certs_verification: true,
+                #[cfg(feature = "__tls")]
+                tls_sni: true,
                 connect_timeout: None,
                 connection_verbose: false,
                 pool_idle_timeout: Some(Duration::from_secs(90)),
@@ -175,6 +186,9 @@ impl ClientBuilder {
                 http2_initial_connection_window_size: None,
                 http2_adaptive_window: false,
                 http2_max_frame_size: None,
+                http2_keep_alive_interval: None,
+                http2_keep_alive_timeout: None,
+                http2_keep_alive_while_idle: false,
                 local_address: None,
                 nodelay: true,
                 trust_dns: cfg!(feature = "trust-dns"),
@@ -182,6 +196,7 @@ impl ClientBuilder {
                 cookie_store: None,
                 https_only: false,
                 dns_overrides: HashMap::new(),
+                dns_resolver: None,
             },
         }
     }
@@ -211,25 +226,23 @@ impl ClientBuilder {
                 headers.get(USER_AGENT).cloned()
             }
 
-            let http = match config.trust_dns {
-                false => {
-                    if config.dns_overrides.is_empty() {
-                        HttpConnector::new_gai()
-                    } else {
-                        HttpConnector::new_gai_with_overrides(config.dns_overrides)
-                    }
-                }
+            let mut resolver: Arc<dyn Resolve> = match config.trust_dns {
+                false => Arc::new(GaiResolver::new()),
                 #[cfg(feature = "trust-dns")]
-                true => {
-                    if config.dns_overrides.is_empty() {
-                        HttpConnector::new_trust_dns()?
-                    } else {
-                        HttpConnector::new_trust_dns_with_overrides(config.dns_overrides)?
-                    }
-                }
+                true => Arc::new(TrustDnsResolver::new().map_err(crate::error::builder)?),
                 #[cfg(not(feature = "trust-dns"))]
                 true => unreachable!("trust-dns shouldn't be enabled unless the feature is"),
             };
+            if let Some(dns_resolver) = config.dns_resolver {
+                resolver = dns_resolver;
+            }
+            if !config.dns_overrides.is_empty() {
+                resolver = Arc::new(DnsResolverWithOverrides::new(
+                    resolver,
+                    config.dns_overrides,
+                ));
+            }
+            let http = HttpConnector::new_with_resolver(DynResolver::new(resolver));
 
             #[cfg(feature = "__tls")]
             match config.tls {
@@ -258,6 +271,8 @@ impl ClientBuilder {
                     }
 
                     tls.danger_accept_invalid_certs(!config.certs_verification);
+
+                    tls.use_sni(config.tls_sni);
 
                     tls.disable_built_in_roots(!config.tls_built_in_root_certs);
 
@@ -420,6 +435,8 @@ impl ClientBuilder {
                             .set_certificate_verifier(Arc::new(NoVerifier));
                     }
 
+                    tls.enable_sni = config.tls_sni;
+
                     // ALPN protocol
                     match config.http_version_pref {
                         HttpVersionPref::Http1 => {
@@ -475,6 +492,15 @@ impl ClientBuilder {
         }
         if let Some(http2_max_frame_size) = config.http2_max_frame_size {
             builder.http2_max_frame_size(http2_max_frame_size);
+        }
+        if let Some(http2_keep_alive_interval) = config.http2_keep_alive_interval {
+            builder.http2_keep_alive_interval(http2_keep_alive_interval);
+        }
+        if let Some(http2_keep_alive_timeout) = config.http2_keep_alive_timeout {
+            builder.http2_keep_alive_timeout(http2_keep_alive_timeout);
+        }
+        if config.http2_keep_alive_while_idle {
+            builder.http2_keep_alive_while_idle(true);
         }
 
         builder.pool_idle_timeout(config.pool_idle_timeout);
@@ -796,6 +822,10 @@ impl ClientBuilder {
 
     /// Clear all `Proxies`, so `Client` will use no proxy anymore.
     ///
+    /// # Note
+    /// To add a proxy exclusion list, use [crate::proxy::Proxy::no_proxy()]
+    /// on all desired proxies instead.
+    ///
     /// This also disables the automatic usage of the "system" proxy.
     pub fn no_proxy(mut self) -> ClientBuilder {
         self.config.proxies.clear();
@@ -935,9 +965,42 @@ impl ClientBuilder {
         self
     }
 
+    /// Sets an interval for HTTP2 Ping frames should be sent to keep a connection alive.
+    ///
+    /// Pass `None` to disable HTTP2 keep-alive.
+    /// Default is currently disabled.
+    pub fn http2_keep_alive_interval(
+        mut self,
+        interval: impl Into<Option<Duration>>,
+    ) -> ClientBuilder {
+        self.config.http2_keep_alive_interval = interval.into();
+        self
+    }
+
+    /// Sets a timeout for receiving an acknowledgement of the keep-alive ping.
+    ///
+    /// If the ping is not acknowledged within the timeout, the connection will be closed.
+    /// Does nothing if `http2_keep_alive_interval` is disabled.
+    /// Default is currently disabled.
+    pub fn http2_keep_alive_timeout(mut self, timeout: Duration) -> ClientBuilder {
+        self.config.http2_keep_alive_timeout = Some(timeout);
+        self
+    }
+
+    /// Sets whether HTTP2 keep-alive should apply while the connection is idle.
+    ///
+    /// If disabled, keep-alive pings are only sent while there are open request/responses streams.
+    /// If enabled, pings are also sent when no streams are active.
+    /// Does nothing if `http2_keep_alive_interval` is disabled.
+    /// Default is `false`.
+    pub fn http2_keep_alive_while_idle(mut self, enabled: bool) -> ClientBuilder {
+        self.config.http2_keep_alive_while_idle = enabled;
+        self
+    }
+
     // TCP options
 
-    /// Set whether sockets have `SO_NODELAY` enabled.
+    /// Set whether sockets have `TCP_NODELAY` enabled.
     ///
     /// Default is `true`.
     pub fn tcp_nodelay(mut self, enabled: bool) -> ClientBuilder {
@@ -1086,6 +1149,28 @@ impl ClientBuilder {
     )]
     pub fn danger_accept_invalid_certs(mut self, accept_invalid_certs: bool) -> ClientBuilder {
         self.config.certs_verification = !accept_invalid_certs;
+        self
+    }
+
+    /// Controls the use of TLS server name indication.
+    ///
+    /// Defaults to `true`.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
+    pub fn tls_sni(mut self, tls_sni: bool) -> ClientBuilder {
+        self.config.tls_sni = tls_sni;
         self
     }
 
@@ -1266,7 +1351,7 @@ impl ClientBuilder {
         self
     }
 
-    /// Override DNS resolution for specific domains to particular IP addresses.
+    /// Override DNS resolution for specific domains to a particular IP address.
     ///
     /// Warning
     ///
@@ -1274,8 +1359,32 @@ impl ClientBuilder {
     /// traffic to a particular port you must include this port in the URL
     /// itself, any port in the overridden addr will be ignored and traffic sent
     /// to the conventional port for the given scheme (e.g. 80 for http).
-    pub fn resolve(mut self, domain: &str, addr: SocketAddr) -> ClientBuilder {
-        self.config.dns_overrides.insert(domain.to_string(), addr);
+    pub fn resolve(self, domain: &str, addr: SocketAddr) -> ClientBuilder {
+        self.resolve_to_addrs(domain, &[addr])
+    }
+
+    /// Override DNS resolution for specific domains to particular IP addresses.
+    ///
+    /// Warning
+    ///
+    /// Since the DNS protocol has no notion of ports, if you wish to send
+    /// traffic to a particular port you must include this port in the URL
+    /// itself, any port in the overridden addresses will be ignored and traffic sent
+    /// to the conventional port for the given scheme (e.g. 80 for http).
+    pub fn resolve_to_addrs(mut self, domain: &str, addrs: &[SocketAddr]) -> ClientBuilder {
+        self.config
+            .dns_overrides
+            .insert(domain.to_string(), addrs.to_vec());
+        self
+    }
+
+    /// Override the DNS resolver implementation.
+    ///
+    /// Pass an `Arc` wrapping a trait object implementing `Resolve`.
+    /// Overrides for specific names passed to `resolve` and `resolve_to_addrs` will
+    /// still be applied on top of this resolver.
+    pub fn dns_resolver<R: Resolve + 'static>(mut self, resolver: Arc<R>) -> ClientBuilder {
+        self.config.dns_resolver = Some(resolver as _);
         self
     }
 }
@@ -1530,6 +1639,20 @@ impl tower_service::Service<Request> for Client {
     }
 }
 
+impl tower_service::Service<Request> for &'_ Client {
+    type Response = Response;
+    type Error = crate::Error;
+    type Future = Pending;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, req: Request) -> Self::Future {
+        self.execute_request(req)
+    }
+}
+
 impl fmt::Debug for ClientBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut builder = f.debug_struct("ClientBuilder");
@@ -1618,6 +1741,8 @@ impl Config {
             if let Some(ref max_tls_version) = self.max_tls_version {
                 f.field("max_tls_version", max_tls_version);
             }
+
+            f.field("tls_sni", &self.tls_sni);
         }
 
         #[cfg(all(feature = "native-tls-crate", feature = "__rustls"))]
@@ -1954,7 +2079,6 @@ impl Future for PendingRequest {
                 }
             }
 
-            debug!("response '{}' for {}", res.status(), self.url);
             let res = Response::new(
                 res,
                 self.url.clone(),
