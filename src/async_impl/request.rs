@@ -25,7 +25,7 @@ pub struct Request {
     headers: HeaderMap,
     body: Option<Body>,
     timeout: Option<Duration>,
-    response_body_limit: Option<usize>,
+    response_body_limit: Option<u64>,
     version: Version,
 }
 
@@ -103,13 +103,13 @@ impl Request {
 
     /// Get the response body limit.
     #[inline]
-    pub fn response_body_limit(&self) -> Option<&usize> {
-        self.response_body_limit.as_ref()
+    pub fn response_body_limit(&self) -> Option<u64> {
+        self.response_body_limit
     }
 
     /// Get a mutable reference to the response body limit.
     #[inline]
-    pub fn response_body_limit_mut(&mut self) -> &mut Option<usize> {
+    pub fn response_body_limit_mut(&mut self) -> &mut Option<u64> {
         &mut self.response_body_limit
     }
 
@@ -146,7 +146,7 @@ impl Request {
             None => None,
         };
         let mut req = Request::new(self.method().clone(), self.url().clone());
-        *req.response_body_limit_mut() = self.response_body_limit().cloned();
+        *req.response_body_limit_mut() = self.response_body_limit();
         *req.timeout_mut() = self.timeout().cloned();
         *req.headers_mut() = self.headers().clone();
         *req.version_mut() = self.version();
@@ -161,7 +161,7 @@ impl Request {
         Url,
         HeaderMap,
         Option<Body>,
-        Option<usize>,
+        Option<u64>,
         Option<Duration>,
         Version,
     ) {
@@ -291,7 +291,7 @@ impl RequestBuilder {
     ///
     /// The response body limits the size of the response. Responses larger than
     /// the limit will be rejected. Only this request is affected. The limit is specified in bytes.
-    pub fn response_body_limit(mut self, response_body_limit: usize) -> RequestBuilder {
+    pub fn response_body_limit(mut self, response_body_limit: u64) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             *req.response_body_limit_mut() = Some(response_body_limit);
         }

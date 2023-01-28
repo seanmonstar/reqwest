@@ -28,7 +28,7 @@ pub struct Response {
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
-    body_limit: Option<usize>,
+    body_limit: Option<u64>,
 }
 
 impl Response {
@@ -36,7 +36,7 @@ impl Response {
         res: hyper::Response<hyper::Body>,
         url: Url,
         accepts: Accepts,
-        body_limit: Option<usize>,
+        body_limit: Option<u64>,
         timeout: Option<Pin<Box<Sleep>>>,
     ) -> Response {
         let (mut parts, body) = res.into_parts();
@@ -279,7 +279,7 @@ impl Response {
                     match buf {
                         Err(e) => return Err(e),
                         Ok(buf) => {
-                            if vec.len() + buf.len() > body_limit {
+                            if vec.len() + buf.len() > body_limit as usize {
                                 Err(crate::error::body(
                                     "Content length exceeds response body limit",
                                 ))?

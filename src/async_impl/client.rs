@@ -1831,7 +1831,7 @@ pin_project! {
 
         #[pin]
         in_flight: ResponseFuture,
-        response_body_limit: Option<usize>,
+        response_body_limit: Option<u64>,
         #[pin]
         timeout: Option<Pin<Box<Sleep>>>,
     }
