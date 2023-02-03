@@ -2,6 +2,7 @@
 use std::error::Error as StdError;
 use std::fmt;
 use std::io;
+use std::sync::Arc;
 
 use crate::{StatusCode, Url};
 
@@ -22,7 +23,7 @@ pub(crate) type BoxError = Box<dyn StdError + Send + Sync>;
 struct Inner {
     kind: Kind,
     source: Option<BoxError>,
-    url: Option<Url>,
+    url: Option<Arc<Url>>,
 }
 
 impl Error {
@@ -37,6 +38,33 @@ impl Error {
                 url: None,
             }),
         }
+    }
+
+    /// Returns a possible URL related to this error.
+    ///
+    /// This is useful when you want to create yet another
+    /// [`Request`](`crate::Request`) or reuse the url without expensive
+    /// [`Url::clone`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # async fn run() {
+    /// // displays last stop of a redirect loop
+    /// let response = reqwest::get("http://site.with.redirect.loop").await;
+    /// if let Err(e) = response {
+    ///     if e.is_redirect() {
+    ///         if let Some(final_stop) = e.url_arc() {
+    ///             println!("redirect loop at {}", final_stop);
+    ///             // Create a new response without `Url::clone`.
+    ///             let response = reqwest::get(final_stop).await;
+    ///         }
+    ///     }
+    /// }
+    /// # }
+    /// ```
+    pub fn url_arc(&self) -> Option<&Arc<Url>> {
+        self.inner.url.as_ref()
     }
 
     /// Returns a possible URL related to this error.
@@ -57,7 +85,7 @@ impl Error {
     /// # }
     /// ```
     pub fn url(&self) -> Option<&Url> {
-        self.inner.url.as_ref()
+        self.inner.url.as_deref()
     }
 
     /// Returns a mutable reference to the URL related to this error
@@ -66,12 +94,12 @@ impl Error {
     /// (e.g. an API key in the query), but do not want to remove the URL
     /// entirely.
     pub fn url_mut(&mut self) -> Option<&mut Url> {
-        self.inner.url.as_mut()
+        self.inner.url.as_mut().map(Arc::make_mut)
     }
 
     /// Add a url related to this error (overwriting any existing)
-    pub fn with_url(mut self, url: Url) -> Self {
-        self.inner.url = Some(url);
+    pub fn with_url(mut self, url: impl Into<Arc<Url>>) -> Self {
+        self.inner.url = Some(url.into());
         self
     }
 
@@ -258,15 +286,15 @@ pub(crate) fn request<E: Into<BoxError>>(e: E) -> Error {
     Error::new(Kind::Request, Some(e))
 }
 
-pub(crate) fn redirect<E: Into<BoxError>>(e: E, url: Url) -> Error {
+pub(crate) fn redirect<E: Into<BoxError>>(e: E, url: Arc<Url>) -> Error {
     Error::new(Kind::Redirect, Some(e)).with_url(url)
 }
 
-pub(crate) fn status_code(url: Url, status: StatusCode) -> Error {
+pub(crate) fn status_code(url: Arc<Url>, status: StatusCode) -> Error {
     Error::new(Kind::Status(status), None::<Error>).with_url(url)
 }
 
-pub(crate) fn url_bad_scheme(url: Url) -> Error {
+pub(crate) fn url_bad_scheme(url: Arc<Url>) -> Error {
     Error::new(Kind::Builder, Some(BadScheme)).with_url(url)
 }
 

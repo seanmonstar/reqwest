@@ -1,5 +1,6 @@
 use std::convert::TryFrom;
 use std::fmt;
+use std::sync::Arc;
 use std::time::Duration;
 
 use http::{request::Parts, Request as HttpRequest, Version};
@@ -34,10 +35,10 @@ pub struct RequestBuilder {
 impl Request {
     /// Constructs a new request.
     #[inline]
-    pub fn new(method: Method, url: Url) -> Self {
+    pub fn new(method: Method, url: impl Into<Arc<Url>>) -> Self {
         Request {
             body: None,
-            inner: async_impl::Request::new(method, url),
+            inner: async_impl::Request::new(method, url.into()),
         }
     }
 
@@ -51,6 +52,12 @@ impl Request {
     #[inline]
     pub fn method_mut(&mut self) -> &mut Method {
         self.inner.method_mut()
+    }
+
+    /// Get the url.
+    #[inline]
+    pub fn url_arc(&self) -> &Arc<Url> {
+        self.inner.url_arc()
     }
 
     /// Get the url.
@@ -118,18 +125,14 @@ impl Request {
     /// None is returned if a body is which can not be cloned. This can be because the body is a
     /// stream.
     pub fn try_clone(&self) -> Option<Request> {
-        let body = if let Some(ref body) = self.body.as_ref() {
-            if let Some(body) = body.try_clone() {
-                Some(body)
-            } else {
-                return None;
-            }
+        let body = if let Some(body) = self.body.as_ref() {
+            Some(body.try_clone()?)
         } else {
             None
         };
-        let mut req = Request::new(self.method().clone(), self.url().clone());
+        let mut req = Request::new(self.method().clone(), self.url_arc().clone());
         *req.headers_mut() = self.headers().clone();
-        *req.version_mut() = self.version().clone();
+        *req.version_mut() = self.version();
         req.body = body;
         Some(req)
     }
@@ -158,7 +161,7 @@ impl RequestBuilder {
             .request
             .as_mut()
             .ok()
-            .and_then(|req| async_impl::request::extract_authority(req.url_mut()));
+            .and_then(|req| async_impl::request::extract_authority(&mut req.inner.url));
 
         if let Some((username, password)) = auth {
             builder.basic_auth(username, password)

@@ -1818,11 +1818,11 @@ enum PendingInner {
 pin_project! {
     struct PendingRequest {
         method: Method,
-        url: Url,
+        url: Arc<Url>,
         headers: HeaderMap,
         body: Option<Option<Bytes>>,
 
-        urls: Vec<Url>,
+        urls: Vec<Arc<Url>>,
 
         retry_count: usize,
 
@@ -1844,7 +1844,7 @@ impl PendingRequest {
         self.project().timeout
     }
 
-    fn urls(self: Pin<&mut Self>) -> &mut Vec<Url> {
+    fn urls(self: Pin<&mut Self>) -> &mut Vec<Arc<Url>> {
         self.project().urls
     }
 
@@ -2030,6 +2030,8 @@ impl Future for PendingRequest {
                     match action {
                         redirect::ActionKind::Follow => {
                             debug!("redirecting '{}' to '{}'", self.url, loc);
+
+                            let loc = Arc::new(loc);
 
                             if self.client.https_only && loc.scheme() != "https" {
                                 return Poll::Ready(Err(error::redirect(

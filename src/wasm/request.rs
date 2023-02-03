@@ -1,11 +1,10 @@
 use std::convert::TryFrom;
 use std::fmt;
+use std::sync::Arc;
 
 use bytes::Bytes;
 use http::{request::Parts, Method, Request as HttpRequest};
 use serde::Serialize;
-#[cfg(feature = "json")]
-use serde_json;
 use url::Url;
 use web_sys::RequestCredentials;
 
@@ -15,7 +14,7 @@ use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
     method: Method,
-    url: Url,
+    url: Arc<Url>,
     headers: HeaderMap,
     body: Option<Body>,
     pub(super) cors: bool,
@@ -31,10 +30,10 @@ pub struct RequestBuilder {
 impl Request {
     /// Constructs a new request.
     #[inline]
-    pub fn new(method: Method, url: Url) -> Self {
+    pub fn new(method: Method, url: impl Into<Arc<Url>>) -> Self {
         Request {
             method,
-            url,
+            url: url.into(),
             headers: HeaderMap::new(),
             body: None,
             cors: true,
@@ -56,6 +55,12 @@ impl Request {
 
     /// Get the url.
     #[inline]
+    pub fn url_arc(&self) -> &Arc<Url> {
+        &self.url
+    }
+
+    /// Get the url.
+    #[inline]
     pub fn url(&self) -> &Url {
         &self.url
     }
@@ -63,7 +68,7 @@ impl Request {
     /// Get a mutable reference to the url.
     #[inline]
     pub fn url_mut(&mut self) -> &mut Url {
-        &mut self.url
+        Arc::make_mut(&mut self.url)
     }
 
     /// Get the headers.
@@ -443,7 +448,7 @@ where
             headers,
             ..
         } = parts;
-        let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
+        let url = Arc::new(Url::parse(&uri.to_string()).map_err(crate::error::builder)?);
         Ok(Request {
             method,
             url,

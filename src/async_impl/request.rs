@@ -1,11 +1,10 @@
 use std::convert::TryFrom;
 use std::fmt;
 use std::future::Future;
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Serialize;
-#[cfg(feature = "json")]
-use serde_json;
 
 use super::body::Body;
 use super::client::{Client, Pending};
@@ -21,7 +20,7 @@ use http::{request::Parts, Request as HttpRequest, Version};
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
     method: Method,
-    url: Url,
+    pub(crate) url: Arc<Url>,
     headers: HeaderMap,
     body: Option<Body>,
     timeout: Option<Duration>,
@@ -40,10 +39,10 @@ pub struct RequestBuilder {
 impl Request {
     /// Constructs a new request.
     #[inline]
-    pub fn new(method: Method, url: Url) -> Self {
+    pub fn new(method: Method, url: impl Into<Arc<Url>>) -> Self {
         Request {
             method,
-            url,
+            url: url.into(),
             headers: HeaderMap::new(),
             body: None,
             timeout: None,
@@ -65,6 +64,12 @@ impl Request {
 
     /// Get the url.
     #[inline]
+    pub fn url_arc(&self) -> &Arc<Url> {
+        &self.url
+    }
+
+    /// Get the url.
+    #[inline]
     pub fn url(&self) -> &Url {
         &self.url
     }
@@ -72,7 +77,7 @@ impl Request {
     /// Get a mutable reference to the url.
     #[inline]
     pub fn url_mut(&mut self) -> &mut Url {
-        &mut self.url
+        Arc::make_mut(&mut self.url)
     }
 
     /// Get the headers.
@@ -131,7 +136,7 @@ impl Request {
             Some(body) => Some(body.try_clone()?),
             None => None,
         };
-        let mut req = Request::new(self.method().clone(), self.url().clone());
+        let mut req = Request::new(self.method().clone(), self.url.clone());
         *req.timeout_mut() = self.timeout().cloned();
         *req.headers_mut() = self.headers().clone();
         *req.version_mut() = self.version();
@@ -143,7 +148,7 @@ impl Request {
         self,
     ) -> (
         Method,
-        Url,
+        Arc<Url>,
         HeaderMap,
         Option<Body>,
         Option<Duration>,
@@ -550,7 +555,7 @@ fn fmt_request_fields<'a, 'b>(
 
 /// Check the request URL for a "username:password" type authority, and if
 /// found, remove it from the URL and return it.
-pub(crate) fn extract_authority(url: &mut Url) -> Option<(String, Option<String>)> {
+pub(crate) fn extract_authority(url: &mut Arc<Url>) -> Option<(String, Option<String>)> {
     use percent_encoding::percent_decode;
 
     if url.has_authority() {
@@ -565,6 +570,8 @@ pub(crate) fn extract_authority(url: &mut Url) -> Option<(String, Option<String>
                 .map(String::from)
         });
         if !username.is_empty() || password.is_some() {
+            let url = Arc::make_mut(url);
+
             url.set_username("")
                 .expect("has_authority means set_username shouldn't fail");
             url.set_password(None)
@@ -591,7 +598,7 @@ where
             version,
             ..
         } = parts;
-        let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
+        let url = Arc::new(Url::parse(&uri.to_string()).map_err(crate::error::builder)?);
         Ok(Request {
             method,
             url,

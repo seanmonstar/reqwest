@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
@@ -11,8 +12,6 @@ use hyper::{HeaderMap, StatusCode, Version};
 use mime::Mime;
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
-#[cfg(feature = "json")]
-use serde_json;
 use tokio::time::Sleep;
 use url::Url;
 
@@ -27,13 +26,13 @@ pub struct Response {
     pub(super) res: hyper::Response<Decoder>,
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
-    url: Box<Url>,
+    url: Arc<Url>,
 }
 
 impl Response {
     pub(super) fn new(
         res: hyper::Response<hyper::Body>,
-        url: Url,
+        url: Arc<Url>,
         accepts: Accepts,
         timeout: Option<Pin<Box<Sleep>>>,
     ) -> Response {
@@ -41,10 +40,7 @@ impl Response {
         let decoder = Decoder::detect(&mut parts.headers, Body::response(body, timeout), accepts);
         let res = hyper::Response::from_parts(parts, decoder);
 
-        Response {
-            res,
-            url: Box::new(url),
-        }
+        Response { res, url }
     }
 
     /// Get the `StatusCode` of this `Response`.
@@ -95,6 +91,12 @@ impl Response {
     #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
     pub fn cookies<'a>(&'a self) -> impl Iterator<Item = cookie::Cookie<'a>> + 'a {
         cookie::extract_response_cookies(self.res.headers()).filter_map(Result::ok)
+    }
+
+    /// Get the final `Arc<Url>` of this `Response`.
+    #[inline]
+    pub fn url_arc(&self) -> &Arc<Url> {
+        &self.url
     }
 
     /// Get the final `Url` of this `Response`.
@@ -341,7 +343,7 @@ impl Response {
     pub fn error_for_status(self) -> crate::Result<Self> {
         let status = self.status();
         if status.is_client_error() || status.is_server_error() {
-            Err(crate::error::status_code(*self.url, status))
+            Err(crate::error::status_code(self.url, status))
         } else {
             Ok(self)
         }
@@ -371,7 +373,7 @@ impl Response {
     pub fn error_for_status_ref(&self) -> crate::Result<&Self> {
         let status = self.status();
         if status.is_client_error() || status.is_server_error() {
-            Err(crate::error::status_code(*self.url.clone(), status))
+            Err(crate::error::status_code(self.url.clone(), status))
         } else {
             Ok(self)
         }
@@ -413,7 +415,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
         let res = hyper::Response::from_parts(parts, decoder);
         Response {
             res,
-            url: Box::new(url),
+            url: Arc::new(url),
         }
     }
 }

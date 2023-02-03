@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use url::Url;
 
 /// A trait to try to convert some type into a `Url`.
@@ -7,20 +8,32 @@ use url::Url;
 pub trait IntoUrl: IntoUrlSealed {}
 
 impl IntoUrl for Url {}
+impl IntoUrl for Arc<Url> {}
 impl IntoUrl for String {}
-impl<'a> IntoUrl for &'a str {}
-impl<'a> IntoUrl for &'a String {}
+impl IntoUrl for &Arc<Url> {}
+impl IntoUrl for &str {}
+impl IntoUrl for &String {}
 
 pub trait IntoUrlSealed {
     // Besides parsing as a valid `Url`, the `Url` must be a valid
     // `http::Uri`, in that it makes sense to use in a network request.
-    fn into_url(self) -> crate::Result<Url>;
+    fn into_url(self) -> crate::Result<Arc<Url>>;
 
     fn as_str(&self) -> &str;
 }
 
 impl IntoUrlSealed for Url {
-    fn into_url(self) -> crate::Result<Url> {
+    fn into_url(self) -> crate::Result<Arc<Url>> {
+        Arc::new(self).into_url()
+    }
+
+    fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+impl IntoUrlSealed for Arc<Url> {
+    fn into_url(self) -> crate::Result<Arc<Url>> {
         if self.has_host() {
             Ok(self)
         } else {
@@ -29,12 +42,22 @@ impl IntoUrlSealed for Url {
     }
 
     fn as_str(&self) -> &str {
-        self.as_ref()
+        (**self).as_ref()
     }
 }
 
-impl<'a> IntoUrlSealed for &'a str {
-    fn into_url(self) -> crate::Result<Url> {
+impl IntoUrlSealed for &Arc<Url> {
+    fn into_url(self) -> crate::Result<Arc<Url>> {
+        self.clone().into_url()
+    }
+
+    fn as_str(&self) -> &str {
+        (***self).as_ref()
+    }
+}
+
+impl IntoUrlSealed for &str {
+    fn into_url(self) -> crate::Result<Arc<Url>> {
         Url::parse(self).map_err(crate::error::builder)?.into_url()
     }
 
@@ -43,8 +66,8 @@ impl<'a> IntoUrlSealed for &'a str {
     }
 }
 
-impl<'a> IntoUrlSealed for &'a String {
-    fn into_url(self) -> crate::Result<Url> {
+impl IntoUrlSealed for &String {
+    fn into_url(self) -> crate::Result<Arc<Url>> {
         (&**self).into_url()
     }
 
@@ -53,8 +76,8 @@ impl<'a> IntoUrlSealed for &'a String {
     }
 }
 
-impl<'a> IntoUrlSealed for String {
-    fn into_url(self) -> crate::Result<Url> {
+impl IntoUrlSealed for String {
+    fn into_url(self) -> crate::Result<Arc<Url>> {
         (&*self).into_url()
     }
 
