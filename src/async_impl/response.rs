@@ -281,7 +281,7 @@ impl Response {
                         Ok(buf) => {
                             if vec.len() + buf.len() > body_limit as usize {
                                 Err(crate::error::body(
-                                    "Content length exceeds response body limit",
+                                    "Received body exceeds response body limit.",
                                 ))?
                             }
                             vec.put(buf);
