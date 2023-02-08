@@ -34,7 +34,9 @@ pub struct Request {
 #[must_use = "RequestBuilder does nothing until you 'send' it"]
 pub struct RequestBuilder {
     client: Client,
-    request: crate::Result<Request>,
+    /// the current request
+    pub request: crate::Result<Request>,
+    interceptor: Option<fn(Self) -> Self>,
 }
 
 impl Request {
@@ -161,8 +163,16 @@ impl Request {
 }
 
 impl RequestBuilder {
-    pub(super) fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
-        let mut builder = RequestBuilder { client, request };
+    pub(super) fn new(
+        client: Client,
+        request: crate::Result<Request>,
+        interceptor: Option<fn(Self) -> Self>,
+    ) -> RequestBuilder {
+        let mut builder = RequestBuilder {
+            client,
+            request,
+            interceptor,
+        };
 
         let auth = builder
             .request
@@ -486,8 +496,13 @@ impl RequestBuilder {
     /// # }
     /// ```
     pub fn send(self) -> impl Future<Output = Result<Response, crate::Error>> {
-        match self.request {
-            Ok(req) => self.client.execute_request(req),
+        let intercepted = match self.interceptor {
+            Some(interceptor) => interceptor(self),
+            None => self,
+        };
+
+        match intercepted.request {
+            Ok(req) => intercepted.client.execute_request(req),
             Err(err) => Pending::new_err(err),
         }
     }
@@ -519,6 +534,7 @@ impl RequestBuilder {
             .map(|req| RequestBuilder {
                 client: self.client.clone(),
                 request: Ok(req),
+                interceptor: self.interceptor.clone(),
             })
     }
 }

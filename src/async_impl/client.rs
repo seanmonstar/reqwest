@@ -79,6 +79,7 @@ struct Config {
     // NOTE: When adding a new field, update `fmt::Debug for ClientBuilder`
     accepts: Accepts,
     headers: HeaderMap,
+    interceptor: Option<fn(RequestBuilder) -> RequestBuilder>,
     #[cfg(feature = "native-tls")]
     hostname_verification: bool,
     #[cfg(feature = "__tls")]
@@ -148,6 +149,7 @@ impl ClientBuilder {
                 error: None,
                 accepts: Accepts::default(),
                 headers,
+                interceptor: None,
                 #[cfg(feature = "native-tls")]
                 hostname_verification: true,
                 #[cfg(feature = "__tls")]
@@ -536,6 +538,7 @@ impl ClientBuilder {
                 proxies,
                 proxies_maybe_http_auth,
                 https_only: config.https_only,
+                interceptor: config.interceptor,
             }),
         })
     }
@@ -625,6 +628,24 @@ impl ClientBuilder {
         for (key, value) in headers.iter() {
             self.config.headers.insert(key, value.clone());
         }
+        self
+    }
+
+    /// Add an interceptor function that can accsess and modify the request as needed before it is sent.
+    /// This is useful for adding headers, cookies, or other information to the request that needs to be computed at runtime
+    ///
+    ///```rust
+    /// let interceptor = |req: reqwest::RequestBuilder| {
+    ///     req.header("X-TIMESTAMP", timestamp)
+    /// }
+    ///
+    /// let client = reqwest::Client::builder()
+    ///    .interceptor(interceptor)
+    ///    .build()?;
+    ///
+    /// let res = client.get("https://www.rust-lang.org").send().await?;
+    fn interceptor(mut self, interceptor: fn(RequestBuilder) -> RequestBuilder) -> ClientBuilder {
+        self.config.interceptor = Some(interceptor);
         self
     }
 
@@ -1482,7 +1503,7 @@ impl Client {
     /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
         let req = url.into_url().map(move |url| Request::new(method, url));
-        RequestBuilder::new(self.clone(), req)
+        RequestBuilder::new(self.clone(), req, self.inner.interceptor)
     }
 
     /// Executes a `Request`.
@@ -1767,6 +1788,7 @@ struct ClientRef {
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
     https_only: bool,
+    interceptor: Option<fn(RequestBuilder) -> RequestBuilder>,
 }
 
 impl ClientRef {
@@ -2132,5 +2154,18 @@ mod tests {
         let err = result.err().unwrap();
         assert!(err.is_builder());
         assert_eq!(url_str, err.url().unwrap().as_str());
+    }
+
+    #[tokio::test]
+    async fn test_interceptor() {
+        let client = crate::Client::builder()
+            .interceptor(|req| {
+                println!("intercepted request: {:?}", req);
+                req
+            })
+            .build()
+            .unwrap();
+        let res = client.get("https://www.rust-lang.org/").send().await;
+        println!("response: {:?}", res);
     }
 }
