@@ -13,6 +13,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Note: Errors may include the full URL used to make the `Request`. If the URL
 /// contains sensitive information (e.g. an API key as a query parameter), be
 /// sure to remove it ([`without_url`](Error::without_url))
+#[derive(Clone)]
 pub struct Error {
     inner: Box<Inner>,
 }
