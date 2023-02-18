@@ -106,13 +106,14 @@ impl<'a> fmt::Debug for Cookie<'a> {
 }
 
 pub(crate) fn extract_response_cookie_headers<'a>(
-    headers: &'a hyper::HeaderMap,
+    headers: &'a http::HeaderMap,
 ) -> impl Iterator<Item = &'a HeaderValue> + 'a {
     headers.get_all(SET_COOKIE).iter()
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn extract_response_cookies<'a>(
-    headers: &'a hyper::HeaderMap,
+    headers: &'a http::HeaderMap,
 ) -> impl Iterator<Item = Result<Cookie<'a>, CookieParseError>> + 'a {
     headers
         .get_all(SET_COOKIE)
