@@ -1,4 +1,5 @@
 use wasm_bindgen::JsCast;
+use web_sys::{AbortController, AbortSignal};
 
 mod body;
 mod client;
@@ -24,4 +25,29 @@ where
     js_val
         .dyn_into::<T>()
         .map_err(|_js_val| "promise resolved to unexpected type".into())
+}
+
+/// A guard that cancels a fetch request when dropped.
+struct AbortGuard {
+    ctrl: AbortController,
+}
+
+impl AbortGuard {
+    fn new() -> crate::Result<Self> {
+        Ok(AbortGuard {
+            ctrl: AbortController::new()
+                .map_err(crate::error::wasm)
+                .map_err(crate::error::builder)?,
+        })
+    }
+
+    fn signal(&self) -> AbortSignal {
+        self.ctrl.signal()
+    }
+}
+
+impl Drop for AbortGuard {
+    fn drop(&mut self) {
+        self.ctrl.abort();
+    }
 }
