@@ -5,6 +5,8 @@ use http::{HeaderMap, StatusCode};
 use js_sys::Uint8Array;
 use url::Url;
 
+use crate::wasm::AbortGuard;
+
 #[cfg(feature = "stream")]
 use wasm_bindgen::JsCast;
 
@@ -17,16 +19,22 @@ use serde::de::DeserializeOwned;
 /// A Response to a submitted `Request`.
 pub struct Response {
     http: http::Response<web_sys::Response>,
+    _abort: AbortGuard,
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
 }
 
 impl Response {
-    pub(super) fn new(res: http::Response<web_sys::Response>, url: Url) -> Response {
+    pub(super) fn new(
+        res: http::Response<web_sys::Response>,
+        url: Url,
+        abort: AbortGuard,
+    ) -> Response {
         Response {
             http: res,
             url: Box::new(url),
+            _abort: abort,
         }
     }
 
