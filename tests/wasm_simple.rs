@@ -1,4 +1,5 @@
 #![cfg(target_arch = "wasm32")]
+use std::time::Duration;
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_test::*;
@@ -21,4 +22,18 @@ async fn simple_example() {
 
     let body = res.text().await.expect("response to utf-8 text");
     log(&format!("Body:\n\n{}", body));
+}
+
+#[wasm_bindgen_test]
+async fn request_with_timeout() {
+    let client = reqwest::Client::new();
+    let err = client
+        .get("https://hyper.rs")
+        .timeout(Duration::from_millis(10))
+        .send()
+        .await
+        .expect_err("Expected error from aborted request");
+
+    assert!(err.is_request());
+    assert!(format!("{:?}", err).contains("The user aborted a request."));
 }
