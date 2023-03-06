@@ -156,7 +156,7 @@
 //!
 //! - Additional X509 certificates can be configured on a `ClientBuilder` with the
 //!   [`Certificate`](Certificate) type.
-//! - Client certificates can be add to a `ClientBuilder` with the
+//! - Client certificates can be added to a `ClientBuilder` with the
 //!   [`Identity`][Identity] type.
 //! - Various parts of TLS can also be configured or even disabled on the
 //!   `ClientBuilder`.
