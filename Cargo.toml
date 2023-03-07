@@ -177,7 +177,7 @@ features = [
 ]
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-wasm-bindgen = { version = "0.2.68", features = ["serde-serialize"] }
+wasm-bindgen = { version = "0.2.68"}
 wasm-bindgen-test = "0.3"
 
 [[example]]
