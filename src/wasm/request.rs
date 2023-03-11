@@ -16,7 +16,7 @@ use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 pub struct Request {
     method: Method,
     url: Url,
-    headers: HeaderMap,
+    pub(crate) headers: HeaderMap,
     body: Option<Body>,
     pub(super) cors: bool,
     pub(super) credentials: Option<RequestCredentials>,
