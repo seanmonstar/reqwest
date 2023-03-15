@@ -1,15 +1,15 @@
 use crate::async_impl::h3_client::dns::resolve;
+use crate::dns::DynResolver;
 use crate::error::BoxError;
 use bytes::Bytes;
 use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::Uri;
+use hyper::client::connect::dns::Name;
 use quinn::{ClientConfig, Endpoint, TransportConfig};
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
-use hyper::client::connect::dns::Name;
-use crate::dns::DynResolver;
 
 type H3Connection = (
     h3::client::Connection<Connection, Bytes>,

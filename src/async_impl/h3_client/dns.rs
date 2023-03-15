@@ -5,7 +5,6 @@ use std::net::SocketAddr;
 use std::task::Poll;
 use tower_service::Service;
 
-
 // Trait from hyper to implement DNS resolution for HTTP/3 client.
 pub trait Resolve {
     type Addrs: Iterator<Item = SocketAddr>;
