@@ -1,3 +1,22 @@
+## v0.11.14
+
+- Adds `Proxy::no_proxy(url)` that works like the NO_PROXY environment variable.
+- Adds `multipart::Part::headers(headers)` method to add custom headers.
+- (wasm) Add `Response::bytes_stream()`.
+- Perf: several internal optimizations reducing copies and memory allocations.
+
+## v0.11.13
+
+- Add `ClientBuilder::dns_resolver()` option for custom DNS resolvers.
+- Add `ClientBuilder::tls_sni(bool)` option to enable or disable TLS Server Name Indication.
+- Add `Identity::from_pkcs8_pem()` constructor when using `native-tls`.
+- Fix `redirect::Policy::limited(0)` from following any redirects.
+
+## v0.11.12
+
+- Add `ClientBuilder::resolve_to_addrs()` which allows a slice of IP addresses to be specified for a single host.
+- Add `Response::upgrade()` to await whether the server agrees to an HTTP upgrade.
+
 ## v0.11.11
 
 - Add HTTP/2 keep-alive configuration methods on `ClientBuilder`.

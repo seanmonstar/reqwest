@@ -1,162 +1,31 @@
-use futures_util::future::Either;
 #[cfg(feature = "__tls")]
 use http::header::HeaderValue;
 use http::uri::{Authority, Scheme};
 use http::Uri;
-use hyper::client::connect::{
-    dns::{GaiResolver, Name},
-    Connected, Connection,
-};
+use hyper::client::connect::{Connected, Connection};
 use hyper::service::Service;
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use pin_project_lite::pin_project;
-use std::io::IoSlice;
+use std::future::Future;
+use std::io::{self, IoSlice};
 use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use std::{collections::HashMap, io};
-use std::{future::Future, net::SocketAddr};
 
 #[cfg(feature = "default-tls")]
 use self::native_tls_conn::NativeTlsConn;
 #[cfg(feature = "__rustls")]
 use self::rustls_tls_conn::RustlsTlsConn;
-#[cfg(feature = "trust-dns")]
-use crate::dns::TrustDnsResolver;
+use crate::dns::DynResolver;
 use crate::error::BoxError;
 use crate::proxy::{Proxy, ProxyScheme};
 
-#[derive(Clone)]
-pub(crate) enum HttpConnector {
-    Gai(hyper::client::HttpConnector),
-    GaiWithDnsOverrides(hyper::client::HttpConnector<DnsResolverWithOverrides<GaiResolver>>),
-    #[cfg(feature = "trust-dns")]
-    TrustDns(hyper::client::HttpConnector<TrustDnsResolver>),
-    #[cfg(feature = "trust-dns")]
-    TrustDnsWithOverrides(hyper::client::HttpConnector<DnsResolverWithOverrides<TrustDnsResolver>>),
-}
-
-impl HttpConnector {
-    pub(crate) fn new_gai() -> Self {
-        Self::Gai(hyper::client::HttpConnector::new())
-    }
-
-    pub(crate) fn new_gai_with_overrides(overrides: HashMap<String, SocketAddr>) -> Self {
-        let gai = hyper::client::connect::dns::GaiResolver::new();
-        let overridden_resolver = DnsResolverWithOverrides::new(gai, overrides);
-        Self::GaiWithDnsOverrides(hyper::client::HttpConnector::new_with_resolver(
-            overridden_resolver,
-        ))
-    }
-
-    #[cfg(feature = "trust-dns")]
-    pub(crate) fn new_trust_dns() -> crate::Result<HttpConnector> {
-        TrustDnsResolver::new()
-            .map(hyper::client::HttpConnector::new_with_resolver)
-            .map(Self::TrustDns)
-            .map_err(crate::error::builder)
-    }
-
-    #[cfg(feature = "trust-dns")]
-    pub(crate) fn new_trust_dns_with_overrides(
-        overrides: HashMap<String, SocketAddr>,
-    ) -> crate::Result<HttpConnector> {
-        TrustDnsResolver::new()
-            .map(|resolver| DnsResolverWithOverrides::new(resolver, overrides))
-            .map(hyper::client::HttpConnector::new_with_resolver)
-            .map(Self::TrustDnsWithOverrides)
-            .map_err(crate::error::builder)
-    }
-}
-
-macro_rules! impl_http_connector {
-    ($(fn $name:ident(&mut self, $($par_name:ident: $par_type:ty),*)$( -> $return:ty)?;)+) => {
-        #[allow(dead_code)]
-        impl HttpConnector {
-            $(
-                fn $name(&mut self, $($par_name: $par_type),*)$( -> $return)? {
-                    match self {
-                        Self::Gai(resolver) => resolver.$name($($par_name),*),
-                        Self::GaiWithDnsOverrides(resolver) => resolver.$name($($par_name),*),
-                        #[cfg(feature = "trust-dns")]
-                        Self::TrustDns(resolver) => resolver.$name($($par_name),*),
-                        #[cfg(feature = "trust-dns")]
-                        Self::TrustDnsWithOverrides(resolver) => resolver.$name($($par_name),*),
-                    }
-                }
-            )+
-        }
-    };
-}
-
-impl_http_connector! {
-    fn set_local_address(&mut self, addr: Option<IpAddr>);
-    fn enforce_http(&mut self, is_enforced: bool);
-    fn set_nodelay(&mut self, nodelay: bool);
-    fn set_keepalive(&mut self, dur: Option<Duration>);
-}
-
-impl Service<Uri> for HttpConnector {
-    type Response = <hyper::client::HttpConnector as Service<Uri>>::Response;
-    type Error = <hyper::client::HttpConnector as Service<Uri>>::Error;
-    #[cfg(feature = "trust-dns")]
-    type Future =
-        Either<
-            Either<
-                <hyper::client::HttpConnector as Service<Uri>>::Future,
-                <hyper::client::HttpConnector<DnsResolverWithOverrides<GaiResolver>> as Service<
-                    Uri,
-                >>::Future,
-            >,
-            Either<
-                    <hyper::client::HttpConnector<TrustDnsResolver> as Service<Uri>>::Future,
-                <hyper::client::HttpConnector<DnsResolverWithOverrides<TrustDnsResolver>> as Service<Uri>>::Future
-                 >
-        >;
-    #[cfg(not(feature = "trust-dns"))]
-    type Future =
-        Either<
-            Either<
-                <hyper::client::HttpConnector as Service<Uri>>::Future,
-                <hyper::client::HttpConnector<DnsResolverWithOverrides<GaiResolver>> as Service<
-                    Uri,
-                >>::Future,
-            >,
-            Either<
-                <hyper::client::HttpConnector as Service<Uri>>::Future,
-                <hyper::client::HttpConnector as Service<Uri>>::Future,
-            >,
-        >;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match self {
-            Self::Gai(resolver) => resolver.poll_ready(cx),
-            Self::GaiWithDnsOverrides(resolver) => resolver.poll_ready(cx),
-            #[cfg(feature = "trust-dns")]
-            Self::TrustDns(resolver) => resolver.poll_ready(cx),
-            #[cfg(feature = "trust-dns")]
-            Self::TrustDnsWithOverrides(resolver) => resolver.poll_ready(cx),
-        }
-    }
-
-    fn call(&mut self, dst: Uri) -> Self::Future {
-        match self {
-            Self::Gai(resolver) => Either::Left(Either::Left(resolver.call(dst))),
-            Self::GaiWithDnsOverrides(resolver) => Either::Left(Either::Right(resolver.call(dst))),
-            #[cfg(feature = "trust-dns")]
-            Self::TrustDns(resolver) => Either::Right(Either::Left(resolver.call(dst))),
-            #[cfg(feature = "trust-dns")]
-            Self::TrustDnsWithOverrides(resolver) => {
-                Either::Right(Either::Right(resolver.call(dst)))
-            }
-        }
-    }
-}
+pub(crate) type HttpConnector = hyper::client::HttpConnector<DynResolver>;
 
 #[derive(Clone)]
 pub(crate) struct Connector {
@@ -960,105 +829,9 @@ mod socks {
     }
 }
 
-pub(crate) mod itertools {
-    pub(crate) enum Either<A, B> {
-        Left(A),
-        Right(B),
-    }
-
-    impl<A, B> Iterator for Either<A, B>
-    where
-        A: Iterator,
-        B: Iterator<Item = <A as Iterator>::Item>,
-    {
-        type Item = <A as Iterator>::Item;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            match self {
-                Either::Left(a) => a.next(),
-                Either::Right(b) => b.next(),
-            }
-        }
-    }
-}
-
-pin_project! {
-    pub(crate) struct WrappedResolverFuture<Fut> {
-        #[pin]
-        fut: Fut,
-    }
-}
-
-impl<Fut, FutOutput, FutError> std::future::Future for WrappedResolverFuture<Fut>
-where
-    Fut: std::future::Future<Output = Result<FutOutput, FutError>>,
-    FutOutput: Iterator<Item = SocketAddr>,
-{
-    type Output = Result<itertools::Either<FutOutput, std::iter::Once<SocketAddr>>, FutError>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-        this.fut
-            .poll(cx)
-            .map(|result| result.map(itertools::Either::Left))
-    }
-}
-
-#[derive(Clone)]
-pub(crate) struct DnsResolverWithOverrides<Resolver>
-where
-    Resolver: Clone,
-{
-    dns_resolver: Resolver,
-    overrides: Arc<HashMap<String, SocketAddr>>,
-}
-
-impl<Resolver: Clone> DnsResolverWithOverrides<Resolver> {
-    pub(crate) fn new(dns_resolver: Resolver, overrides: HashMap<String, SocketAddr>) -> Self {
-        DnsResolverWithOverrides {
-            dns_resolver,
-            overrides: Arc::new(overrides),
-        }
-    }
-}
-
-impl<Resolver, Iter> Service<Name> for DnsResolverWithOverrides<Resolver>
-where
-    Resolver: Service<Name, Response = Iter> + Clone,
-    Iter: Iterator<Item = SocketAddr>,
-{
-    type Response = itertools::Either<Iter, std::iter::Once<SocketAddr>>;
-    type Error = <Resolver as Service<Name>>::Error;
-    type Future = Either<
-        WrappedResolverFuture<<Resolver as Service<Name>>::Future>,
-        futures_util::future::Ready<
-            Result<itertools::Either<Iter, std::iter::Once<SocketAddr>>, Self::Error>,
-        >,
-    >;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.dns_resolver.poll_ready(cx)
-    }
-
-    fn call(&mut self, name: Name) -> Self::Future {
-        match self.overrides.get(name.as_str()) {
-            Some(dest) => {
-                let fut = futures_util::future::ready(Ok(itertools::Either::Right(
-                    std::iter::once(dest.to_owned()),
-                )));
-                Either::Right(fut)
-            }
-            None => {
-                let resolver_fut = self.dns_resolver.call(name);
-                let y = WrappedResolverFuture { fut: resolver_fut };
-                Either::Left(y)
-            }
-        }
-    }
-}
-
 mod verbose {
     use hyper::client::connect::{Connected, Connection};
+    use std::cmp::min;
     use std::fmt;
     use std::io::{self, IoSlice};
     use std::pin::Pin;
@@ -1133,7 +906,18 @@ mod verbose {
             cx: &mut Context<'_>,
             bufs: &[IoSlice<'_>],
         ) -> Poll<Result<usize, io::Error>> {
-            Pin::new(&mut self.inner).poll_write_vectored(cx, bufs)
+            match Pin::new(&mut self.inner).poll_write_vectored(cx, bufs) {
+                Poll::Ready(Ok(nwritten)) => {
+                    log::trace!(
+                        "{:08x} write (vectored): {:?}",
+                        self.id,
+                        Vectored { bufs, nwritten }
+                    );
+                    Poll::Ready(Ok(nwritten))
+                }
+                Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+                Poll::Pending => Poll::Pending,
+            }
         }
 
         fn is_write_vectored(&self) -> bool {
@@ -1180,6 +964,26 @@ mod verbose {
                 }
             }
             write!(f, "\"")?;
+            Ok(())
+        }
+    }
+
+    struct Vectored<'a, 'b> {
+        bufs: &'a [IoSlice<'b>],
+        nwritten: usize,
+    }
+
+    impl fmt::Debug for Vectored<'_, '_> {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            let mut left = self.nwritten;
+            for buf in self.bufs.iter() {
+                if left == 0 {
+                    break;
+                }
+                let n = min(left, buf.len());
+                Escape(&buf[..n]).fmt(f)?;
+                left -= n;
+            }
             Ok(())
         }
     }

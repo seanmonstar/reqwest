@@ -5,22 +5,36 @@ use http::{HeaderMap, StatusCode};
 use js_sys::Uint8Array;
 use url::Url;
 
+use crate::wasm::AbortGuard;
+
+#[cfg(feature = "stream")]
+use wasm_bindgen::JsCast;
+
+#[cfg(feature = "stream")]
+use futures_util::stream::StreamExt;
+
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
     http: http::Response<web_sys::Response>,
+    _abort: AbortGuard,
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
 }
 
 impl Response {
-    pub(super) fn new(res: http::Response<web_sys::Response>, url: Url) -> Response {
+    pub(super) fn new(
+        res: http::Response<web_sys::Response>,
+        url: Url,
+        abort: AbortGuard,
+    ) -> Response {
         Response {
             http: res,
             url: Box::new(url),
+            _abort: abort,
         }
     }
 
@@ -116,6 +130,26 @@ impl Response {
         let mut bytes = vec![0; buffer.length() as usize];
         buffer.copy_to(&mut bytes);
         Ok(bytes.into())
+    }
+
+    /// Convert the response into a `Stream` of `Bytes` from the body.
+    #[cfg(feature = "stream")]
+    pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
+        let web_response = self.http.into_body();
+        let body = web_response
+            .body()
+            .expect("could not create wasm byte stream");
+        let body = wasm_streams::ReadableStream::from_raw(body.unchecked_into());
+        Box::pin(body.into_stream().map(|buf_js| {
+            let buffer = Uint8Array::new(
+                &buf_js
+                    .map_err(crate::error::wasm)
+                    .map_err(crate::error::decode)?,
+            );
+            let mut bytes = vec![0; buffer.length() as usize];
+            buffer.copy_to(&mut bytes);
+            Ok(bytes.into())
+        }))
     }
 
     // util methods
