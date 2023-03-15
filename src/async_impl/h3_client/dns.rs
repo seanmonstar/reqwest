@@ -1,80 +1,12 @@
-use crate::dns::DnsResolverWithOverrides;
 #[cfg(feature = "trust-dns")]
 use crate::dns::trust_dns::TrustDnsResolver;
 use core::task;
-use hyper::client::connect::dns::{GaiResolver, Name};
-use std::collections::HashMap;
+use hyper::client::connect::dns::Name;
 use std::future::Future;
 use std::net::SocketAddr;
-use std::str::FromStr;
-use std::sync::Arc;
 use std::task::Poll;
 use tower_service::Service;
 
-#[derive(Clone)]
-pub(crate) enum Resolver {
-    Gai(GaiResolver),
-    GaiWithDnsOverrides(DnsResolverWithOverrides),
-    #[cfg(feature = "trust-dns")]
-    TrustDns(TrustDnsResolver),
-    #[cfg(feature = "trust-dns")]
-    TrustDnsWithOverrides(DnsResolverWithOverrides),
-}
-
-impl Resolver {
-    pub fn new_gai() -> Self {
-        Self::Gai(GaiResolver::new())
-    }
-
-    pub fn new_gai_with_overrides(overrides: HashMap<String, Vec<SocketAddr>>) -> Self {
-        Self::GaiWithDnsOverrides(DnsResolverWithOverrides::new(Arc::new(GaiResolver::new()), overrides))
-    }
-
-    #[cfg(feature = "trust-dns")]
-    pub fn new_trust_dns() -> crate::Result<Self> {
-        TrustDnsResolver::new()
-            .map(Self::TrustDns)
-            .map_err(crate::error::builder)
-    }
-
-    #[cfg(feature = "trust-dns")]
-    pub fn new_trust_dns_with_overrides(
-        overrides: HashMap<String, Vec<SocketAddr>>,
-    ) -> crate::Result<Self> {
-        TrustDnsResolver::new()
-            .map(|trust_resolver| DnsResolverWithOverrides::new(Arc::new(trust_resolver), overrides))
-            .map(Self::TrustDnsWithOverrides)
-            .map_err(crate::error::builder)
-    }
-
-    pub async fn resolve(&mut self, server_name: &str) -> Vec<SocketAddr> {
-        let res: Vec<SocketAddr> = match self {
-            Self::Gai(resolver) => resolve(resolver, Name::from_str(server_name).unwrap())
-                .await
-                .unwrap()
-                .collect(),
-            Self::GaiWithDnsOverrides(resolver) => {
-                resolve(resolver, Name::from_str(server_name).unwrap())
-                    .await
-                    .unwrap()
-                    .collect()
-            }
-            #[cfg(feature = "trust-dns")]
-            Self::TrustDns(resolver) => resolve(resolver, Name::from_str(server_name).unwrap())
-                .await
-                .unwrap()
-                .collect(),
-            #[cfg(feature = "trust-dns")]
-            Self::TrustDnsWithOverrides(resolver) => {
-                resolve(resolver, Name::from_str(server_name).unwrap())
-                    .await
-                    .unwrap()
-                    .collect()
-            }
-        };
-        res
-    }
-}
 
 // Trait from hyper to implement DNS resolution for HTTP/3 client.
 pub trait Resolve {

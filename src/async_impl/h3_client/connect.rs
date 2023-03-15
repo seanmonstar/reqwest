@@ -1,4 +1,4 @@
-use crate::async_impl::h3_client::dns::Resolver;
+use crate::async_impl::h3_client::dns::resolve;
 use crate::error::BoxError;
 use bytes::Bytes;
 use h3::client::SendRequest;
@@ -8,6 +8,8 @@ use quinn::{ClientConfig, Endpoint, TransportConfig};
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
+use hyper::client::connect::dns::Name;
+use crate::dns::DynResolver;
 
 type H3Connection = (
     h3::client::Connection<Connection, Bytes>,
@@ -16,13 +18,13 @@ type H3Connection = (
 
 #[derive(Clone)]
 pub(crate) struct H3Connector {
-    resolver: Resolver,
+    resolver: DynResolver,
     endpoint: Endpoint,
 }
 
 impl H3Connector {
     pub fn new(
-        resolver: Resolver,
+        resolver: DynResolver,
         tls: rustls::ClientConfig,
         local_addr: Option<IpAddr>,
         transport_config: TransportConfig,
@@ -50,7 +52,7 @@ impl H3Connector {
             // If the host is already an IP address, skip resolving.
             vec![SocketAddr::new(addr, port)]
         } else {
-            let addrs = self.resolver.resolve(host).await.into_iter();
+            let addrs = resolve(&mut self.resolver, Name::from_str(host)?).await?;
             let addrs = addrs.map(|mut addr| {
                 addr.set_port(port);
                 addr

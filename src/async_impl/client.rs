@@ -29,8 +29,6 @@ use super::Body;
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::connect::H3Connector;
 #[cfg(feature = "http3")]
-use crate::async_impl::h3_client::dns::Resolver;
-#[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
 use crate::connect::Connector;
 #[cfg(feature = "cookies")]
@@ -262,22 +260,10 @@ impl ClientBuilder {
             }
 
             #[cfg(feature = "http3")]
-            let h3_resolver = match config.trust_dns {
-                false => {
-                    if config.dns_overrides.is_empty() {
-                        Resolver::new_gai()
-                    } else {
-                        Resolver::new_gai_with_overrides(config.dns_overrides.clone())
-                    }
-                }
+            let h3_resolver: Arc<dyn Resolve> = match config.trust_dns {
+                false => Arc::new(GaiResolver::new()),
                 #[cfg(feature = "trust-dns")]
-                true => {
-                    if config.dns_overrides.is_empty() {
-                        Resolver::new_trust_dns()?
-                    } else {
-                        Resolver::new_trust_dns_with_overrides(config.dns_overrides.clone())?
-                    }
-                }
+                true => Arc::new(TrustDnsResolver::new().map_err(crate::error::builder)?),
                 #[cfg(not(feature = "trust-dns"))]
                 true => unreachable!("trust-dns shouldn't be enabled unless the feature is"),
             };
@@ -298,7 +284,7 @@ impl ClientBuilder {
                     config.dns_overrides,
                 ));
             }
-            let http = HttpConnector::new_with_resolver(DynResolver::new(resolver));
+            let http = HttpConnector::new_with_resolver(DynResolver::new(resolver.clone()));
 
             #[cfg(feature = "__tls")]
             match config.tls {
@@ -535,7 +521,7 @@ impl ClientBuilder {
                         }
 
                         h3_connector = Some(H3Connector::new(
-                            h3_resolver,
+                            DynResolver::new(h3_resolver),
                             tls.clone(),
                             config.local_address,
                             transport_config,
