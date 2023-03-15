@@ -1,5 +1,3 @@
-#[cfg(feature = "trust-dns")]
-use crate::dns::trust_dns::TrustDnsResolver;
 use core::task;
 use hyper::client::connect::dns::Name;
 use std::future::Future;
