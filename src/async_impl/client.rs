@@ -259,15 +259,6 @@ impl ClientBuilder {
                 headers.get(USER_AGENT).cloned()
             }
 
-            #[cfg(feature = "http3")]
-            let h3_resolver: Arc<dyn Resolve> = match config.trust_dns {
-                false => Arc::new(GaiResolver::new()),
-                #[cfg(feature = "trust-dns")]
-                true => Arc::new(TrustDnsResolver::new().map_err(crate::error::builder)?),
-                #[cfg(not(feature = "trust-dns"))]
-                true => unreachable!("trust-dns shouldn't be enabled unless the feature is"),
-            };
-
             let mut resolver: Arc<dyn Resolve> = match config.trust_dns {
                 false => Arc::new(GaiResolver::new()),
                 #[cfg(feature = "trust-dns")]
@@ -521,7 +512,7 @@ impl ClientBuilder {
                         }
 
                         h3_connector = Some(H3Connector::new(
-                            DynResolver::new(h3_resolver),
+                            DynResolver::new(resolver),
                             tls.clone(),
                             config.local_address,
                             transport_config,
