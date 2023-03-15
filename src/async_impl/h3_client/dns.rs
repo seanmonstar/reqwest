@@ -1,23 +1,24 @@
-use crate::connect::DnsResolverWithOverrides;
+use crate::dns::DnsResolverWithOverrides;
 #[cfg(feature = "trust-dns")]
-use crate::dns::TrustDnsResolver;
+use crate::dns::trust_dns::TrustDnsResolver;
 use core::task;
 use hyper::client::connect::dns::{GaiResolver, Name};
 use std::collections::HashMap;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::task::Poll;
 use tower_service::Service;
 
 #[derive(Clone)]
 pub(crate) enum Resolver {
     Gai(GaiResolver),
-    GaiWithDnsOverrides(DnsResolverWithOverrides<GaiResolver>),
+    GaiWithDnsOverrides(DnsResolverWithOverrides),
     #[cfg(feature = "trust-dns")]
     TrustDns(TrustDnsResolver),
     #[cfg(feature = "trust-dns")]
-    TrustDnsWithOverrides(DnsResolverWithOverrides<TrustDnsResolver>),
+    TrustDnsWithOverrides(DnsResolverWithOverrides),
 }
 
 impl Resolver {
@@ -25,8 +26,8 @@ impl Resolver {
         Self::Gai(GaiResolver::new())
     }
 
-    pub fn new_gai_with_overrides(overrides: HashMap<String, SocketAddr>) -> Self {
-        Self::GaiWithDnsOverrides(DnsResolverWithOverrides::new(GaiResolver::new(), overrides))
+    pub fn new_gai_with_overrides(overrides: HashMap<String, Vec<SocketAddr>>) -> Self {
+        Self::GaiWithDnsOverrides(DnsResolverWithOverrides::new(Arc::new(GaiResolver::new()), overrides))
     }
 
     #[cfg(feature = "trust-dns")]
@@ -38,10 +39,10 @@ impl Resolver {
 
     #[cfg(feature = "trust-dns")]
     pub fn new_trust_dns_with_overrides(
-        overrides: HashMap<String, SocketAddr>,
+        overrides: HashMap<String, Vec<SocketAddr>>,
     ) -> crate::Result<Self> {
         TrustDnsResolver::new()
-            .map(|trust_resolver| DnsResolverWithOverrides::new(trust_resolver, overrides))
+            .map(|trust_resolver| DnsResolverWithOverrides::new(Arc::new(trust_resolver), overrides))
             .map(Self::TrustDnsWithOverrides)
             .map_err(crate::error::builder)
     }
