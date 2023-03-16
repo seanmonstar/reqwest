@@ -17,6 +17,7 @@ jobs:
     needs:
       - style
       - test
+      - unstable
       - nightly
       - msrv
       - android
@@ -182,6 +183,22 @@ jobs:
       - name: Test
         run: cargo test ${{ matrix.features }} ${{ matrix.test-features }} -- --test-threads=1
 
+  unstable:
+    name: "unstable features"
+    needs: [style]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 'stable'
+
+      - name: Check
+        run: RUSTFLAGS="--cfg reqwest_unstable" cargo check --features http3
+
   docs:
     name: Docs
     runs-on: ubuntu-latest
@@ -195,7 +212,7 @@ jobs:
 
       - name: Check documentation
         env:
-          RUSTDOCFLAGS: -D warnings
+          RUSTDOCFLAGS: --cfg reqwest_unstable -D warnings
         run: cargo doc --no-deps --document-private-items --all-features
 
   # Separate build job for nightly because of the missing feature for allowed failures at
@@ -222,6 +239,8 @@ jobs:
       #   run: cargo test --features __internal_proxy_sys_no_cache -- --test-threads=1
 
       - name: Check minimal versions
+        env:
+          RUSTFLAGS: --cfg reqwest_unstable
         run: |
           cargo clean
           cargo update -Z minimal-versions

@@ -191,6 +191,22 @@
 //! - **trust-dns**: Enables a trust-dns async resolver instead of default
 //!   threadpool using `getaddrinfo`.
 //!
+//! ## Unstable Features
+//!
+//! Some feature flags require additional opt-in by the application, by setting
+//! a `reqwest_unstable` flag.
+//!
+//! - **http3** *(unstable)*: Enables support for sending HTTP/3 requests.
+//!
+//! These features are unstable, and experimental. Details about them may be
+//! changed in patch releases.
+//!
+//! You can pass such a flag to the compiler via `.cargo/config`, or
+//! environment variables, such as:
+//!
+//! ```notrust
+//! RUSTFLAGS="--cfg reqwest_unstable" cargo build
+//! ```
 //!
 //! [hyper]: http://hyper.rs
 //! [blocking]: ./blocking/index.html
@@ -202,6 +218,14 @@
 //! [redirect]: crate::redirect
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
+
+#[cfg(all(feature = "http3", not(reqwest_unstable)))]
+compile_error!(
+    "\
+    The `http3` feature is unstable, and requires the \
+    `RUSTFLAGS='--cfg reqwest_unstable'` environment variable to be set.\
+"
+);
 
 macro_rules! if_wasm {
     ($($item:item)*) => {$(
