@@ -136,11 +136,14 @@ impl Response {
     #[cfg(feature = "stream")]
     pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
         let web_response = self.http.into_body();
+        let abort = self._abort;
         let body = web_response
             .body()
             .expect("could not create wasm byte stream");
         let body = wasm_streams::ReadableStream::from_raw(body.unchecked_into());
-        Box::pin(body.into_stream().map(|buf_js| {
+        Box::pin(body.into_stream().map(move |buf_js| {
+            // Keep the abort guard alive as long as this stream is.
+            let _abort = &abort;
             let buffer = Uint8Array::new(
                 &buf_js
                     .map_err(crate::error::wasm)
