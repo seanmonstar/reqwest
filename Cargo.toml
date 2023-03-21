@@ -13,19 +13,8 @@ edition = "2018"
 autotests = true
 
 [package.metadata.docs.rs]
-features = [
-    "blocking",
-    "cookies",
-    "json",
-    "multipart",
-    "stream",
-    "trust-dns",
-    "socks",
-    "gzip",
-    "brotli",
-    "deflate",
-]
-rustdoc-args = ["--cfg", "docsrs"]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs", "--cfg", "reqwest_unstable"]
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [package.metadata.playground]
