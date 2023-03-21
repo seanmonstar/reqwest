@@ -13,7 +13,18 @@ edition = "2018"
 autotests = true
 
 [package.metadata.docs.rs]
-all-features = true
+features = [
+    "blocking",
+    "cookies",
+    "json",
+    "multipart",
+    "stream",
+    "trust-dns",
+    "socks",
+    "gzip",
+    "brotli",
+    "deflate",
+]
 rustdoc-args = ["--cfg", "docsrs"]
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
