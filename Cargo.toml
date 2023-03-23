@@ -118,9 +118,9 @@ native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls"
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
-hyper-rustls = { version = "0.23", default-features = false, optional = true }
-rustls = { version = "0.20", features = ["dangerous_configuration"], optional = true }
-tokio-rustls = { version = "0.23", optional = true }
+hyper-rustls = { version = "0.24.0", default-features = false, optional = true }
+rustls = { version = "0.21.0", features = ["dangerous_configuration"], optional = true }
+tokio-rustls = { version = "0.24", optional = true }
 webpki-roots = { version = "0.22", optional = true }
 rustls-native-certs = { version = "0.6", optional = true }
 rustls-pemfile = { version = "1.0", optional = true }
@@ -141,8 +141,8 @@ trust-dns-resolver = { version = "0.22", optional = true }
 
 # HTTP/3 experimental support
 h3 = { version="0.0.2", optional = true }
-h3-quinn = { version="0.0.2", optional = true }
-quinn = { version = "0.9", default-features = false, features = ["tls-rustls", "ring"], optional = true  }
+h3-quinn = { version="0.0.3", optional = true }
+quinn = { version = "0.10", default-features = false, features = ["tls-rustls", "ring"], optional = true  }
 futures-channel = { version="0.3", optional = true}
 
 
