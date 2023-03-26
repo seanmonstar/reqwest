@@ -412,14 +412,14 @@ impl fmt::Debug for TlsBackend {
 
 impl Default for TlsBackend {
     fn default() -> TlsBackend {
-        #[cfg(all(feature = "default-tls", not(feature = "http3")))]
+        #[cfg(all(feature = "default-tls", not(feature = "http3-provider")))]
         {
             TlsBackend::Default
         }
 
         #[cfg(any(
             all(feature = "__rustls", not(feature = "default-tls")),
-            feature = "http3"
+            feature = "http3-provider"
         ))]
         {
             TlsBackend::Rustls
