@@ -1,3 +1,8 @@
+## v0.11.16
+
+- Chore: set MSRV in `Cargo.toml`.
+- Docs: fix build on docs.rs
+
 ## v0.11.15
 
 - Add `RequestBuilder` methods to split and reconstruct from its parts.
