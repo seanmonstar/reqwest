@@ -248,23 +248,23 @@ jobs:
           cargo check --all-features
 
   msrv:
-    name: MSRV ${{ matrix.rust }}
+    name: MSRV
     needs: [style]
 
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        rust: [1.57.0]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Install rust
+      - name: Get MSRV package metadata
+        id: metadata
+        run: cargo metadata --no-deps --format-version 1 | jq -r '"msrv=" + .packages[0].rust_version' >> $GITHUB_OUTPUT
+
+      - name: Install rust (${{ steps.metadata.outputs.msrv }})
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: ${{ steps.metadata.outputs.msrv }}
 
       - name: Check
         run: cargo check
