@@ -1,9 +1,19 @@
 #![cfg(not(target_arch = "wasm32"))]
 mod support;
-use futures_util::stream::StreamExt;
-use support::*;
+use std::future::Future;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::sync::{Arc, RwLock};
+use std::task::{Context, Poll};
 
-use reqwest::Client;
+use futures_util::stream::StreamExt;
+use http::Response;
+use http::Uri;
+use hyper::service::Service;
+use support::*;
+use tokio::net::TcpStream;
+
+use reqwest::{AsyncConn, Client};
 
 #[tokio::test]
 async fn auto_headers() {
@@ -371,4 +381,39 @@ async fn test_allowed_methods() {
         .await;
 
     assert!(resp.is_err());
+}
+
+#[tokio::test]
+async fn custom_connector() {
+    let server =
+        server::http(|_| async move { Response::builder().body("Hello world".into()).unwrap() });
+
+    struct CustomConnector(SocketAddr);
+
+    impl Service<Uri> for CustomConnector {
+        type Response = Box<dyn AsyncConn>;
+        type Error = Box<dyn std::error::Error + Send + Sync>;
+        type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn call(&mut self, _req: Uri) -> Self::Future {
+            let addr = self.0;
+
+            Box::pin(async move { Ok(Box::new(TcpStream::connect(addr).await.unwrap()) as Box<_>) })
+        }
+    }
+
+    let res = reqwest::Client::builder()
+        .connector(Arc::new(RwLock::new(CustomConnector(server.addr()))))
+        .build()
+        .expect("client builder")
+        .get("http://google.com")
+        .send()
+        .await
+        .expect("request");
+
+    assert_eq!(res.text().await.unwrap(), "Hello world");
 }
