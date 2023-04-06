@@ -45,6 +45,8 @@ pub struct Identity {
 enum ClientCert {
     #[cfg(feature = "native-tls")]
     Pkcs12(native_tls_crate::Identity),
+    #[cfg(feature = "native-tls")]
+    Pkcs8(native_tls_crate::Identity),
     #[cfg(feature = "__rustls")]
     Pem {
         key: rustls::PrivateKey,
@@ -179,12 +181,45 @@ impl Identity {
         })
     }
 
+    /// Parses a chain of PEM encoded X509 certificates, with the leaf certificate first.
+    /// `key` is a PEM encoded PKCS #8 formatted private key for the leaf certificate.
+    ///
+    /// The certificate chain should contain any intermediate cerficates that should be sent to
+    /// clients to allow them to build a chain to a trusted root.
+    ///
+    /// A certificate chain here means a series of PEM encoded certificates concatenated together.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::fs;
+    /// # fn pkcs8() -> Result<(), Box<std::error::Error>> {
+    /// let cert = fs::read("client.pem")?;
+    /// let key = fs::read("key.pem")?;
+    /// let pkcs8 = reqwest::Identity::from_pkcs8_pem(&cert, &key)?;
+    /// # drop(pkcs8);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Optional
+    ///
+    /// This requires the `native-tls` Cargo feature enabled.
+    #[cfg(feature = "native-tls")]
+    pub fn from_pkcs8_pem(pem: &[u8], key: &[u8]) -> crate::Result<Identity> {
+        Ok(Identity {
+            inner: ClientCert::Pkcs8(
+                native_tls_crate::Identity::from_pkcs8(pem, key).map_err(crate::error::builder)?,
+            ),
+        })
+    }
+
     /// Parses PEM encoded private key and certificate.
     ///
     /// The input should contain a PEM encoded private key
     /// and at least one PEM encoded certificate.
     ///
-    /// Note: The private key must be in RSA or PKCS#8 format.
+    /// Note: The private key must be in RSA, SEC1 Elliptic Curve or PKCS#8 format.
     ///
     /// # Examples
     ///
@@ -210,33 +245,29 @@ impl Identity {
 
         let (key, certs) = {
             let mut pem = Cursor::new(buf);
-            let certs = rustls_pemfile::certs(&mut pem)
-                .map_err(|_| TLSError::General(String::from("No valid certificate was found")))
-                .map_err(crate::error::builder)?
-                .into_iter()
-                .map(rustls::Certificate)
-                .collect::<Vec<_>>();
-            pem.set_position(0);
-            let mut sk = rustls_pemfile::pkcs8_private_keys(&mut pem)
-                .and_then(|pkcs8_keys| {
-                    if pkcs8_keys.is_empty() {
-                        Err(std::io::Error::new(
-                            std::io::ErrorKind::NotFound,
-                            "No valid private key was found",
-                        ))
-                    } else {
-                        Ok(pkcs8_keys)
+            let mut sk = Vec::<rustls::PrivateKey>::new();
+            let mut certs = Vec::<rustls::Certificate>::new();
+
+            for item in std::iter::from_fn(|| rustls_pemfile::read_one(&mut pem).transpose()) {
+                match item.map_err(|_| {
+                    crate::error::builder(TLSError::General(String::from(
+                        "Invalid identity PEM file",
+                    )))
+                })? {
+                    rustls_pemfile::Item::X509Certificate(cert) => {
+                        certs.push(rustls::Certificate(cert))
                     }
-                })
-                .or_else(|_| {
-                    pem.set_position(0);
-                    rustls_pemfile::rsa_private_keys(&mut pem)
-                })
-                .map_err(|_| TLSError::General(String::from("No valid private key was found")))
-                .map_err(crate::error::builder)?
-                .into_iter()
-                .map(rustls::PrivateKey)
-                .collect::<Vec<_>>();
+                    rustls_pemfile::Item::PKCS8Key(key) => sk.push(rustls::PrivateKey(key)),
+                    rustls_pemfile::Item::RSAKey(key) => sk.push(rustls::PrivateKey(key)),
+                    rustls_pemfile::Item::ECKey(key) => sk.push(rustls::PrivateKey(key)),
+                    _ => {
+                        return Err(crate::error::builder(TLSError::General(String::from(
+                            "No valid certificate was found",
+                        ))))
+                    }
+                }
+            }
+
             if let (Some(sk), false) = (sk.pop(), certs.is_empty()) {
                 (sk, certs)
             } else {
@@ -257,7 +288,7 @@ impl Identity {
         tls: &mut native_tls_crate::TlsConnectorBuilder,
     ) -> crate::Result<()> {
         match self.inner {
-            ClientCert::Pkcs12(id) => {
+            ClientCert::Pkcs12(id) | ClientCert::Pkcs8(id) => {
                 tls.identity(id);
                 Ok(())
             }
@@ -279,7 +310,9 @@ impl Identity {
                 .with_single_cert(certs, key)
                 .map_err(crate::error::builder),
             #[cfg(feature = "native-tls")]
-            ClientCert::Pkcs12(..) => Err(crate::error::builder("incompatible TLS identity type")),
+            ClientCert::Pkcs12(..) | ClientCert::Pkcs8(..) => {
+                Err(crate::error::builder("incompatible TLS identity type"))
+            }
         }
     }
 }
@@ -346,6 +379,8 @@ impl Version {
 }
 
 pub(crate) enum TlsBackend {
+    // This is the default and HTTP/3 feature does not use it so suppress it.
+    #[allow(dead_code)]
     #[cfg(feature = "default-tls")]
     Default,
     #[cfg(feature = "native-tls")]
@@ -377,12 +412,15 @@ impl fmt::Debug for TlsBackend {
 
 impl Default for TlsBackend {
     fn default() -> TlsBackend {
-        #[cfg(feature = "default-tls")]
+        #[cfg(all(feature = "default-tls", not(feature = "http3")))]
         {
             TlsBackend::Default
         }
 
-        #[cfg(all(feature = "__rustls", not(feature = "default-tls")))]
+        #[cfg(any(
+            all(feature = "__rustls", not(feature = "default-tls")),
+            feature = "http3"
+        ))]
         {
             TlsBackend::Rustls
         }
@@ -445,6 +483,12 @@ mod tests {
     #[test]
     fn identity_from_pkcs12_der_invalid() {
         Identity::from_pkcs12_der(b"not der", "nope").unwrap_err();
+    }
+
+    #[cfg(feature = "native-tls")]
+    #[test]
+    fn identity_from_pkcs8_pem_invalid() {
+        Identity::from_pkcs8_pem(b"not pem", b"not key").unwrap_err();
     }
 
     #[cfg(feature = "__rustls")]

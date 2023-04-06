@@ -178,6 +178,16 @@ impl Response {
         self.inner.remote_addr()
     }
 
+    /// Returns a reference to the associated extensions.
+    pub fn extensions(&self) -> &http::Extensions {
+        self.inner.extensions()
+    }
+
+    /// Returns a mutable reference to the associated extensions.
+    pub fn extensions_mut(&mut self) -> &mut http::Extensions {
+        self.inner.extensions_mut()
+    }
+
     /// Get the content-length of the response, if it is known.
     ///
     /// Reasons it may not be known:
@@ -257,7 +267,7 @@ impl Response {
     ///
     /// This method decodes the response body with BOM sniffing
     /// and with malformed sequences replaced with the REPLACEMENT CHARACTER.
-    /// Encoding is determinated from the `charset` parameter of `Content-Type` header,
+    /// Encoding is determined from the `charset` parameter of `Content-Type` header,
     /// and defaults to `utf-8` if not presented.
     ///
     /// # Example

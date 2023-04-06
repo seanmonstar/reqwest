@@ -60,7 +60,7 @@ impl Error {
         self.inner.url.as_ref()
     }
 
-    /// Returns a mutable referene to the URL related to this error
+    /// Returns a mutable reference to the URL related to this error
     ///
     /// This is useful if you need to remove sensitive information from the URL
     /// (e.g. an API key in the query), but do not want to remove the URL
@@ -185,6 +185,7 @@ impl fmt::Display for Error {
             Kind::Body => f.write_str("request or response body error")?,
             Kind::Decode => f.write_str("error decoding response body")?,
             Kind::Redirect => f.write_str("error following redirect")?,
+            Kind::Upgrade => f.write_str("error upgrading connection")?,
             Kind::Status(ref code) => {
                 let prefix = if code.is_client_error() {
                     "HTTP status client error"
@@ -236,6 +237,7 @@ pub(crate) enum Kind {
     Status(StatusCode),
     Body,
     Decode,
+    Upgrade,
 }
 
 // constructors
@@ -265,7 +267,7 @@ pub(crate) fn status_code(url: Url, status: StatusCode) -> Error {
 }
 
 pub(crate) fn url_bad_scheme(url: Url) -> Error {
-    Error::new(Kind::Builder, Some("URL scheme is not allowed")).with_url(url)
+    Error::new(Kind::Builder, Some(BadScheme)).with_url(url)
 }
 
 pub(crate) fn url_invalid_uri(url: Url) -> Error {
@@ -276,6 +278,10 @@ if_wasm! {
     pub(crate) fn wasm(js_val: wasm_bindgen::JsValue) -> BoxError {
         format!("{:?}", js_val).into()
     }
+}
+
+pub(crate) fn upgrade<E: Into<BoxError>>(e: E) -> Error {
+    Error::new(Kind::Upgrade, Some(e))
 }
 
 // io::Error helpers
@@ -309,6 +315,17 @@ impl fmt::Display for TimedOut {
 }
 
 impl StdError for TimedOut {}
+
+#[derive(Debug)]
+pub(crate) struct BadScheme;
+
+impl fmt::Display for BadScheme {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("URL scheme is not allowed")
+    }
+}
+
+impl StdError for BadScheme {}
 
 #[cfg(test)]
 mod tests {

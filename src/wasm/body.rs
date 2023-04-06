@@ -75,7 +75,7 @@ impl Body {
         }
     }
 
-    /// into_part turns a regular body into the body of a mutlipart/form-data part.
+    /// into_part turns a regular body into the body of a multipart/form-data part.
     #[cfg(feature = "multipart")]
     pub(crate) fn into_part(self) -> Body {
         match self.inner {

@@ -79,6 +79,7 @@ impl Body {
     ///
     /// This requires the `stream` feature to be enabled.
     #[cfg(feature = "stream")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     pub fn wrap_stream<S>(stream: S) -> Body
     where
         S: futures_core::stream::TryStream + Send + Sync + 'static,
@@ -213,6 +214,7 @@ impl From<&'static str> for Body {
 }
 
 #[cfg(feature = "stream")]
+#[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
 impl From<File> for Body {
     #[inline]
     fn from(file: File) -> Body {
