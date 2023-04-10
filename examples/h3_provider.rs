@@ -1,5 +1,8 @@
 #![deny(warnings)]
 
+use std::net::SocketAddr;
+use futures_core::future::BoxFuture;
+
 // This is using the `tokio` runtime. You'll need the following dependency:
 //
 // `tokio = { version = "1", features = ["full"] }`
@@ -13,6 +16,7 @@ async fn main() -> Result<(), reqwest::Error> {
     async fn get<T: IntoUrl + Clone>(url: T) -> reqwest::Result<Response> {
         Client::builder()
             .http3_prior_knowledge()
+            .http3_connection_provider(Box::new(MyHttp3Provider{}))
             .build()?
             .get(url)
             .version(Version::HTTP_3)
@@ -49,3 +53,20 @@ async fn main() -> Result<(), reqwest::Error> {
 // The two lines below avoid the "'main' function not found" error when building for wasm32 target.
 #[cfg(any(target_arch = "wasm32", not(feature = "http3-provider")))]
 fn main() {}
+
+struct MyHttp3Provider {
+
+}
+
+impl crate::async_impl::h3_client::connect::H3ConnectionProvider for MyHttp3Provider {
+    type C = ();
+    type T = ();
+
+    fn poll_connect(
+        &self,
+        addr: SocketAddr,
+        server_name: &str,
+    ) -> BoxFuture<Result<Self::C, BoxError>> {
+        todo!()
+    }
+}

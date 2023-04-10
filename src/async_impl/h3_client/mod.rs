@@ -1,4 +1,4 @@
-#![cfg(feature = "http3")]
+#![cfg(feature = "http3-provider")]
 
 pub(crate) mod connect;
 pub(crate) mod dns;

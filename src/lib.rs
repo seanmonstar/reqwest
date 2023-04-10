@@ -219,7 +219,7 @@
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
 
-#[cfg(all(feature = "http3", not(reqwest_unstable)))]
+#[cfg(all(feature = "http3-provider", not(reqwest_unstable)))]
 compile_error!(
     "\
     The `http3` feature is unstable, and requires the \
