@@ -31,7 +31,7 @@ impl H3Connector {
     ) -> H3Connector {
         let mut config = ClientConfig::new(Arc::new(tls));
         // FIXME: Replace this when there is a setter.
-        config.transport = Arc::new(transport_config);
+        config.transport_config(Arc::new(transport_config));
 
         let socket_addr = match local_addr {
             Some(ip) => SocketAddr::new(ip, 0),
