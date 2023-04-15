@@ -1,3 +1,5 @@
+.vscode/
+.VSCodeCounter/
 target
 Cargo.lock
 *.swp
