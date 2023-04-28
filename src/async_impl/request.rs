@@ -34,7 +34,7 @@ pub struct Request {
 #[must_use = "RequestBuilder does nothing until you 'send' it"]
 pub struct RequestBuilder {
     client: Client,
-    request: crate::Result<Request>,
+    request: RequestBuilderNc,
 }
 
 pub struct RequestBuilderNc {
@@ -166,9 +166,14 @@ impl Request {
 
 impl RequestBuilder {
     pub(super) fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
-        let mut builder = RequestBuilder { client, request };
+        let inner_builder = RequestBuilderNc::new(request);
+        let mut builder = RequestBuilder {
+            client,
+            request: inner_builder,
+        };
 
         let auth = builder
+            .request
             .request
             .as_mut()
             .ok()
@@ -185,7 +190,9 @@ impl RequestBuilder {
     pub fn from_parts(client: Client, request: Request) -> RequestBuilder {
         RequestBuilder {
             client,
-            request: crate::Result::Ok(request),
+            request: RequestBuilderNc {
+                request: crate::Result::Ok(request),
+            },
         }
     }
 
@@ -197,48 +204,17 @@ impl RequestBuilder {
         HeaderValue: TryFrom<V>,
         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
-        self.header_sensitive(key, value, false)
-    }
-
-    /// Add a `Header` to this Request with ability to define if header_value is sensitive.
-    fn header_sensitive<K, V>(mut self, key: K, value: V, sensitive: bool) -> RequestBuilder
-    where
-        HeaderName: TryFrom<K>,
-        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
-        HeaderValue: TryFrom<V>,
-        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
-    {
-        let mut error = None;
-        if let Ok(ref mut req) = self.request {
-            match <HeaderName as TryFrom<K>>::try_from(key) {
-                Ok(key) => match <HeaderValue as TryFrom<V>>::try_from(value) {
-                    Ok(mut value) => {
-                        // We want to potentially make an unsensitive header
-                        // to be sensitive, not the reverse. So, don't turn off
-                        // a previously sensitive header.
-                        if sensitive {
-                            value.set_sensitive(true);
-                        }
-                        req.headers_mut().append(key, value);
-                    }
-                    Err(e) => error = Some(crate::error::builder(e.into())),
-                },
-                Err(e) => error = Some(crate::error::builder(e.into())),
-            };
+        RequestBuilder {
+            client: self.client,
+            request: self.request.header_sensitive(key, value, false),
         }
-        if let Some(err) = error {
-            self.request = Err(err);
-        }
-        self
     }
 
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
     pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            crate::util::replace_headers(req.headers_mut(), headers);
-        }
+        self.request = self.request.headers(headers);
         self
     }
 
@@ -261,8 +237,10 @@ impl RequestBuilder {
         U: fmt::Display,
         P: fmt::Display,
     {
-        let header_value = crate::util::basic_auth(username, password);
-        self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
+        RequestBuilder {
+            client: self.client,
+            request: self.request.basic_auth(username, password),
+        }
     }
 
     /// Enable HTTP bearer authentication.
@@ -270,15 +248,15 @@ impl RequestBuilder {
     where
         T: fmt::Display,
     {
-        let header_value = format!("Bearer {}", token);
-        self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
+        RequestBuilder {
+            client: self.client,
+            request: self.request.bearer_auth(token),
+        }
     }
 
     /// Set the request body.
     pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            *req.body_mut() = Some(body.into());
-        }
+        self.request = self.request.body(body);
         self
     }
 
@@ -288,9 +266,7 @@ impl RequestBuilder {
     /// response body has finished. It affects only this request and overrides
     /// the timeout configured using `ClientBuilder::timeout()`.
     pub fn timeout(mut self, timeout: Duration) -> RequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            *req.timeout_mut() = Some(timeout);
-        }
+        self.request = self.request.timeout(timeout);
         self
     }
 
@@ -316,20 +292,10 @@ impl RequestBuilder {
     #[cfg(feature = "multipart")]
     #[cfg_attr(docsrs, doc(cfg(feature = "multipart")))]
     pub fn multipart(self, mut multipart: multipart::Form) -> RequestBuilder {
-        let mut builder = self.header(
-            CONTENT_TYPE,
-            format!("multipart/form-data; boundary={}", multipart.boundary()).as_str(),
-        );
-
-        builder = match multipart.compute_length() {
-            Some(length) => builder.header(CONTENT_LENGTH, length),
-            None => builder,
-        };
-
-        if let Ok(ref mut req) = builder.request {
-            *req.body_mut() = Some(multipart.stream())
+        RequestBuilder {
+            client: self.client,
+            request: self.request.multipart(multipart),
         }
-        builder
     }
 
     /// Modify the query string of the URL.
@@ -351,32 +317,13 @@ impl RequestBuilder {
     /// This method will fail if the object you provide cannot be serialized
     /// into a query string.
     pub fn query<T: Serialize + ?Sized>(mut self, query: &T) -> RequestBuilder {
-        let mut error = None;
-        if let Ok(ref mut req) = self.request {
-            let url = req.url_mut();
-            let mut pairs = url.query_pairs_mut();
-            let serializer = serde_urlencoded::Serializer::new(&mut pairs);
-
-            if let Err(err) = query.serialize(serializer) {
-                error = Some(crate::error::builder(err));
-            }
-        }
-        if let Ok(ref mut req) = self.request {
-            if let Some("") = req.url().query() {
-                req.url_mut().set_query(None);
-            }
-        }
-        if let Some(err) = error {
-            self.request = Err(err);
-        }
+        self.request = self.request.query(query);
         self
     }
 
     /// Set HTTP version
     pub fn version(mut self, version: Version) -> RequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            req.version = version;
-        }
+        self.request = self.request.version(version);
         self
     }
 
@@ -408,22 +355,7 @@ impl RequestBuilder {
     /// This method fails if the passed value cannot be serialized into
     /// url encoded format
     pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> RequestBuilder {
-        let mut error = None;
-        if let Ok(ref mut req) = self.request {
-            match serde_urlencoded::to_string(form) {
-                Ok(body) => {
-                    req.headers_mut().insert(
-                        CONTENT_TYPE,
-                        HeaderValue::from_static("application/x-www-form-urlencoded"),
-                    );
-                    *req.body_mut() = Some(body.into());
-                }
-                Err(err) => error = Some(crate::error::builder(err)),
-            }
-        }
-        if let Some(err) = error {
-            self.request = Err(err);
-        }
+        self.request = self.request.form(form);
         self
     }
 
@@ -440,20 +372,7 @@ impl RequestBuilder {
     #[cfg(feature = "json")]
     #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     pub fn json<T: Serialize + ?Sized>(mut self, json: &T) -> RequestBuilder {
-        let mut error = None;
-        if let Ok(ref mut req) = self.request {
-            match serde_json::to_vec(json) {
-                Ok(body) => {
-                    req.headers_mut()
-                        .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-                    *req.body_mut() = Some(body.into());
-                }
-                Err(err) => error = Some(crate::error::builder(err)),
-            }
-        }
-        if let Some(err) = error {
-            self.request = Err(err);
-        }
+        self.request = self.request.json(json);
         self
     }
 
@@ -473,7 +392,7 @@ impl RequestBuilder {
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
     pub fn build(self) -> crate::Result<Request> {
-        self.request
+        self.request.request
     }
 
     /// Build a `Request`, which can be inspected, modified and executed with
@@ -482,7 +401,7 @@ impl RequestBuilder {
     /// This is similar to [`RequestBuilder::build()`], but also returns the
     /// embedded `Client`.
     pub fn build_split(self) -> (Client, crate::Result<Request>) {
-        (self.client, self.request)
+        (self.client, self.request.request)
     }
 
     /// Constructs the Request and sends it to the target URL, returning a
@@ -507,7 +426,7 @@ impl RequestBuilder {
     /// # }
     /// ```
     pub fn send(self) -> impl Future<Output = Result<Response, crate::Error>> {
-        match self.request {
+        match self.request.request {
             Ok(req) => self.client.execute_request(req),
             Err(err) => Pending::new_err(err),
         }
@@ -534,12 +453,13 @@ impl RequestBuilder {
     /// ```
     pub fn try_clone(&self) -> Option<RequestBuilder> {
         self.request
+            .request
             .as_ref()
             .ok()
             .and_then(|req| req.try_clone())
             .map(|req| RequestBuilder {
                 client: self.client.clone(),
-                request: Ok(req),
+                request: RequestBuilderNc { request: Ok(req) },
             })
     }
 }
@@ -851,7 +771,7 @@ impl fmt::Debug for Request {
 impl fmt::Debug for RequestBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut builder = f.debug_struct("RequestBuilder");
-        match self.request {
+        match self.request.request {
             Ok(ref req) => fmt_request_fields(&mut builder, req).finish(),
             Err(ref err) => builder.field("error", err).finish(),
         }
