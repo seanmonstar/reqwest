@@ -34,7 +34,7 @@ pub struct Request {
 #[must_use = "RequestBuilder does nothing until you 'send' it"]
 pub struct RequestBuilder {
     client: Client,
-    request: RequestBuilderNc,
+    inner_builder: RequestBuilderNc,
 }
 
 pub struct RequestBuilderNc {
@@ -169,11 +169,11 @@ impl RequestBuilder {
         let inner_builder = RequestBuilderNc::new(request);
         let mut builder = RequestBuilder {
             client,
-            request: inner_builder,
+            inner_builder,
         };
 
         let auth = builder
-            .request
+            .inner_builder
             .request
             .as_mut()
             .ok()
@@ -190,7 +190,7 @@ impl RequestBuilder {
     pub fn from_parts(client: Client, request: Request) -> RequestBuilder {
         RequestBuilder {
             client,
-            request: RequestBuilderNc {
+            inner_builder: RequestBuilderNc {
                 request: crate::Result::Ok(request),
             },
         }
@@ -206,7 +206,7 @@ impl RequestBuilder {
     {
         RequestBuilder {
             client: self.client,
-            request: self.request.header_sensitive(key, value, false),
+            inner_builder: self.inner_builder.header_sensitive(key, value, false),
         }
     }
 
@@ -214,7 +214,7 @@ impl RequestBuilder {
     ///
     /// The headers will be merged in to any already set.
     pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
-        self.request = self.request.headers(headers);
+        self.inner_builder = self.inner_builder.headers(headers);
         self
     }
 
@@ -239,7 +239,7 @@ impl RequestBuilder {
     {
         RequestBuilder {
             client: self.client,
-            request: self.request.basic_auth(username, password),
+            inner_builder: self.inner_builder.basic_auth(username, password),
         }
     }
 
@@ -250,13 +250,13 @@ impl RequestBuilder {
     {
         RequestBuilder {
             client: self.client,
-            request: self.request.bearer_auth(token),
+            inner_builder: self.inner_builder.bearer_auth(token),
         }
     }
 
     /// Set the request body.
     pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder {
-        self.request = self.request.body(body);
+        self.inner_builder = self.inner_builder.body(body);
         self
     }
 
@@ -266,7 +266,7 @@ impl RequestBuilder {
     /// response body has finished. It affects only this request and overrides
     /// the timeout configured using `ClientBuilder::timeout()`.
     pub fn timeout(mut self, timeout: Duration) -> RequestBuilder {
-        self.request = self.request.timeout(timeout);
+        self.inner_builder = self.inner_builder.timeout(timeout);
         self
     }
 
@@ -317,13 +317,13 @@ impl RequestBuilder {
     /// This method will fail if the object you provide cannot be serialized
     /// into a query string.
     pub fn query<T: Serialize + ?Sized>(mut self, query: &T) -> RequestBuilder {
-        self.request = self.request.query(query);
+        self.inner_builder = self.inner_builder.query(query);
         self
     }
 
     /// Set HTTP version
     pub fn version(mut self, version: Version) -> RequestBuilder {
-        self.request = self.request.version(version);
+        self.inner_builder = self.inner_builder.version(version);
         self
     }
 
@@ -355,7 +355,7 @@ impl RequestBuilder {
     /// This method fails if the passed value cannot be serialized into
     /// url encoded format
     pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> RequestBuilder {
-        self.request = self.request.form(form);
+        self.inner_builder = self.inner_builder.form(form);
         self
     }
 
@@ -392,7 +392,7 @@ impl RequestBuilder {
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
     pub fn build(self) -> crate::Result<Request> {
-        self.request.request
+        self.inner_builder.request
     }
 
     /// Build a `Request`, which can be inspected, modified and executed with
@@ -401,7 +401,7 @@ impl RequestBuilder {
     /// This is similar to [`RequestBuilder::build()`], but also returns the
     /// embedded `Client`.
     pub fn build_split(self) -> (Client, crate::Result<Request>) {
-        (self.client, self.request.request)
+        (self.client, self.inner_builder.request)
     }
 
     /// Constructs the Request and sends it to the target URL, returning a
@@ -426,7 +426,7 @@ impl RequestBuilder {
     /// # }
     /// ```
     pub fn send(self) -> impl Future<Output = Result<Response, crate::Error>> {
-        match self.request.request {
+        match self.inner_builder.request {
             Ok(req) => self.client.execute_request(req),
             Err(err) => Pending::new_err(err),
         }
@@ -452,14 +452,14 @@ impl RequestBuilder {
     /// # }
     /// ```
     pub fn try_clone(&self) -> Option<RequestBuilder> {
-        self.request
+        self.inner_builder
             .request
             .as_ref()
             .ok()
             .and_then(|req| req.try_clone())
             .map(|req| RequestBuilder {
                 client: self.client.clone(),
-                request: RequestBuilderNc { request: Ok(req) },
+                inner_builder: RequestBuilderNc { request: Ok(req) },
             })
     }
 }
@@ -771,7 +771,7 @@ impl fmt::Debug for Request {
 impl fmt::Debug for RequestBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut builder = f.debug_struct("RequestBuilder");
-        match self.request.request {
+        match self.inner_builder.request {
             Ok(ref req) => fmt_request_fields(&mut builder, req).finish(),
             Err(ref err) => builder.field("error", err).finish(),
         }
