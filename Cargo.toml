@@ -140,9 +140,9 @@ tokio-socks = { version = "0.5.1", optional = true }
 trust-dns-resolver = { version = "0.22", optional = true }
 
 # HTTP/3 experimental support
-h3 = { version="0.0.1", optional = true }
-h3-quinn = { version="0.0.1", optional = true }
-quinn = { version = "0.8", default-features = false, features = ["tls-rustls", "ring"], optional = true  }
+h3 = { version="0.0.2", optional = true }
+h3-quinn = { version="0.0.2", optional = true }
+quinn = { version = "0.9", default-features = false, features = ["tls-rustls", "ring"], optional = true  }
 futures-channel = { version="0.3", optional = true}
 
 
