@@ -14,6 +14,7 @@ use tokio::time::Sleep;
 use tokio_util::io::ReaderStream;
 
 /// An asynchronous request body.
+#[derive(Debug)]
 pub struct Body {
     inner: Inner,
 }
@@ -33,6 +34,21 @@ enum Inner {
         >,
         timeout: Option<Pin<Box<Sleep>>>,
     },
+}
+
+impl fmt::Debug for Inner {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Inner::Reusable(bytes) => {
+                f.write_str(std::str::from_utf8(bytes).unwrap_or(&format!("{:#?}", bytes)))
+            }
+            Inner::Streaming {
+                ..
+            } => {
+                f.debug_struct("Inner::Streaming").finish()
+            }
+        }
+    }
 }
 
 pin_project! {
@@ -219,12 +235,6 @@ impl From<File> for Body {
     #[inline]
     fn from(file: File) -> Body {
         Body::wrap_stream(ReaderStream::new(file))
-    }
-}
-
-impl fmt::Debug for Body {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Body").finish()
     }
 }
 
