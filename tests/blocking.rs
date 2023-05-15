@@ -1,8 +1,8 @@
 mod support;
 
-use std::collections::HashMap;
 use http::header::CONTENT_TYPE;
 use http::HeaderValue;
+use std::collections::HashMap;
 use support::*;
 
 #[test]

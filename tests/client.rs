@@ -1,10 +1,10 @@
 #![cfg(not(target_arch = "wasm32"))]
 mod support;
 
-use std::collections::HashMap;
 use futures_util::stream::StreamExt;
 use http::header::CONTENT_TYPE;
 use http::HeaderValue;
+use std::collections::HashMap;
 use support::*;
 
 use reqwest::Client;
