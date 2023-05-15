@@ -9,6 +9,8 @@ on:
 env:
   REQWEST_TEST_BODY_FULL: 1
   RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
 jobs:
   ci-pass:
@@ -109,11 +111,15 @@ jobs:
             rust: stable-x86_64-pc-windows-gnu
             target: x86_64-pc-windows-gnu
             features: "--features blocking,gzip,brotli,deflate,json,multipart"
+            package_name: mingw-w64-x86_64-gcc
+            mingw64_path: "C:\\msys64\\mingw64\\bin"
           - name: windows / stable-i686-gnu
             os: windows-latest
             rust: stable-i686-pc-windows-gnu
             target: i686-pc-windows-gnu
             features: "--features blocking,gzip,brotli,deflate,json,multipart"
+            package_name: mingw-w64-i686-gcc
+            mingw64_path: "C:\\msys64\\mingw32\\bin"
 
           - name: "feat.: default-tls disabled"
             features: "--no-default-features"
@@ -158,30 +164,32 @@ jobs:
           toolchain: ${{ matrix.rust || 'stable' }}
           targets: ${{ matrix.target }}
 
-      - name: Add mingw32 to path for i686-gnu
+      - name: Add mingw-w64 to path for i686-gnu
         run: |
-          echo "C:\msys64\mingw32\bin" >> $GITHUB_PATH
+          echo "${{ matrix.mingw64_path }}" >> $GITHUB_PATH
           echo "C:\msys64\usr\bin" >> $GITHUB_PATH
-        if: matrix.target == 'i686-pc-windows-gnu'
+        if: matrix.mingw64_path
         shell: bash
-      - name: Add mingw64 to path for x86_64-gnu
+
+      - name: Update gcc
+        if: matrix.package_name
+        run: pacman.exe -Sy --noconfirm ${{ matrix.package_name }}
+
+      - name: Create Cargo.lock
+        run: cargo update
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Run tests
         run: |
-          echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH
-          echo "C:\msys64\usr\bin" >> $GITHUB_PATH
-        if: matrix.target == 'x86_64-pc-windows-gnu'
+          set -euxo pipefail
+          cargo nextest run --locked --workspace ${{ matrix.features }} ${{ matrix.test-features }}
+          cargo test --locked --workspace --doc ${{ matrix.features }} ${{ matrix.test-features }}
         shell: bash
-      - name: Update gcc
-        if: matrix.target == 'x86_64-pc-windows-gnu'
-        run: pacman.exe -Sy --noconfirm mingw-w64-x86_64-toolchain
-      - name: Update gcc
-        if: matrix.target == 'i686-pc-windows-gnu'
-        run: pacman.exe -Sy --noconfirm mingw-w64-i686-toolchain
-
-      - name: Build
-        run: cargo build ${{ matrix.features }}
-
-      - name: Test
-        run: cargo test ${{ matrix.features }} ${{ matrix.test-features }} -- --test-threads=1
 
   unstable:
     name: "unstable features"
