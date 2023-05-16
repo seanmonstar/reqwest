@@ -14,7 +14,7 @@
 #[cfg(feature = "__rustls")]
 use rustls::{
     client::HandshakeSignatureValid, client::ServerCertVerified, client::ServerCertVerifier,
-    internal::msgs::handshake::DigitallySignedStruct, Error as TLSError, ServerName,
+    DigitallySignedStruct, Error as TLSError, ServerName,
 };
 use std::fmt;
 
