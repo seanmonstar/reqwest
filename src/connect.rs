@@ -172,7 +172,7 @@ impl Connector {
             ProxyScheme::Socks5 {
                 remote_dns: true, ..
             } => socks::DnsResolve::Proxy,
-            ProxyScheme::Http { .. } | ProxyScheme::Https { .. } => {
+            ProxyScheme::Http { .. } | ProxyScheme::Https { .. } | ProxyScheme::Custom { .. } => {
                 unreachable!("connect_socks is only called for socks proxies");
             }
         };
@@ -219,6 +219,65 @@ impl Connector {
             inner: self.verbose.wrap(tcp),
             is_proxy: false,
         })
+    }
+
+    async fn connect_custom(&self, dst: Uri, proxy: ProxyScheme) -> Result<Conn, BoxError> {
+        let connector = match proxy {
+            ProxyScheme::Custom { connector } => connector,
+            _ => unreachable!(),
+        };
+
+        match &self.inner {
+            #[cfg(feature = "default-tls")]
+            Inner::DefaultTls(_http, tls) => {
+                if dst.scheme() == Some(&Scheme::HTTPS) {
+                    let host = dst.host().ok_or("no host in url")?.to_string();
+                    let conn = ConnectionBox(connector(dst).await?);
+                    let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
+                    let io = tls_connector.connect(&host, conn).await?;
+                    return Ok(Conn {
+                        inner: self.verbose.wrap(NativeTlsConn { inner: io }),
+                        is_proxy: false,
+                    });
+                }
+            }
+            #[cfg(feature = "__rustls")]
+            Inner::RustlsTls { tls_proxy, .. } => {
+                if dst.scheme() == Some(&Scheme::HTTPS) {
+                    use std::convert::TryFrom;
+                    use tokio_rustls::TlsConnector as RustlsConnector;
+
+                    let tls = tls_proxy.clone();
+                    let host = dst.host().ok_or("no host in url")?.to_string();
+                    let conn = ConnectionBox(connector(dst).await?);
+                    let server_name = rustls::ServerName::try_from(host.as_str())
+                        .map_err(|_| "Invalid Server Name")?;
+                    let io = RustlsConnector::from(tls)
+                        .connect(server_name, conn)
+                        .await?;
+                    return Ok(Conn {
+                        inner: self.verbose.wrap(RustlsTlsConn { inner: io }),
+                        is_proxy: false,
+                    });
+                }
+            }
+            #[cfg(not(feature = "__tls"))]
+            Inner::Http(_) => (),
+        }
+
+
+        let conn = connector(dst).await?;
+        if self.verbose.0 {
+            Ok(Conn {
+                inner: self.verbose.wrap(ConnectionBox(conn)),
+                is_proxy: false,
+            })
+        } else {
+            Ok(Conn {
+                inner: conn,
+                is_proxy: false,
+            })
+        }
     }
 
     async fn connect_with_maybe_proxy(self, dst: Uri, is_proxy: bool) -> Result<Conn, BoxError> {
@@ -306,6 +365,7 @@ impl Connector {
             ProxyScheme::Https { host, auth } => (into_uri(Scheme::HTTPS, host), auth),
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => return self.connect_socks(dst, proxy_scheme).await,
+            ProxyScheme::Custom { .. } => return self.connect_custom(dst, proxy_scheme).await,
         };
 
         #[cfg(feature = "__tls")]
@@ -391,6 +451,45 @@ impl Connector {
     }
 }
 
+// this is a bit of a mess, but it's needed because Connection isn't implemented for
+// Box<Connection>
+struct ConnectionBox<T: ?Sized>(Box<T>);
+impl<T: Connection + ?Sized> Connection for ConnectionBox<T> {
+    fn connected(&self) -> Connected {
+        self.0.connected()
+    }
+}
+impl<T: AsyncRead + Unpin + ?Sized> AsyncRead for ConnectionBox<T> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut *self.0).poll_read(cx, buf)
+    }
+}
+impl<T: AsyncWrite + Unpin + ?Sized> AsyncWrite for ConnectionBox<T> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8]
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut *self.0).poll_write(cx, buf)
+    }
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut *self.0).poll_flush(cx)
+    }
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut *self.0).poll_shutdown(cx)
+    }
+}
+
 fn into_uri(scheme: Scheme, host: Authority) -> Uri {
     // TODO: Should the `http` crate get `From<(Scheme, Authority)> for Uri`?
     http::Uri::builder()
@@ -444,7 +543,7 @@ impl Service<Uri> for Connector {
     }
 }
 
-pub(crate) trait AsyncConn:
+pub trait AsyncConn:
     AsyncRead + AsyncWrite + Connection + Send + Sync + Unpin + 'static
 {
 }

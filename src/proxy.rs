@@ -99,13 +99,20 @@ pub enum ProxyScheme {
         auth: Option<(String, String)>,
         remote_dns: bool,
     },
+    Custom {
+        connector: Arc<dyn Fn(Uri) ->
+            futures_core::future::BoxFuture<
+                'static,
+                Result<Box<dyn crate::connect::AsyncConn>,crate::error::BoxError>
+            >
+        + Send + Sync>
+    },
 }
 
 impl ProxyScheme {
     fn maybe_http_auth(&self) -> Option<&HeaderValue> {
         match self {
             ProxyScheme::Http { auth, .. } | ProxyScheme::Https { auth, .. } => auth.as_ref(),
-            #[cfg(feature = "socks")]
             _ => None,
         }
     }
@@ -601,6 +608,7 @@ impl ProxyScheme {
             ProxyScheme::Socks5 { ref mut auth, .. } => {
                 *auth = Some((username.into(), password.into()));
             }
+            ProxyScheme::Custom { .. } => (),
         }
     }
 
@@ -618,6 +626,7 @@ impl ProxyScheme {
             }
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => {}
+            ProxyScheme::Custom { .. } => (),
         }
 
         self
@@ -671,6 +680,7 @@ impl ProxyScheme {
             ProxyScheme::Https { .. } => "https",
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => "socks5",
+            ProxyScheme::Custom { .. } => "custom",
         }
     }
 
@@ -681,6 +691,7 @@ impl ProxyScheme {
             ProxyScheme::Https { host, .. } => host.as_str(),
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => panic!("socks5"),
+            ProxyScheme::Custom { .. } => panic!("custom"),
         }
     }
 }
@@ -699,6 +710,9 @@ impl fmt::Debug for ProxyScheme {
                 let h = if *remote_dns { "h" } else { "" };
                 write!(f, "socks5{}://{}", h, addr)
             }
+            ProxyScheme::Custom { .. } => {
+                f.write_str("custom://")
+            },
         }
     }
 }
@@ -991,7 +1005,6 @@ mod tests {
         let (scheme, host) = match p.intercept(&url(s)).unwrap() {
             ProxyScheme::Http { host, .. } => ("http", host),
             ProxyScheme::Https { host, .. } => ("https", host),
-            #[cfg(feature = "socks")]
             _ => panic!("intercepted as socks"),
         };
         http::Uri::builder()
