@@ -544,11 +544,11 @@ impl Service<Uri> for Connector {
 }
 
 pub trait AsyncConn:
-    AsyncRead + AsyncWrite + Connection + Send + Sync + Unpin + 'static
+    AsyncRead + AsyncWrite + Connection + Send + Unpin + 'static
 {
 }
 
-impl<T: AsyncRead + AsyncWrite + Connection + Send + Sync + Unpin + 'static> AsyncConn for T {}
+impl<T: AsyncRead + AsyncWrite + Connection + Send + Unpin + 'static> AsyncConn for T {}
 
 type BoxConn = Box<dyn AsyncConn>;
 

@@ -3,8 +3,11 @@ use std::fmt;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::connect::AsyncConn;
+use crate::error::BoxError;
 use crate::into_url::{IntoUrl, IntoUrlSealed};
 use crate::Url;
+use futures_core::future::BoxFuture;
 use http::{header::HeaderValue, Uri};
 use ipnet::IpNet;
 use once_cell::sync::Lazy;
@@ -100,12 +103,9 @@ pub enum ProxyScheme {
         remote_dns: bool,
     },
     Custom {
-        connector: Arc<dyn Fn(Uri) ->
-            futures_core::future::BoxFuture<
-                'static,
-                Result<Box<dyn crate::connect::AsyncConn>,crate::error::BoxError>
-            >
-        + Send + Sync>
+        connector: Arc<dyn Fn(Uri) -> BoxFuture<'static,
+                        Result<Box<dyn AsyncConn>, BoxError>>
+                    + Send + Sync>
     },
 }
 
@@ -270,6 +270,20 @@ impl Proxy {
         Proxy::new(Intercept::Custom(Custom {
             auth: None,
             func: Arc::new(move |url| fun(url).map(IntoProxyScheme::into_proxy_scheme)),
+        }))
+    }
+
+    // TODO find a better name
+    /// Provide a custom function which returns a TCP-like stream to interact with.
+    ///
+    /// It allows using a proxy with an arbitrary protocol, or to leverage unusual transport such
+    /// as Unix Domain Sockets.
+    pub fn custom2<F>(fun: F) -> Proxy
+    where
+        F: Fn(Uri) -> BoxFuture<'static, Result<Box<dyn AsyncConn>, BoxError>> + Send + Sync + 'static,
+    {
+        Proxy::new(Intercept::All(ProxyScheme::Custom {
+            connector: Arc::new(fun),
         }))
     }
 
