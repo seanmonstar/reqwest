@@ -22,7 +22,7 @@ use std::fmt;
 #[derive(Clone)]
 pub struct Certificate {
     #[cfg(feature = "native-tls-crate")]
-    native: native_tls_crate::Certificate,
+    native: Option<native_tls_crate::Certificate>,
     #[cfg(feature = "__rustls")]
     original: Cert,
 }
@@ -32,6 +32,7 @@ pub struct Certificate {
 enum Cert {
     Der(Vec<u8>),
     Pem(Vec<u8>),
+    Rustls(rustls::OwnedTrustAnchor),
 }
 
 /// Represents a private key and X509 cert as a client certificate.
@@ -74,7 +75,9 @@ impl Certificate {
     pub fn from_der(der: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             #[cfg(feature = "native-tls-crate")]
-            native: native_tls_crate::Certificate::from_der(der).map_err(crate::error::builder)?,
+            native: Some(
+                native_tls_crate::Certificate::from_der(der).map_err(crate::error::builder)?,
+            ),
             #[cfg(feature = "__rustls")]
             original: Cert::Der(der.to_owned()),
         })
@@ -99,15 +102,40 @@ impl Certificate {
     pub fn from_pem(pem: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             #[cfg(feature = "native-tls-crate")]
-            native: native_tls_crate::Certificate::from_pem(pem).map_err(crate::error::builder)?,
+            native: Some(
+                native_tls_crate::Certificate::from_pem(pem).map_err(crate::error::builder)?,
+            ),
             #[cfg(feature = "__rustls")]
             original: Cert::Pem(pem.to_owned()),
         })
     }
 
+    /// Create a `Certificate` from a [`rustls::OwnedTrustAnchor`].
+    #[cfg(feature = "__rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    pub fn from_rustls(
+        subject: Vec<u8>,
+        spki: Vec<u8>,
+        name_constraints: Option<Vec<u8>>,
+    ) -> Certificate {
+        Certificate {
+            #[cfg(feature = "native-tls-crate")]
+            native: None,
+            original: Cert::Rustls(
+                rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                    subject,
+                    spki,
+                    name_constraints,
+                ),
+            ),
+        }
+    }
+
     #[cfg(feature = "native-tls-crate")]
     pub(crate) fn add_to_native_tls(self, tls: &mut native_tls_crate::TlsConnectorBuilder) {
-        tls.add_root_certificate(self.native);
+        if let Some(cert) = self.native {
+            tls.add_root_certificate(cert);
+        }
     }
 
     #[cfg(feature = "__rustls")]
@@ -134,6 +162,7 @@ impl Certificate {
                         .map_err(crate::error::builder)?;
                 }
             }
+            Cert::Rustls(trust_anchor) => root_cert_store.roots.push(trust_anchor),
         }
         Ok(())
     }
