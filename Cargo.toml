@@ -64,7 +64,7 @@ stream = ["tokio/fs", "tokio-util", "wasm-streams"]
 socks = ["tokio-socks"]
 
 # Experimental HTTP/3 client.
-http3 = ["rustls-tls", "h3", "h3-quinn", "quinn", "futures-channel"]
+http3 = ["rustls-tls-manual-roots", "h3", "h3-quinn", "quinn", "futures-channel"]
 
 # Internal (PRIVATE!) features used to aid testing.
 # Don't rely on these whatsoever. They may disappear at anytime.
