@@ -2,10 +2,12 @@
 mod support;
 
 use futures_util::stream::StreamExt;
+use support::server;
+
+#[cfg(feature = "json")]
 use http::header::CONTENT_TYPE;
-use http::HeaderValue;
+#[cfg(feature = "json")]
 use std::collections::HashMap;
-use support::*;
 
 use reqwest::Client;
 
@@ -382,7 +384,7 @@ async fn test_allowed_methods() {
 fn add_json_default_content_type_if_not_set_manually() {
     let mut map = HashMap::new();
     map.insert("body", "json");
-    let content_type = HeaderValue::from_static("application/vnd.api+json");
+    let content_type = http::HeaderValue::from_static("application/vnd.api+json");
     let req = Client::new()
         .post("https://google.com/")
         .header(CONTENT_TYPE, &content_type)

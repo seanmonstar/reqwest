@@ -3,7 +3,7 @@ mod support;
 use http::header::CONTENT_TYPE;
 use http::HeaderValue;
 use std::collections::HashMap;
-use support::*;
+use support::server;
 
 #[test]
 fn test_response_text() {
