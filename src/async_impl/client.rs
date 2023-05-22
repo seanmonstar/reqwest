@@ -110,6 +110,10 @@ struct Config {
     root_certs: Vec<Certificate>,
     #[cfg(feature = "__tls")]
     tls_built_in_root_certs: bool,
+    #[cfg(feature = "rustls-tls-webpki-roots")]
+    webpki_root_certs: bool,
+    #[cfg(feature = "rustls-tls-native-roots")]
+    native_root_certs: bool,
     #[cfg(feature = "__tls")]
     min_tls_version: Option<tls::Version>,
     #[cfg(feature = "__tls")]
@@ -189,6 +193,10 @@ impl ClientBuilder {
                 root_certs: Vec::new(),
                 #[cfg(feature = "__tls")]
                 tls_built_in_root_certs: true,
+                #[cfg(feature = "rustls-tls-webpki-roots")]
+                webpki_root_certs: true,
+                #[cfg(feature = "rustls-tls-native-roots")]
+                native_root_certs: true,
                 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
                 identity: None,
                 #[cfg(feature = "__tls")]
@@ -411,7 +419,7 @@ impl ClientBuilder {
                     }
 
                     #[cfg(feature = "rustls-tls-webpki-roots")]
-                    if config.tls_built_in_root_certs {
+                    if config.webpki_root_certs {
                         use rustls::OwnedTrustAnchor;
 
                         let trust_anchors =
@@ -427,7 +435,7 @@ impl ClientBuilder {
                     }
 
                     #[cfg(feature = "rustls-tls-native-roots")]
-                    if config.tls_built_in_root_certs {
+                    if config.native_root_certs {
                         let mut valid_count = 0;
                         let mut invalid_count = 0;
                         for cert in rustls_native_certs::load_native_certs()
@@ -1193,6 +1201,38 @@ impl ClientBuilder {
     )]
     pub fn tls_built_in_root_certs(mut self, tls_built_in_root_certs: bool) -> ClientBuilder {
         self.config.tls_built_in_root_certs = tls_built_in_root_certs;
+
+        #[cfg(feature = "rustls-tls-webpki-roots")]
+        {
+            self.config.webpki_root_certs = tls_built_in_root_certs;
+        }
+        #[cfg(feature = "rustls-tls-native-roots")]
+        {
+            self.config.native_root_certs = tls_built_in_root_certs;
+        }
+
+        self
+    }
+
+    /// Disables the use of Mozilla's root certificates during certificate validation when using the Rustls TLS backend.
+    #[cfg_attr(not(feature = "rustls-tls-webpki-roots"), allow(unused_mut))]
+    pub fn no_webpki_root_certs(mut self) -> ClientBuilder {
+        #[cfg(feature = "rustls-tls-webpki-roots")]
+        {
+            self.config.webpki_root_certs = false;
+        }
+
+        self
+    }
+
+    /// Disables the use of platform's native certificate store during certificate validation when using the Rustls TLS backend.
+    #[cfg_attr(not(feature = "rustls-tls-native-roots"), allow(unused_mut))]
+    pub fn no_native_root_certs(mut self) -> ClientBuilder {
+        #[cfg(feature = "rustls-tls-native-roots")]
+        {
+            self.config.native_root_certs = false;
+        }
+
         self
     }
 
