@@ -1,6 +1,6 @@
 mod support;
 use std::io::Read;
-use support::*;
+use support::server;
 
 #[tokio::test]
 async fn brotli_response() {

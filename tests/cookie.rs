@@ -1,5 +1,5 @@
 mod support;
-use support::*;
+use support::server;
 
 #[tokio::test]
 async fn cookie_response_accessor() {
@@ -36,7 +36,7 @@ async fn cookie_response_accessor() {
     assert_eq!(cookies[1].name(), "expires");
     assert_eq!(
         cookies[1].expires().unwrap(),
-        std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1445412480)
+        std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_445_412_480)
     );
 
     // path

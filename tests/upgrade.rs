@@ -1,6 +1,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 mod support;
-use support::*;
+use support::server;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::test]

@@ -132,7 +132,7 @@ impl Request {
             None => None,
         };
         let mut req = Request::new(self.method().clone(), self.url().clone());
-        *req.timeout_mut() = self.timeout().cloned();
+        *req.timeout_mut() = self.timeout().copied();
         *req.headers_mut() = self.headers().clone();
         *req.version_mut() = self.version();
         req.body = body;
@@ -196,7 +196,7 @@ impl RequestBuilder {
         self.header_sensitive(key, value, false)
     }
 
-    /// Add a `Header` to this Request with ability to define if header_value is sensitive.
+    /// Add a `Header` to this Request with ability to define if `header_value` is sensitive.
     fn header_sensitive<K, V>(mut self, key: K, value: V, sensitive: bool) -> RequestBuilder
     where
         HeaderName: TryFrom<K>,
