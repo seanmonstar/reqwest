@@ -1640,7 +1640,7 @@ impl Client {
     }
 
     pub(super) fn execute_request(&self, req: Request) -> Pending {
-        let (method, url, mut headers, body, timeout, version) = req.pieces();
+        let (method, url, mut headers, body, response_body_limit, timeout, version) = req.pieces();
         if url.scheme() != "http" && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
         }
@@ -1728,6 +1728,7 @@ impl Client {
                 client: self.inner.clone(),
 
                 in_flight,
+                response_body_limit,
                 timeout,
             }),
         }
@@ -1984,6 +1985,7 @@ pin_project! {
 
         #[pin]
         in_flight: ResponseFuture,
+        response_body_limit: Option<u64>,
         #[pin]
         timeout: Option<Pin<Box<Sleep>>>,
     }
@@ -2297,6 +2299,7 @@ impl Future for PendingRequest {
                 res,
                 self.url.clone(),
                 self.client.accepts,
+                self.response_body_limit,
                 self.timeout.take(),
             );
             return Poll::Ready(Ok(res));
