@@ -319,6 +319,13 @@ impl ClientBuilder {
                             id.add_to_native_tls(&mut tls)?;
                         }
                     }
+                    #[cfg(feature = "__rustls")]
+                    {
+                        // Default backend + rustls Identity doesn't work.
+                        if let Some(_id) = config.identity {
+                            return Err(crate::error::builder("incompatible TLS identity type"));
+                        }
+                    }
 
                     if let Some(min_tls_version) = config.min_tls_version {
                         let protocol = min_tls_version.to_native_tls().ok_or_else(|| {
