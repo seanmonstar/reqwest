@@ -81,7 +81,18 @@ impl Response {
     pub fn content_length(&self) -> Option<u64> {
         use hyper::body::HttpBody;
 
-        HttpBody::size_hint(self.res.body()).exact()
+        let len = HttpBody::size_hint(self.res.body()).exact();
+        // For HEAD requests, the size_hint method doesn't provide an accurate content length.
+        if let Some(0) = len {
+            self.headers()
+                .get(http::header::CONTENT_LENGTH)?
+                .to_str()
+                .ok()?
+                .parse()
+                .ok()
+        } else {
+            len
+        }
     }
 
     /// Retrieve the cookies contained in the response.
