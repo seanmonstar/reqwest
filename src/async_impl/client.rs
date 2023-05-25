@@ -319,7 +319,7 @@ impl ClientBuilder {
                             id.add_to_native_tls(&mut tls)?;
                         }
                     }
-                    #[cfg(feature = "__rustls")]
+                    #[cfg(all(feature = "__rustls", not(feature = "native-tls")))]
                     {
                         // Default backend + rustls Identity doesn't work.
                         if let Some(_id) = config.identity {
