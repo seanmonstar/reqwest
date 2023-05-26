@@ -846,7 +846,7 @@ fn get_from_environment() -> SystemProxyMap {
         insert_from_env(&mut proxies, "https", "https_proxy");
     }
 
-    if !(insert_from_env(&mut proxies, "http", "ALL_PROXY") && insert_from_env(&mut proxies, "http", "ALL_PROXY")) {
+    if !(insert_from_env(&mut proxies, "http", "ALL_PROXY") && insert_from_env(&mut proxies, "https", "ALL_PROXY")) {
         insert_from_env(&mut proxies, "http", "all_proxy");
         insert_from_env(&mut proxies, "https", "all_proxy");
     }
@@ -1139,7 +1139,7 @@ mod tests {
         // save system setting first.
         let _g1 = env_guard("HTTP_PROXY");
         let _g2 = env_guard("http_proxy");
-        let _g3 = env_guard("all_proxy");
+        let _g3 = env_guard("ALL_PROXY");
 
         // Mock ENV, get the results, before doing assertions
         // to avoid assert! -> panic! -> Mutex Poisoned.
@@ -1150,8 +1150,8 @@ mod tests {
         // set valid proxy
         env::set_var("http_proxy", "127.0.0.1/");
         let valid_proxies = get_sys_proxies(None); 
-        // set valid all_proxy
-        env::set_var("all_proxy", "127.0.0.2/");
+        // set valid ALL_PROXY
+        env::set_var("ALL_PROXY", "127.0.0.2/");
         let all_proxies = get_sys_proxies(None);  
 
         // reset user setting when guards drop
