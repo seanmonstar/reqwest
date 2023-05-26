@@ -261,7 +261,7 @@ impl Response {
     /// # }
     /// ```
     pub async fn bytes(self) -> crate::Result<Bytes> {
-        // Optimization: don't ready any of the body if the content-length
+        // Optimization: don't read any of the body if the content-length
         // header exists and is too large.
         if let Some(body_limit) = self.res.body().limit_remaining() {
             if self.content_length() > Some(body_limit) {
