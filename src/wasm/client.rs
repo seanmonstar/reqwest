@@ -4,7 +4,7 @@ use std::{fmt, future::Future, sync::Arc};
 use url::Url;
 use wasm_bindgen::prelude::{wasm_bindgen, UnwrapThrowExt as _};
 
-use super::{Request, RequestBuilder, Response};
+use super::{AbortGuard, Request, RequestBuilder, Response};
 use crate::IntoUrl;
 
 #[wasm_bindgen]
@@ -216,6 +216,9 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         }
     }
 
+    let abort = AbortGuard::new()?;
+    init.signal(Some(&abort.signal()));
+
     let js_req = web_sys::Request::new_with_str_and_init(req.url().as_str(), &init)
         .map_err(crate::error::wasm)
         .map_err(crate::error::builder)?;
@@ -247,7 +250,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     }
 
     resp.body(js_resp)
-        .map(|resp| Response::new(resp, url))
+        .map(|resp| Response::new(resp, url, abort))
         .map_err(crate::error::request)
 }
 

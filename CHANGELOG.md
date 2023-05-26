@@ -1,3 +1,25 @@
+## v0.11.18
+
+- Fix `RequestBuilder::json()` method from overriding a previously set `content-type` header. An existing value will be left in place.
+- Upgrade internal dependencies for rustls and compression.
+
+## v0.11.17
+
+- Upgrade internal dependencies of Experimental HTTP/3 to use quinn v0.9
+- (wasm) Fix blob url support
+
+## v0.11.16
+
+- Chore: set MSRV in `Cargo.toml`.
+- Docs: fix build on docs.rs
+
+## v0.11.15
+
+- Add `RequestBuilder` methods to split and reconstruct from its parts.
+- Add experimental HTTP/3 support.
+- Fix `connection_verbose` to log `write_vectored` calls.
+- (wasm) Make requests actually cancel if the future is dropped.
+
 ## v0.11.14
 
 - Adds `Proxy::no_proxy(url)` that works like the NO_PROXY environment variable.

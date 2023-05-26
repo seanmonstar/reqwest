@@ -1,5 +1,5 @@
 mod support;
-use support::*;
+use support::server;
 
 use std::io::Write;
 

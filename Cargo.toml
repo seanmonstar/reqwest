@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.11.14" # remember to update html_root_url
+version = "0.11.18" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -10,11 +10,12 @@ authors = ["Sean McArthur <sean@seanmonstar.com>"]
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 edition = "2018"
+rust-version = "1.57.0"
 autotests = true
 
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
+rustdoc-args = ["--cfg", "docsrs", "--cfg", "reqwest_unstable"]
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [package.metadata.playground]
@@ -61,6 +62,9 @@ trust-dns = ["trust-dns-resolver"]
 stream = ["tokio/fs", "tokio-util", "wasm-streams"]
 
 socks = ["tokio-socks"]
+
+# Experimental HTTP/3 client.
+http3 = ["rustls-tls-manual-roots", "h3", "h3-quinn", "quinn", "futures-channel"]
 
 # Internal (PRIVATE!) features used to aid testing.
 # Don't rely on these whatsoever. They may disappear at anytime.
@@ -114,10 +118,10 @@ native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls"
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
-hyper-rustls = { version = "0.23", default-features = false, optional = true }
-rustls = { version = "0.20", features = ["dangerous_configuration"], optional = true }
-tokio-rustls = { version = "0.23", optional = true }
-webpki-roots = { version = "0.22", optional = true }
+hyper-rustls = { version = "0.24.0", default-features = false, optional = true }
+rustls = { version = "0.21.0", features = ["dangerous_configuration"], optional = true }
+tokio-rustls = { version = "0.24", optional = true }
+webpki-roots = { version = "0.23", optional = true }
 rustls-native-certs = { version = "0.6", optional = true }
 rustls-pemfile = { version = "1.0", optional = true }
 
@@ -126,7 +130,7 @@ cookie_crate = { version = "0.16", package = "cookie", optional = true }
 cookie_store = { version = "0.16", optional = true }
 
 ## compression
-async-compression = { version = "0.3.13", default-features = false, features = ["tokio"], optional = true }
+async-compression = { version = "0.4.0", default-features = false, features = ["tokio"], optional = true }
 tokio-util = { version = "0.7.1", default-features = false, features = ["codec", "io"], optional = true }
 
 ## socks
@@ -134,6 +138,13 @@ tokio-socks = { version = "0.5.1", optional = true }
 
 ## trust-dns
 trust-dns-resolver = { version = "0.22", optional = true }
+
+# HTTP/3 experimental support
+h3 = { version="0.0.2", optional = true }
+h3-quinn = { version="0.0.3", optional = true }
+quinn = { version = "0.10", default-features = false, features = ["tls-rustls", "ring", "runtime-tokio"], optional = true  }
+futures-channel = { version="0.3", optional = true}
+
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.8"
@@ -159,6 +170,8 @@ wasm-streams = { version = "0.2", optional = true }
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3.25"
 features = [
+    "AbortController",
+    "AbortSignal",
     "Headers",
     "Request",
     "RequestInit",

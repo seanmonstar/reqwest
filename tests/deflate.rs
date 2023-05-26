@@ -1,6 +1,6 @@
 mod support;
 use std::io::Write;
-use support::*;
+use support::server;
 
 #[tokio::test]
 async fn deflate_response() {

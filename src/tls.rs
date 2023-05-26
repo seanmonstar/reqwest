@@ -14,7 +14,7 @@
 #[cfg(feature = "__rustls")]
 use rustls::{
     client::HandshakeSignatureValid, client::ServerCertVerified, client::ServerCertVerifier,
-    internal::msgs::handshake::DigitallySignedStruct, Error as TLSError, ServerName,
+    DigitallySignedStruct, Error as TLSError, ServerName,
 };
 use std::fmt;
 
@@ -379,6 +379,8 @@ impl Version {
 }
 
 pub(crate) enum TlsBackend {
+    // This is the default and HTTP/3 feature does not use it so suppress it.
+    #[allow(dead_code)]
     #[cfg(feature = "default-tls")]
     Default,
     #[cfg(feature = "native-tls")]
@@ -410,12 +412,15 @@ impl fmt::Debug for TlsBackend {
 
 impl Default for TlsBackend {
     fn default() -> TlsBackend {
-        #[cfg(feature = "default-tls")]
+        #[cfg(all(feature = "default-tls", not(feature = "http3")))]
         {
             TlsBackend::Default
         }
 
-        #[cfg(all(feature = "__rustls", not(feature = "default-tls")))]
+        #[cfg(any(
+            all(feature = "__rustls", not(feature = "default-tls")),
+            feature = "http3"
+        ))]
         {
             TlsBackend::Rustls
         }

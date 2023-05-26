@@ -831,6 +831,7 @@ mod socks {
 
 mod verbose {
     use hyper::client::connect::{Connected, Connection};
+    use std::cmp::min;
     use std::fmt;
     use std::io::{self, IoSlice};
     use std::pin::Pin;
@@ -905,7 +906,18 @@ mod verbose {
             cx: &mut Context<'_>,
             bufs: &[IoSlice<'_>],
         ) -> Poll<Result<usize, io::Error>> {
-            Pin::new(&mut self.inner).poll_write_vectored(cx, bufs)
+            match Pin::new(&mut self.inner).poll_write_vectored(cx, bufs) {
+                Poll::Ready(Ok(nwritten)) => {
+                    log::trace!(
+                        "{:08x} write (vectored): {:?}",
+                        self.id,
+                        Vectored { bufs, nwritten }
+                    );
+                    Poll::Ready(Ok(nwritten))
+                }
+                Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+                Poll::Pending => Poll::Pending,
+            }
         }
 
         fn is_write_vectored(&self) -> bool {
@@ -952,6 +964,26 @@ mod verbose {
                 }
             }
             write!(f, "\"")?;
+            Ok(())
+        }
+    }
+
+    struct Vectored<'a, 'b> {
+        bufs: &'a [IoSlice<'b>],
+        nwritten: usize,
+    }
+
+    impl fmt::Debug for Vectored<'_, '_> {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            let mut left = self.nwritten;
+            for buf in self.bufs.iter() {
+                if left == 0 {
+                    break;
+                }
+                let n = min(left, buf.len());
+                Escape(&buf[..n]).fmt(f)?;
+                left -= n;
+            }
             Ok(())
         }
     }

@@ -98,11 +98,12 @@ pub use self::response::Response;
 ///
 /// This function fails if:
 ///
-/// - native TLS backend cannot be initialized
-/// - supplied `Url` cannot be parsed
-/// - there was an error while sending request
-/// - redirect loop was detected
-/// - redirect limit was exhausted
+/// - the native TLS backend cannot be initialized,
+/// - the supplied `Url` cannot be parsed,
+/// - there was an error while sending request,
+/// - a redirect loop was detected,
+/// - the redirect limit was exhausted, or
+/// - the total download time exceeds 30 seconds.
 pub fn get<T: crate::IntoUrl>(url: T) -> crate::Result<Response> {
     Client::builder().build()?.get(url).send()
 }

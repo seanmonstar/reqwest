@@ -1,7 +1,13 @@
 #![cfg(not(target_arch = "wasm32"))]
 mod support;
+
 use futures_util::stream::StreamExt;
-use support::*;
+use support::server;
+
+#[cfg(feature = "json")]
+use http::header::CONTENT_TYPE;
+#[cfg(feature = "json")]
+use std::collections::HashMap;
 
 use reqwest::Client;
 
@@ -409,4 +415,34 @@ async fn test_allowed_methods() {
         .await;
 
     assert!(resp.is_err());
+}
+
+#[test]
+#[cfg(feature = "json")]
+fn add_json_default_content_type_if_not_set_manually() {
+    let mut map = HashMap::new();
+    map.insert("body", "json");
+    let content_type = http::HeaderValue::from_static("application/vnd.api+json");
+    let req = Client::new()
+        .post("https://google.com/")
+        .header(CONTENT_TYPE, &content_type)
+        .json(&map)
+        .build()
+        .expect("request is not valid");
+
+    assert_eq!(content_type, req.headers().get(CONTENT_TYPE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "json")]
+fn update_json_content_type_if_set_manually() {
+    let mut map = HashMap::new();
+    map.insert("body", "json");
+    let req = Client::new()
+        .post("https://google.com/")
+        .json(&map)
+        .build()
+        .expect("request is not valid");
+
+    assert_eq!("application/json", req.headers().get(CONTENT_TYPE).unwrap());
 }

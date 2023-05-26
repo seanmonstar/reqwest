@@ -141,16 +141,15 @@ impl<S: IntoUrl> IntoProxyScheme for S {
                     }
                     source = err.source();
                 }
-                if !presumed_to_have_scheme {
-                    // the issue could have been caused by a missing scheme, so we try adding http://
-                    let try_this = format!("http://{}", self.as_str());
-                    try_this.into_url().map_err(|_| {
-                        // return the original error
-                        crate::error::builder(e)
-                    })?
-                } else {
+                if presumed_to_have_scheme {
                     return Err(crate::error::builder(e));
                 }
+                // the issue could have been caused by a missing scheme, so we try adding http://
+                let try_this = format!("http://{}", self.as_str());
+                try_this.into_url().map_err(|_| {
+                    // return the original error
+                    crate::error::builder(e)
+                })?
             }
         };
         ProxyScheme::parse(url)
@@ -330,7 +329,7 @@ impl Proxy {
                 .get("http")
                 .and_then(|s| s.maybe_http_auth())
                 .is_some(),
-            _ => false,
+            Intercept::Https(_) => false,
         }
     }
 
@@ -343,7 +342,7 @@ impl Proxy {
             Intercept::Custom(custom) => {
                 custom.call(uri).and_then(|s| s.maybe_http_auth().cloned())
             }
-            _ => None,
+            Intercept::Https(_) => None,
         }
     }
 
@@ -422,7 +421,7 @@ impl NoProxy {
         Self::from_string(&raw)
     }
 
-    /// Returns a new no-proxy configuration based on a no_proxy string (or `None` if no variables
+    /// Returns a new no-proxy configuration based on a `no_proxy` string (or `None` if no variables
     /// are set)
     /// The rules are as follows:
     /// * The environment variable `NO_PROXY` is checked, if it is not set, `no_proxy` is checked
@@ -483,7 +482,7 @@ impl NoProxy {
 
 impl IpMatcher {
     fn contains(&self, addr: IpAddr) -> bool {
-        for ip in self.0.iter() {
+        for ip in &self.0 {
             match ip {
                 Ip::Address(address) => {
                     if &addr == address {
@@ -507,7 +506,7 @@ impl DomainMatcher {
     // * https://github.com/curl/curl/issues/1208
     fn contains(&self, domain: &str) -> bool {
         let domain_len = domain.len();
-        for d in self.0.iter() {
+        for d in &self.0 {
             if d == domain || d.strip_prefix('.') == Some(domain) {
                 return true;
             } else if domain.ends_with(d) {
@@ -743,8 +742,8 @@ impl Custom {
             "{}://{}{}{}",
             uri.scheme(),
             uri.host(),
-            uri.port().map(|_| ":").unwrap_or(""),
-            uri.port().map(|p| p.to_string()).unwrap_or_default()
+            uri.port().map_or("", |_| ":"),
+            uri.port().map_or(String::new(), |p| p.to_string())
         )
         .parse()
         .expect("should be valid Url");
