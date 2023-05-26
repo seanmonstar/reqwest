@@ -266,27 +266,23 @@ impl Response {
         match self.body_limit {
             None => hyper::body::to_bytes(self.res.into_body()).await,
             Some(body_limit) => {
-                if self.content_length() > Some(body_limit as u64) {
-                    Err(crate::error::body(
+                if self.content_length() > Some(body_limit) {
+                    return Err(crate::error::body(
                         "Content length exceeds response body limit",
-                    ))?
+                    ));
                 };
 
                 let cap = self.content_length().unwrap_or_default() as usize;
                 let mut vec = Vec::with_capacity(cap);
 
-                while let Some(buf) = self.res.body_mut().next().await {
-                    match buf {
-                        Err(e) => return Err(e),
-                        Ok(buf) => {
-                            if vec.len() + buf.len() > body_limit as usize {
-                                Err(crate::error::body(
-                                    "Received body exceeds response body limit.",
-                                ))?
-                            }
-                            vec.put(buf);
-                        }
+                while let Some(result) = self.res.body_mut().next().await {
+                    let buf = result?;
+                    if vec.len() + buf.len() > body_limit as usize {
+                        return Err(crate::error::body(
+                            "Received body exceeds response body limit",
+                        ));
                     }
+                    vec.put(buf);
                 }
                 Ok(vec.into())
             }
