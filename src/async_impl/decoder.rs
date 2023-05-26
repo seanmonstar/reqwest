@@ -233,7 +233,7 @@ impl Stream for Decoder {
                 if let Some(new_limit_remaining) = limit_remaining.checked_sub(bytes.len() as u64) {
                     *limit_remaining = new_limit_remaining;
                 } else {
-                    return Poll::Ready(Some(Err(crate::error::body("Received body exceeds body size limit"))));
+                    return Poll::Ready(Some(Err(crate::error::body("Received body exceeds response body limit"))));
                 }
             }
             _ => {}
