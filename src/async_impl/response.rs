@@ -3,7 +3,7 @@ use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
 
-use bytes::{BufMut, Bytes};
+use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
 use futures_util::stream::StreamExt;
 use hyper::client::connect::HttpInfo;
@@ -28,7 +28,6 @@ pub struct Response {
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
-    body_limit: Option<u64>,
 }
 
 impl Response {
@@ -40,13 +39,12 @@ impl Response {
         timeout: Option<Pin<Box<Sleep>>>,
     ) -> Response {
         let (mut parts, body) = res.into_parts();
-        let decoder = Decoder::detect(&mut parts.headers, Body::response(body, timeout), accepts);
+        let decoder = Decoder::detect(&mut parts.headers, Body::response(body, timeout), accepts).with_limit(body_limit);
         let res = hyper::Response::from_parts(parts, decoder);
 
         Response {
             res,
             url: Box::new(url),
-            body_limit,
         }
     }
 
@@ -262,31 +260,18 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn bytes(mut self) -> crate::Result<Bytes> {
-        match self.body_limit {
-            None => hyper::body::to_bytes(self.res.into_body()).await,
-            Some(body_limit) => {
-                if self.content_length() > Some(body_limit) {
-                    return Err(crate::error::body(
-                        "Content length exceeds response body limit",
-                    ));
-                };
-
-                let cap = self.content_length().unwrap_or_default() as usize;
-                let mut vec = Vec::with_capacity(cap);
-
-                while let Some(result) = self.res.body_mut().next().await {
-                    let buf = result?;
-                    if vec.len() + buf.len() > body_limit as usize {
-                        return Err(crate::error::body(
-                            "Received body exceeds response body limit",
-                        ));
-                    }
-                    vec.put(buf);
-                }
-                Ok(vec.into())
-            }
+    pub async fn bytes(self) -> crate::Result<Bytes> {
+        // Optimization: don't ready any of the body if the content-length
+        // header exists and is too large.
+        if let Some(body_limit) = self.res.body().limit_remaining() {
+            if self.content_length() > Some(body_limit) {
+                return Err(crate::error::body(
+                    "Content length exceeds response body limit",
+                ));
+            };
         }
+
+        hyper::body::to_bytes(self.res.into_body()).await
     }
 
     /// Stream a chunk of the response body.
@@ -440,7 +425,6 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
         Response {
             res,
             url: Box::new(url),
-            body_limit: None,
         }
     }
 }

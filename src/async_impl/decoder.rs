@@ -41,6 +41,7 @@ pub(super) struct Accepts {
 /// The inner decoder may be constructed asynchronously.
 pub(crate) struct Decoder {
     inner: Inner,
+    limit_remaining: Option<u64>,
 }
 
 type PeekableIoStream = Peekable<IoStream>;
@@ -92,9 +93,7 @@ impl fmt::Debug for Decoder {
 impl Decoder {
     #[cfg(feature = "blocking")]
     pub(crate) fn empty() -> Decoder {
-        Decoder {
-            inner: Inner::PlainText(Body::empty().into_stream()),
-        }
+        Self::plain_text(Body::empty())
     }
 
     /// A plain text decoder.
@@ -103,6 +102,7 @@ impl Decoder {
     fn plain_text(body: Body) -> Decoder {
         Decoder {
             inner: Inner::PlainText(body.into_stream()),
+            limit_remaining: None,
         }
     }
 
@@ -211,16 +211,45 @@ impl Decoder {
 
         Decoder::plain_text(body)
     }
+
+    /// Set a limit (in bytes) over all chunks of the decoded body.
+    pub(super) fn with_limit(mut self, limit: Option<u64>) -> Self {
+        self.limit_remaining = limit;
+        self
+    }
+
+    pub(super) fn limit_remaining(&self) -> Option<u64> {
+        self.limit_remaining
+    }
 }
 
 impl Stream for Decoder {
     type Item = Result<Bytes, error::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let result = Pin::new(&mut self.inner).poll_next(cx);
+        match (&result, self.limit_remaining) {
+            (Poll::Ready(Some(Ok(bytes))), Some(ref mut limit_remaining)) => {
+                if let Some(new_limit_remaining) = limit_remaining.checked_sub(bytes.len() as u64) {
+                    *limit_remaining = new_limit_remaining;
+                } else {
+                    return Poll::Ready(Some(Err(crate::error::body("Received body exceeds body size limit"))));
+                }
+            }
+            _ => {}
+        }
+        result
+    }
+}
+
+impl Stream for Inner {
+    type Item = Result<Bytes, error::Error>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         // Do a read or poll for a pending decoder value.
-        match self.inner {
+        match *self {
             #[cfg(any(feature = "brotli", feature = "gzip", feature = "deflate"))]
-            Inner::Pending(ref mut future) => match Pin::new(future).poll(cx) {
+            Self::Pending(ref mut future) => match Pin::new(future).poll(cx) {
                 Poll::Ready(Ok(inner)) => {
                     self.inner = inner;
                     self.poll_next(cx)
@@ -228,9 +257,9 @@ impl Stream for Decoder {
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(crate::error::decode_io(e)))),
                 Poll::Pending => Poll::Pending,
             },
-            Inner::PlainText(ref mut body) => Pin::new(body).poll_next(cx),
+            Self::PlainText(ref mut body) => Pin::new(body).poll_next(cx),
             #[cfg(feature = "gzip")]
-            Inner::Gzip(ref mut decoder) => {
+            Self::Gzip(ref mut decoder) => {
                 match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.freeze()))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
@@ -238,7 +267,7 @@ impl Stream for Decoder {
                 }
             }
             #[cfg(feature = "brotli")]
-            Inner::Brotli(ref mut decoder) => {
+            Self::Brotli(ref mut decoder) => {
                 match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.freeze()))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
@@ -246,7 +275,7 @@ impl Stream for Decoder {
                 }
             }
             #[cfg(feature = "deflate")]
-            Inner::Deflate(ref mut decoder) => {
+            Self::Deflate(ref mut decoder) => {
                 match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.freeze()))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
