@@ -360,14 +360,46 @@ impl ClientBuilder {
                     config.nodelay,
                 ),
                 #[cfg(feature = "__rustls")]
-                TlsBackend::BuiltRustls(conn) => Connector::new_rustls_tls(
-                    http,
-                    conn,
-                    proxies.clone(),
-                    user_agent(&config.headers),
-                    config.local_address,
-                    config.nodelay,
-                ),
+                TlsBackend::BuiltRustls(conn) => {
+                    #[cfg(feature = "http3")]
+                    {
+                        let mut transport_config = TransportConfig::default();
+
+                        if let Some(max_idle_timeout) = config.quic_max_idle_timeout {
+                            transport_config.max_idle_timeout(Some(
+                                max_idle_timeout.try_into().map_err(error::builder)?,
+                            ));
+                        }
+
+                        if let Some(stream_receive_window) = config.quic_stream_receive_window {
+                            transport_config.stream_receive_window(stream_receive_window);
+                        }
+
+                        if let Some(receive_window) = config.quic_receive_window {
+                            transport_config.receive_window(receive_window);
+                        }
+
+                        if let Some(send_window) = config.quic_send_window {
+                            transport_config.send_window(send_window);
+                        }
+
+                        h3_connector = Some(H3Connector::new(
+                            DynResolver::new(resolver),
+                            conn.clone(),
+                            config.local_address,
+                            transport_config,
+                        ));
+                    }
+
+                    Connector::new_rustls_tls(
+                        http,
+                        conn,
+                        proxies.clone(),
+                        user_agent(&config.headers),
+                        config.local_address,
+                        config.nodelay,
+                    )
+                }
                 #[cfg(feature = "__rustls")]
                 TlsBackend::Rustls => {
                     use crate::tls::NoVerifier;
