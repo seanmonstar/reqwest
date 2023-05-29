@@ -846,7 +846,9 @@ fn get_from_environment() -> SystemProxyMap {
         insert_from_env(&mut proxies, "https", "https_proxy");
     }
 
-    if !(insert_from_env(&mut proxies, "http", "ALL_PROXY") && insert_from_env(&mut proxies, "https", "ALL_PROXY")) {
+    if !(insert_from_env(&mut proxies, "http", "ALL_PROXY")
+        && insert_from_env(&mut proxies, "https", "ALL_PROXY"))
+    {
         insert_from_env(&mut proxies, "http", "all_proxy");
         insert_from_env(&mut proxies, "https", "all_proxy");
     }
@@ -1149,10 +1151,10 @@ mod tests {
         let invalid_proxies = get_sys_proxies(None);
         // set valid proxy
         env::set_var("http_proxy", "127.0.0.1/");
-        let valid_proxies = get_sys_proxies(None); 
+        let valid_proxies = get_sys_proxies(None);
         // set valid ALL_PROXY
         env::set_var("ALL_PROXY", "127.0.0.2/");
-        let all_proxies = get_sys_proxies(None);  
+        let all_proxies = get_sys_proxies(None);
 
         // reset user setting when guards drop
         drop(_g1);
