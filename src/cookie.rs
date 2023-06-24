@@ -188,12 +188,12 @@ impl Jar {
         Ok(Jar(RwLock::new(cookie_store::CookieStore::load(file, cookie_from_str)?)))
     }
 
-    pub fn load_json<R: std::io::BufRead>(file:R)->Result<Self,cookie_store::Error>{
-        Ok(Jar(RwLock::new(cookie_store::CookieStore::load_json(file)?)))
+    pub fn load_json<R: std::io::BufRead>(reader:R)->Result<Self,cookie_store::Error>{
+        Ok(Jar(RwLock::new(cookie_store::CookieStore::load_json(reader)?)))
     }
 
-    pub fn load_json_all<R: std::io::BufRead>(file:R)->Result<Self,cookie_store::Error>{
-        Ok(Jar(RwLock::new(cookie_store::CookieStore::load_json_all(file)?)))
+    pub fn load_json_all<R: std::io::BufRead>(reader:R)->Result<Self,cookie_store::Error>{
+        Ok(Jar(RwLock::new(cookie_store::CookieStore::load_json_all(reader)?)))
     }
 
     pub fn from_cookies<I, E>(iter: I, include_expired: bool) -> Result<Self, E>
