@@ -4,6 +4,8 @@ use std::convert::TryInto;
 use std::fmt;
 use std::sync::RwLock;
 use std::time::SystemTime;
+use std::io::Write;
+use std::io::BufRead;
 
 use crate::header::{HeaderValue, SET_COOKIE};
 use bytes::Bytes;
@@ -163,42 +165,55 @@ impl Jar {
         self.0.write().unwrap().store_response_cookies(cookies, url);
     }
 
-    pub fn save<W, E, F>(&self, writer: &mut W, cookie_to_string: F) -> StoreResult<()>
+    /// Serialize any __unexpired__ and __persistent__ cookies in the store with `cookie_to_string`
+    /// and write them to `writer`
+    pub fn save<W, E, F>(&self, writer: &mut W, cookie_to_string: F) -> Result<(), cookie_store::Error>
         where
             W: Write,
-            F: Fn(&Cookie<'static>) -> Result<String, E>,
-            crate::Error: From<E>,
+            F: Fn(&cookie_store::Cookie<'static>) -> Result<String, E>,
+            cookie_store::Error: From<E>
     {
         self.0.read().unwrap().save(writer, cookie_to_string)
     }
 
-    pub fn save_json<W>(&self, writer: &mut W)->Result<(),cookie_store::Error>
+    /// Serialize any __unexpired__ and __persistent__ cookies in the store to JSON format and
+    /// write them to `writer`
+    pub fn save_json<W>(&self, writer: &mut W)->Result<(), cookie_store::Error>
         where
             W: Write
     {
         self.0.read().unwrap().save_json(writer)
     }
 
+    /// Load cookies from `reader`, deserializing with `cookie_from_str`, skipping any __expired__
+    /// cookies
     pub fn load<R, E, F>(reader: R, cookie_from_str: F) -> Result<Self, cookie_store::Error>
         where
             R: BufRead,
-            F: Fn(&str) -> Result<Cookie<'static>, E>,
-            crate::Error: From<E>,
+            F: Fn(&str) -> Result<cookie_store::Cookie<'static>, E>,
+            cookie_store::Error: From<E>, E: std::error::Error + Send + Sync
     {
-        Ok(Jar(RwLock::new(cookie_store::CookieStore::load(file, cookie_from_str)?)))
+        Ok(Jar(RwLock::new(cookie_store::CookieStore::load(reader, cookie_from_str)?)))
     }
 
+    /// Load JSON-formatted cookies from `reader`, skipping any __expired__ cookies
     pub fn load_json<R: std::io::BufRead>(reader:R)->Result<Self,cookie_store::Error>{
         Ok(Jar(RwLock::new(cookie_store::CookieStore::load_json(reader)?)))
     }
 
+    /// Load JSON-formatted cookies from `reader`, loading both __expired__ and __unexpired__ cookies
     pub fn load_json_all<R: std::io::BufRead>(reader:R)->Result<Self,cookie_store::Error>{
         Ok(Jar(RwLock::new(cookie_store::CookieStore::load_json_all(reader)?)))
     }
 
+    /// Create a `CookieStore` from an iterator of `Cookie` values. When
+    /// `include_expired` is `true`, both __expired__ and __unexpired__ cookies in the incoming
+    /// iterator will be included in the produced `CookieStore`; otherwise, only
+    /// __unexpired__ cookies will be included, and __expired__ cookies filtered
+    /// out.
     pub fn from_cookies<I, E>(iter: I, include_expired: bool) -> Result<Self, E>
         where
-            I: IntoIterator<Item = Result<Cookie<'static>, E>>,
+            I: IntoIterator<Item = Result<cookie_store::Cookie<'static>, E>>,
     {
         Ok(Jar(RwLock::new(cookie_store::CookieStore::from_cookies(iter, include_expired)?)))
     }
