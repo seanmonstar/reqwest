@@ -162,6 +162,46 @@ impl Jar {
             .into_iter();
         self.0.write().unwrap().store_response_cookies(cookies, url);
     }
+
+    pub fn save<W, E, F>(&self, writer: &mut W, cookie_to_string: F) -> StoreResult<()>
+        where
+            W: Write,
+            F: Fn(&Cookie<'static>) -> Result<String, E>,
+            crate::Error: From<E>,
+    {
+        self.0.read().unwrap().save(writer, cookie_to_string)
+    }
+
+    pub fn save_json<W>(&self, writer: &mut W)->Result<(),cookie_store::Error>
+        where
+            W: Write
+    {
+        self.0.read().unwrap().save_json(writer)
+    }
+
+    pub fn load<R, E, F>(reader: R, cookie_from_str: F) -> Result<Self, cookie_store::Error>
+        where
+            R: BufRead,
+            F: Fn(&str) -> Result<Cookie<'static>, E>,
+            crate::Error: From<E>,
+    {
+        Ok(Jar(RwLock::new(cookie_store::CookieStore::load(file, cookie_from_str)?)))
+    }
+
+    pub fn load_json<R: std::io::BufRead>(file:R)->Result<Self,cookie_store::Error>{
+        Ok(Jar(RwLock::new(cookie_store::CookieStore::load_json(file)?)))
+    }
+
+    pub fn load_json_all<R: std::io::BufRead>(file:R)->Result<Self,cookie_store::Error>{
+        Ok(Jar(RwLock::new(cookie_store::CookieStore::load_json_all(file)?)))
+    }
+
+    pub fn from_cookies<I, E>(iter: I, include_expired: bool) -> Result<Self, E>
+        where
+            I: IntoIterator<Item = Result<Cookie<'static>, E>>,
+    {
+        Ok(Jar(RwLock::new(cookie_store::CookieStore::from_cookies(iter, include_expired)?)))
+    }
 }
 
 impl CookieStore for Jar {

@@ -1,3 +1,7 @@
+## v0.11.19
+
+- Add `Jar` load and save methods
+
 ## v0.11.18
 
 - Fix `RequestBuilder::json()` method from overriding a previously set `content-type` header. An existing value will be left in place.
