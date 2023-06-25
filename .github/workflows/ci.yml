@@ -274,6 +274,13 @@ jobs:
         with:
           toolchain: ${{ steps.metadata.outputs.msrv }}
 
+      - name: Make sure log v0.4.18 is used
+        run: |
+          cargo update
+          cargo update -p log --precise 0.4.18
+
+      - uses: Swatinem/rust-cache@v2
+
       - name: Check
         run: cargo check
 
