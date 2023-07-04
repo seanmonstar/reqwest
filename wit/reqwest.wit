@@ -1,0 +1,8 @@
+package reqwest:wasi
+
+world http-client {
+  import wasi:poll/poll
+  import wasi:io/streams
+  import wasi:http/types
+  import wasi:http/outgoing-handler
+}
