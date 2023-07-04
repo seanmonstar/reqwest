@@ -231,6 +231,7 @@ impl Client {
 
         let response_fields = types::incoming_response_headers(incoming_response);
         let response_headers = Self::fields_to_header_map(response_fields);
+        types::drop_fields(headers);
         types::drop_fields(response_fields);
         let response_body_stream = types::incoming_response_consume(incoming_response).unwrap(); // TODO: error handling
         let response_body: Body = response_body_stream.into();
@@ -244,7 +245,6 @@ impl Client {
                 Some(Ok(incoming_response)) => incoming_response,
                 Some(Err(err)) => panic!("Error: {:?}", err),
                 None => {
-                    println!("No incoming response yet, polling");
                     let pollable = types::listen_to_future_incoming_response(future_incoming_response);
                     let _ = poll::poll_oneoff(&vec!(pollable));
                     poll::drop_pollable(pollable);
