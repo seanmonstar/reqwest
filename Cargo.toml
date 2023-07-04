@@ -87,8 +87,6 @@ bytes = "1.0"
 serde = "1.0"
 serde_urlencoded = "0.7.1"
 tower-service = "0.3"
-futures-core = { version = "0.3.0", default-features = false }
-futures-util = { version = "0.3.0", default-features = false }
 
 # Optional deps...
 
@@ -96,6 +94,10 @@ futures-util = { version = "0.3.0", default-features = false }
 serde_json = { version = "1.0", optional = true }
 ## multipart
 mime_guess = { version = "2.0", default-features = false, optional = true }
+
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
+futures-core = { version = "0.3.0", default-features = false }
+futures-util = { version = "0.3.0", default-features = false }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 encoding_rs = "0.8"
@@ -140,10 +142,10 @@ tokio-socks = { version = "0.5.1", optional = true }
 trust-dns-resolver = { version = "0.22", optional = true }
 
 # HTTP/3 experimental support
-h3 = { version="0.0.2", optional = true }
-h3-quinn = { version="0.0.3", optional = true }
-quinn = { version = "0.10", default-features = false, features = ["tls-rustls", "ring", "runtime-tokio"], optional = true  }
-futures-channel = { version="0.3", optional = true}
+h3 = { version = "0.0.2", optional = true }
+h3-quinn = { version = "0.0.3", optional = true }
+quinn = { version = "0.10", default-features = false, features = ["tls-rustls", "ring", "runtime-tokio"], optional = true }
+futures-channel = { version = "0.3", optional = true }
 
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
@@ -160,14 +162,14 @@ winreg = "0.50.0"
 
 # wasm
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 js-sys = "0.3.45"
 serde_json = "1.0"
 wasm-bindgen = "0.2.68"
 wasm-bindgen-futures = "0.4.18"
 wasm-streams = { version = "0.2", optional = true }
 
-[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies.web-sys]
 version = "0.3.25"
 features = [
     "AbortController",
@@ -187,9 +189,30 @@ features = [
     "ReadableStream"
 ]
 
-[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies]
 wasm-bindgen = { version = "0.2.68", features = ["serde-serialize"] }
 wasm-bindgen-test = "0.3"
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "wasi"))'.dependencies]
+encoding_rs = "0.8"
+mime = "0.3.16"
+percent-encoding = "2.1"
+rand = "0.8.5"
+wit-bindgen = "0.8.0"
+
+[package.metadata.component]
+package = "reqwest:wasi"
+
+[package.metadata.component.target]
+path = "wit"
+
+[package.metadata.component.target.dependencies]
+"wasi:poll" = { path = "wit/deps/poll" }
+"wasi:io" = { path = "wit/deps/io" }
+"wasi:http" = { path = "wit/deps/http" }
+
+#[lib]
+#crate-type = ["cdylib"]
 
 [[example]]
 name = "blocking"
