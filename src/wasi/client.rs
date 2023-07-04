@@ -212,7 +212,6 @@ impl Client {
                     streams::write(request_body_stream, chunk).unwrap(); // TODO: error handling
                     Ok(())
                 }).unwrap(); // TODO: error handling
-                streams::write(request_body_stream, "test-body".as_bytes()).unwrap(); // TODO: error handling
                 types::finish_outgoing_stream(request_body_stream, None);
                 streams::drop_output_stream(request_body_stream);
             }
