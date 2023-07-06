@@ -249,9 +249,12 @@ jobs:
       - name: Check minimal versions
         env:
           RUSTFLAGS: --cfg reqwest_unstable
+        # Make sure proc-macro2 v1.0.60 is used
+        # See https://github.com/rust-lang/rust/issues/113152
         run: |
           cargo clean
           cargo update -Z minimal-versions
+          cargo update -p proc-macro2 --precise 1.0.60
           cargo check
           cargo check --all-features
 
