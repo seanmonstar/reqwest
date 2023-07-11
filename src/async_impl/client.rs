@@ -2259,7 +2259,7 @@ impl Future for PendingRequest {
                         .check(res.status(), &loc, &self.urls);
 
                     match action {
-                        redirect::ActionKind::Follow => {
+                        redirect::ActionKind::Follow(is_trusted) => {
                             debug!("redirecting '{}' to '{}'", self.url, loc);
 
                             if self.client.https_only && loc.scheme() != "https" {
@@ -2273,7 +2273,9 @@ impl Future for PendingRequest {
                             let mut headers =
                                 std::mem::replace(self.as_mut().headers(), HeaderMap::new());
 
-                            remove_sensitive_headers(&mut headers, &self.url, &self.urls);
+                            if !is_trusted {
+                                remove_sensitive_headers(&mut headers, &self.url, &self.urls);
+                            }
                             let uri = expect_uri(&self.url);
                             let body = match self.body {
                                 Some(Some(ref body)) => Body::reusable(body.clone()),
