@@ -100,7 +100,7 @@ mime_guess = { version = "2.0", default-features = false, optional = true }
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 encoding_rs = "0.8"
 http-body = "0.4.0"
-hyper = { version = "0.14.18", default-features = false, features = ["tcp", "http1", "http2", "client", "runtime"] }
+hyper = { git = "https://github.com/wasix-org/hyper.git", branch = "v0.14.18", default-features = false, features = ["tcp", "http1", "http2", "client", "runtime"] }
 h2 = "0.3.10"
 once_cell = "1"
 log = "0.4"
