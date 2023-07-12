@@ -97,16 +97,16 @@ serde_json = { version = "1.0", optional = true }
 ## multipart
 mime_guess = { version = "2.0", default-features = false, optional = true }
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 encoding_rs = "0.8"
 http-body = "0.4.0"
-hyper = { version = "0.14.18", default-features = false, features = ["tcp", "http1", "http2", "client", "runtime"] }
-h2 = "0.3.10"
+hyper = { git = "https://github.com/wasix-org/hyper.git", branch = "v0.14.27", default-features = false, features = ["tcp", "http1", "http2", "client", "runtime"] }
+h2 = { git = "https://github.com/wasix-org/h2.git" }
 once_cell = "1"
 log = "0.4"
 mime = "0.3.16"
 percent-encoding = "2.1"
-tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
+tokio = { git = "https://github.com/wasix-org/tokio.git", branch = "epoll", default-features = false, features = ["net", "time"] }
 pin-project-lite = "0.2.0"
 ipnet = "2.3"
 
@@ -118,10 +118,10 @@ native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls"
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
-hyper-rustls = { version = "0.24.0", default-features = false, optional = true }
-rustls = { version = "0.21.0", features = ["dangerous_configuration"], optional = true }
+hyper-rustls = { git = "https://github.com/wasix-org/hyper-rustls.git", default-features = false, optional = true }
+rustls = { git = "https://github.com/wasix-org/rustls.git", branch = "v0.21.5", features = ["dangerous_configuration"], optional = true }
 tokio-rustls = { version = "0.24", optional = true }
-webpki-roots = { version = "0.24", optional = true }
+webpki-roots = { git = "https://github.com/wasix-org/webpki-roots.git", branch = "v0.24.0", optional = true }
 rustls-native-certs = { version = "0.6", optional = true }
 rustls-pemfile = { version = "1.0", optional = true }
 
@@ -146,28 +146,28 @@ quinn = { version = "0.10", default-features = false, features = ["tls-rustls", 
 futures-channel = { version="0.3", optional = true}
 
 
-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies]
 env_logger = "0.8"
-hyper = { version = "0.14", default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server", "runtime"] }
+hyper = { git = "https://github.com/wasix-org/hyper.git", branch = "v0.14.27", default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server", "runtime"] }
 serde = { version = "1.0", features = ["derive"] }
 libflate = "1.0"
 brotli_crate = { package = "brotli", version = "3.3.0" }
 doc-comment = "0.3"
-tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
+tokio = { git = "https://github.com/wasix-org/tokio.git", branch = "epoll", default-features = false, features = ["macros", "rt-multi-thread"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.50.0"
 
 # wasm
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 js-sys = "0.3.45"
 serde_json = "1.0"
 wasm-bindgen = "0.2.68"
 wasm-bindgen-futures = "0.4.18"
 wasm-streams = { version = "0.3", optional = true }
 
-[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies.web-sys]
 version = "0.3.25"
 features = [
     "AbortController",
@@ -187,7 +187,7 @@ features = [
     "ReadableStream"
 ]
 
-[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies]
 wasm-bindgen = { version = "0.2.68", features = ["serde-serialize"] }
 wasm-bindgen-test = "0.3"
 

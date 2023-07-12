@@ -23,7 +23,7 @@ impl IntoUrlSealed for Url {
     fn into_url(self) -> crate::Result<Url> {
         // With blob url the `self.has_host()` check is always false, so we
         // remove the `blob:` scheme and check again if the url is valid.
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         if self.scheme() == "blob"
             && self.path().starts_with("http") // Check if the path starts with http or https to avoid validating a `blob:blob:...` url.
             && self.as_str()[5..].into_url().is_ok()
