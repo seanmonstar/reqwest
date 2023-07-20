@@ -9,9 +9,7 @@ use http::header::CONTENT_TYPE;
 #[cfg(feature = "json")]
 use std::collections::HashMap;
 
-use cookie_store;
 use reqwest::Client;
-use reqwest::Url;
 
 #[tokio::test]
 async fn auto_headers() {
