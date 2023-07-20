@@ -27,7 +27,7 @@ features = [
 ]
 
 [features]
-default = ["default-tls"]
+default = ["default-tls","cookies"]
 
 # Note: this doesn't enable the 'native-tls' feature, which adds specific
 # functionality for it.
