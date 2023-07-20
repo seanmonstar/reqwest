@@ -1794,7 +1794,7 @@ impl Client {
 
     /// Get the cookies inside a client.
     #[cfg(feature = "cookies")]
-    pub fn get_cookie_store<T>(&self) -> Option<Arc<dyn cookie::CookieStore>> {
+    pub fn get_cookie_store(&self) -> Option<Arc<dyn cookie::CookieStore>> {
         let client = &self.inner.clone();
         let cs_ref = &client.cookie_store;
         let cs = cs_ref.clone()?;

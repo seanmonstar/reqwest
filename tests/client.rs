@@ -9,7 +9,9 @@ use http::header::CONTENT_TYPE;
 #[cfg(feature = "json")]
 use std::collections::HashMap;
 
+use cookie_store;
 use reqwest::Client;
+use reqwest::Url;
 
 #[tokio::test]
 async fn auto_headers() {
@@ -407,4 +409,31 @@ fn update_json_content_type_if_set_manually() {
         .expect("request is not valid");
 
     assert_eq!("application/json", req.headers().get(CONTENT_TYPE).unwrap());
+}
+
+#[tokio::test]
+#[cfg(feature = "cookies")]
+async fn extract_cookie_from_client() {
+    let test_server = server::http(|mut request| async move {
+        let body = request.body_mut().next().await.unwrap().unwrap();
+        let cookie = String::from_utf8(body.into()).unwrap();
+
+        http::Response::builder()
+            .status(200)
+            .header("Set-Cookie", cookie)
+            .body("Body".into())
+            .unwrap()
+    });
+
+    let client = Client::builder().cookie_store(true).build().unwrap();
+
+    let url = format!("http://{}/", test_server.addr());
+    let _resp = client.post(&url).body("a=1;").send().await.unwrap();
+    let _resp2 = client.post(&url).body("b=2;").send().await.unwrap();
+
+    let cookies = client.get_cookie_store().unwrap();
+    let cookies = cookies.cookies(&Url::parse(&url).unwrap()).unwrap();
+    let cookies = cookies.to_str().unwrap();
+
+    assert_eq!(cookies, "b=2; a=1");
 }
