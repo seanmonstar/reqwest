@@ -6,6 +6,7 @@ use js_sys::Uint8Array;
 use url::Url;
 
 use crate::wasm::AbortGuard;
+use crate::response::ResponseUrl;
 
 #[cfg(feature = "stream")]
 use wasm_bindgen::JsCast;
@@ -185,5 +186,56 @@ impl fmt::Debug for Response {
             .field("status", &self.status())
             .field("headers", self.headers())
             .finish()
+    }
+}
+
+impl From<http::Response<web_sys::Response>> for Response {
+    fn from(res: http::Response<web_sys::Response>) -> Response {
+        let (mut parts, body) = res.into_parts();
+        let url = parts
+            .extensions
+            .remove::<ResponseUrl>()
+            .unwrap_or_else(|| ResponseUrl(Url::parse("http://no.url.provided.local").unwrap()));
+        let url = url.0;
+        let res = http::Response::from_parts(parts, body);
+        Response::new(res, url, AbortGuard::new().unwrap())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Response;
+    use crate::ResponseBuilderExt;
+    use http::response::Builder;
+    use url::Url;
+    use wasm_bindgen::prelude::*;
+    use wasm_bindgen_test::*;
+
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen]
+    extern "C" {
+        // Use `js_namespace` here to bind `console.log(..)` instead of just
+        // `log(..)`
+        #[wasm_bindgen(js_namespace = console)]
+        fn log(s: String);
+    }
+
+    #[wasm_bindgen_test]
+    async fn test_from_http_response() {
+        let url = Url::parse("http://example.com").unwrap();
+        let web_res = web_sys::Response::new_with_opt_str(Some("hello")).unwrap();
+        assert_eq!(web_res.status(), 200);
+        let http_res: http::Response<web_sys::Response> = Builder::new()
+            .status(200)
+            .url(url.clone())
+            .header("content-type", "text/plain")
+            .body(web_res)
+            .unwrap();
+        let response = Response::from(http_res);
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.url(), &url);
+        assert_eq!(response.headers().get("content-type").unwrap(), "text/plain");
+        assert_eq!(response.text().await.unwrap(), "hello");
     }
 }
