@@ -420,6 +420,11 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.http1_allow_obsolete_multiline_headers_in_responses(value))
     }
 
+    /// Sets whether invalid header lines should be silently ignored in HTTP/1 responses.
+    pub fn http1_ignore_invalid_headers_in_responses(self, value: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.http1_ignore_invalid_headers_in_responses(value))
+    }
+
     /// Only use HTTP/1.
     pub fn http1_only(self) -> ClientBuilder {
         self.with_inner(|inner| inner.http1_only())
