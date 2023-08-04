@@ -324,7 +324,7 @@ impl Future for Pending {
             ))))),
             #[cfg(feature = "deflate")]
             DecoderType::Deflate => Poll::Ready(Ok(Inner::Deflate(Box::pin(FramedRead::new(
-                ZlibDecoder::new(StreamReader::new(_body)),
+                DeflateDecoder::new(StreamReader::new(_body)),
                 BytesCodec::new(),
             ))))),
         }
