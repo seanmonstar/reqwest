@@ -1,5 +1,6 @@
 //! DNS resolution
 
+pub use hyper::client::connect::dns::Name;
 pub use resolve::{Addrs, Resolve, Resolving};
 pub(crate) use resolve::{DnsResolverWithOverrides, DynResolver};
 
