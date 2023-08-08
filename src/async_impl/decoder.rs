@@ -10,7 +10,7 @@ use async_compression::tokio::bufread::GzipDecoder;
 use async_compression::tokio::bufread::BrotliDecoder;
 
 #[cfg(feature = "deflate")]
-use async_compression::tokio::bufread::ZlibDecoder;
+use async_compression::tokio::bufread::DeflateDecoder;
 
 use bytes::Bytes;
 use futures_core::Stream;
@@ -62,7 +62,7 @@ enum Inner {
 
     /// A `Deflate` decoder will uncompress the deflated response content before returning it.
     #[cfg(feature = "deflate")]
-    Deflate(Pin<Box<FramedRead<ZlibDecoder<PeekableIoStreamReader>, BytesCodec>>>),
+    Deflate(Pin<Box<FramedRead<DeflateDecoder<PeekableIoStreamReader>, BytesCodec>>>),
 
     /// A decoder that doesn't have a value yet.
     #[cfg(any(feature = "brotli", feature = "gzip", feature = "deflate"))]
@@ -324,7 +324,7 @@ impl Future for Pending {
             ))))),
             #[cfg(feature = "deflate")]
             DecoderType::Deflate => Poll::Ready(Ok(Inner::Deflate(Box::pin(FramedRead::new(
-                ZlibDecoder::new(StreamReader::new(_body)),
+                DeflateDecoder::new(StreamReader::new(_body)),
                 BytesCodec::new(),
             ))))),
         }
