@@ -307,7 +307,7 @@ impl Identity {
     ) -> crate::Result<rustls::ClientConfig> {
         match self.inner {
             ClientCert::Pem { key, certs } => config_builder
-                .with_single_cert(certs, key)
+                .with_client_auth_cert(certs, key)
                 .map_err(crate::error::builder),
             #[cfg(feature = "native-tls")]
             ClientCert::Pkcs12(..) | ClientCert::Pkcs8(..) => {
