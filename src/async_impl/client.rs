@@ -121,6 +121,7 @@ struct Config {
     http1_title_case_headers: bool,
     http1_allow_obsolete_multiline_headers_in_responses: bool,
     http1_ignore_invalid_headers_in_responses: bool,
+    http1_allow_spaces_after_header_name_in_responses: bool,
     http2_initial_stream_window_size: Option<u32>,
     http2_initial_connection_window_size: Option<u32>,
     http2_adaptive_window: bool,
@@ -203,6 +204,7 @@ impl ClientBuilder {
                 http1_title_case_headers: false,
                 http1_allow_obsolete_multiline_headers_in_responses: false,
                 http1_ignore_invalid_headers_in_responses: false,
+                http1_allow_spaces_after_header_name_in_responses: false,
                 http2_initial_stream_window_size: None,
                 http2_initial_connection_window_size: None,
                 http2_adaptive_window: false,
@@ -626,6 +628,10 @@ impl ClientBuilder {
             builder.http1_ignore_invalid_headers_in_responses(true);
         }
 
+        if config.http1_allow_spaces_after_header_name_in_responses {
+            builder.http1_allow_spaces_after_header_name_in_responses(true);
+        }
+
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
 
         Ok(Client {
@@ -1024,6 +1030,20 @@ impl ClientBuilder {
     /// Sets whether invalid header lines should be silently ignored in HTTP/1 responses.
     pub fn http1_ignore_invalid_headers_in_responses(mut self, value: bool) -> ClientBuilder {
         self.config.http1_ignore_invalid_headers_in_responses = value;
+        self
+    }
+
+    /// Set whether HTTP/1 connections will accept spaces between header
+    /// names and the colon that follow them in responses.
+    ///
+    /// Newline codepoints (`\r` and `\n`) will be transformed to spaces when
+    /// parsing.
+    pub fn http1_allow_spaces_after_header_name_in_responses(
+        mut self,
+        value: bool,
+    ) -> ClientBuilder {
+        self.config
+            .http1_allow_spaces_after_header_name_in_responses = value;
         self
     }
 
@@ -1887,6 +1907,10 @@ impl Config {
 
         if self.http1_ignore_invalid_headers_in_responses {
             f.field("http1_ignore_invalid_headers_in_responses", &true);
+        }
+
+        if self.http1_allow_spaces_after_header_name_in_responses {
+            f.field("http1_allow_spaces_after_header_name_in_responses", &true);
         }
 
         if matches!(self.http_version_pref, HttpVersionPref::Http1) {

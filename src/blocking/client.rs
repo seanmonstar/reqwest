@@ -425,6 +425,15 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.http1_ignore_invalid_headers_in_responses(value))
     }
 
+    /// Set whether HTTP/1 connections will accept spaces between header
+    /// names and the colon that follow them in responses.
+    ///
+    /// Newline codepoints (\r and \n) will be transformed to spaces when
+    /// parsing.
+    pub fn http1_allow_spaces_after_header_name_in_responses(self, value: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.http1_allow_spaces_after_header_name_in_responses(value))
+    }
+
     /// Only use HTTP/1.
     pub fn http1_only(self) -> ClientBuilder {
         self.with_inner(|inner| inner.http1_only())
