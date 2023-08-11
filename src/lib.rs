@@ -326,6 +326,7 @@ if_hyper! {
     #[cfg(feature = "multipart")]
     pub use self::async_impl::multipart;
 
+    pub use self::connect::HttpsInfo;
 
     mod async_impl;
     #[cfg(feature = "blocking")]

@@ -115,6 +115,8 @@ struct Config {
     #[cfg(feature = "__tls")]
     max_tls_version: Option<tls::Version>,
     #[cfg(feature = "__tls")]
+    https_info: bool,
+    #[cfg(feature = "__tls")]
     tls: TlsBackend,
     http_version_pref: HttpVersionPref,
     http09_responses: bool,
@@ -197,6 +199,8 @@ impl ClientBuilder {
                 min_tls_version: None,
                 #[cfg(feature = "__tls")]
                 max_tls_version: None,
+                #[cfg(feature = "__tls")]
+                https_info: false,
                 #[cfg(feature = "__tls")]
                 tls: TlsBackend::default(),
                 http_version_pref: HttpVersionPref::All,
@@ -352,6 +356,7 @@ impl ClientBuilder {
                         user_agent(&config.headers),
                         config.local_address,
                         config.nodelay,
+                        config.https_info,
                     )?
                 }
                 #[cfg(feature = "native-tls")]
@@ -402,6 +407,7 @@ impl ClientBuilder {
                         user_agent(&config.headers),
                         config.local_address,
                         config.nodelay,
+                        config.https_info,
                     )
                 }
                 #[cfg(feature = "__rustls")]
@@ -562,6 +568,7 @@ impl ClientBuilder {
                         user_agent(&config.headers),
                         config.local_address,
                         config.nodelay,
+                        config.https_info,
                     )
                 }
                 #[cfg(any(feature = "native-tls", feature = "__rustls",))]
@@ -1455,6 +1462,26 @@ impl ClientBuilder {
         self
     }
 
+    /// Add HTTPS transport information as `HttpsInfo` extension to reponses.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
+    pub fn https_info(mut self, https_info: bool) -> ClientBuilder {
+        self.config.https_info = https_info;
+        self
+    }
+
     /// Enables the [trust-dns](trust_dns_resolver) async resolver instead of a default threadpool using `getaddrinfo`.
     ///
     /// If the `trust-dns` feature is turned on, the default option is enabled.
@@ -1959,6 +1986,8 @@ impl Config {
             }
 
             f.field("tls_sni", &self.tls_sni);
+
+            f.field("https_info", &self.https_info);
         }
 
         #[cfg(all(feature = "native-tls-crate", feature = "__rustls"))]
