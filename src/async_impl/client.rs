@@ -279,7 +279,8 @@ impl ClientBuilder {
                     config.dns_overrides,
                 ));
             }
-            let http = HttpConnector::new_with_resolver(DynResolver::new(resolver.clone()));
+            let mut http = HttpConnector::new_with_resolver(DynResolver::new(resolver.clone()));
+            http.set_connect_timeout(config.connect_timeout);
 
             #[cfg(feature = "__tls")]
             match config.tls {

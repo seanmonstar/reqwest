@@ -105,6 +105,11 @@ impl Error {
             if err.is::<TimedOut>() {
                 return true;
             }
+            if let Some(io) = err.downcast_ref::<io::Error>() {
+                if io.kind() == io::ErrorKind::TimedOut {
+                    return true;
+                }
+            }
             source = err.source();
         }
 
