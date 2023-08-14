@@ -367,6 +367,7 @@ impl ClientBuilder {
                     user_agent(&config.headers),
                     config.local_address,
                     config.nodelay,
+                    config.https_info,
                 ),
                 #[cfg(feature = "__rustls")]
                 TlsBackend::BuiltRustls(conn) => {
