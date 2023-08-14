@@ -753,7 +753,7 @@ impl ClientBuilder {
             feature = "rustls-tls"
         )))
     )]
-    pub fn https_info(self, https_info) -> ClientBuilder {
+    pub fn https_info(self, https_info: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.https_info(https_info))
     }
 

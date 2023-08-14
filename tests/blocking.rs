@@ -362,3 +362,25 @@ fn blocking_update_json_content_type_if_set_manually() {
 
     assert_eq!("application/json", req.headers().get(CONTENT_TYPE).unwrap());
 }
+
+#[test]
+fn test_response_no_https_info_for_http() {
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
+
+    let url = format!("http://{}/text", server.addr());
+
+    let client = reqwest::blocking::Client::builder()
+        .https_info(true)
+        .build()
+        .unwrap();
+
+    let res = client.get(&url).send().unwrap();
+    assert_eq!(res.url().as_str(), &url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.content_length(), Some(5));
+    let https_info = res.extensions().get::<reqwest::HttpsInfo>();
+    assert_eq!(https_info.is_none(), true);
+
+    let body = res.text().unwrap();
+    assert_eq!(b"Hello", body.as_bytes());
+}
