@@ -409,7 +409,7 @@ fn update_json_content_type_if_set_manually() {
     assert_eq!("application/json", req.headers().get(CONTENT_TYPE).unwrap());
 }
 
-#[cfg(feature = "__tls")]
+#[cfg(all(feature = "__tls", not(feature = "rustls-tls-manual-roots")))]
 #[tokio::test]
 async fn test_https_info() {
     let resp = reqwest::Client::builder()
