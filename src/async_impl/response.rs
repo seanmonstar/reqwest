@@ -5,6 +5,7 @@ use std::pin::Pin;
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
 use futures_util::stream::StreamExt;
+use http::response::Parts;
 use hyper::client::connect::HttpInfo;
 use hyper::{HeaderMap, StatusCode, Version};
 use mime::Mime;
@@ -312,6 +313,24 @@ impl Response {
     }
 
     // util methods
+
+    /// Consumes the response returning the [`Parts`] and the [`Body`].
+    /// 
+    /// # Example
+    ///
+    /// ```
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// let res = reqwest::get("https://hyper.rs").await?;
+    ///
+    /// let (parts, body) = res.into_parts();
+    /// let http_response = http::Response::from_parts(parts, "Some new body");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn into_parts(self) -> (Parts, Body) {
+        let (parts, decoder) = self.res.into_parts();
+        (parts, Body::stream(decoder))
+    }
 
     /// Turn a response into an error if the server returned an error.
     ///
