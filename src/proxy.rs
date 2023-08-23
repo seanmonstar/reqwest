@@ -3,8 +3,11 @@ use std::fmt;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::connect::AsyncConn;
+use crate::error::BoxError;
 use crate::into_url::{IntoUrl, IntoUrlSealed};
 use crate::Url;
+use futures_core::future::BoxFuture;
 use http::{header::HeaderValue, Uri};
 use ipnet::IpNet;
 use once_cell::sync::Lazy;
@@ -99,13 +102,17 @@ pub enum ProxyScheme {
         auth: Option<(String, String)>,
         remote_dns: bool,
     },
+    Custom {
+        connector: Arc<dyn Fn(Uri) -> BoxFuture<'static,
+                        Result<Box<dyn AsyncConn>, BoxError>>
+                    + Send + Sync>
+    },
 }
 
 impl ProxyScheme {
     fn maybe_http_auth(&self) -> Option<&HeaderValue> {
         match self {
             ProxyScheme::Http { auth, .. } | ProxyScheme::Https { auth, .. } => auth.as_ref(),
-            #[cfg(feature = "socks")]
             _ => None,
         }
     }
@@ -262,6 +269,20 @@ impl Proxy {
         Proxy::new(Intercept::Custom(Custom {
             auth: None,
             func: Arc::new(move |url| fun(url).map(IntoProxyScheme::into_proxy_scheme)),
+        }))
+    }
+
+    // TODO find a better name
+    /// Provide a custom function which returns a TCP-like stream to interact with.
+    ///
+    /// It allows using a proxy with an arbitrary protocol, or to leverage unusual transport such
+    /// as Unix Domain Sockets.
+    pub fn custom2<F>(fun: F) -> Proxy
+    where
+        F: Fn(Uri) -> BoxFuture<'static, Result<Box<dyn AsyncConn>, BoxError>> + Send + Sync + 'static,
+    {
+        Proxy::new(Intercept::All(ProxyScheme::Custom {
+            connector: Arc::new(fun),
         }))
     }
 
@@ -600,6 +621,7 @@ impl ProxyScheme {
             ProxyScheme::Socks5 { ref mut auth, .. } => {
                 *auth = Some((username.into(), password.into()));
             }
+            ProxyScheme::Custom { .. } => (),
         }
     }
 
@@ -617,6 +639,7 @@ impl ProxyScheme {
             }
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => {}
+            ProxyScheme::Custom { .. } => (),
         }
 
         self
@@ -670,6 +693,7 @@ impl ProxyScheme {
             ProxyScheme::Https { .. } => "https",
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => "socks5",
+            ProxyScheme::Custom { .. } => "custom",
         }
     }
 
@@ -680,6 +704,7 @@ impl ProxyScheme {
             ProxyScheme::Https { host, .. } => host.as_str(),
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => panic!("socks5"),
+            ProxyScheme::Custom { .. } => panic!("custom"),
         }
     }
 }
@@ -698,6 +723,9 @@ impl fmt::Debug for ProxyScheme {
                 let h = if *remote_dns { "h" } else { "" };
                 write!(f, "socks5{}://{}", h, addr)
             }
+            ProxyScheme::Custom { .. } => {
+                f.write_str("custom://")
+            },
         }
     }
 }
@@ -997,7 +1025,6 @@ mod tests {
         let (scheme, host) = match p.intercept(&url(s)).unwrap() {
             ProxyScheme::Http { host, .. } => ("http", host),
             ProxyScheme::Https { host, .. } => ("https", host),
-            #[cfg(feature = "socks")]
             _ => panic!("intercepted as socks"),
         };
         http::Uri::builder()
