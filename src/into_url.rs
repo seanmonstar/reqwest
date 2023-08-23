@@ -1,3 +1,4 @@
+use http::Uri;
 use url::Url;
 
 /// A trait to try to convert some type into a `Url`.
@@ -7,6 +8,7 @@ use url::Url;
 pub trait IntoUrl: IntoUrlSealed {}
 
 impl IntoUrl for Url {}
+impl IntoUrl for Uri {}
 impl IntoUrl for String {}
 impl<'a> IntoUrl for &'a str {}
 impl<'a> IntoUrl for &'a String {}
@@ -40,6 +42,21 @@ impl IntoUrlSealed for Url {
 
     fn as_str(&self) -> &str {
         self.as_ref()
+    }
+}
+
+impl IntoUrlSealed for Uri {
+    fn into_url(self) -> crate::Result<Url> {
+        let url = Url::parse(&self.to_string()).map_err(crate::error::builder)?;
+        if self.host().is_some() {
+            Ok(url)
+        } else {
+            Err(crate::error::url_bad_scheme(url))
+        }
+    }
+
+    fn as_str(&self) -> &str {
+        self.to_string().as_str()
     }
 }
 
