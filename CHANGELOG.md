@@ -1,3 +1,7 @@
+## v0.11.20
+
+- Fix `deflate` decompression back to using zlib, as outlined in the spec.
+
 ## v0.11.19
 
 - Add `ClientBuilder::http1_ignore_invalid_headers_in_responses()` option.

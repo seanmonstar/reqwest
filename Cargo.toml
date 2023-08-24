@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.11.19" # remember to update html_root_url
+version = "0.11.20" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -51,7 +51,7 @@ gzip = ["async-compression", "async-compression/gzip", "tokio-util"]
 
 brotli = ["async-compression", "async-compression/brotli", "tokio-util"]
 
-deflate = ["async-compression", "async-compression/deflate", "tokio-util"]
+deflate = ["async-compression", "async-compression/zlib", "tokio-util"]
 
 json = ["serde_json"]
 
