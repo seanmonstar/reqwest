@@ -421,6 +421,14 @@ impl From<Response> for Body {
     }
 }
 
+/// A `Response` can be transformed into a classic http hyper body response.
+impl From<Response> for http::Response<hyper::Body> {
+    fn from(r: Response) -> http::Response<hyper::Body> {
+        let (parts, body) = r.res.into_parts();
+        http::Response::from_parts(parts, hyper::Body::wrap_stream(body))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Response;
