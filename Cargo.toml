@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.11.18" # remember to update html_root_url
+version = "0.11.20" # remember to update html_root_url
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -10,7 +10,7 @@ authors = ["Sean McArthur <sean@seanmonstar.com>"]
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 edition = "2018"
-rust-version = "1.57.0"
+rust-version = "1.63.0"
 autotests = true
 
 [package.metadata.docs.rs]
@@ -51,7 +51,7 @@ gzip = ["async-compression", "async-compression/gzip", "tokio-util"]
 
 brotli = ["async-compression", "async-compression/brotli", "tokio-util"]
 
-deflate = ["async-compression", "async-compression/deflate", "tokio-util"]
+deflate = ["async-compression", "async-compression/zlib", "tokio-util"]
 
 json = ["serde_json"]
 

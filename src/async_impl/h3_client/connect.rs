@@ -28,7 +28,7 @@ impl H3Connector {
         tls: rustls::ClientConfig,
         local_addr: Option<IpAddr>,
         transport_config: TransportConfig,
-    ) -> H3Connector {
+    ) -> Result<H3Connector, BoxError> {
         let mut config = ClientConfig::new(Arc::new(tls));
         // FIXME: Replace this when there is a setter.
         config.transport_config(Arc::new(transport_config));
@@ -38,10 +38,10 @@ impl H3Connector {
             None => "[::]:0".parse::<SocketAddr>().unwrap(),
         };
 
-        let mut endpoint = Endpoint::client(socket_addr).expect("unable to create QUIC endpoint");
+        let mut endpoint = Endpoint::client(socket_addr)?;
         endpoint.set_default_client_config(config);
 
-        Self { resolver, endpoint }
+        Ok(Self { resolver, endpoint })
     }
 
     pub async fn connect(&mut self, dest: Uri) -> Result<H3Connection, BoxError> {
