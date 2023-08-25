@@ -411,19 +411,19 @@ fn update_json_content_type_if_set_manually() {
 
 #[cfg(all(feature = "__tls", not(feature = "rustls-tls-manual-roots")))]
 #[tokio::test]
-async fn test_https_info() {
+async fn test_tls_info() {
     let resp = reqwest::Client::builder()
-        .https_info(true)
+        .tls_info(true)
         .build()
         .expect("client builder")
         .get("https://google.com")
         .send()
         .await
         .expect("response");
-    let https_info = resp.extensions().get::<reqwest::HttpsInfo>();
-    assert!(https_info.is_some());
-    let https_info = https_info.unwrap();
-    let peer_certificate = https_info.peer_certificate();
+    let tls_info = resp.extensions().get::<reqwest::TlsInfo>();
+    assert!(tls_info.is_some());
+    let tls_info = tls_info.unwrap();
+    let peer_certificate = tls_info.peer_certificate();
     assert!(peer_certificate.is_some());
     let der = peer_certificate.unwrap();
     assert_eq!(der[0], 0x30); // ASN.1 SEQUENCE
@@ -435,6 +435,6 @@ async fn test_https_info() {
         .send()
         .await
         .expect("response");
-    let https_info = resp.extensions().get::<reqwest::HttpsInfo>();
-    assert!(https_info.is_none());
+    let tls_info = resp.extensions().get::<reqwest::TlsInfo>();
+    assert!(tls_info.is_none());
 }

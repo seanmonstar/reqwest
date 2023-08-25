@@ -463,6 +463,26 @@ impl ServerCertVerifier for NoVerifier {
     }
 }
 
+/// Hyper extension carrying extra TLS layer information.
+/// Made available to clients on responses when `tls_info` is set.
+#[derive(Clone)]
+pub struct TlsInfo {
+    pub(crate) peer_certificate: Option<Vec<u8>>,
+}
+
+impl TlsInfo {
+    /// Get the DER encoded leaf certificate of the peer.
+    pub fn peer_certificate(&self) -> Option<&[u8]> {
+        self.peer_certificate.as_ref().map(|der| &der[..])
+    }
+}
+
+impl std::fmt::Debug for TlsInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("TlsInfo").finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

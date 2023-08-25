@@ -115,7 +115,7 @@ struct Config {
     #[cfg(feature = "__tls")]
     max_tls_version: Option<tls::Version>,
     #[cfg(feature = "__tls")]
-    https_info: bool,
+    tls_info: bool,
     #[cfg(feature = "__tls")]
     tls: TlsBackend,
     http_version_pref: HttpVersionPref,
@@ -200,7 +200,7 @@ impl ClientBuilder {
                 #[cfg(feature = "__tls")]
                 max_tls_version: None,
                 #[cfg(feature = "__tls")]
-                https_info: false,
+                tls_info: false,
                 #[cfg(feature = "__tls")]
                 tls: TlsBackend::default(),
                 http_version_pref: HttpVersionPref::All,
@@ -412,7 +412,7 @@ impl ClientBuilder {
                         user_agent(&config.headers),
                         config.local_address,
                         config.nodelay,
-                        config.https_info,
+                        config.tls_info,
                     )?
                 }
                 #[cfg(feature = "native-tls")]
@@ -423,7 +423,7 @@ impl ClientBuilder {
                     user_agent(&config.headers),
                     config.local_address,
                     config.nodelay,
-                    config.https_info,
+                    config.tls_info,
                 ),
                 #[cfg(feature = "__rustls")]
                 TlsBackend::BuiltRustls(conn) => {
@@ -448,7 +448,7 @@ impl ClientBuilder {
                         user_agent(&config.headers),
                         config.local_address,
                         config.nodelay,
-                        config.https_info,
+                        config.tls_info,
                     )
                 }
                 #[cfg(feature = "__rustls")]
@@ -593,7 +593,7 @@ impl ClientBuilder {
                         user_agent(&config.headers),
                         config.local_address,
                         config.nodelay,
-                        config.https_info,
+                        config.tls_info,
                     )
                 }
                 #[cfg(any(feature = "native-tls", feature = "__rustls",))]
@@ -1491,7 +1491,7 @@ impl ClientBuilder {
         self
     }
 
-    /// Add HTTPS transport information as `HttpsInfo` extension to reponses.
+    /// Add TLS information as `TlsInfo` extension to responses.
     ///
     /// # Optional
     ///
@@ -1506,8 +1506,8 @@ impl ClientBuilder {
             feature = "rustls-tls"
         )))
     )]
-    pub fn https_info(mut self, https_info: bool) -> ClientBuilder {
-        self.config.https_info = https_info;
+    pub fn tls_info(mut self, tls_info: bool) -> ClientBuilder {
+        self.config.tls_info = tls_info;
         self
     }
 
@@ -2016,7 +2016,7 @@ impl Config {
 
             f.field("tls_sni", &self.tls_sni);
 
-            f.field("https_info", &self.https_info);
+            f.field("tls_info", &self.tls_info);
         }
 
         #[cfg(all(feature = "native-tls-crate", feature = "__rustls"))]

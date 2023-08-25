@@ -738,7 +738,7 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.use_rustls_tls())
     }
 
-    /// Add HTTPS transport information as `HttpsInfo` extension to reponses.
+    /// Add TLS information as `TlsInfo` extension to responses.
     ///
     /// # Optional
     ///
@@ -753,8 +753,8 @@ impl ClientBuilder {
             feature = "rustls-tls"
         )))
     )]
-    pub fn https_info(self, https_info: bool) -> ClientBuilder {
-        self.with_inner(|inner| inner.https_info(https_info))
+    pub fn tls_info(self, tls_info: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.tls_info(tls_info))
     }
 
     /// Use a preconfigured TLS backend.

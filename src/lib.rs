@@ -326,7 +326,8 @@ if_hyper! {
     #[cfg(feature = "multipart")]
     pub use self::async_impl::multipart;
 
-    pub use self::connect::HttpsInfo;
+    #[cfg(feature = "__tls")]
+    pub use self::tls::TlsInfo;
 
     mod async_impl;
     #[cfg(feature = "blocking")]
