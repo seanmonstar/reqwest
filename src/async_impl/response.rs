@@ -315,7 +315,6 @@ impl Response {
     // util methods
 
     /// Consumes the response returning the [`Parts`] and the [`Body`].
-    /// 
     /// # Example
     ///
     /// ```
