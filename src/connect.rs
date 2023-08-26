@@ -577,7 +577,6 @@ impl<T: AsyncConn + TlsInfoFactory> AsyncConnWithInfo for T {}
 #[cfg(not(feature = "__tls"))]
 impl<T: AsyncConn> AsyncConnWithInfo for T {}
 
-
 type BoxConn = Box<dyn AsyncConnWithInfo>;
 
 pin_project! {
@@ -1011,10 +1010,7 @@ mod verbose {
     pub(super) struct Wrapper(pub(super) bool);
 
     impl Wrapper {
-        pub(super) fn wrap<T: super::AsyncConnWithInfo>(
-            &self,
-            conn: T,
-        ) -> super::BoxConn {
+        pub(super) fn wrap<T: super::AsyncConnWithInfo>(&self, conn: T) -> super::BoxConn {
             if self.0 && log::log_enabled!(log::Level::Trace) {
                 Box::new(Verbose {
                     // truncate is fine
