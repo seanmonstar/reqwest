@@ -13,6 +13,11 @@ use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::net::IpAddr;
+#[cfg(target_os = "macos")]
+use system_configuration::{
+    core_foundation::{base::CFType, dictionary::CFDictionary, number::CFNumber, string::CFString},
+    dynamic_store::SCDynamicStoreBuilder,
+};
 #[cfg(target_os = "windows")]
 use winreg::enums::HKEY_CURRENT_USER;
 #[cfg(target_os = "windows")]
@@ -268,7 +273,7 @@ impl Proxy {
     pub(crate) fn system() -> Proxy {
         let mut proxy = if cfg!(feature = "__internal_proxy_sys_no_cache") {
             Proxy::new(Intercept::System(Arc::new(get_sys_proxies(
-                get_from_registry(),
+                get_from_platform(),
             ))))
         } else {
             Proxy::new(Intercept::System(SYS_PROXIES.clone()))
@@ -703,7 +708,7 @@ impl fmt::Debug for ProxyScheme {
 }
 
 type SystemProxyMap = HashMap<String, ProxyScheme>;
-type RegistryProxyValues = (u32, String);
+type PlatformProxyValues = (u32, String);
 
 #[derive(Clone, Debug)]
 enum Intercept {
@@ -788,34 +793,36 @@ impl Dst for Uri {
 }
 
 static SYS_PROXIES: Lazy<Arc<SystemProxyMap>> =
-    Lazy::new(|| Arc::new(get_sys_proxies(get_from_registry())));
+    Lazy::new(|| Arc::new(get_sys_proxies(get_from_platform())));
 
 /// Get system proxies information.
 ///
-/// It can only support Linux, Unix like, and windows system.  Note that it will always
-/// return a HashMap, even if something runs into error when find registry information in
-/// Windows system.  Note that invalid proxy url in the system setting will be ignored.
+/// All platforms will check for proxy settings via the `http_proxy`, `https_proxy`,
+/// and `all_proxy` environment variables. If those aren't set, platform-wide proxy
+/// settings will be looked up on Windows and MacOS platforms instead. Errors
+/// encountered while discovering these settings are ignored.
 ///
 /// Returns:
 ///     System proxies information as a hashmap like
 ///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}
 fn get_sys_proxies(
-    #[cfg_attr(not(target_os = "windows"), allow(unused_variables))] registry_values: Option<
-        RegistryProxyValues,
-    >,
+    #[cfg_attr(
+        not(any(target_os = "windows", target_os = "macos")),
+        allow(unused_variables)
+    )]
+    platform_proxies: Option<PlatformProxyValues>,
 ) -> SystemProxyMap {
     let proxies = get_from_environment();
 
-    // TODO: move the following #[cfg] to `if expression` when attributes on `if` expressions allowed
-    #[cfg(target_os = "windows")]
-    {
-        if proxies.is_empty() {
-            // don't care errors if can't get proxies from registry, just return an empty HashMap.
-            if let Some(registry_values) = registry_values {
-                return parse_registry_values(registry_values);
-            }
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    if proxies.is_empty() {
+        // if there are errors in acquiring the platform proxies,
+        // we'll just return an empty HashMap
+        if let Some(platform_proxies) = platform_proxies {
+            return parse_platform_values(platform_proxies);
         }
     }
+
     proxies
 }
 
@@ -873,7 +880,7 @@ fn is_cgi() -> bool {
 }
 
 #[cfg(target_os = "windows")]
-fn get_from_registry_impl() -> Result<RegistryProxyValues, Box<dyn Error>> {
+fn get_from_platform_impl() -> Result<PlatformProxyValues, Box<dyn Error>> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let internet_setting: RegKey =
         hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")?;
@@ -884,21 +891,85 @@ fn get_from_registry_impl() -> Result<RegistryProxyValues, Box<dyn Error>> {
     Ok((proxy_enable, proxy_server))
 }
 
-#[cfg(target_os = "windows")]
-fn get_from_registry() -> Option<RegistryProxyValues> {
-    get_from_registry_impl().ok()
-}
+#[cfg(target_os = "macos")]
+fn parse_setting_from_dynamic_store(
+    proxies_map: &CFDictionary<CFString, CFType>,
+    scheme: &str,
+) -> Option<String> {
+    let uppercase_scheme = scheme.to_ascii_uppercase();
+    let enabled_key = uppercase_scheme.clone() + "Enable";
+    let host_key = uppercase_scheme.clone() + "Proxy";
+    let port_key = uppercase_scheme.clone() + "Port";
 
-#[cfg(not(target_os = "windows"))]
-fn get_from_registry() -> Option<RegistryProxyValues> {
+    let proxy_enabled = proxies_map
+        .find(CFString::new(enabled_key.as_str()))
+        .and_then(|flag| flag.downcast::<CFNumber>())
+        .and_then(|flag| flag.to_i32())
+        .unwrap_or(0);
+
+    if proxy_enabled == 1 {
+        let proxy_host = proxies_map
+            .find(CFString::new(host_key.as_str()))
+            .and_then(|host| host.downcast::<CFString>())
+            .and_then(|host| Some(host.to_string()))
+            .unwrap_or_default();
+        let proxy_port = proxies_map
+            .find(CFString::new(port_key.as_str()))
+            .and_then(|port| port.downcast::<CFNumber>())
+            .and_then(|port| port.to_i32());
+
+        if let Some(proxy_port) = proxy_port {
+            return Some(format_args!("{scheme}={proxy_host}:{proxy_port}").to_string());
+        } else {
+            return Some(format_args!("{scheme}={proxy_host}").to_string());
+        }
+    }
+
     None
 }
 
-#[cfg(target_os = "windows")]
-fn parse_registry_values_impl(
-    registry_values: RegistryProxyValues,
+#[cfg(target_os = "macos")]
+fn get_from_platform_impl() -> Result<PlatformProxyValues, Box<dyn Error>> {
+    let store = SCDynamicStoreBuilder::new("reqwest").build();
+
+    if let Some(proxies_map) = store.get_proxies() {
+        let http_proxy_config = parse_setting_from_dynamic_store(&proxies_map, "http");
+        let https_proxy_config = parse_setting_from_dynamic_store(&proxies_map, "https");
+
+        match (http_proxy_config, https_proxy_config) {
+            (Some(http_proxy_config), Some(https_proxy_config)) => {
+                return Ok((
+                    1,
+                    format_args!("{http_proxy_config};{https_proxy_config}").to_string(),
+                ));
+            }
+            (Some(config), None) | (None, Some(config)) => {
+                return Ok((1, config));
+            }
+            (None, None) => {
+                return Ok((0, Default::default()));
+            }
+        }
+    }
+
+    Ok((0, Default::default()))
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn get_from_platform() -> Option<PlatformProxyValues> {
+    get_from_platform_impl().ok()
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn get_from_platform() -> Option<PlatformProxyValues> {
+    None
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn parse_platform_values_impl(
+    platform_values: PlatformProxyValues,
 ) -> Result<SystemProxyMap, Box<dyn Error>> {
-    let (proxy_enable, proxy_server) = registry_values;
+    let (proxy_enable, proxy_server) = platform_values;
 
     if proxy_enable == 0 {
         return Ok(HashMap::new());
@@ -944,7 +1015,7 @@ fn parse_registry_values_impl(
 
 /// Extract the protocol from the given address, if present
 /// For example, "https://example.com" will return Some("https")
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn extract_type_prefix(address: &str) -> Option<&str> {
     if let Some(indice) = address.find("://") {
         if indice == 0 {
@@ -964,9 +1035,9 @@ fn extract_type_prefix(address: &str) -> Option<&str> {
     }
 }
 
-#[cfg(target_os = "windows")]
-fn parse_registry_values(registry_values: RegistryProxyValues) -> SystemProxyMap {
-    parse_registry_values_impl(registry_values).unwrap_or(HashMap::new())
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn parse_platform_values(platform_values: PlatformProxyValues) -> SystemProxyMap {
+    parse_platform_values_impl(platform_values).unwrap_or(HashMap::new())
 }
 
 #[cfg(test)]
@@ -1173,7 +1244,7 @@ mod tests {
         assert!(all_proxies.values().all(|p| p.host() == "127.0.0.2"));
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     #[test]
     fn test_get_sys_proxies_registry_parsing() {
         // Stop other threads from modifying process-global ENV while we are.
@@ -1185,20 +1256,16 @@ mod tests {
         // Mock ENV, get the results, before doing assertions
         // to avoid assert! -> panic! -> Mutex Poisoned.
         let baseline_proxies = get_sys_proxies(None);
-        // the system proxy in the registry has been disabled
-        let disabled_proxies = get_sys_proxies(Some((0, String::from("http://127.0.0.1/"))));
         // set valid proxy
-        let valid_proxies = get_sys_proxies(Some((1, String::from("http://127.0.0.1/"))));
-        let valid_proxies_no_scheme = get_sys_proxies(Some((1, String::from("127.0.0.1"))));
+        let valid_proxies = get_sys_proxies(Some(String::from("http://127.0.0.1/")));
+        let valid_proxies_no_scheme = get_sys_proxies(Some(String::from("127.0.0.1")));
         let valid_proxies_explicit_https =
-            get_sys_proxies(Some((1, String::from("https://127.0.0.1/"))));
-        let multiple_proxies = get_sys_proxies(Some((
-            1,
-            String::from("http=127.0.0.1:8888;https=127.0.0.2:8888"),
+            get_sys_proxies(Some(String::from("https://127.0.0.1/")));
+        let multiple_proxies = get_sys_proxies(Some(String::from(
+            "http=127.0.0.1:8888;https=127.0.0.2:8888",
         )));
-        let multiple_proxies_explicit_scheme = get_sys_proxies(Some((
-            1,
-            String::from("http=http://127.0.0.1:8888;https=https://127.0.0.2:8888"),
+        let multiple_proxies_explicit_scheme = get_sys_proxies(Some(String::from(
+            "http=http://127.0.0.1:8888;https=https://127.0.0.2:8888",
         )));
 
         // reset user setting when guards drop
@@ -1208,7 +1275,6 @@ mod tests {
         drop(_lock);
 
         assert_eq!(baseline_proxies.contains_key("http"), false);
-        assert_eq!(disabled_proxies.contains_key("http"), false);
 
         let p = &valid_proxies["http"];
         assert_eq!(p.scheme(), "http");
@@ -1491,7 +1557,7 @@ mod tests {
         drop(_lock);
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     #[test]
     fn test_type_prefix_extraction() {
         assert!(extract_type_prefix("test").is_none());
