@@ -15,8 +15,19 @@ use std::error::Error;
 use std::net::IpAddr;
 #[cfg(target_os = "macos")]
 use system_configuration::{
-    core_foundation::{base::CFType, dictionary::CFDictionary, number::CFNumber, string::CFString},
+    core_foundation::{
+        base::CFType,
+        dictionary::CFDictionary,
+        number::CFNumber,
+        string::{CFString, CFStringRef},
+    },
     dynamic_store::SCDynamicStoreBuilder,
+    sys::schema_definitions::kSCPropNetProxiesHTTPEnable,
+    sys::schema_definitions::kSCPropNetProxiesHTTPPort,
+    sys::schema_definitions::kSCPropNetProxiesHTTPProxy,
+    sys::schema_definitions::kSCPropNetProxiesHTTPSEnable,
+    sys::schema_definitions::kSCPropNetProxiesHTTPSPort,
+    sys::schema_definitions::kSCPropNetProxiesHTTPSProxy,
 };
 #[cfg(target_os = "windows")]
 use winreg::enums::HKEY_CURRENT_USER;
@@ -708,7 +719,6 @@ impl fmt::Debug for ProxyScheme {
 }
 
 type SystemProxyMap = HashMap<String, ProxyScheme>;
-type PlatformProxyValues = (u32, String);
 
 #[derive(Clone, Debug)]
 enum Intercept {
@@ -797,10 +807,10 @@ static SYS_PROXIES: Lazy<Arc<SystemProxyMap>> =
 
 /// Get system proxies information.
 ///
-/// All platforms will check for proxy settings via the `http_proxy`, `https_proxy`,
-/// and `all_proxy` environment variables. If those aren't set, platform-wide proxy
-/// settings will be looked up on Windows and MacOS platforms instead. Errors
-/// encountered while discovering these settings are ignored.
+/// All platforms will check for proxy settings via environment variables.
+/// If those aren't set, platform-wide proxy settings will be looked up on
+/// Windows and MacOS platforms instead. Errors encountered while discovering
+/// these settings are ignored.
 ///
 /// Returns:
 ///     System proxies information as a hashmap like
@@ -810,7 +820,7 @@ fn get_sys_proxies(
         not(any(target_os = "windows", target_os = "macos")),
         allow(unused_variables)
     )]
-    platform_proxies: Option<PlatformProxyValues>,
+    platform_proxies: Option<String>,
 ) -> SystemProxyMap {
     let proxies = get_from_environment();
 
@@ -880,7 +890,7 @@ fn is_cgi() -> bool {
 }
 
 #[cfg(target_os = "windows")]
-fn get_from_platform_impl() -> Result<PlatformProxyValues, Box<dyn Error>> {
+fn get_from_platform_impl() -> Result<Option<String>, Box<dyn Error>> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let internet_setting: RegKey =
         hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")?;
@@ -888,33 +898,36 @@ fn get_from_platform_impl() -> Result<PlatformProxyValues, Box<dyn Error>> {
     let proxy_enable: u32 = internet_setting.get_value("ProxyEnable")?;
     let proxy_server: String = internet_setting.get_value("ProxyServer")?;
 
-    Ok((proxy_enable, proxy_server))
+    if proxy_enable == 1 {
+        Some(proxy_server)
+    } else {
+        None
+    }
 }
 
 #[cfg(target_os = "macos")]
 fn parse_setting_from_dynamic_store(
     proxies_map: &CFDictionary<CFString, CFType>,
+    enabled_key: CFStringRef,
+    host_key: CFStringRef,
+    port_key: CFStringRef,
     scheme: &str,
 ) -> Option<String> {
-    let uppercase_scheme = scheme.to_ascii_uppercase();
-    let enabled_key = uppercase_scheme.clone() + "Enable";
-    let host_key = uppercase_scheme.clone() + "Proxy";
-    let port_key = uppercase_scheme.clone() + "Port";
-
     let proxy_enabled = proxies_map
-        .find(CFString::new(enabled_key.as_str()))
+        .find(enabled_key)
         .and_then(|flag| flag.downcast::<CFNumber>())
         .and_then(|flag| flag.to_i32())
-        .unwrap_or(0);
+        .unwrap_or(0)
+        == 1;
 
-    if proxy_enabled == 1 {
+    if proxy_enabled {
         let proxy_host = proxies_map
-            .find(CFString::new(host_key.as_str()))
+            .find(host_key)
             .and_then(|host| host.downcast::<CFString>())
-            .and_then(|host| Some(host.to_string()))
+            .map(|host| host.to_string())
             .unwrap_or_default();
         let proxy_port = proxies_map
-            .find(CFString::new(port_key.as_str()))
+            .find(port_key)
             .and_then(|port| port.downcast::<CFNumber>())
             .and_then(|port| port.to_i32());
 
@@ -929,56 +942,63 @@ fn parse_setting_from_dynamic_store(
 }
 
 #[cfg(target_os = "macos")]
-fn get_from_platform_impl() -> Result<PlatformProxyValues, Box<dyn Error>> {
+fn get_from_platform_impl() -> Result<Option<String>, Box<dyn Error>> {
     let store = SCDynamicStoreBuilder::new("reqwest").build();
 
     if let Some(proxies_map) = store.get_proxies() {
-        let http_proxy_config = parse_setting_from_dynamic_store(&proxies_map, "http");
-        let https_proxy_config = parse_setting_from_dynamic_store(&proxies_map, "https");
+        let http_proxy_config = parse_setting_from_dynamic_store(
+            &proxies_map,
+            unsafe { kSCPropNetProxiesHTTPEnable },
+            unsafe { kSCPropNetProxiesHTTPProxy },
+            unsafe { kSCPropNetProxiesHTTPPort },
+            "http",
+        );
+        let https_proxy_config = parse_setting_from_dynamic_store(
+            &proxies_map,
+            unsafe { kSCPropNetProxiesHTTPSEnable },
+            unsafe { kSCPropNetProxiesHTTPSProxy },
+            unsafe { kSCPropNetProxiesHTTPSPort },
+            "https",
+        );
 
         match (http_proxy_config, https_proxy_config) {
             (Some(http_proxy_config), Some(https_proxy_config)) => {
-                return Ok((
-                    1,
+                return Ok(Some(
                     format_args!("{http_proxy_config};{https_proxy_config}").to_string(),
-                ));
+                ))
             }
             (Some(config), None) | (None, Some(config)) => {
-                return Ok((1, config));
+                return Ok(Some(config));
             }
             (None, None) => {
-                return Ok((0, Default::default()));
+                return Ok(None);
             }
         }
     }
 
-    Ok((0, Default::default()))
+    Ok(None)
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
-fn get_from_platform() -> Option<PlatformProxyValues> {
-    get_from_platform_impl().ok()
+fn get_from_platform() -> Option<String> {
+    if let Some(platform_proxy_values) = get_from_platform_impl().ok() {
+        platform_proxy_values
+    } else {
+        None
+    }
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn get_from_platform() -> Option<PlatformProxyValues> {
+fn get_from_platform() -> Option<String> {
     None
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
-fn parse_platform_values_impl(
-    platform_values: PlatformProxyValues,
-) -> Result<SystemProxyMap, Box<dyn Error>> {
-    let (proxy_enable, proxy_server) = platform_values;
-
-    if proxy_enable == 0 {
-        return Ok(HashMap::new());
-    }
-
+fn parse_platform_values_impl(platform_values: String) -> Result<SystemProxyMap, Box<dyn Error>> {
     let mut proxies = HashMap::new();
-    if proxy_server.contains("=") {
+    if platform_values.contains("=") {
         // per-protocol settings.
-        for p in proxy_server.split(";") {
+        for p in platform_values.split(";") {
             let protocol_parts: Vec<&str> = p.split("=").collect();
             match protocol_parts.as_slice() {
                 [protocol, address] => {
@@ -1001,13 +1021,13 @@ fn parse_platform_values_impl(
             }
         }
     } else {
-        if let Some(scheme) = extract_type_prefix(&proxy_server) {
+        if let Some(scheme) = extract_type_prefix(&platform_values) {
             // Explicit protocol has been specified
-            insert_proxy(&mut proxies, scheme, proxy_server.to_owned());
+            insert_proxy(&mut proxies, scheme, platform_values.to_owned());
         } else {
             // No explicit protocol has been specified, default to HTTP
-            insert_proxy(&mut proxies, "http", format!("http://{}", proxy_server));
-            insert_proxy(&mut proxies, "https", format!("http://{}", proxy_server));
+            insert_proxy(&mut proxies, "http", format!("http://{}", platform_values));
+            insert_proxy(&mut proxies, "https", format!("http://{}", platform_values));
         }
     }
     Ok(proxies)
@@ -1036,7 +1056,7 @@ fn extract_type_prefix(address: &str) -> Option<&str> {
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
-fn parse_platform_values(platform_values: PlatformProxyValues) -> SystemProxyMap {
+fn parse_platform_values(platform_values: String) -> SystemProxyMap {
     parse_platform_values_impl(platform_values).unwrap_or(HashMap::new())
 }
 
