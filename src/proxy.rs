@@ -898,11 +898,7 @@ fn get_from_platform_impl() -> Result<Option<String>, Box<dyn Error>> {
     let proxy_enable: u32 = internet_setting.get_value("ProxyEnable")?;
     let proxy_server: String = internet_setting.get_value("ProxyServer")?;
 
-    if proxy_enable == 1 {
-        Some(proxy_server)
-    } else {
-        None
-    }
+    Ok((proxy_enable == 1).then_some(proxy_server))
 }
 
 #[cfg(target_os = "macos")]
@@ -924,18 +920,20 @@ fn parse_setting_from_dynamic_store(
         let proxy_host = proxies_map
             .find(host_key)
             .and_then(|host| host.downcast::<CFString>())
-            .map(|host| host.to_string())
-            .unwrap_or_default();
+            .map(|host| host.to_string());
         let proxy_port = proxies_map
             .find(port_key)
             .and_then(|port| port.downcast::<CFNumber>())
             .and_then(|port| port.to_i32());
 
-        if let Some(proxy_port) = proxy_port {
-            return Some(format_args!("{scheme}={proxy_host}:{proxy_port}").to_string());
-        } else {
-            return Some(format_args!("{scheme}={proxy_host}").to_string());
-        }
+        return match (proxy_host, proxy_port) {
+            (Some(proxy_host), Some(proxy_port)) => {
+                Some(format!("{scheme}={proxy_host}:{proxy_port}"))
+            }
+            (Some(proxy_host), None) => Some(format!("{scheme}={proxy_host}")),
+            (None, Some(_)) => None,
+            (None, None) => None,
+        };
     }
 
     None
@@ -945,47 +943,34 @@ fn parse_setting_from_dynamic_store(
 fn get_from_platform_impl() -> Result<Option<String>, Box<dyn Error>> {
     let store = SCDynamicStoreBuilder::new("reqwest").build();
 
-    if let Some(proxies_map) = store.get_proxies() {
-        let http_proxy_config = parse_setting_from_dynamic_store(
-            &proxies_map,
-            unsafe { kSCPropNetProxiesHTTPEnable },
-            unsafe { kSCPropNetProxiesHTTPProxy },
-            unsafe { kSCPropNetProxiesHTTPPort },
-            "http",
-        );
-        let https_proxy_config = parse_setting_from_dynamic_store(
-            &proxies_map,
-            unsafe { kSCPropNetProxiesHTTPSEnable },
-            unsafe { kSCPropNetProxiesHTTPSProxy },
-            unsafe { kSCPropNetProxiesHTTPSPort },
-            "https",
-        );
+    let Some(proxies_map) = store.get_proxies() else {
+        return Ok(None);
+    };
 
-        match (http_proxy_config, https_proxy_config) {
-            (Some(http_proxy_config), Some(https_proxy_config)) => {
-                return Ok(Some(
-                    format_args!("{http_proxy_config};{https_proxy_config}").to_string(),
-                ))
-            }
-            (Some(config), None) | (None, Some(config)) => {
-                return Ok(Some(config));
-            }
-            (None, None) => {
-                return Ok(None);
-            }
-        }
+    let http_proxy_config = parse_setting_from_dynamic_store(
+        &proxies_map,
+        unsafe { kSCPropNetProxiesHTTPEnable },
+        unsafe { kSCPropNetProxiesHTTPProxy },
+        unsafe { kSCPropNetProxiesHTTPPort },
+        "http",
+    );
+    let https_proxy_config = parse_setting_from_dynamic_store(
+        &proxies_map,
+        unsafe { kSCPropNetProxiesHTTPSEnable },
+        unsafe { kSCPropNetProxiesHTTPSProxy },
+        unsafe { kSCPropNetProxiesHTTPSPort },
+        "https",
+    );
+
+    match http_proxy_config.as_ref().zip(https_proxy_config.as_ref()) {
+        Some((http_config, https_config)) => Ok(Some(format!("{http_config};{https_config}"))),
+        None => Ok(http_proxy_config.or(https_proxy_config)),
     }
-
-    Ok(None)
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 fn get_from_platform() -> Option<String> {
-    if let Some(platform_proxy_values) = get_from_platform_impl().ok() {
-        platform_proxy_values
-    } else {
-        None
-    }
+    get_from_platform_impl().ok().flatten()
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -994,7 +979,7 @@ fn get_from_platform() -> Option<String> {
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
-fn parse_platform_values_impl(platform_values: String) -> Result<SystemProxyMap, Box<dyn Error>> {
+fn parse_platform_values_impl(platform_values: String) -> SystemProxyMap {
     let mut proxies = HashMap::new();
     if platform_values.contains("=") {
         // per-protocol settings.
@@ -1030,7 +1015,7 @@ fn parse_platform_values_impl(platform_values: String) -> Result<SystemProxyMap,
             insert_proxy(&mut proxies, "https", format!("http://{}", platform_values));
         }
     }
-    Ok(proxies)
+    proxies
 }
 
 /// Extract the protocol from the given address, if present
@@ -1057,7 +1042,7 @@ fn extract_type_prefix(address: &str) -> Option<&str> {
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 fn parse_platform_values(platform_values: String) -> SystemProxyMap {
-    parse_platform_values_impl(platform_values).unwrap_or(HashMap::new())
+    parse_platform_values_impl(platform_values)
 }
 
 #[cfg(test)]
