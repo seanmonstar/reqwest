@@ -13,6 +13,8 @@ use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::net::IpAddr;
+#[cfg(unix)]
+use std::path::PathBuf;
 #[cfg(target_os = "windows")]
 use winreg::enums::HKEY_CURRENT_USER;
 #[cfg(target_os = "windows")]
@@ -47,6 +49,16 @@ use winreg::RegKey;
 /// ```rust
 /// # fn run() -> Result<(), Box<std::error::Error>> {
 /// let proxy = reqwest::Proxy::http("socks5://192.168.1.1:9000")?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// On unix, it is also possible to send request to a unix socket via url or [Proxy::unix]:
+/// ```rust
+/// # fn run() -> Result<(), Box<std::error::Error>> {
+/// let proxy = reqwest::Proxy::all("unix:///run/snapd.socket")?;
+/// // equivalent to:
+/// let proxy = reqwest::Proxy::unix("/run/snapd.socket");
 /// # Ok(())
 /// # }
 /// ```
@@ -99,6 +111,10 @@ pub enum ProxyScheme {
         auth: Option<(String, String)>,
         remote_dns: bool,
     },
+    #[cfg(unix)]
+    UnixSocket {
+        socket: PathBuf,
+    },
 }
 
 impl ProxyScheme {
@@ -107,6 +123,8 @@ impl ProxyScheme {
             ProxyScheme::Http { auth, .. } | ProxyScheme::Https { auth, .. } => auth.as_ref(),
             #[cfg(feature = "socks")]
             _ => None,
+            #[cfg(unix)]
+            ProxyScheme::UnixSocket { .. } => None,
         }
     }
 }
@@ -232,6 +250,26 @@ impl Proxy {
         Ok(Proxy::new(Intercept::All(
             proxy_scheme.into_proxy_scheme()?,
         )))
+    }
+
+    /// Proxy **all** traffic to the passed unix domain socket.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # extern crate reqwest;
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// let client = reqwest::Client::builder()
+    ///     .proxy(reqwest::Proxy::unix("/run/snapd.socket"))
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// # fn main() {}
+    /// ```
+    pub fn unix<Path: Into<PathBuf>>(socket_path: Path) -> Proxy {
+        Proxy::new(Intercept::All(
+            ProxyScheme::unix_socket(socket_path),
+        ))
     }
 
     /// Provide a custom function to determine what traffic to proxy to where.
@@ -576,6 +614,14 @@ impl ProxyScheme {
         })
     }
 
+    /// Proxy traffic via the specified URL over HTTPS
+    #[cfg(unix)]
+    fn unix_socket<Path: Into<PathBuf>>(path: Path) -> Self {
+        ProxyScheme::UnixSocket {
+            socket: path.into(),
+        }
+    }
+
     /// Use a username and password when connecting to the proxy server
     fn with_basic_auth<T: Into<String>, U: Into<String>>(
         mut self,
@@ -600,6 +646,8 @@ impl ProxyScheme {
             ProxyScheme::Socks5 { ref mut auth, .. } => {
                 *auth = Some((username.into(), password.into()));
             }
+            #[cfg(unix)]
+            ProxyScheme::UnixSocket { .. } => (),
         }
     }
 
@@ -617,6 +665,8 @@ impl ProxyScheme {
             }
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => {}
+            #[cfg(unix)]
+            ProxyScheme::UnixSocket { .. } => {}
         }
 
         self
@@ -651,6 +701,8 @@ impl ProxyScheme {
             "socks5" => Self::socks5(to_addr()?)?,
             #[cfg(feature = "socks")]
             "socks5h" => Self::socks5h(to_addr()?)?,
+            #[cfg(unix)]
+            "unix" => Self::unix_socket(url.path()),
             _ => return Err(crate::error::builder("unknown proxy scheme")),
         };
 
@@ -670,6 +722,8 @@ impl ProxyScheme {
             ProxyScheme::Https { .. } => "https",
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => "socks5",
+            #[cfg(unix)]
+            ProxyScheme::UnixSocket { .. } => "unix",
         }
     }
 
@@ -680,6 +734,8 @@ impl ProxyScheme {
             ProxyScheme::Https { host, .. } => host.as_str(),
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => panic!("socks5"),
+            #[cfg(unix)]
+            ProxyScheme::UnixSocket { .. } => panic!("unix"),
         }
     }
 }
@@ -697,6 +753,10 @@ impl fmt::Debug for ProxyScheme {
             } => {
                 let h = if *remote_dns { "h" } else { "" };
                 write!(f, "socks5{}://{}", h, addr)
+            }
+            #[cfg(unix)]
+            ProxyScheme::UnixSocket { socket } => {
+                write!(f, "unix://{}", socket.display())
             }
         }
     }
@@ -997,6 +1057,8 @@ mod tests {
         let (scheme, host) = match p.intercept(&url(s)).unwrap() {
             ProxyScheme::Http { host, .. } => ("http", host),
             ProxyScheme::Https { host, .. } => ("https", host),
+            #[cfg(unix)]
+            ProxyScheme::UnixSocket { .. } => panic!("intercepted as unix"),
             #[cfg(feature = "socks")]
             _ => panic!("intercepted as socks"),
         };
