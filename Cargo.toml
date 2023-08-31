@@ -158,6 +158,9 @@ tokio = { version = "1.0", default-features = false, features = ["macros", "rt-m
 [target.'cfg(windows)'.dependencies]
 winreg = "0.50.0"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+system-configuration = "0.5.1"
+
 # wasm
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
