@@ -105,22 +105,13 @@ impl Body {
                 let mut bytes = Vec::new();
                 let mut eof = false;
                 while !eof {
-                    let (mut body_chunk, stream_ended) = streams::read(handle, u64::MAX).unwrap(); // TODO: error handling
-                    eof = stream_ended;
+                    let (mut body_chunk, stream_status) = streams::read(handle, u64::MAX).unwrap(); // TODO: error handling
+                    eof = stream_status == streams::StreamStatus::Ended;
                     bytes.append(&mut body_chunk);
                 }
                 self.kind = Some(Kind::Bytes(bytes.into()));
                 self.buffer()
             }
-            None => panic!("Body has already been extracted")
-        }
-    }
-
-    pub(crate) fn len(&self) -> Option<u64> {
-        match self.kind {
-            Some(Kind::Reader(_, len)) => len,
-            Some(Kind::Bytes(ref bytes)) => Some(bytes.len() as u64),
-            Some(Kind::Incoming(_)) => None,
             None => panic!("Body has already been extracted")
         }
     }
@@ -155,8 +146,8 @@ impl Body {
             Kind::Incoming(handle) => {
                 let mut eof = false;
                 while !eof {
-                    let (body_chunk, stream_ended) = streams::read(handle, u64::MAX).unwrap(); // TODO: error handling
-                    eof = stream_ended;
+                    let (body_chunk, stream_status) = streams::read(handle, u64::MAX).unwrap(); // TODO: error handling
+                    eof = stream_status == streams::StreamStatus::Ended;
                     f(&body_chunk)?;
                 }
                 Ok(())
@@ -277,8 +268,8 @@ impl Read for Reader {
             Reader::Reader(ref mut rdr) => rdr.read(buf),
             Reader::Bytes(ref mut rdr) => rdr.read(buf),
             Reader::Wasi(handle) => {
-                let (body_chunk, stream_ended) = streams::read(handle, buf.len() as u64).unwrap(); // TODO: error handling
-                if stream_ended {
+                let (body_chunk, stream_status) = streams::read(handle, buf.len() as u64).unwrap(); // TODO: error handling
+                if stream_status == streams::StreamStatus::Ended {
                     return Ok(0);
                 } else {
                     let len = body_chunk.len();

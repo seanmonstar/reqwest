@@ -174,10 +174,10 @@ impl Client {
         &self,
         request: Request,
     ) -> Result<Response, crate::Error> {
-        let mut header_key_values: Vec<(&str, &str)> = vec![];
+        let mut header_key_values: Vec<(String, String)> = vec![];
         for (name, value) in self.inner.headers.iter() {
             match value.to_str() {
-                Ok(value) => header_key_values.push((name.as_str(), value)),
+                Ok(value) => header_key_values.push((name.as_str().to_string(), value.to_string())),
                 Err(_) => {}
             }
         }
@@ -185,7 +185,7 @@ impl Client {
         let (method, url, headers, body, timeout, _version) = request.pieces();
         for (name, value) in headers.iter() {
             match value.to_str() {
-                Ok(value) => header_key_values.push((name.as_str(), value)),
+                Ok(value) => header_key_values.push((name.as_str().to_string(), value.to_string())),
                 Err(_) => {}
             }
         }
@@ -196,12 +196,15 @@ impl Client {
             other => types::Scheme::Other(other.to_string())
         };
         let headers = types::new_fields(&header_key_values);
+        let path_with_query = match url.query() {
+            Some(query) => format!("{}?{}", url.path(), query),
+            None => url.path().to_string()
+        };
         let request = types::new_outgoing_request(
             &method.into(),
-            url.path(),
-            url.query().unwrap_or(""),
+            Some(&path_with_query),
             Some(&scheme),
-            url.authority(),
+            Some(url.authority()),
             headers,
         );
 
@@ -260,7 +263,7 @@ impl Client {
         let entries = types::fields_entries(fields);
         for (name, value) in entries {
             headers.insert(HeaderName::try_from(&name).expect("Invalid header name"),
-                           HeaderValue::from_str(&value).expect("Invalid header value"));
+                           HeaderValue::from_bytes(&value).expect("Invalid header value"));
         }
         headers
     }

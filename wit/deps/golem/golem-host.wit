@@ -1,0 +1,40 @@
+package golem:api
+
+interface host {
+
+    record promise-id {
+        worker-id: worker-id,
+        oplog-idx: s32,
+    }
+
+    record worker-id {
+        template-id: template-id,
+        worker-name: string
+    }
+
+  
+    record template-id {
+        uuid: uuid,
+    }
+
+    record uuid {
+      high-bits: u64,
+      low-bits: u64
+    }
+    
+    record account-id {
+        account-name: string
+    }
+
+    golem-create-promise: func() -> promise-id
+
+    golem-await-promise: func(promise-id: promise-id) -> list<u8>
+
+    golem-complete-promise: func(promise-id: promise-id, data: list<u8>) -> bool
+
+    golem-delete-promise: func(promise-id: promise-id) -> ()
+}
+
+world golem-host {
+    import host
+}
