@@ -4,10 +4,7 @@ use hyper::client::connect::dns::Name;
 use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
 pub use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
-use trust_dns_resolver::{
-    lookup_ip::LookupIpIntoIter, system_conf, AsyncResolver, TokioConnection,
-    TokioConnectionProvider, TokioHandle,
-};
+use trust_dns_resolver::{lookup_ip::LookupIpIntoIter, system_conf, TokioAsyncResolver};
 
 use std::io;
 use std::net::SocketAddr;
@@ -15,9 +12,7 @@ use std::sync::Arc;
 
 use super::{Addrs, Resolve, Resolving};
 
-use crate::error::BoxError;
-
-type SharedResolver = Arc<AsyncResolver<TokioConnection, TokioConnectionProvider>>;
+type SharedResolver = Arc<TokioAsyncResolver>;
 
 static SYSTEM_CONF: Lazy<io::Result<(ResolverConfig, ResolverOpts)>> =
     Lazy::new(|| system_conf::read_system_conf().map_err(io::Error::from));
@@ -63,7 +58,7 @@ impl Resolve for TrustDnsResolver {
 
             let resolver = match &*lock {
                 State::Init => {
-                    let resolver = new_resolver().await?;
+                    let resolver = new_resolver().await;
                     *lock = State::Ready(resolver.clone());
                     resolver
                 }
@@ -91,7 +86,7 @@ impl Iterator for SocketAddrs {
     }
 }
 
-async fn new_resolver() -> Result<SharedResolver, BoxError> {
+async fn new_resolver() -> SharedResolver {
     let (config, opts) = SYSTEM_CONF
         .as_ref()
         .expect("can't construct TrustDnsResolver if SYSTEM_CONF is error")
@@ -99,10 +94,6 @@ async fn new_resolver() -> Result<SharedResolver, BoxError> {
     new_resolver_with_config(config, opts)
 }
 
-fn new_resolver_with_config(
-    config: ResolverConfig,
-    opts: ResolverOpts,
-) -> Result<SharedResolver, BoxError> {
-    let resolver = AsyncResolver::new(config, opts, TokioHandle)?;
-    Ok(Arc::new(resolver))
+fn new_resolver_with_config(config: ResolverConfig, opts: ResolverOpts) -> SharedResolver {
+    Arc::new(TokioAsyncResolver::tokio(config, opts))
 }
