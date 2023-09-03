@@ -35,7 +35,7 @@ fn initialize_system_conf() -> io::Result<(ResolverConfig, ResolverOpts)> {
     system_conf::read_system_conf().map_err(io::Error::from)
 }
 
-fn reinitialize_system_conf() -> io::Result<()> {
+pub fn reinitialize_system_conf() -> io::Result<()> {
     let mut data = SYSTEM_CONF.lock().unwrap();
     *data = Some(initialize_system_conf());
     Ok(())
@@ -61,7 +61,7 @@ impl TrustDnsResolver {
     /// Create a new resolver with the default configuration,
     /// which reads from `/etc/resolve.conf`.
     pub fn new() -> io::Result<Self> {
-        get_system_conf.as_ref().map_err(|e| {
+        get_system_conf().as_ref().map_err(|e| {
             io::Error::new(e.kind(), format!("error reading DNS system conf: {}", e))
         })?;
 
