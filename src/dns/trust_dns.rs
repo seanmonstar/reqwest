@@ -1,8 +1,7 @@
 //! DNS resolution via the [trust_dns_resolver](https://github.com/bluejekyll/trust-dns) crate
 
 use hyper::client::connect::dns::Name;
-use once_cell::sync::Lazy;
-use tokio::sync::Mutex;
+use once_cell::sync::{Lazy, OnceCell};
 pub use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 use trust_dns_resolver::{lookup_ip::LookupIpIntoIter, system_conf, TokioAsyncResolver};
 
@@ -20,17 +19,11 @@ static SYSTEM_CONF: Lazy<io::Result<(ResolverConfig, ResolverOpts)>> =
 /// Wrapper around an `AsyncResolver`, which implements the `Resolve` trait.
 #[derive(Debug, Clone)]
 pub(crate) struct TrustDnsResolver {
-    state: Arc<Mutex<State>>,
+    state: Arc<OnceCell<SharedResolver>>,
 }
 
 struct SocketAddrs {
     iter: LookupIpIntoIter,
-}
-
-#[derive(Debug)]
-enum State {
-    Init,
-    Ready(SharedResolver),
 }
 
 impl TrustDnsResolver {
@@ -45,7 +38,7 @@ impl TrustDnsResolver {
         // Tokio Runtime, so we must delay the actual construction of the
         // resolver.
         Ok(TrustDnsResolver {
-            state: Arc::new(Mutex::new(State::Init)),
+            state: Arc::new(OnceCell::new()),
         })
     }
 }
@@ -54,20 +47,7 @@ impl Resolve for TrustDnsResolver {
     fn resolve(&self, name: Name) -> Resolving {
         let resolver = self.clone();
         Box::pin(async move {
-            let mut lock = resolver.state.lock().await;
-
-            let resolver = match &*lock {
-                State::Init => {
-                    let resolver = new_resolver().await;
-                    *lock = State::Ready(resolver.clone());
-                    resolver
-                }
-                State::Ready(resolver) => resolver.clone(),
-            };
-
-            // Don't keep lock once the resolver is constructed, otherwise
-            // only one lookup could be done at a time.
-            drop(lock);
+            let resolver = resolver.state.get_or_init(new_resolver);
 
             let lookup = resolver.lookup_ip(name.as_str()).await?;
             let addrs: Addrs = Box::new(SocketAddrs {
@@ -86,7 +66,7 @@ impl Iterator for SocketAddrs {
     }
 }
 
-async fn new_resolver() -> SharedResolver {
+fn new_resolver() -> SharedResolver {
     let (config, opts) = SYSTEM_CONF
         .as_ref()
         .expect("can't construct TrustDnsResolver if SYSTEM_CONF is error")
