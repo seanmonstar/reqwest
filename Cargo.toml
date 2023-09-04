@@ -137,7 +137,7 @@ tokio-util = { version = "0.7.1", default-features = false, features = ["codec",
 tokio-socks = { version = "0.5.1", optional = true }
 
 ## trust-dns
-trust-dns-resolver = { version = "0.22", optional = true }
+trust-dns-resolver = { version = "0.23", optional = true, features = ["tokio-runtime"] }
 
 # HTTP/3 experimental support
 h3 = { version="0.0.2", optional = true }

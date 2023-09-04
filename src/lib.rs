@@ -160,12 +160,12 @@
 //!   [`Identity`][Identity] type.
 //! - Various parts of TLS can also be configured or even disabled on the
 //!   `ClientBuilder`.
-//! 
+//!
 //! ## WASM
 //! The Client implementation automatically switches to the WASM one when the target_arch is wasm32,
 //! the usage is basically the same as the async api. Some of the features are disabled in wasm
 //! : [`tls`](tls) [`cookie`](cookie) [`blocking`](blocking).
-//! 
+//!
 //!
 //! ## Optional Features
 //!
