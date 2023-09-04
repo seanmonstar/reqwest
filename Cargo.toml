@@ -109,6 +109,7 @@ percent-encoding = "2.1"
 tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
 pin-project-lite = "0.2.0"
 ipnet = "2.3"
+lazy_static = "1.4"
 
 # Optional deps...
 
