@@ -12,26 +12,16 @@ use std::sync::Arc;
 use super::{Addrs, Resolve, Resolving};
 
 /// Wrapper around an `AsyncResolver`, which implements the `Resolve` trait.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct TrustDnsResolver {
+    /// Since we might not have been called in the context of a
+    /// Tokio Runtime in initialization, so we must delay the actual
+    /// construction of the resolver.
     state: Arc<OnceCell<TokioAsyncResolver>>,
 }
 
 struct SocketAddrs {
     iter: LookupIpIntoIter,
-}
-
-impl TrustDnsResolver {
-    /// Create a new resolver with the default configuration,
-    /// which reads from `/etc/resolve.conf`.
-    pub fn new() -> io::Result<Self> {
-        // At this stage, we might not have been called in the context of a
-        // Tokio Runtime, so we must delay the actual construction of the
-        // resolver.
-        Ok(TrustDnsResolver {
-            state: Arc::new(OnceCell::new()),
-        })
-    }
 }
 
 impl Resolve for TrustDnsResolver {
@@ -57,6 +47,8 @@ impl Iterator for SocketAddrs {
     }
 }
 
+/// Create a new resolver with the default configuration,
+/// which reads from `/etc/resolve.conf`.
 fn new_resolver() -> io::Result<TokioAsyncResolver> {
     let (config, opts) = system_conf::read_system_conf()
         .map_err(|e| io::Error::new(e.kind(), format!("error reading DNS system conf: {}", e)))?;
