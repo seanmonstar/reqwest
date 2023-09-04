@@ -110,6 +110,7 @@ tokio = { version = "1.0", default-features = false, features = ["net", "time"] 
 pin-project-lite = "0.2.0"
 ipnet = "2.3"
 lazy_static = "1.4"
+futures = "0.3"
 
 # Optional deps...
 
