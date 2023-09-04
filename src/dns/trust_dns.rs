@@ -52,11 +52,14 @@ impl TrustDnsResolver {
     /// Create a new resolver with the default configuration,
     /// which reads from `/etc/resolve.conf`.
     pub fn new() -> io::Result<Self> {
-        SYSTEM_CONF
-            .lock()
-            .as_ref()
-            .map_err(|e| io::Error::new(e.kind(), format!("error reading DNS system conf: {}", e)))?;
-
+        block_on(async {
+            SYSTEM_CONF
+                .lock()
+                .await
+                .as_ref()
+                .map_err(|e| io::Error::new(e.kind(), format!("error reading DNS system conf: {}", e)))
+                .unwrap();
+        });
         // At this stage, we might not have been called in the context of a
         // Tokio Runtime, so we must delay the actual construction of the
         // resolver.
