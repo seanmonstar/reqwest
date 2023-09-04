@@ -1,5 +1,6 @@
 //! DNS resolution via the [trust_dns_resolver](https://github.com/bluejekyll/trust-dns) crate
 
+use futures::executor::block_on;
 use hyper::client::connect::dns::Name;
 use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
