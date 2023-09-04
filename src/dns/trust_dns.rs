@@ -19,8 +19,18 @@ use crate::error::BoxError;
 
 type SharedResolver = Arc<AsyncResolver<TokioConnection, TokioConnectionProvider>>;
 
-static SYSTEM_CONF: Lazy<io::Result<(ResolverConfig, ResolverOpts)>> =
-    Lazy::new(|| system_conf::read_system_conf().map_err(io::Error::from));
+lazy_static! {
+    static ref SYSTEM_CONF: Mutex<Lazy<io::Result<(ResolverConfig, ResolverOpts)>>> = {
+        Mutex::new(Lazy::new(|| {
+            system_conf::read_system_conf().map_err(io::Error::from)
+        }))
+    };
+}
+
+pub async fn reinitialize_system_conf() {
+    let mut system_conf_lock = SYSTEM_CONF.lock().await;
+    *system_conf_lock = Lazy::new(|| system_conf::read_system_conf().map_err(io::Error::from));
+}
 
 /// Wrapper around an `AsyncResolver`, which implements the `Resolve` trait.
 #[derive(Debug, Clone)]
@@ -42,9 +52,11 @@ impl TrustDnsResolver {
     /// Create a new resolver with the default configuration,
     /// which reads from `/etc/resolve.conf`.
     pub fn new() -> io::Result<Self> {
-        SYSTEM_CONF.as_ref().map_err(|e| {
-            io::Error::new(e.kind(), format!("error reading DNS system conf: {}", e))
-        })?;
+        SYSTEM_CONF
+            .lock()
+            .await
+            .as_ref()
+            .map_err(|e| io::Error::new(e.kind(), format!("error reading DNS system conf: {}", e)))?;
 
         // At this stage, we might not have been called in the context of a
         // Tokio Runtime, so we must delay the actual construction of the
@@ -93,8 +105,10 @@ impl Iterator for SocketAddrs {
 
 async fn new_resolver() -> Result<SharedResolver, BoxError> {
     let (config, opts) = SYSTEM_CONF
+        .lock()
+        .await
         .as_ref()
-        .expect("can't construct TrustDnsResolver if SYSTEM_CONF is error")
+        .expect("Failed to get reference of SYSTEM_CONF")
         .clone();
     new_resolver_with_config(config, opts)
 }
