@@ -378,7 +378,7 @@ fn test_response_no_tls_info_for_http() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.content_length(), Some(5));
-    let tls_info = res.extensions().get::<reqwest::TlsInfo>();
+    let tls_info = res.extensions().get::<reqwest::tls::TlsInfo>();
     assert_eq!(tls_info.is_none(), true);
 
     let body = res.text().unwrap();

@@ -463,19 +463,19 @@ impl Service<Uri> for Connector {
 
 #[cfg(feature = "__tls")]
 trait TlsInfoFactory {
-    fn tls_info(&self) -> Option<crate::TlsInfo>;
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo>;
 }
 
 #[cfg(feature = "__tls")]
 impl TlsInfoFactory for tokio::net::TcpStream {
-    fn tls_info(&self) -> Option<crate::TlsInfo> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         None
     }
 }
 
 #[cfg(feature = "default-tls")]
 impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<tokio::net::TcpStream> {
-    fn tls_info(&self) -> Option<crate::TlsInfo> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         match self {
             hyper_tls::MaybeHttpsStream::Https(tls) => tls.tls_info(),
             hyper_tls::MaybeHttpsStream::Http(_) => None,
@@ -485,33 +485,33 @@ impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<tokio::net::TcpStream> {
 
 #[cfg(feature = "default-tls")]
 impl TlsInfoFactory for hyper_tls::TlsStream<hyper_tls::MaybeHttpsStream<tokio::net::TcpStream>> {
-    fn tls_info(&self) -> Option<crate::TlsInfo> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         let peer_certificate = self
             .get_ref()
             .peer_certificate()
             .ok()
             .flatten()
             .and_then(|c| c.to_der().ok());
-        Some(crate::TlsInfo { peer_certificate })
+        Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
 
 #[cfg(feature = "default-tls")]
 impl TlsInfoFactory for tokio_native_tls::TlsStream<tokio::net::TcpStream> {
-    fn tls_info(&self) -> Option<crate::TlsInfo> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         let peer_certificate = self
             .get_ref()
             .peer_certificate()
             .ok()
             .flatten()
             .and_then(|c| c.to_der().ok());
-        Some(crate::TlsInfo { peer_certificate })
+        Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
 
 #[cfg(feature = "__rustls")]
 impl TlsInfoFactory for hyper_rustls::MaybeHttpsStream<tokio::net::TcpStream> {
-    fn tls_info(&self) -> Option<crate::TlsInfo> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         match self {
             hyper_rustls::MaybeHttpsStream::Https(tls) => tls.tls_info(),
             hyper_rustls::MaybeHttpsStream::Http(_) => None,
@@ -521,14 +521,14 @@ impl TlsInfoFactory for hyper_rustls::MaybeHttpsStream<tokio::net::TcpStream> {
 
 #[cfg(feature = "__rustls")]
 impl TlsInfoFactory for tokio_rustls::TlsStream<tokio::net::TcpStream> {
-    fn tls_info(&self) -> Option<crate::TlsInfo> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         let peer_certificate = self
             .get_ref()
             .1
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.0.clone());
-        Some(crate::TlsInfo { peer_certificate })
+        Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
 
@@ -536,27 +536,27 @@ impl TlsInfoFactory for tokio_rustls::TlsStream<tokio::net::TcpStream> {
 impl TlsInfoFactory
     for tokio_rustls::client::TlsStream<hyper_rustls::MaybeHttpsStream<tokio::net::TcpStream>>
 {
-    fn tls_info(&self) -> Option<crate::TlsInfo> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         let peer_certificate = self
             .get_ref()
             .1
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.0.clone());
-        Some(crate::TlsInfo { peer_certificate })
+        Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
 
 #[cfg(feature = "__rustls")]
 impl TlsInfoFactory for tokio_rustls::client::TlsStream<tokio::net::TcpStream> {
-    fn tls_info(&self) -> Option<crate::TlsInfo> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         let peer_certificate = self
             .get_ref()
             .1
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.0.clone());
-        Some(crate::TlsInfo { peer_certificate })
+        Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
 
@@ -825,13 +825,13 @@ mod native_tls_conn {
     }
 
     impl TlsInfoFactory for NativeTlsConn<tokio::net::TcpStream> {
-        fn tls_info(&self) -> Option<crate::TlsInfo> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
             self.inner.tls_info()
         }
     }
 
     impl TlsInfoFactory for NativeTlsConn<hyper_tls::MaybeHttpsStream<tokio::net::TcpStream>> {
-        fn tls_info(&self) -> Option<crate::TlsInfo> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
             self.inner.tls_info()
         }
     }
@@ -918,13 +918,13 @@ mod rustls_tls_conn {
     }
 
     impl TlsInfoFactory for RustlsTlsConn<tokio::net::TcpStream> {
-        fn tls_info(&self) -> Option<crate::TlsInfo> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
             self.inner.tls_info()
         }
     }
 
     impl TlsInfoFactory for RustlsTlsConn<hyper_rustls::MaybeHttpsStream<tokio::net::TcpStream>> {
-        fn tls_info(&self) -> Option<crate::TlsInfo> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
             self.inner.tls_info()
         }
     }
@@ -1107,7 +1107,7 @@ mod verbose {
 
     #[cfg(feature = "__tls")]
     impl<T: super::TlsInfoFactory> super::TlsInfoFactory for Verbose<T> {
-        fn tls_info(&self) -> Option<crate::TlsInfo> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
             self.inner.tls_info()
         }
     }
