@@ -738,6 +738,25 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.use_rustls_tls())
     }
 
+    /// Add TLS information as `TlsInfo` extension to responses.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
+    pub fn tls_info(self, tls_info: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.tls_info(tls_info))
+    }
+
     /// Use a preconfigured TLS backend.
     ///
     /// If the passed `Any` argument is not a TLS backend that reqwest

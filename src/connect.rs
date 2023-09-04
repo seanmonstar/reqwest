@@ -36,6 +36,8 @@ pub(crate) struct Connector {
     #[cfg(feature = "__tls")]
     nodelay: bool,
     #[cfg(feature = "__tls")]
+    tls_info: bool,
+    #[cfg(feature = "__tls")]
     user_agent: Option<HeaderValue>,
 }
 
@@ -82,13 +84,14 @@ impl Connector {
         user_agent: Option<HeaderValue>,
         local_addr: T,
         nodelay: bool,
+        tls_info: bool,
     ) -> crate::Result<Connector>
     where
         T: Into<Option<IpAddr>>,
     {
         let tls = tls.build().map_err(crate::error::builder)?;
         Ok(Self::from_built_default_tls(
-            http, tls, proxies, user_agent, local_addr, nodelay,
+            http, tls, proxies, user_agent, local_addr, nodelay, tls_info,
         ))
     }
 
@@ -100,6 +103,7 @@ impl Connector {
         user_agent: Option<HeaderValue>,
         local_addr: T,
         nodelay: bool,
+        tls_info: bool,
     ) -> Connector
     where
         T: Into<Option<IpAddr>>,
@@ -113,6 +117,7 @@ impl Connector {
             verbose: verbose::OFF,
             timeout: None,
             nodelay,
+            tls_info,
             user_agent,
         }
     }
@@ -125,6 +130,7 @@ impl Connector {
         user_agent: Option<HeaderValue>,
         local_addr: T,
         nodelay: bool,
+        tls_info: bool,
     ) -> Connector
     where
         T: Into<Option<IpAddr>>,
@@ -151,6 +157,7 @@ impl Connector {
             verbose: verbose::OFF,
             timeout: None,
             nodelay,
+            tls_info,
             user_agent,
         }
     }
@@ -188,6 +195,7 @@ impl Connector {
                     return Ok(Conn {
                         inner: self.verbose.wrap(NativeTlsConn { inner: io }),
                         is_proxy: false,
+                        tls_info: self.tls_info,
                     });
                 }
             }
@@ -208,6 +216,7 @@ impl Connector {
                     return Ok(Conn {
                         inner: self.verbose.wrap(RustlsTlsConn { inner: io }),
                         is_proxy: false,
+                        tls_info: false,
                     });
                 }
             }
@@ -218,6 +227,7 @@ impl Connector {
         socks::connect(proxy, dst, dns).await.map(|tcp| Conn {
             inner: self.verbose.wrap(tcp),
             is_proxy: false,
+            tls_info: false,
         })
     }
 
@@ -229,6 +239,7 @@ impl Connector {
                 Ok(Conn {
                     inner: self.verbose.wrap(io),
                     is_proxy,
+                    tls_info: false,
                 })
             }
             #[cfg(feature = "default-tls")]
@@ -253,11 +264,13 @@ impl Connector {
                     Ok(Conn {
                         inner: self.verbose.wrap(NativeTlsConn { inner: stream }),
                         is_proxy,
+                        tls_info: self.tls_info,
                     })
                 } else {
                     Ok(Conn {
                         inner: self.verbose.wrap(io),
                         is_proxy,
+                        tls_info: false,
                     })
                 }
             }
@@ -283,11 +296,13 @@ impl Connector {
                     Ok(Conn {
                         inner: self.verbose.wrap(RustlsTlsConn { inner: stream }),
                         is_proxy,
+                        tls_info: self.tls_info,
                     })
                 } else {
                     Ok(Conn {
                         inner: self.verbose.wrap(io),
                         is_proxy,
+                        tls_info: false,
                     })
                 }
             }
@@ -337,6 +352,7 @@ impl Connector {
                     return Ok(Conn {
                         inner: self.verbose.wrap(NativeTlsConn { inner: io }),
                         is_proxy: false,
+                        tls_info: false,
                     });
                 }
             }
@@ -369,6 +385,7 @@ impl Connector {
                     return Ok(Conn {
                         inner: self.verbose.wrap(RustlsTlsConn { inner: io }),
                         is_proxy: false,
+                        tls_info: false,
                     });
                 }
             }
@@ -444,6 +461,105 @@ impl Service<Uri> for Connector {
     }
 }
 
+#[cfg(feature = "__tls")]
+trait TlsInfoFactory {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo>;
+}
+
+#[cfg(feature = "__tls")]
+impl TlsInfoFactory for tokio::net::TcpStream {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        None
+    }
+}
+
+#[cfg(feature = "default-tls")]
+impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<tokio::net::TcpStream> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        match self {
+            hyper_tls::MaybeHttpsStream::Https(tls) => tls.tls_info(),
+            hyper_tls::MaybeHttpsStream::Http(_) => None,
+        }
+    }
+}
+
+#[cfg(feature = "default-tls")]
+impl TlsInfoFactory for hyper_tls::TlsStream<hyper_tls::MaybeHttpsStream<tokio::net::TcpStream>> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .peer_certificate()
+            .ok()
+            .flatten()
+            .and_then(|c| c.to_der().ok());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
+#[cfg(feature = "default-tls")]
+impl TlsInfoFactory for tokio_native_tls::TlsStream<tokio::net::TcpStream> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .peer_certificate()
+            .ok()
+            .flatten()
+            .and_then(|c| c.to_der().ok());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
+#[cfg(feature = "__rustls")]
+impl TlsInfoFactory for hyper_rustls::MaybeHttpsStream<tokio::net::TcpStream> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        match self {
+            hyper_rustls::MaybeHttpsStream::Https(tls) => tls.tls_info(),
+            hyper_rustls::MaybeHttpsStream::Http(_) => None,
+        }
+    }
+}
+
+#[cfg(feature = "__rustls")]
+impl TlsInfoFactory for tokio_rustls::TlsStream<tokio::net::TcpStream> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .1
+            .peer_certificates()
+            .and_then(|certs| certs.first())
+            .map(|c| c.0.clone());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
+#[cfg(feature = "__rustls")]
+impl TlsInfoFactory
+    for tokio_rustls::client::TlsStream<hyper_rustls::MaybeHttpsStream<tokio::net::TcpStream>>
+{
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .1
+            .peer_certificates()
+            .and_then(|certs| certs.first())
+            .map(|c| c.0.clone());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
+#[cfg(feature = "__rustls")]
+impl TlsInfoFactory for tokio_rustls::client::TlsStream<tokio::net::TcpStream> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .1
+            .peer_certificates()
+            .and_then(|certs| certs.first())
+            .map(|c| c.0.clone());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
 pub(crate) trait AsyncConn:
     AsyncRead + AsyncWrite + Connection + Send + Sync + Unpin + 'static
 {
@@ -451,7 +567,17 @@ pub(crate) trait AsyncConn:
 
 impl<T: AsyncRead + AsyncWrite + Connection + Send + Sync + Unpin + 'static> AsyncConn for T {}
 
-type BoxConn = Box<dyn AsyncConn>;
+#[cfg(feature = "__tls")]
+trait AsyncConnWithInfo: AsyncConn + TlsInfoFactory {}
+#[cfg(not(feature = "__tls"))]
+trait AsyncConnWithInfo: AsyncConn {}
+
+#[cfg(feature = "__tls")]
+impl<T: AsyncConn + TlsInfoFactory> AsyncConnWithInfo for T {}
+#[cfg(not(feature = "__tls"))]
+impl<T: AsyncConn> AsyncConnWithInfo for T {}
+
+type BoxConn = Box<dyn AsyncConnWithInfo>;
 
 pin_project! {
     /// Note: the `is_proxy` member means *is plain text HTTP proxy*.
@@ -462,12 +588,26 @@ pin_project! {
         #[pin]
         inner: BoxConn,
         is_proxy: bool,
+        // Only needed for __tls, but #[cfg()] on fields breaks pin_project!
+        tls_info: bool,
     }
 }
 
 impl Connection for Conn {
     fn connected(&self) -> Connected {
-        self.inner.connected().proxy(self.is_proxy)
+        let connected = self.inner.connected().proxy(self.is_proxy);
+        #[cfg(feature = "__tls")]
+        if self.tls_info {
+            if let Some(tls_info) = self.inner.tls_info() {
+                connected.extra(tls_info)
+            } else {
+                connected
+            }
+        } else {
+            connected
+        }
+        #[cfg(not(feature = "__tls"))]
+        connected
     }
 }
 
@@ -595,6 +735,7 @@ fn tunnel_eof() -> BoxError {
 
 #[cfg(feature = "default-tls")]
 mod native_tls_conn {
+    use super::TlsInfoFactory;
     use hyper::client::connect::{Connected, Connection};
     use pin_project_lite::pin_project;
     use std::{
@@ -682,10 +823,23 @@ mod native_tls_conn {
             AsyncWrite::poll_shutdown(this.inner, cx)
         }
     }
+
+    impl TlsInfoFactory for NativeTlsConn<tokio::net::TcpStream> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+            self.inner.tls_info()
+        }
+    }
+
+    impl TlsInfoFactory for NativeTlsConn<hyper_tls::MaybeHttpsStream<tokio::net::TcpStream>> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+            self.inner.tls_info()
+        }
+    }
 }
 
 #[cfg(feature = "__rustls")]
 mod rustls_tls_conn {
+    use super::TlsInfoFactory;
     use hyper::client::connect::{Connected, Connection};
     use pin_project_lite::pin_project;
     use std::{
@@ -760,6 +914,18 @@ mod rustls_tls_conn {
         ) -> Poll<Result<(), tokio::io::Error>> {
             let this = self.project();
             AsyncWrite::poll_shutdown(this.inner, cx)
+        }
+    }
+
+    impl TlsInfoFactory for RustlsTlsConn<tokio::net::TcpStream> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+            self.inner.tls_info()
+        }
+    }
+
+    impl TlsInfoFactory for RustlsTlsConn<hyper_rustls::MaybeHttpsStream<tokio::net::TcpStream>> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+            self.inner.tls_info()
         }
     }
 }
@@ -844,7 +1010,7 @@ mod verbose {
     pub(super) struct Wrapper(pub(super) bool);
 
     impl Wrapper {
-        pub(super) fn wrap<T: super::AsyncConn>(&self, conn: T) -> super::BoxConn {
+        pub(super) fn wrap<T: super::AsyncConnWithInfo>(&self, conn: T) -> super::BoxConn {
             if self.0 && log::log_enabled!(log::Level::Trace) {
                 Box::new(Verbose {
                     // truncate is fine
@@ -936,6 +1102,13 @@ mod verbose {
             cx: &mut Context,
         ) -> Poll<Result<(), std::io::Error>> {
             Pin::new(&mut self.inner).poll_shutdown(cx)
+        }
+    }
+
+    #[cfg(feature = "__tls")]
+    impl<T: super::TlsInfoFactory> super::TlsInfoFactory for Verbose<T> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+            self.inner.tls_info()
         }
     }
 
