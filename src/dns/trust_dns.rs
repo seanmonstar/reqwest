@@ -54,7 +54,6 @@ impl TrustDnsResolver {
     pub fn new() -> io::Result<Self> {
         SYSTEM_CONF
             .lock()
-            .await
             .as_ref()
             .map_err(|e| io::Error::new(e.kind(), format!("error reading DNS system conf: {}", e)))?;
 
