@@ -108,7 +108,7 @@ async fn new_resolver() -> Result<SharedResolver, BoxError> {
         .lock()
         .await
         .as_ref()
-        .expect("Failed to get reference of SYSTEM_CONF")
+        .unwrap()
         .clone();
     new_resolver_with_config(config, opts)
 }
