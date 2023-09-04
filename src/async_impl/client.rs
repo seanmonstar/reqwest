@@ -266,7 +266,7 @@ impl ClientBuilder {
             let mut resolver: Arc<dyn Resolve> = match config.trust_dns {
                 false => Arc::new(GaiResolver::new()),
                 #[cfg(feature = "trust-dns")]
-                true => Arc::new(TrustDnsResolver::new().map_err(crate::error::builder)?),
+                true => Arc::new(TrustDnsResolver::default()),
                 #[cfg(not(feature = "trust-dns"))]
                 true => unreachable!("trust-dns shouldn't be enabled unless the feature is"),
             };
