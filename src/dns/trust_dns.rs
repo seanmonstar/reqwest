@@ -11,12 +11,10 @@ use std::sync::Arc;
 
 use super::{Addrs, Resolve, Resolving};
 
-type SharedResolver = Arc<TokioAsyncResolver>;
-
 /// Wrapper around an `AsyncResolver`, which implements the `Resolve` trait.
 #[derive(Debug, Clone)]
 pub(crate) struct TrustDnsResolver {
-    state: Arc<OnceCell<SharedResolver>>,
+    state: Arc<OnceCell<TokioAsyncResolver>>,
 }
 
 struct SocketAddrs {
@@ -59,12 +57,8 @@ impl Iterator for SocketAddrs {
     }
 }
 
-fn new_resolver() -> io::Result<SharedResolver> {
+fn new_resolver() -> io::Result<TokioAsyncResolver> {
     let (config, opts) = system_conf::read_system_conf()
         .map_err(|e| io::Error::new(e.kind(), format!("error reading DNS system conf: {}", e)))?;
-    Ok(new_resolver_with_config(config, opts))
-}
-
-fn new_resolver_with_config(config: ResolverConfig, opts: ResolverOpts) -> SharedResolver {
-    Arc::new(TokioAsyncResolver::tokio(config, opts))
+    Ok(TokioAsyncResolver::tokio(config, opts))
 }
