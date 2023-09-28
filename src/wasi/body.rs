@@ -6,6 +6,8 @@ use std::io::{self, Cursor, Read};
 use super::wasi::http::*;
 use super::wasi::io::*;
 
+use super::client::failure_point;
+
 /// An asynchronous request body.
 #[derive(Debug)]
 pub struct Body {
@@ -105,7 +107,7 @@ impl Body {
                 let mut bytes = Vec::new();
                 let mut eof = false;
                 while !eof {
-                    let (mut body_chunk, stream_status) = streams::read(handle, u64::MAX).unwrap(); // TODO: error handling
+                    let (mut body_chunk, stream_status) = streams::read(handle, u64::MAX).map_err(|e| failure_point("read", e))?;
                     eof = stream_status == streams::StreamStatus::Ended;
                     bytes.append(&mut body_chunk);
                 }
@@ -146,7 +148,7 @@ impl Body {
             Kind::Incoming(handle) => {
                 let mut eof = false;
                 while !eof {
-                    let (body_chunk, stream_status) = streams::read(handle, u64::MAX).unwrap(); // TODO: error handling
+                    let (body_chunk, stream_status) = streams::read(handle, u64::MAX).map_err(|e| failure_point("read", e))?;
                     eof = stream_status == streams::StreamStatus::Ended;
                     f(&body_chunk)?;
                 }
@@ -268,7 +270,7 @@ impl Read for Reader {
             Reader::Reader(ref mut rdr) => rdr.read(buf),
             Reader::Bytes(ref mut rdr) => rdr.read(buf),
             Reader::Wasi(handle) => {
-                let (body_chunk, stream_status) = streams::read(handle, buf.len() as u64).unwrap(); // TODO: error handling
+                let (body_chunk, stream_status) = streams::read(handle, buf.len() as u64).map_err(|_| io::Error::new(io::ErrorKind::Other, "read chunk"))?;
                 if stream_status == streams::StreamStatus::Ended {
                     return Ok(0);
                 } else {
