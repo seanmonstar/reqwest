@@ -3,13 +3,16 @@ use http::header::{
 };
 use http::{HeaderName, Method, StatusCode};
 use std::convert::{TryInto, TryFrom};
+use std::io::ErrorKind;
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::{Body, IntoUrl};
+use crate::error::Kind;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 
+use super::wasi::clocks::*;
 use super::wasi::http::*;
 use super::wasi::io::*;
 use super::wasi::poll::*;
@@ -210,11 +213,11 @@ impl Client {
 
         match body {
             Some(body) => {
-                let request_body_stream = types::outgoing_request_write(request).unwrap(); // TODO: error handling
+                let request_body_stream = types::outgoing_request_write(request).map_err(|e| failure_point("outgoing_request_write", e))?;
                 body.write(|chunk| {
-                    streams::write(request_body_stream, chunk).unwrap(); // TODO: error handling
+                    streams::write(request_body_stream, chunk).map_err(|e| failure_point("write chunk", e))?;
                     Ok(())
-                }).unwrap(); // TODO: error handling
+                })?;
                 types::finish_outgoing_stream(request_body_stream, None);
                 streams::drop_output_stream(request_body_stream);
             }
@@ -227,7 +230,8 @@ impl Client {
             between_bytes_timeout_ms: timeout.or(self.inner.between_bytes_timeout).map(|d| d.as_millis() as u32),
         }));
 
-        let incoming_response = Self::get_incoming_response(future_incoming_response);
+        let receive_timeout = timeout.or(self.inner.first_byte_timeout);
+        let incoming_response = Self::get_incoming_response(future_incoming_response, receive_timeout)?;
 
         let status = types::incoming_response_status(incoming_response);
         let status_code = StatusCode::from_u16(status).map_err(|e| crate::Error::new(crate::error::Kind::Decode, Some(e)))?;
@@ -236,26 +240,33 @@ impl Client {
         let response_headers = Self::fields_to_header_map(response_fields);
         types::drop_fields(headers);
         types::drop_fields(response_fields);
-        let response_body_stream = types::incoming_response_consume(incoming_response).unwrap(); // TODO: error handling
+        let response_body_stream = types::incoming_response_consume(incoming_response).map_err(|e| failure_point("incoming_response_consume", e))?;
         let response_body: Body = response_body_stream.into();
 
         Ok(Response::new(status_code, response_headers, response_body, incoming_response, url))
     }
 
-    fn get_incoming_response(future_incoming_response: types::FutureIncomingResponse) -> types::IncomingResponse {
-        let incoming_response =
+    fn get_incoming_response(future_incoming_response: types::FutureIncomingResponse, timeout: Option<Duration>) -> Result<types::IncomingResponse, crate::Error> {
+        let deadline_pollable = monotonic_clock::subscribe(timeout.unwrap_or(Duration::from_secs(0)).as_nanos() as u64, false);
+        loop {
             match types::future_incoming_response_get(future_incoming_response) {
-                Some(Ok(incoming_response)) => incoming_response,
-                Some(Err(err)) => panic!("Error: {:?}", err),
+                Some(Ok(incoming_response)) => {
+                    types::drop_future_incoming_response(future_incoming_response);
+                    return Ok(incoming_response);
+                }
+                Some(Err(err)) => return Err(err.into()),
                 None => {
                     let pollable = types::listen_to_future_incoming_response(future_incoming_response);
-                    let _ = poll::poll_oneoff(&vec!(pollable));
-                    poll::drop_pollable(pollable);
-                    Self::get_incoming_response(future_incoming_response)
+                    let bitmap = poll::poll_oneoff(&vec!(pollable, deadline_pollable));
+                    if timeout.is_none() || !bitmap[1] {
+                        poll::drop_pollable(pollable);
+                        continue;
+                    } else {
+                        return Err(crate::Error::new(Kind::Request, Some(crate::error::TimedOut)));
+                    }
                 }
             };
-        types::drop_future_incoming_response(future_incoming_response);
-        incoming_response
+        }
     }
 
     fn fields_to_header_map(fields: types::Fields) -> HeaderMap {
@@ -419,4 +430,14 @@ impl From<Method> for types::Method {
             types::Method::Other(value.as_str().to_string())
         }
     }
+}
+
+impl From<types::Error> for crate::Error {
+    fn from(value: types::Error) -> Self {
+        crate::Error::new(Kind::Request, Some(std::io::Error::new(ErrorKind::Other, format!("{:?}", value))))
+    }
+}
+
+pub(crate) fn failure_point(s: &str, _: ()) -> crate::Error {
+    crate::Error::new(Kind::Request, Some(std::io::Error::new(ErrorKind::Other, s)))
 }

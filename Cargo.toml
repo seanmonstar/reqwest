@@ -206,9 +206,10 @@ package = "reqwest:wasi"
 path = "wit"
 
 [package.metadata.component.target.dependencies]
-"wasi:poll" = { path = "wit/deps/poll" }
-"wasi:io" = { path = "wit/deps/io" }
+"wasi:clocks" = { path = "wit/deps/clocks" }
 "wasi:http" = { path = "wit/deps/http" }
+"wasi:io" = { path = "wit/deps/io" }
+"wasi:poll" = { path = "wit/deps/poll" }
 
 #[lib]
 #crate-type = ["cdylib"]

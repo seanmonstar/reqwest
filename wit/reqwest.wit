@@ -1,6 +1,7 @@
 package reqwest:wasi
 
 world http-client {
+  import wasi:clocks/monotonic-clock
   import wasi:poll/poll
   import wasi:io/streams
   import wasi:http/types
