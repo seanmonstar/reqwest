@@ -1,3 +1,10 @@
+## v0.11.21
+
+- Add automatically detecting macOS proxy settings.
+- Add `ClientBuilder::tls_info(bool)`, which will put `tls::TlsInfo` into the response extensions.
+- Fix trust-dns resolver from possible hangs.
+- Fix connect timeout to be split among multiple IP addresses.
+
 ## v0.11.20
 
 - Fix `deflate` decompression back to using zlib, as outlined in the spec.
