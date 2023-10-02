@@ -86,6 +86,63 @@ async fn connect_timeout() {
     assert!(err.is_connect() && err.is_timeout());
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+#[tokio::test]
+async fn connect_many_timeout_succeeds() {
+    let _ = env_logger::try_init();
+
+    let server = server::http(move |_req| async { http::Response::default() });
+    let port = server.addr().port();
+
+    let client = reqwest::Client::builder()
+        .resolve_to_addrs(
+            "many_addrs",
+            &["10.255.255.1:81".parse().unwrap(), server.addr()],
+        )
+        .connect_timeout(Duration::from_millis(100))
+        .build()
+        .unwrap();
+
+    let url = format!("http://many_addrs:{port}/eventual");
+
+    let _res = client
+        .get(url)
+        .timeout(Duration::from_millis(1000))
+        .send()
+        .await
+        .unwrap();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[tokio::test]
+async fn connect_many_timeout() {
+    let _ = env_logger::try_init();
+
+    let client = reqwest::Client::builder()
+        .resolve_to_addrs(
+            "many_addrs",
+            &[
+                "10.255.255.1:81".parse().unwrap(),
+                "10.255.255.2:81".parse().unwrap(),
+            ],
+        )
+        .connect_timeout(Duration::from_millis(100))
+        .build()
+        .unwrap();
+
+    let url = format!("http://many_addrs:81/slow");
+
+    let res = client
+        .get(url)
+        .timeout(Duration::from_millis(1000))
+        .send()
+        .await;
+
+    let err = res.unwrap_err();
+
+    assert!(err.is_connect() && err.is_timeout());
+}
+
 #[tokio::test]
 async fn response_timeout() {
     let _ = env_logger::try_init();

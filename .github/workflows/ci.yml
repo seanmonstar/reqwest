@@ -277,10 +277,11 @@ jobs:
         with:
           toolchain: ${{ steps.metadata.outputs.msrv }}
 
-      - name: Make sure log v0.4.18 is used
+      - name: Fix log and tokio versions
         run: |
           cargo update
           cargo update -p log --precise 0.4.18
+          cargo update -p tokio --precise 1.29.1
 
       - uses: Swatinem/rust-cache@v2
 
