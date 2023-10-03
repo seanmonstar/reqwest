@@ -50,7 +50,11 @@ impl Iterator for SocketAddrs {
 /// Create a new resolver with the default configuration,
 /// which reads from `/etc/resolve.conf`.
 fn new_resolver() -> io::Result<TokioAsyncResolver> {
-    let (config, opts) = system_conf::read_system_conf()
-        .map_err(|e| io::Error::new(e.kind(), format!("error reading DNS system conf: {}", e)))?;
+    let (config, opts) = system_conf::read_system_conf().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::Other,
+            format!("error reading DNS system conf: {}", e),
+        )
+    })?;
     Ok(TokioAsyncResolver::tokio(config, opts))
 }
