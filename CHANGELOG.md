@@ -1,3 +1,7 @@
+## v0.11.22
+
+- Fix compilation on Windows when `trust-dns` is enabled.
+
 ## v0.11.21
 
 - Add automatically detecting macOS proxy settings.
