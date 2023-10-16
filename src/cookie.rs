@@ -97,6 +97,11 @@ impl<'a> Cookie<'a> {
             None | Some(cookie_crate::Expiration::Session) => None,
         }
     }
+
+    /// Creates Cookie with a static lifetime.
+    pub fn into_owned(&self) -> Cookie<'static> {
+        Cookie(self.0.clone().into_owned())
+    }
 }
 
 impl<'a> fmt::Debug for Cookie<'a> {
@@ -187,5 +192,21 @@ impl CookieStore for Jar {
         }
 
         HeaderValue::from_maybe_shared(Bytes::from(s)).ok()
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cookie_can_become_owned_type() {
+        let cookie = {
+            let header_value = HeaderValue::from_static("sessionId=e8bb43229de9;");
+            Cookie::parse(&header_value).unwrap().into_owned()
+        };
+        assert_eq!("sessionId", cookie.name());
+        assert_eq!("e8bb43229de9", cookie.value());
     }
 }
