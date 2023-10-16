@@ -244,6 +244,55 @@ impl Response {
         })
     }
 
+    /// Try to deserialize a single chunk of the request body as JSON.
+    ///
+    /// When the response body has been exhausted, this will return `Ok(None)`.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `json` feature enabled.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # extern crate reqwest;
+    /// # extern crate serde;
+    /// #
+    /// # use reqwest::Error;
+    /// # use serde::Deserialize;
+    /// #
+    /// // This `derive` requires the `serde` dependency.
+    /// #[derive(Deserialize)]
+    /// struct Ip {
+    ///     origin: String,
+    /// }
+    ///
+    /// # fn run() -> Result<(), Error> {
+    /// let mut res = reqwest::blocking::get("http://httpbin.org/ip")?;
+    ///
+    /// while let Some(chunk) = res.json_chunk::<Ip>()? {
+    ///     println!("Chunk: {:?}", chunk);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever the response chunk is not in JSON format
+    /// or it cannot be properly deserialized to target type `T`. For more
+    /// details please see [`serde_json::from_reader`].
+    ///
+    /// [`serde_json::from_reader`]: https://docs.serde.rs/serde_json/fn.from_reader.html
+    #[cfg(feature = "json")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
+    pub fn json_chunk<T: DeserializeOwned>(&mut self) -> crate::Result<Option<T>> {
+        wait::timeout(self.inner.json_chunk(), self.timeout).map_err(|e| match e {
+            wait::Waited::TimedOut(e) => crate::error::decode(e),
+            wait::Waited::Inner(e) => e,
+        })
+    }
+
     /// Get the full response body as `Bytes`.
     ///
     /// # Example
