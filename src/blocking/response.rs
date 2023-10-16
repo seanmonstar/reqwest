@@ -263,6 +263,29 @@ impl Response {
         })
     }
 
+    /// Stream a chunk of the response body.
+    ///
+    /// When the response body has been exhausted, this will return `None`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut res = reqwest::blocking::get("https://hyper.rs")?;
+    ///
+    /// while let Some(chunk) = res.chunk()? {
+    ///     println!("Chunk: {:?}", chunk);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn chunk(&mut self) -> crate::Result<Option<Bytes>> {
+        wait::timeout(self.inner.chunk(), self.timeout).map_err(|e| match e {
+            wait::Waited::TimedOut(e) => crate::error::decode(e),
+            wait::Waited::Inner(e) => e,
+        })
+    }
+
     /// Get the response text.
     ///
     /// This method decodes the response body with BOM sniffing
