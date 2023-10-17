@@ -194,7 +194,7 @@
 //! - **multipart**: Provides functionality for multipart forms.
 //! - **stream**: Adds support for `futures::Stream`.
 //! - **socks**: Provides SOCKS5 proxy support.
-//! - **trust-dns**: Enables a trust-dns async resolver instead of default
+//! - **hickory-dns**: Enables a hickory-dns async resolver instead of default
 //!   threadpool using `getaddrinfo`.
 //!
 //! ## Unstable Features
