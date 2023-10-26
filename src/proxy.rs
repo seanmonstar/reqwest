@@ -943,7 +943,9 @@ fn parse_setting_from_dynamic_store(
 fn get_from_platform_impl() -> Result<Option<String>, Box<dyn Error>> {
     let store = SCDynamicStoreBuilder::new("reqwest").build();
 
-    let Some(proxies_map) = store.get_proxies() else {
+    let proxies_map = if let Some(proxies_map) = store.get_proxies() {
+        proxies_map
+    } else {
         return Ok(None);
     };
 
