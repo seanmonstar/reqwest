@@ -23,6 +23,41 @@ use crate::Url;
 /// - `custom` can be used to create a customized policy.
 pub struct Policy {
     inner: PolicyKind,
+    filter: Box<dyn Filter + Send + Sync>,
+}
+
+/// A trait that controls the handling of sensitive headers.
+pub trait Filter {
+    /// Handle sensitive headers.
+    fn handle_sensitive_headers(&self, headers: &mut HeaderMap, next: &Url, previous: &[Url]);
+}
+
+/// Default implementation for the handling of sensitive headers.
+///
+/// This implementation will exclude the authorization and cookie headers.
+#[derive(Debug)]
+pub struct DefaultFilter {}
+
+impl Default for DefaultFilter {
+    fn default() -> Self {
+        Self {}
+    }
+}
+
+impl Filter for DefaultFilter {
+    fn handle_sensitive_headers(&self, headers: &mut HeaderMap, next: &Url, previous: &[Url]) {
+        if let Some(previous) = previous.last() {
+            let cross_host = next.host_str() != previous.host_str()
+                || next.port_or_known_default() != previous.port_or_known_default();
+            if cross_host {
+                headers.remove(AUTHORIZATION);
+                headers.remove(COOKIE);
+                headers.remove("cookie2");
+                headers.remove(PROXY_AUTHORIZATION);
+                headers.remove(WWW_AUTHENTICATE);
+            }
+        }
+    }
 }
 
 /// A type that holds information on the next request and previous requests
@@ -47,6 +82,7 @@ impl Policy {
     pub fn limited(max: usize) -> Self {
         Self {
             inner: PolicyKind::Limit(max),
+            filter: Box::new(DefaultFilter::default()),
         }
     }
 
@@ -54,6 +90,7 @@ impl Policy {
     pub fn none() -> Self {
         Self {
             inner: PolicyKind::None,
+            filter: Box::new(DefaultFilter::default()),
         }
     }
 
@@ -101,6 +138,7 @@ impl Policy {
     {
         Self {
             inner: PolicyKind::Custom(Box::new(policy)),
+            filter: Box::new(DefaultFilter::default()),
         }
     }
 
@@ -149,6 +187,21 @@ impl Policy {
 
     pub(crate) fn is_default(&self) -> bool {
         matches!(self.inner, PolicyKind::Limit(10))
+    }
+
+    /// Set filter for the handling of sensitive headers.
+    pub fn set_filter(&mut self, filter: Box<dyn Filter + Send + Sync>) {
+        self.filter = filter;
+    }
+
+    pub(crate) fn handle_sensitive_headers(
+        &self,
+        headers: &mut HeaderMap,
+        next: &Url,
+        previous: &[Url],
+    ) {
+        self.filter
+            .handle_sensitive_headers(headers, next, previous);
     }
 }
 
@@ -231,20 +284,6 @@ pub(crate) enum ActionKind {
     Error(Box<dyn StdError + Send + Sync>),
 }
 
-pub(crate) fn remove_sensitive_headers(headers: &mut HeaderMap, next: &Url, previous: &[Url]) {
-    if let Some(previous) = previous.last() {
-        let cross_host = next.host_str() != previous.host_str()
-            || next.port_or_known_default() != previous.port_or_known_default();
-        if cross_host {
-            headers.remove(AUTHORIZATION);
-            headers.remove(COOKIE);
-            headers.remove("cookie2");
-            headers.remove(PROXY_AUTHORIZATION);
-            headers.remove(WWW_AUTHENTICATE);
-        }
-    }
-}
-
 #[derive(Debug)]
 struct TooManyRedirects;
 
@@ -313,7 +352,7 @@ fn test_redirect_policy_custom() {
 }
 
 #[test]
-fn test_remove_sensitive_headers() {
+fn test_handle_sensitive_headers() {
     use hyper::header::{HeaderValue, ACCEPT, AUTHORIZATION, COOKIE};
 
     let mut headers = HeaderMap::new();
@@ -325,13 +364,15 @@ fn test_remove_sensitive_headers() {
     let mut prev = vec![Url::parse("http://initial-domain.com/new_path").unwrap()];
     let mut filtered_headers = headers.clone();
 
-    remove_sensitive_headers(&mut headers, &next, &prev);
+    let filter = DefaultFilter::default();
+
+    filter.handle_sensitive_headers(&mut headers, &next, &prev);
     assert_eq!(headers, filtered_headers);
 
     prev.push(Url::parse("http://new-domain.com/path").unwrap());
     filtered_headers.remove(AUTHORIZATION);
     filtered_headers.remove(COOKIE);
 
-    remove_sensitive_headers(&mut headers, &next, &prev);
+    filter.handle_sensitive_headers(&mut headers, &next, &prev);
     assert_eq!(headers, filtered_headers);
 }
