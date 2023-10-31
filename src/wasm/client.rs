@@ -1,6 +1,6 @@
 use http::{HeaderMap, Method};
 use js_sys::{Promise, JSON};
-use std::{fmt, future::Future, sync::Arc};
+use std::{fmt, future::Future, pin::Pin, sync::Arc, task::{Context, Poll}};
 use url::Url;
 use wasm_bindgen::prelude::{wasm_bindgen, UnwrapThrowExt as _};
 
@@ -169,6 +169,34 @@ impl fmt::Debug for Client {
         let mut builder = f.debug_struct("Client");
         self.config.fmt_fields(&mut builder);
         builder.finish()
+    }
+}
+
+impl tower_service::Service<Request> for Client {
+    type Response = Response;
+    type Error = crate::Error;
+    type Future = Pin<Box<dyn Future<Output = crate::Result<Response>>>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, req: Request) -> Self::Future {
+        Box::pin(self.execute_request(req))
+    }
+}
+
+impl tower_service::Service<Request> for &'_ Client {
+    type Response = Response;
+    type Error = crate::Error;
+    type Future = Pin<Box<dyn Future<Output = crate::Result<Response>>>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, req: Request) -> Self::Future {
+        Box::pin(self.execute_request(req))
     }
 }
 
