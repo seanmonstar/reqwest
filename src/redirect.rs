@@ -261,7 +261,7 @@ fn test_redirect_policy_limit() {
     let policy = Policy::default();
     let next = Url::parse("http://x.y/z").unwrap();
     let mut previous = (0..9)
-        .map(|i| Url::parse(&format!("http://a.b/c/{}", i)).unwrap())
+        .map(|i| Url::parse(&format!("http://a.b/c/{i}")).unwrap())
         .collect::<Vec<_>>();
 
     match policy.check(StatusCode::FOUND, &next, &previous) {

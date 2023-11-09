@@ -38,7 +38,7 @@
 //!     .text()
 //!     .await?;
 //!
-//! println!("body = {:?}", body);
+//! println!("body = {body:?}");
 //! # Ok(())
 //! # }
 //! ```

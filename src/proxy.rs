@@ -737,8 +737,8 @@ impl ProxyScheme {
 impl fmt::Debug for ProxyScheme {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ProxyScheme::Http { auth: _auth, host } => write!(f, "http://{}", host),
-            ProxyScheme::Https { auth: _auth, host } => write!(f, "https://{}", host),
+            ProxyScheme::Http { auth: _auth, host } => write!(f, "http://{host}"),
+            ProxyScheme::Https { auth: _auth, host } => write!(f, "https://{host}"),
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 {
                 addr,
@@ -746,7 +746,7 @@ impl fmt::Debug for ProxyScheme {
                 remote_dns,
             } => {
                 let h = if *remote_dns { "h" } else { "" };
-                write!(f, "socks5{}://{}", h, addr)
+                write!(f, "socks5{h}://{addr}")
             }
         }
     }
@@ -1040,7 +1040,7 @@ fn parse_platform_values_impl(platform_values: String) -> SystemProxyMap {
                     let address = if extract_type_prefix(*address).is_some() {
                         String::from(*address)
                     } else {
-                        format!("http://{}", address)
+                        format!("http://{address}")
                     };
 
                     insert_proxy(&mut proxies, *protocol, address);
@@ -1059,8 +1059,8 @@ fn parse_platform_values_impl(platform_values: String) -> SystemProxyMap {
             insert_proxy(&mut proxies, scheme, platform_values.to_owned());
         } else {
             // No explicit protocol has been specified, default to HTTP
-            insert_proxy(&mut proxies, "http", format!("http://{}", platform_values));
-            insert_proxy(&mut proxies, "https", format!("http://{}", platform_values));
+            insert_proxy(&mut proxies, "http", format!("http://{platform_values}"));
+            insert_proxy(&mut proxies, "https", format!("http://{platform_values}"));
         }
     }
     proxies

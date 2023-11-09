@@ -17,7 +17,7 @@ async fn main() -> Result<(), reqwest::Error> {
 
     let text = res.text().await?;
     let is_tor = text.contains("Congratulations. This browser is configured to use Tor.");
-    println!("Is Tor: {}", is_tor);
+    println!("Is Tor: {is_tor}");
     assert!(is_tor);
 
     Ok(())

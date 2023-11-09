@@ -130,7 +130,7 @@ async fn connect_many_timeout() {
         .build()
         .unwrap();
 
-    let url = format!("http://many_addrs:81/slow");
+    let url = "http://many_addrs:81/slow".to_string();
 
     let res = client
         .get(url)

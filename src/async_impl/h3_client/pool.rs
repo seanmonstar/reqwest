@@ -37,7 +37,7 @@ impl Pool {
     pub fn connecting(&self, key: Key) -> Result<(), BoxError> {
         let mut inner = self.inner.lock().unwrap();
         if !inner.connecting.insert(key.clone()) {
-            return Err(format!("HTTP/3 connecting already in progress for {:?}", key).into());
+            return Err(format!("HTTP/3 connecting already in progress for {key:?}").into());
         }
         return Ok(());
     }
@@ -77,7 +77,7 @@ impl Pool {
         let (close_tx, close_rx) = std::sync::mpsc::channel();
         tokio::spawn(async move {
             if let Err(e) = future::poll_fn(|cx| driver.poll_close(cx)).await {
-                trace!("poll_close returned error {:?}", e);
+                trace!("poll_close returned error {e:?}");
                 close_tx.send(e).ok();
             }
         });
@@ -105,7 +105,7 @@ struct PoolInner {
 impl PoolInner {
     fn insert(&mut self, key: Key, conn: PoolConnection) {
         if self.idle_conns.contains_key(&key) {
-            trace!("connection already exists for key {:?}", key);
+            trace!("connection already exists for key {key:?}");
         }
 
         self.idle_conns.insert(key, conn);
