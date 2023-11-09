@@ -6,7 +6,7 @@ use hyper::rt::{Read, ReadBufCursor, Write};
 use hyper_util::client::legacy::connect::{Connected, Connection};
 #[cfg(feature = "__tls")]
 use hyper_util::rt::TokioIo;
-#[cfg(feature = "native-tls-crate")]
+#[cfg(feature = "default-tls")]
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
 use tower_service::Service;
 
