@@ -1,10 +1,11 @@
 use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
-use futures_util::stream::StreamExt;
+use futures_util::{StreamExt, TryStreamExt};
 use hyper::client::connect::HttpInfo;
 use hyper::{HeaderMap, StatusCode, Version};
 use mime::Mime;
@@ -21,12 +22,63 @@ use super::decoder::{Accepts, Decoder};
 use crate::cookie;
 use crate::response::ResponseUrl;
 
+/// Response configuration.
+///
+/// Configured per `Client` with
+/// [`ClientBuilder::response_config()`](struct.ClientBuilder.html#method.response_config)
+#[derive(Debug, Clone, Default)]
+pub struct ResponseConfig {
+    /// Setting this to `Some(speed_limit_config)` aborts
+    /// any **full** response body retrieval whenever the
+    /// download speed is lower than `speed_limit_config`.
+    ///
+    /// This setting is in other words only used whenever [`Response::bytes()`]
+    /// (or indirectly by [`Response::text()`] and [`Response::json()`]) is
+    /// being awaited, and **not** by awaiting [`Response::chunk()`] or
+    /// [`Response::bytes_stream()`] etc.
+    pub lowest_allowed_speed: Option<SpeedLimitConfig>,
+}
+
+/// Currently used in [`ResponseConfig`] to optionally
+/// place lowest allowed speed limits.
+#[derive(Debug, Clone)]
+pub struct SpeedLimitConfig {
+    bytes_per_second: usize,
+    /// ### Invariant:
+    /// Must always be greater than one second.
+    ///
+    /// (Further reading for a more detailed explanation can
+    /// be found in the source code of [`Response::bytes()`])
+    duration_window: Duration,
+}
+
+impl SpeedLimitConfig {
+    /// # Errors
+    ///
+    /// Errors if `duration_window` is less than one second.
+    /// This constraint is needed to protect against integer
+    /// division by zero during speed calculations.
+    pub fn try_new(bytes_per_second: usize, duration_window: Duration) -> crate::Result<Self> {
+        if duration_window.as_millis() < 1000 {
+            return Err(crate::error::builder(
+                "duration window may not be less than one second, this is to avoid division by zero during speed calculations"
+            ));
+        }
+
+        Ok(Self {
+            bytes_per_second,
+            duration_window,
+        })
+    }
+}
+
 /// A Response to a submitted `Request`.
 pub struct Response {
     pub(super) res: hyper::Response<Decoder>,
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
+    response_config: ResponseConfig,
 }
 
 impl Response {
@@ -35,6 +87,7 @@ impl Response {
         url: Url,
         accepts: Accepts,
         timeout: Option<Pin<Box<Sleep>>>,
+        response_config: ResponseConfig,
     ) -> Response {
         let (mut parts, body) = res.into_parts();
         let decoder = Decoder::detect(&mut parts.headers, Body::response(body, timeout), accepts);
@@ -43,6 +96,7 @@ impl Response {
         Response {
             res,
             url: Box::new(url),
+            response_config,
         }
     }
 
@@ -255,8 +309,73 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn bytes(self) -> crate::Result<Bytes> {
-        hyper::body::to_bytes(self.res.into_body()).await
+    pub async fn bytes(mut self) -> crate::Result<Bytes> {
+        match &self.response_config.lowest_allowed_speed {
+            None => hyper::body::to_bytes(self.res.into_body()).await,
+            Some(lowest_speed_config) => {
+                let mut window_start_time = Instant::now();
+                let mut bytes_recieved_during_window = 0;
+                // HELP: With capacity?
+                let mut bytes_buffer = Vec::new();
+
+                while let Some(bytes) = self.res.body_mut().try_next().await? {
+                    let current_time = Instant::now();
+
+                    // NOTE:
+                    // Elapsed seconds conversion calculation is required to be done outside of
+                    // if statement. `.as_secs()` floors elapsed, which may invalidate the inner
+                    // assumption that elapsed > duration_window.
+                    let elapsed_seconds = (current_time - window_start_time).as_secs();
+                    let duriation_window_seconds = lowest_speed_config.duration_window.as_secs();
+
+                    if elapsed_seconds >= duriation_window_seconds {
+                        /*
+                            * Protection against division by zero is guranteed by requiring
+                            `duration_window` to be greater or equal to one second. `elapsed`
+                            will in other words always be > 1 second whenever this branch
+                            is executed.
+
+                            * Using '<=' over '<' is required to handle the case when
+                            lowest_speed_config.bytes_per_second is set to 0.
+
+                            * Using integers removes the need to protect against NaN, +-Infinity
+                            edge-cases, normally at the cost of precision. False positives
+                            should, however, still not be able to occur given that the
+                            if statement can equivalently be expressed as:
+
+                            "abort if bytes_recieved_during_window <= min_bytes_per_per_window"
+
+                            This equivalence leaves no room for rounding errors so long as
+                            my math remains correct:
+
+                            bytes_recieved_during_window / elapsed <= min_bytes_per_second <==>
+                            bytes_recieved_during_window / elapsed <= min_bytes_per_window / duration_window
+
+                            The surrounding `elapsed >= duration_window` if condition,
+                            implies that the above inequality can be simplied to:
+
+                            bytes_recieved_during_window <= min_bytes_per_window (Q.E.D)
+                        */
+                        if bytes_recieved_during_window / (elapsed_seconds as usize)
+                            < lowest_speed_config.bytes_per_second
+                        {
+                            return Err(crate::error::body(
+                                "body retrieval speed lower that configured limit, aborting",
+                            ));
+                        } else {
+                            window_start_time = current_time;
+                            bytes_recieved_during_window = 0;
+                        }
+                    } else {
+                        bytes_recieved_during_window += bytes.len();
+                    }
+
+                    bytes_buffer.push(bytes)
+                }
+
+                Ok(bytes_buffer.concat().into())
+            }
+        }
     }
 
     /// Stream a chunk of the response body.
@@ -410,6 +529,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
         Response {
             res,
             url: Box::new(url),
+            response_config: Default::default(),
         }
     }
 }
@@ -423,22 +543,97 @@ impl From<Response> for Body {
 
 #[cfg(test)]
 mod tests {
-    use super::Response;
-    use crate::ResponseBuilderExt;
+    use std::{convert::From, task::Poll, time::Duration};
+
     use http::response::Builder;
     use url::Url;
 
+    use crate::{
+        async_impl::{
+            body::Body,
+            response::{ResponseConfig, SpeedLimitConfig},
+        },
+        Response, ResponseBuilderExt,
+    };
+
+    fn mock_url() -> Url {
+        Url::parse("http://example.com").unwrap()
+    }
+
+    fn mock_response<T>(body: T) -> Response
+    where
+        Body: From<T>,
+    {
+        Response::from(
+            Builder::new()
+                .status(200)
+                .url(mock_url())
+                .body(body)
+                .unwrap(),
+        )
+    }
+
     #[test]
     fn test_from_http_response() {
-        let url = Url::parse("http://example.com").unwrap();
-        let response = Builder::new()
-            .status(200)
-            .url(url.clone())
-            .body("foo")
-            .unwrap();
-        let response = Response::from(response);
-
+        let response = mock_response("foo");
         assert_eq!(response.status(), 200);
-        assert_eq!(*response.url(), url);
+        assert_eq!(*response.url(), mock_url());
+    }
+
+    #[test]
+    fn disallows_subsecond_duration_windows() {
+        assert!(SpeedLimitConfig::try_new(10, Duration::from_millis(999)).is_err())
+    }
+
+    #[tokio::test]
+    async fn gets_bytes_over_lowest_allowed_speed() {
+        verify_lower_speed_limit(LowerLimit::Above).await
+    }
+
+    #[tokio::test]
+    async fn error_under_lowest_allowed_speed() {
+        verify_lower_speed_limit(LowerLimit::Below).await
+    }
+
+    enum LowerLimit {
+        Below,
+        Above,
+    }
+
+    async fn verify_lower_speed_limit(threshold: LowerLimit) {
+        const DURATION_WINDOW: Duration = Duration::from_secs(2);
+        const SENT_DATA: [u8; 2] = [0; 2];
+
+        let response_config = ResponseConfig {
+            lowest_allowed_speed: Some(SpeedLimitConfig {
+                bytes_per_second: 10,
+                duration_window: DURATION_WINDOW,
+            }),
+        };
+
+        let (mut sender, body) = hyper::Body::channel();
+        let mut response = mock_response(body);
+        response.response_config = response_config.clone();
+
+        let mut bytes_future = Box::pin(response.bytes());
+        assert!(matches!(
+            futures_util::poll!(&mut bytes_future),
+            Poll::Pending
+        ));
+
+        tokio::time::sleep(match threshold {
+            LowerLimit::Below => DURATION_WINDOW + Duration::from_secs(1),
+            LowerLimit::Above => DURATION_WINDOW - Duration::from_secs(1),
+        })
+        .await;
+
+        sender.send_data(SENT_DATA.as_slice().into()).await.unwrap();
+        drop(sender);
+
+        let bytes_result = bytes_future.await;
+        match threshold {
+            LowerLimit::Below => assert!(bytes_result.is_err()),
+            LowerLimit::Above => assert_eq!(SENT_DATA.as_slice(), bytes_result.unwrap()),
+        }
     }
 }

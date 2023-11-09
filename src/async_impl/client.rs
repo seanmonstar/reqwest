@@ -24,7 +24,7 @@ use tokio::time::Sleep;
 
 use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
-use super::response::Response;
+use super::response::{Response, ResponseConfig};
 use super::Body;
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::connect::H3Connector;
@@ -106,6 +106,7 @@ struct Config {
     redirect_policy: redirect::Policy,
     referer: bool,
     timeout: Option<Duration>,
+    response_config: ResponseConfig,
     #[cfg(feature = "__tls")]
     root_certs: Vec<Certificate>,
     #[cfg(feature = "__tls")]
@@ -189,6 +190,7 @@ impl ClientBuilder {
                 redirect_policy: redirect::Policy::default(),
                 referer: true,
                 timeout: None,
+                response_config: ResponseConfig::default(),
                 #[cfg(feature = "__tls")]
                 root_certs: Vec::new(),
                 #[cfg(feature = "__tls")]
@@ -686,6 +688,7 @@ impl ClientBuilder {
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
                 request_timeout: config.timeout,
+                response_config: config.response_config,
                 proxies,
                 proxies_maybe_http_auth,
                 https_only: config.https_only,
@@ -983,6 +986,12 @@ impl ClientBuilder {
     pub fn no_proxy(mut self) -> ClientBuilder {
         self.config.proxies.clear();
         self.config.auto_sys_proxy = false;
+        self
+    }
+
+    /// See [`ResponseConfig`].
+    pub fn response_config(mut self, response_config: ResponseConfig) -> ClientBuilder {
+        self.config.response_config = response_config;
         self
     }
 
@@ -2049,6 +2058,7 @@ struct ClientRef {
     redirect_policy: redirect::Policy,
     referer: bool,
     request_timeout: Option<Duration>,
+    response_config: ResponseConfig,
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
     https_only: bool,
@@ -2438,6 +2448,7 @@ impl Future for PendingRequest {
                 self.url.clone(),
                 self.client.accepts,
                 self.timeout.take(),
+                self.client.response_config.clone(),
             );
             return Poll::Ready(Ok(res));
         }
