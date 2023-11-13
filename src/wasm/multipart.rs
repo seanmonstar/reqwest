@@ -267,6 +267,14 @@ impl PartMetadata {
         self.file_name = Some(filename.into());
         self
     }
+
+    pub(crate) fn headers<T>(mut self, headers: T) -> Self
+    where
+        T: Into<HeaderMap>,
+    {
+        self.headers = headers.into();
+        self
+    }
 }
 
 impl PartMetadata {
