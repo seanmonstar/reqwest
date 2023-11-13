@@ -7,7 +7,6 @@ use mime_guess::Mime;
 use web_sys::FormData;
 
 use super::Body;
-use crate::header::HeaderMap;
 
 /// An async multipart/form-data request.
 pub struct Form {
