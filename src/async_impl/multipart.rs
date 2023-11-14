@@ -13,6 +13,189 @@ use futures_util::{future, stream, StreamExt};
 use super::Body;
 use crate::header::HeaderMap;
 
+
+
+
+
+// == FormData
+
+use std::path::{Path, PathBuf};
+/// Try Into Multipart
+///
+/// # Examples
+///
+/// ```
+/// use reqwest::multipart::{Part, TryIntoMultipart};
+/// struct MyText {
+///     text: String
+/// }
+/// impl TryIntoMultipart for MyText {
+///     type Error = ();
+///
+///     fn part(self) -> Result<Part, Self::Error> {
+///         Ok(Part::text(self.text))
+///     }
+/// }
+/// use reqwest::multipart::FormData;
+/// let mut form_data = FormData::new();
+/// let mut my_text = MyText { text: "Hello".to_string() };
+/// form_data.append("my_text", my_text).unwrap();
+///
+/// ```
+pub trait TryIntoMultipart {
+    /// The type returned in the event of a conversion error.
+    type Error;
+    /// Convert to Part Type
+    fn part(self) -> Result<Part, Self::Error>;
+}
+
+macro_rules! derive_str_part {
+    ($($ty:ty), *) => {
+        $(
+            impl TryIntoMultipart for $ty {
+                type Error = ();
+                fn part(self) -> Result<Part, Self::Error> {
+                    Ok(Part::text(self.to_owned()))
+                }
+            }
+        )*
+    };
+}
+
+macro_rules! derive_path_part {
+    ($($ty:ty), *) => {
+        $(
+            impl TryIntoMultipart for $ty {
+                type Error = std::io::Error;
+                fn part(self) -> Result<Part, Self::Error> {
+                    let file = std::fs::File::open(self)?;
+                    std::fs::File::part(file)
+                }
+            }
+        )*
+    };
+}
+macro_rules! derive_bytes_part {
+    ($($ty:ty), *) => {
+        $(
+            impl TryIntoMultipart for $ty {
+                type Error = ();
+                fn part(self) -> Result<Part, Self::Error> {
+                    let (filename, bytes) = self;
+                    Ok(Part::bytes(bytes.to_owned()).file_name(filename.to_owned()))
+                }
+            }
+        )*
+    };
+}
+
+derive_path_part!(PathBuf, &Path, &PathBuf);
+derive_str_part!(&str, String, &String);
+derive_bytes_part!(
+    (&str, Vec<u8>),
+    (&str, &Vec<u8>),
+    (&str, &[u8]),
+    (&String, Vec<u8>),
+    (&String, &Vec<u8>),
+    (&String, &[u8]),
+    (String, Vec<u8>),
+    (String, &Vec<u8>),
+    (String, &[u8])
+);
+fn get_file_path(file_debug: String) -> String {
+    let split_path: Vec<&str> = file_debug.split('\"').collect();
+    let path = split_path[1].to_string();
+    #[cfg(windows)]
+        let path = path.replace("\\\\", "\\").replace(r"\\?\", "");
+    path
+}
+impl TryIntoMultipart for std::fs::File {
+    type Error = std::io::Error;
+
+    fn part(self) -> Result<Part, Self::Error> {
+        let file_path = get_file_path(format!("{:?}", self));
+        let file = PathBuf::from(file_path);
+        let filename = file
+            .file_name()
+            .expect("Any file should have a file name")
+            .to_str()
+            .expect("File name is not valid Unicode")
+            .to_owned();
+
+        let part = Part::bytes(std::fs::read(file.as_path())?).file_name(filename);
+        Ok(part)
+    }
+}
+/// A package based on [`Form`](Form)
+///
+/// # Examples
+/// ```
+/// use std::path::PathBuf;
+/// use reqwest::multipart::{FormData, Form};
+/// let mut form_data = FormData::new();
+/// // append a text field
+/// form_data.append("text", "Some texts").unwrap();
+/// // append a file field
+/// let path = PathBuf::from("Cargo.toml");
+/// form_data.append("file", path).unwrap();
+/// // or
+/// form_data.append("file", ("hello.txt", "Hello world".as_bytes())).unwrap();
+/// let form: Form = form_data.into();
+/// ```
+#[derive(Default, Debug)]
+pub struct FormData {
+    data: Vec<(String, Part)>,
+}
+
+impl From<FormData> for Form {
+    fn from(value: FormData) -> Self {
+        let mut form_data = Form::new();
+        if !value.data.is_empty() {
+            for (name, part) in value.data {
+                form_data = form_data.part(name, part);
+            }
+        }
+        form_data
+    }
+}
+
+impl FormData {
+
+    /// Create a new FormData
+    pub fn new() -> FormData {
+        Self { data: Vec::new() }
+    }
+
+    /// Append a form data
+    ///
+    /// # Examples
+    /// ```
+    /// use std::path::PathBuf;
+    /// use reqwest::multipart::FormData;
+    /// let mut form_data = FormData::new();
+    /// // append a text field
+    /// form_data.append("text", "Some texts").unwrap();
+    /// // append a file field
+    /// let path = PathBuf::from("Cargo.toml");
+    /// form_data.append("file", path).unwrap();
+    /// // or
+    /// form_data.append("file", ("hello.txt", "Hello world".as_bytes())).unwrap();
+    ///
+    /// ```
+    pub fn append<T: TryIntoMultipart>(&mut self, name: &str, value: T) -> Result<(), T::Error> {
+        self.data.push((name.to_owned(), value.part()?));
+        Ok(())
+    }
+}
+
+
+// ==
+
+
+
+
+
+
 /// An async multipart/form-data request.
 pub struct Form {
     inner: FormParts<Part>,
