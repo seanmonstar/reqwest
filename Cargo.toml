@@ -118,7 +118,7 @@ native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls"
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
-hyper-rustls = { git = "https://github.com/wasix-org/hyper-rustls.git", default-features = false, optional = true }
+hyper-rustls = { git = "https://github.com/wasix-org/hyper-rustls.git", branch="wasix" ,default-features = false, optional = true }
 rustls = { git = "https://github.com/wasix-org/rustls.git", branch = "v0.21.5", features = ["dangerous_configuration"], optional = true }
 tokio-rustls = { version = "0.24", optional = true }
 webpki-roots = { git = "https://github.com/wasix-org/webpki-roots.git", branch = "v0.24.0", optional = true }
