@@ -1,11 +1,14 @@
-use std::fmt;
+use std::fmt::{self, Debug};
 #[cfg(feature = "socks")]
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crate::into_url::{IntoUrl, IntoUrlSealed};
 use crate::Url;
+use async_trait::async_trait;
+use dyn_clone::DynClone;
 use http::{header::HeaderValue, Uri};
+use hyper::client::connect::{Connected, Connection};
 use ipnet::IpNet;
 use once_cell::sync::Lazy;
 use percent_encoding::percent_decode;
@@ -13,6 +16,7 @@ use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::net::IpAddr;
+use std::pin::pin;
 #[cfg(target_os = "macos")]
 use system_configuration::{
     core_foundation::{
@@ -29,6 +33,7 @@ use system_configuration::{
     sys::schema_definitions::kSCPropNetProxiesHTTPSPort,
     sys::schema_definitions::kSCPropNetProxiesHTTPSProxy,
 };
+use tokio::io::{AsyncRead, AsyncWrite};
 #[cfg(target_os = "windows")]
 use winreg::enums::HKEY_CURRENT_USER;
 #[cfg(target_os = "windows")]
@@ -96,6 +101,115 @@ pub struct NoProxy {
     domains: DomainMatcher,
 }
 
+/// A trait for creating a trait object that implements AsyncRead and AsyncWrite.
+pub trait AsyncStream: AsyncRead + AsyncWrite + Send + Unpin + 'static {}
+impl<RW: AsyncRead + AsyncWrite + Send + Unpin + 'static> AsyncStream for RW {}
+pub struct AsyncStreamWrapper(Box<dyn AsyncStream>);
+impl From<Box<dyn AsyncStream>> for AsyncStreamWrapper {
+    fn from(value: Box<dyn AsyncStream>) -> Self {
+        Self(value)
+    }
+}
+impl AsyncRead for AsyncStreamWrapper {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        pin!(&mut self.0).poll_read(cx, buf)
+    }
+}
+impl AsyncWrite for AsyncStreamWrapper {
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), std::io::Error>> {
+        pin!(&mut self.0).poll_flush(cx)
+    }
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), std::io::Error>> {
+        pin!(&mut self.0).poll_shutdown(cx)
+    }
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<Result<usize, std::io::Error>> {
+        pin!(&mut self.0).poll_write(cx, buf)
+    }
+    fn poll_write_vectored(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        bufs: &[std::io::IoSlice<'_>],
+    ) -> std::task::Poll<Result<usize, std::io::Error>> {
+        pin!(&mut self.0).poll_write_vectored(cx, bufs)
+    }
+    fn is_write_vectored(&self) -> bool {
+        self.0.is_write_vectored()
+    }
+}
+impl Debug for AsyncStreamWrapper {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "AsyncStreamWrapper")
+    }
+}
+impl Connection for AsyncStreamWrapper {
+    fn connected(&self) -> Connected {
+        Connected::new()
+    }
+}
+
+/// A trait to define custom proxy protocol.  
+/// `Box<dyn CustomProxyProtocol>` implements `IntoProxyScheme`.  
+/// # Example
+/// ```
+/// use std::error::Error;
+/// use tokio::net::TcpStream;
+///
+/// use async_trait::async_trait;
+/// use http::Uri;
+/// use reqwest::{AsyncStream, CustomProxyProtocol};
+///
+/// #[derive(Clone)]
+/// struct Example();
+/// #[async_trait]
+/// impl CustomProxyProtocol for Example {
+///     async fn connect(
+///         &self,
+///         dst: Uri,
+///     ) -> Result<Box<dyn AsyncStream>, Box<dyn Error + Send + Sync + 'static>> {
+///         let host = dst.host().ok_or("host is None")?;
+///         let port = match (dst.scheme_str(), dst.port_u16()) {
+///             (_, Some(p)) => p,
+///             (Some("http"), None) => 80,
+///             (Some("https"), None) => 443,
+///             _ => return Err("scheme is unknown and port is None.".into()),
+///         };
+///         eprintln!("Connecting to {}:{}", host, port);
+///         Ok(Box::new(
+///             TcpStream::connect(format!("{}:{}", host, port)).await?,
+///         ))
+///     }
+/// }
+/// ```
+#[async_trait]
+pub trait CustomProxyProtocol: Sync + Send + DynClone {
+    /// Establish an OSI layer 4(ex. TCP) connection to the web server.
+    async fn connect(
+        &self,
+        dst: Uri,
+    ) -> Result<Box<dyn AsyncStream>, Box<dyn Error + Send + Sync + 'static>>;
+}
+dyn_clone::clone_trait_object!(CustomProxyProtocol);
+
+impl IntoProxyScheme for Box<dyn CustomProxyProtocol> {
+    fn into_proxy_scheme(self) -> crate::Result<ProxyScheme> {
+        Ok(ProxyScheme::Custom(self))
+    }
+}
+
 /// A particular scheme used for proxying requests.
 ///
 /// For example, HTTP vs SOCKS5
@@ -109,6 +223,7 @@ pub enum ProxyScheme {
         auth: Option<HeaderValue>,
         host: http::uri::Authority,
     },
+    Custom(Box<dyn CustomProxyProtocol>),
     #[cfg(feature = "socks")]
     Socks5 {
         addr: SocketAddr,
@@ -121,7 +236,6 @@ impl ProxyScheme {
     fn maybe_http_auth(&self) -> Option<&HeaderValue> {
         match self {
             ProxyScheme::Http { auth, .. } | ProxyScheme::Https { auth, .. } => auth.as_ref(),
-            #[cfg(feature = "socks")]
             _ => None,
         }
     }
@@ -612,6 +726,7 @@ impl ProxyScheme {
                 let header = encode_basic_auth(&username.into(), &password.into());
                 *auth = Some(header);
             }
+            ProxyScheme::Custom(_) => {}
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { ref mut auth, .. } => {
                 *auth = Some((username.into(), password.into()));
@@ -631,6 +746,7 @@ impl ProxyScheme {
                     *auth = update.clone();
                 }
             }
+            ProxyScheme::Custom(_) => {}
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => {}
         }
@@ -684,6 +800,7 @@ impl ProxyScheme {
         match self {
             ProxyScheme::Http { .. } => "http",
             ProxyScheme::Https { .. } => "https",
+            ProxyScheme::Custom(_) => "custom",
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => "socks5",
         }
@@ -694,6 +811,7 @@ impl ProxyScheme {
         match self {
             ProxyScheme::Http { host, .. } => host.as_str(),
             ProxyScheme::Https { host, .. } => host.as_str(),
+            ProxyScheme::Custom(_) => panic!("custom"),
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { .. } => panic!("socks5"),
         }
@@ -705,6 +823,7 @@ impl fmt::Debug for ProxyScheme {
         match self {
             ProxyScheme::Http { auth: _auth, host } => write!(f, "http://{}", host),
             ProxyScheme::Https { auth: _auth, host } => write!(f, "https://{}", host),
+            ProxyScheme::Custom(_) => write!(f, "custom://"),
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 {
                 addr,
@@ -1075,8 +1194,7 @@ mod tests {
         let (scheme, host) = match p.intercept(&url(s)).unwrap() {
             ProxyScheme::Http { host, .. } => ("http", host),
             ProxyScheme::Https { host, .. } => ("https", host),
-            #[cfg(feature = "socks")]
-            _ => panic!("intercepted as socks"),
+            _ => panic!("intercepted as not http or https"),
         };
         http::Uri::builder()
             .scheme(scheme)
