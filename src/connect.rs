@@ -327,7 +327,6 @@ impl Connector {
                         if dst.scheme() == Some(&Scheme::HTTPS) {
                             let host = dst.host().ok_or("no host in url")?.to_string();
                             let conn = p.connect(dst).await?;
-                            let conn = AsyncStreamWrapper::from(conn);
                             let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                             let io = tls_connector.connect(&host, conn).await?;
                             return Ok(Conn {
@@ -345,7 +344,6 @@ impl Connector {
 
                             let host = dst.host().ok_or("no host in url")?.to_string();
                             let conn = p.connect(dst).await?;
-                            let conn = AsyncStreamWrapper::from(conn);
                             let server_name = rustls::ServerName::try_from(host.as_str())
                                 .map_err(|_| "Invalid Server Name")?;
                             let tls = tls.clone();
@@ -364,8 +362,8 @@ impl Connector {
                 }
 
                 return p.connect(dst).await.map(|tcp| Conn {
-                    inner: self.verbose.wrap(AsyncStreamWrapper::from(tcp)),
-                    is_proxy: false,
+                    is_proxy: tcp.is_http_proxy,
+                    inner: self.verbose.wrap(tcp),
                     tls_info: false,
                 });
             }

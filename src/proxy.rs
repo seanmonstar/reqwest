@@ -101,13 +101,26 @@ pub struct NoProxy {
     domains: DomainMatcher,
 }
 
-/// A trait for creating a trait object that implements AsyncRead and AsyncWrite.
 pub trait AsyncStream: AsyncRead + AsyncWrite + Send + Unpin + 'static {}
 impl<RW: AsyncRead + AsyncWrite + Send + Unpin + 'static> AsyncStream for RW {}
-pub struct AsyncStreamWrapper(Box<dyn AsyncStream>);
-impl From<Box<dyn AsyncStream>> for AsyncStreamWrapper {
-    fn from(value: Box<dyn AsyncStream>) -> Self {
-        Self(value)
+/// A wrapper for proxy connections and related information.  
+/// return type of [CustomProxyProtocol::connect].  
+pub struct AsyncStreamWrapper {
+    pub(crate) inner: Box<dyn AsyncStream>,
+    pub(crate) is_http_proxy: bool,
+}
+impl AsyncStreamWrapper {
+    /// Make a new instance of [AsyncStreamWrapper].  
+    /// If is_http_proxy is set to true, the connection will be treated as a connection to an http proxy.  
+    /// This does not affect https.  
+    pub fn new<RW>(stream: RW, is_http_proxy: bool) -> Self
+    where
+        RW: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    {
+        Self {
+            inner: Box::new(stream),
+            is_http_proxy,
+        }
     }
 }
 impl AsyncRead for AsyncStreamWrapper {
@@ -116,7 +129,7 @@ impl AsyncRead for AsyncStreamWrapper {
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        pin!(&mut self.0).poll_read(cx, buf)
+        pin!(&mut self.inner).poll_read(cx, buf)
     }
 }
 impl AsyncWrite for AsyncStreamWrapper {
@@ -124,30 +137,30 @@ impl AsyncWrite for AsyncStreamWrapper {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        pin!(&mut self.0).poll_flush(cx)
+        pin!(&mut self.inner).poll_flush(cx)
     }
     fn poll_shutdown(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        pin!(&mut self.0).poll_shutdown(cx)
+        pin!(&mut self.inner).poll_shutdown(cx)
     }
     fn poll_write(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        pin!(&mut self.0).poll_write(cx, buf)
+        pin!(&mut self.inner).poll_write(cx, buf)
     }
     fn poll_write_vectored(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         bufs: &[std::io::IoSlice<'_>],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        pin!(&mut self.0).poll_write_vectored(cx, bufs)
+        pin!(&mut self.inner).poll_write_vectored(cx, bufs)
     }
     fn is_write_vectored(&self) -> bool {
-        self.0.is_write_vectored()
+        self.inner.is_write_vectored()
     }
 }
 impl Debug for AsyncStreamWrapper {
@@ -170,7 +183,7 @@ impl Connection for AsyncStreamWrapper {
 ///
 /// use async_trait::async_trait;
 /// use http::Uri;
-/// use reqwest::{AsyncStream, CustomProxyProtocol};
+/// use reqwest::{AsyncStreamWrapper, CustomProxyProtocol};
 ///
 /// #[derive(Clone)]
 /// struct Example();
@@ -179,7 +192,7 @@ impl Connection for AsyncStreamWrapper {
 ///     async fn connect(
 ///         &self,
 ///         dst: Uri,
-///     ) -> Result<Box<dyn AsyncStream>, Box<dyn Error + Send + Sync + 'static>> {
+///     ) -> Result<AsyncStreamWrapper, Box<dyn Error + Send + Sync + 'static>> {
 ///         let host = dst.host().ok_or("host is None")?;
 ///         let port = match (dst.scheme_str(), dst.port_u16()) {
 ///             (_, Some(p)) => p,
@@ -188,19 +201,20 @@ impl Connection for AsyncStreamWrapper {
 ///             _ => return Err("scheme is unknown and port is None.".into()),
 ///         };
 ///         eprintln!("Connecting to {}:{}", host, port);
-///         Ok(Box::new(
+///         Ok(AsyncStreamWrapper::new(
 ///             TcpStream::connect(format!("{}:{}", host, port)).await?,
+///             false,
 ///         ))
 ///     }
 /// }
 /// ```
 #[async_trait]
 pub trait CustomProxyProtocol: Sync + Send + DynClone {
-    /// Establish an OSI layer 4(ex. TCP) connection to the web server.
+    /// Establish an TCP connection to the web server.
     async fn connect(
         &self,
         dst: Uri,
-    ) -> Result<Box<dyn AsyncStream>, Box<dyn Error + Send + Sync + 'static>>;
+    ) -> Result<AsyncStreamWrapper, Box<dyn Error + Send + Sync + 'static>>;
 }
 dyn_clone::clone_trait_object!(CustomProxyProtocol);
 

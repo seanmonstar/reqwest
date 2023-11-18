@@ -6,7 +6,7 @@ use tokio::{
 
 use async_trait::async_trait;
 use http::Uri;
-use reqwest::{AsyncStream, Client, CustomProxyProtocol, Proxy};
+use reqwest::{AsyncStreamWrapper, Client, CustomProxyProtocol, Proxy};
 
 #[tokio::main]
 async fn main() {
@@ -16,15 +16,16 @@ async fn main() {
         .http1_only()
         .build()
         .unwrap();
-    let response = client
+    let mut response = client
         .get("http://www.hal.ipc.i.u-tokyo.ac.jp/~nakada/prog2015/alice.txt")
         .send()
         .await
         .unwrap();
-    let body = response.bytes().await.unwrap();
 
     let mut stdout = std::io::stdout();
-    stdout.write_all(&body).unwrap();
+    while let Some(chunk) = response.chunk().await.unwrap() {
+        stdout.write_all(&chunk).unwrap();
+    }
     stdout.flush().unwrap();
 }
 
@@ -35,7 +36,7 @@ impl CustomProxyProtocol for Example {
     async fn connect(
         &self,
         dst: Uri,
-    ) -> Result<Box<dyn AsyncStream>, Box<dyn Error + Send + Sync + 'static>> {
+    ) -> Result<AsyncStreamWrapper, Box<dyn Error + Send + Sync + 'static>> {
         let host = dst.host().ok_or("host is None")?;
         let port = match (dst.scheme_str(), dst.port_u16()) {
             (_, Some(p)) => p,
@@ -44,14 +45,20 @@ impl CustomProxyProtocol for Example {
             _ => return Err("scheme is unknown and port is None.".into()),
         };
         eprintln!("Connecting to {}:{}", host, port);
-        Ok(Box::new(WrapStream(
-            TcpStream::connect(format!("{}:{}", host, port)).await?,
-        )))
+        Ok(AsyncStreamWrapper::new(
+            WrapStream(TcpStream::connect(format!("{}:{}", host, port)).await?),
+            false,
+        ))
     }
 }
 
-struct WrapStream<RW: AsyncStream>(RW);
-impl<RW: AsyncStream> AsyncRead for WrapStream<RW> {
+struct WrapStream<RW>(RW)
+where
+    RW: AsyncRead + AsyncWrite + Send + Unpin + 'static;
+impl<RW> AsyncRead for WrapStream<RW>
+where
+    RW: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -61,7 +68,10 @@ impl<RW: AsyncStream> AsyncRead for WrapStream<RW> {
         pin!(&mut self.0).poll_read(cx, buf)
     }
 }
-impl<RW: AsyncStream> AsyncWrite for WrapStream<RW> {
+impl<RW> AsyncWrite for WrapStream<RW>
+where
+    RW: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
     fn poll_write(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
