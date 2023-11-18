@@ -338,17 +338,17 @@ impl Connector {
                         }
                     }
                     #[cfg(feature = "__rustls")]
-                    Inner::RustlsTls { tls_proxy, .. } => {
+                    Inner::RustlsTls { tls, .. } => {
                         if dst.scheme() == Some(&Scheme::HTTPS) {
                             use std::convert::TryFrom;
                             use tokio_rustls::TlsConnector as RustlsConnector;
 
-                            let tls = tls_proxy.clone();
                             let host = dst.host().ok_or("no host in url")?.to_string();
                             let conn = p.connect(dst).await?;
                             let conn = AsyncStreamWrapper::from(conn);
                             let server_name = rustls::ServerName::try_from(host.as_str())
                                 .map_err(|_| "Invalid Server Name")?;
+                            let tls = tls.clone();
                             let io = RustlsConnector::from(tls)
                                 .connect(server_name, conn)
                                 .await?;
