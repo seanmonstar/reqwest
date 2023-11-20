@@ -188,7 +188,7 @@ impl ClientBuilder {
                 auto_sys_proxy: true,
                 redirect_policy: redirect::Policy::default(),
                 referer: true,
-                timeout: None,
+                timeout: Some(Duration::from_secs(30)),
                 #[cfg(feature = "__tls")]
                 root_certs: Vec::new(),
                 #[cfg(feature = "__tls")]
@@ -993,7 +993,7 @@ impl ClientBuilder {
     /// The timeout is applied from when the request starts connecting until the
     /// response body has finished.
     ///
-    /// Default is no timeout.
+    /// Default is 30 s.
     pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
         self.config.timeout = Some(timeout);
         self
