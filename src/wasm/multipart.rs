@@ -172,6 +172,11 @@ impl Part {
         self.with_inner(move |inner| inner.file_name(filename))
     }
 
+    /// Sets custom headers for the part.
+    pub fn headers(self, headers: HeaderMap) -> Part {
+        self.with_inner(move |inner| inner.headers(headers))
+    }
+
     fn with_inner<F>(self, func: F) -> Self
     where
         F: FnOnce(PartMetadata) -> PartMetadata,
@@ -260,6 +265,14 @@ impl PartMetadata {
         T: Into<Cow<'static, str>>,
     {
         self.file_name = Some(filename.into());
+        self
+    }
+
+    pub(crate) fn headers<T>(mut self, headers: T) -> Self
+    where
+        T: Into<HeaderMap>,
+    {
+        self.headers = headers.into();
         self
     }
 }

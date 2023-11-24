@@ -5,9 +5,9 @@
 //! Security-Framework on macOS, and OpenSSL on Linux.
 //!
 //! - Additional X509 certificates can be configured on a `ClientBuilder` with the
-//!   [`Certificate`](Certificate) type.
+//!   [`Certificate`] type.
 //! - Client certificates can be add to a `ClientBuilder` with the
-//!   [`Identity`][Identity] type.
+//!   [`Identity`] type.
 //! - Various parts of TLS can also be configured or even disabled on the
 //!   `ClientBuilder`.
 
@@ -307,7 +307,7 @@ impl Identity {
     ) -> crate::Result<rustls::ClientConfig> {
         match self.inner {
             ClientCert::Pem { key, certs } => config_builder
-                .with_single_cert(certs, key)
+                .with_client_auth_cert(certs, key)
                 .map_err(crate::error::builder),
             #[cfg(feature = "native-tls")]
             ClientCert::Pkcs12(..) | ClientCert::Pkcs8(..) => {
@@ -460,6 +460,26 @@ impl ServerCertVerifier for NoVerifier {
         _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
         Ok(HandshakeSignatureValid::assertion())
+    }
+}
+
+/// Hyper extension carrying extra TLS layer information.
+/// Made available to clients on responses when `tls_info` is set.
+#[derive(Clone)]
+pub struct TlsInfo {
+    pub(crate) peer_certificate: Option<Vec<u8>>,
+}
+
+impl TlsInfo {
+    /// Get the DER encoded leaf certificate of the peer.
+    pub fn peer_certificate(&self) -> Option<&[u8]> {
+        self.peer_certificate.as_ref().map(|der| &der[..])
+    }
+}
+
+impl std::fmt::Debug for TlsInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("TlsInfo").finish()
     }
 }
 

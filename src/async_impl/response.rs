@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -131,6 +130,8 @@ impl Response {
     /// Encoding is determined from the `charset` parameter of `Content-Type` header,
     /// and defaults to `utf-8` if not presented.
     ///
+    /// Note that the BOM is stripped from the returned String.
+    ///
     /// # Example
     ///
     /// ```
@@ -155,6 +156,8 @@ impl Response {
     /// You can provide a default encoding for decoding the raw message, while the
     /// `charset` parameter of `Content-Type` header is still prioritized. For more information
     /// about the possible encoding name, please go to [`encoding_rs`] docs.
+    ///
+    /// Note that the BOM is stripped from the returned String.
     ///
     /// [`encoding_rs`]: https://docs.rs/encoding_rs/0.8/encoding_rs/#relationship-with-windows-code-pages
     ///
@@ -186,14 +189,7 @@ impl Response {
         let full = self.bytes().await?;
 
         let (text, _, _) = encoding.decode(&full);
-        if let Cow::Owned(s) = text {
-            return Ok(s);
-        }
-        unsafe {
-            // decoding returned Cow::Borrowed, meaning these bytes
-            // are already valid utf8
-            Ok(String::from_utf8_unchecked(full.to_vec()))
-        }
+        Ok(text.into_owned())
     }
 
     /// Try to deserialize the response body as JSON.

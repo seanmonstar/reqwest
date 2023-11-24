@@ -35,7 +35,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@stable
@@ -156,7 +156,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@master
@@ -197,7 +197,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@master
@@ -213,7 +213,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -235,7 +235,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@nightly
@@ -249,9 +249,12 @@ jobs:
       - name: Check minimal versions
         env:
           RUSTFLAGS: --cfg reqwest_unstable
+        # Make sure proc-macro2 v1.0.60 is used
+        # See https://github.com/rust-lang/rust/issues/113152
         run: |
           cargo clean
           cargo update -Z minimal-versions
+          cargo update -p proc-macro2 --precise 1.0.60
           cargo check
           cargo check --all-features
 
@@ -263,7 +266,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Get MSRV package metadata
         id: metadata
@@ -273,6 +276,14 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ steps.metadata.outputs.msrv }}
+
+      - name: Fix log and tokio versions
+        run: |
+          cargo update
+          cargo update -p log --precise 0.4.18
+          cargo update -p tokio --precise 1.29.1
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Check
         run: cargo check
@@ -285,7 +296,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@stable
@@ -304,7 +315,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@stable

@@ -446,3 +446,33 @@ fn update_json_content_type_if_set_manually() {
 
     assert_eq!("application/json", req.headers().get(CONTENT_TYPE).unwrap());
 }
+
+#[cfg(all(feature = "__tls", not(feature = "rustls-tls-manual-roots")))]
+#[tokio::test]
+async fn test_tls_info() {
+    let resp = reqwest::Client::builder()
+        .tls_info(true)
+        .build()
+        .expect("client builder")
+        .get("https://google.com")
+        .send()
+        .await
+        .expect("response");
+    let tls_info = resp.extensions().get::<reqwest::tls::TlsInfo>();
+    assert!(tls_info.is_some());
+    let tls_info = tls_info.unwrap();
+    let peer_certificate = tls_info.peer_certificate();
+    assert!(peer_certificate.is_some());
+    let der = peer_certificate.unwrap();
+    assert_eq!(der[0], 0x30); // ASN.1 SEQUENCE
+
+    let resp = reqwest::Client::builder()
+        .build()
+        .expect("client builder")
+        .get("https://google.com")
+        .send()
+        .await
+        .expect("response");
+    let tls_info = resp.extensions().get::<reqwest::tls::TlsInfo>();
+    assert!(tls_info.is_none());
+}
