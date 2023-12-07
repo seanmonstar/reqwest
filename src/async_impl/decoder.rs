@@ -16,14 +16,14 @@ use bytes::Bytes;
 use futures_core::Stream;
 use futures_util::stream::Peekable;
 use http::HeaderMap;
-use hyper::body::HttpBody;
+use hyper::body::Body as HttpBody;
 
 #[cfg(any(feature = "gzip", feature = "brotli", feature = "deflate"))]
 use tokio_util::codec::{BytesCodec, FramedRead};
 #[cfg(any(feature = "gzip", feature = "brotli", feature = "deflate"))]
 use tokio_util::io::StreamReader;
 
-use super::super::Body;
+use super::body::ResponseBody;
 use crate::error;
 
 #[derive(Clone, Copy, Debug)]
@@ -50,7 +50,7 @@ type PeekableIoStreamReader = StreamReader<PeekableIoStream, Bytes>;
 
 enum Inner {
     /// A `PlainText` decoder just returns the response content as is.
-    PlainText(super::body::ImplStream),
+    PlainText(ResponseBody),
 
     /// A `Gzip` decoder will uncompress the gzipped response content before returning it.
     #[cfg(feature = "gzip")]
@@ -72,7 +72,7 @@ enum Inner {
 /// A future attempt to poll the response body for EOF so we know whether to use gzip or not.
 struct Pending(PeekableIoStream, DecoderType);
 
-struct IoStream(super::body::ImplStream);
+struct IoStream(ResponseBody);
 
 enum DecoderType {
     #[cfg(feature = "gzip")]
@@ -100,9 +100,9 @@ impl Decoder {
     /// A plain text decoder.
     ///
     /// This decoder will emit the underlying chunks as-is.
-    fn plain_text(body: Body) -> Decoder {
+    fn plain_text(body: ResponseBody) -> Decoder {
         Decoder {
-            inner: Inner::PlainText(body.into_stream()),
+            inner: Inner::PlainText(body),
         }
     }
 
@@ -110,7 +110,7 @@ impl Decoder {
     ///
     /// This decoder will buffer and decompress chunks that are gzipped.
     #[cfg(feature = "gzip")]
-    fn gzip(body: Body) -> Decoder {
+    fn gzip(body: ResponseBody) -> Decoder {
         use futures_util::StreamExt;
 
         Decoder {
@@ -187,7 +187,7 @@ impl Decoder {
     /// how to decode the content body of the request.
     ///
     /// Uses the correct variant by inspecting the Content-Encoding header.
-    pub(super) fn detect(_headers: &mut HeaderMap, body: Body, _accepts: Accepts) -> Decoder {
+    pub(super) fn detect(_headers: &mut HeaderMap, body: ResponseBody, _accepts: Accepts) -> Decoder {
         #[cfg(feature = "gzip")]
         {
             if _accepts.gzip && Decoder::detect_encoding(_headers, "gzip") {

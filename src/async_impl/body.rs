@@ -4,7 +4,6 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use bytes::Bytes;
-use futures_core::Stream;
 use http_body::Body as HttpBody;
 use pin_project_lite::pin_project;
 #[cfg(feature = "stream")]
@@ -17,9 +16,6 @@ use tokio_util::io::ReaderStream;
 pub struct Body {
     inner: Inner,
 }
-
-// The `Stream` trait isn't stable, so the impl isn't public.
-pub(crate) struct ImplStream(Body);
 
 enum Inner {
     Reusable(Bytes),
@@ -35,14 +31,21 @@ enum Inner {
     },
 }
 
+/// A body with a total timeout.
+///
+/// The timeout does not reset upon each chunk, but rather requires the whole
+/// body be streamed before the deadline is reached.
+pub(crate) struct TotalTimeoutBody<B> {
+    inner: B,
+    timeout: Pin<Box<Sleep>>,
+}
+
 pin_project! {
     struct WrapStream<S> {
         #[pin]
         inner: S,
     }
 }
-
-struct WrapHyper(hyper::Body);
 
 impl Body {
     /// Returns a reference to the internal data of the `Body`.
@@ -108,6 +111,7 @@ impl Body {
         }
     }
 
+    /*
     pub(crate) fn response(body: hyper::Body, timeout: Option<Pin<Box<Sleep>>>) -> Body {
         Body {
             inner: Inner::Streaming {
@@ -126,6 +130,7 @@ impl Body {
             },
         }
     }
+    */
 
     pub(crate) fn empty() -> Body {
         Body::reusable(Bytes::new())
@@ -153,9 +158,11 @@ impl Body {
         }
     }
 
+    /*
     pub(crate) fn into_stream(self) -> ImplStream {
         ImplStream(self)
     }
+    */
 
     #[cfg(feature = "multipart")]
     pub(crate) fn content_length(&self) -> Option<u64> {
@@ -166,6 +173,7 @@ impl Body {
     }
 }
 
+/*
 impl From<hyper::Body> for Body {
     #[inline]
     fn from(body: hyper::Body) -> Body {
@@ -177,6 +185,7 @@ impl From<hyper::Body> for Body {
         }
     }
 }
+*/
 
 impl From<Bytes> for Body {
     #[inline]
@@ -228,132 +237,44 @@ impl fmt::Debug for Body {
     }
 }
 
-// ===== impl ImplStream =====
+// ===== impl TotalTimeoutBody =====
 
-impl HttpBody for ImplStream {
-    type Data = Bytes;
+pub(crate) fn total_timeout<B>(body: B, timeout: Pin<Box<Sleep>>) -> TotalTimeoutBody<B> {
+    TotalTimeoutBody {
+        inner: body,
+        timeout,
+    }
+}
+
+impl<B> hyper::body::Body for TotalTimeoutBody<B>
+where
+    B: hyper::body::Body + Unpin,
+    B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    type Data = B::Data;
     type Error = crate::Error;
 
-    fn poll_data(
+    fn poll_frame(
         mut self: Pin<&mut Self>,
         cx: &mut Context,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let opt_try_chunk = match self.0.inner {
-            Inner::Streaming {
-                ref mut body,
-                ref mut timeout,
-            } => {
-                if let Some(ref mut timeout) = timeout {
-                    if let Poll::Ready(()) = timeout.as_mut().poll(cx) {
-                        return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
-                    }
-                }
-                futures_core::ready!(Pin::new(body).poll_data(cx))
-                    .map(|opt_chunk| opt_chunk.map(Into::into).map_err(crate::error::body))
-            }
-            Inner::Reusable(ref mut bytes) => {
-                if bytes.is_empty() {
-                    None
-                } else {
-                    Some(Ok(std::mem::replace(bytes, Bytes::new())))
-                }
-            }
-        };
-
-        Poll::Ready(opt_try_chunk)
-    }
-
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        _cx: &mut Context,
-    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        Poll::Ready(Ok(None))
-    }
-
-    fn is_end_stream(&self) -> bool {
-        match self.0.inner {
-            Inner::Streaming { ref body, .. } => body.is_end_stream(),
-            Inner::Reusable(ref bytes) => bytes.is_empty(),
+    ) -> Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        if let Poll::Ready(()) = self.timeout.as_mut().poll(cx) {
+            return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
         }
-    }
-
-    fn size_hint(&self) -> http_body::SizeHint {
-        match self.0.inner {
-            Inner::Streaming { ref body, .. } => body.size_hint(),
-            Inner::Reusable(ref bytes) => {
-                let mut hint = http_body::SizeHint::default();
-                hint.set_exact(bytes.len() as u64);
-                hint
-            }
-        }
+        Poll::Ready(futures_core::ready!(Pin::new(&mut self.inner).poll_frame(cx))
+            .map(|opt_chunk| opt_chunk.map_err(crate::error::body)))
     }
 }
 
-impl Stream for ImplStream {
-    type Item = Result<Bytes, crate::Error>;
+pub(crate) type ResponseBody = http_body_util::combinators::BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        self.poll_data(cx)
-    }
-}
+pub(crate) fn response(body: hyper::body::Incoming, timeout: Option<Pin<Box<Sleep>>>) -> ResponseBody {
+    use http_body_util::BodyExt;
 
-// ===== impl WrapStream =====
-
-impl<S, D, E> HttpBody for WrapStream<S>
-where
-    S: Stream<Item = Result<D, E>>,
-    D: Into<Bytes>,
-    E: Into<Box<dyn std::error::Error + Send + Sync>>,
-{
-    type Data = Bytes;
-    type Error = E;
-
-    fn poll_data(
-        self: Pin<&mut Self>,
-        cx: &mut Context,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let item = futures_core::ready!(self.project().inner.poll_next(cx)?);
-
-        Poll::Ready(item.map(|val| Ok(val.into())))
-    }
-
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        _cx: &mut Context,
-    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        Poll::Ready(Ok(None))
-    }
-}
-
-// ===== impl WrapHyper =====
-
-impl HttpBody for WrapHyper {
-    type Data = Bytes;
-    type Error = Box<dyn std::error::Error + Send + Sync>;
-
-    fn poll_data(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        // safe pin projection
-        Pin::new(&mut self.0)
-            .poll_data(cx)
-            .map(|opt| opt.map(|res| res.map_err(Into::into)))
-    }
-
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        _cx: &mut Context,
-    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        Poll::Ready(Ok(None))
-    }
-
-    fn is_end_stream(&self) -> bool {
-        self.0.is_end_stream()
-    }
-
-    fn size_hint(&self) -> http_body::SizeHint {
-        HttpBody::size_hint(&self.0)
+    if let Some(timeout) = timeout {
+        total_timeout(body, timeout).map_err(Into::into).boxed()
+    } else {
+        body.map_err(Into::into).boxed()
     }
 }
 

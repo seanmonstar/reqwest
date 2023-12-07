@@ -13,7 +13,7 @@ use http::header::{
 };
 use http::uri::Scheme;
 use http::Uri;
-use hyper::client::{HttpConnector, ResponseFuture as HyperResponseFuture};
+use hyper_util::client::legacy::{connect::HttpConnector/*, ResponseFuture as HyperResponseFuture*/};
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
@@ -612,7 +612,7 @@ impl ClientBuilder {
         connector.set_timeout(config.connect_timeout);
         connector.set_verbose(config.connection_verbose);
 
-        let mut builder = hyper::Client::builder();
+        let mut builder = HyperClient::builder();
         if matches!(config.http_version_pref, HttpVersionPref::Http2) {
             builder.http2_only(true);
         }
@@ -1651,7 +1651,7 @@ impl ClientBuilder {
     }
 }
 
-type HyperClient = hyper::Client<Connector, super::body::ImplStream>;
+type HyperClient = hyper_util::client::legacy::Client<Connector, super::body::ImplStream>;
 
 impl Default for Client {
     fn default() -> Self {

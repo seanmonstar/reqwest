@@ -5,7 +5,7 @@ use std::pin::Pin;
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
 use futures_util::stream::StreamExt;
-use hyper::client::connect::HttpInfo;
+use hyper_util::client::legacy::connect::HttpInfo;
 use hyper::{HeaderMap, StatusCode, Version};
 use mime::Mime;
 #[cfg(feature = "json")]
@@ -31,13 +31,13 @@ pub struct Response {
 
 impl Response {
     pub(super) fn new(
-        res: hyper::Response<hyper::Body>,
+        res: hyper::Response<hyper::body::Incoming>,
         url: Url,
         accepts: Accepts,
         timeout: Option<Pin<Box<Sleep>>>,
     ) -> Response {
         let (mut parts, body) = res.into_parts();
-        let decoder = Decoder::detect(&mut parts.headers, Body::response(body, timeout), accepts);
+        let decoder = Decoder::detect(&mut parts.headers, super::body::response(body, timeout), accepts);
         let res = hyper::Response::from_parts(parts, decoder);
 
         Response {
@@ -78,9 +78,9 @@ impl Response {
     /// - The response is compressed and automatically decoded (thus changing
     ///   the actual decoded length).
     pub fn content_length(&self) -> Option<u64> {
-        use hyper::body::HttpBody;
+        use hyper::body::Body;
 
-        HttpBody::size_hint(self.res.body()).exact()
+        Body::size_hint(self.res.body()).exact()
     }
 
     /// Retrieve the cookies contained in the response.
@@ -256,7 +256,9 @@ impl Response {
     /// # }
     /// ```
     pub async fn bytes(self) -> crate::Result<Bytes> {
-        hyper::body::to_bytes(self.res.into_body()).await
+        use http_body_util::BodyExt;
+
+        BodyExt::collect(self.res.into_body()).await.map(|buf| buf.to_bytes())
     }
 
     /// Stream a chunk of the response body.
