@@ -68,6 +68,7 @@ impl Connector {
     {
         http.set_local_address(local_addr.into());
         http.set_nodelay(nodelay);
+
         Connector {
             inner: Inner::Http(http),
             verbose: verbose::OFF,
@@ -109,6 +110,7 @@ impl Connector {
         T: Into<Option<IpAddr>>,
     {
         http.set_local_address(local_addr.into());
+        http.set_nodelay(nodelay);
         http.enforce_http(false);
 
         Connector {
@@ -136,6 +138,7 @@ impl Connector {
         T: Into<Option<IpAddr>>,
     {
         http.set_local_address(local_addr.into());
+        http.set_nodelay(nodelay);
         http.enforce_http(false);
 
         let (tls, tls_proxy) = if proxies.is_empty() {
