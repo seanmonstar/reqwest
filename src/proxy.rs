@@ -647,7 +647,7 @@ impl ProxyScheme {
                 *auth = Some(header_value);
             }
             #[cfg(feature = "socks")]
-            ProxyScheme::Socks5 { ref mut auth, .. } => {
+            ProxyScheme::Socks5 { .. } => {
                 panic!("Socks is not supported for this method")
             }
         }
