@@ -3,11 +3,12 @@ use std::task::{self, Poll};
 use std::{fmt, io};
 
 use futures_util::TryFutureExt;
+use hyper_util::rt::TokioIo;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 /// An upgraded HTTP connection.
 pub struct Upgraded {
-    inner: hyper::upgrade::Upgraded,
+    inner: TokioIo<hyper::upgrade::Upgraded>,
 }
 
 impl AsyncRead for Upgraded {
@@ -58,7 +59,7 @@ impl fmt::Debug for Upgraded {
 
 impl From<hyper::upgrade::Upgraded> for Upgraded {
     fn from(inner: hyper::upgrade::Upgraded) -> Self {
-        Upgraded { inner }
+        Upgraded { inner: TokioIo::new(inner) }
     }
 }
 

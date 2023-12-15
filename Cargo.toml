@@ -35,7 +35,7 @@ default-tls = ["hyper-tls", "native-tls-crate", "__tls", "tokio-native-tls"]
 
 # Enables native-tls specific functionality not available by default.
 native-tls = ["default-tls"]
-native-tls-alpn = ["native-tls", "native-tls-crate/alpn"]
+native-tls-alpn = ["native-tls", "native-tls-crate/alpn", "hyper-tls/alpn"]
 native-tls-vendored = ["native-tls", "native-tls-crate/vendored"]
 
 rustls-tls = ["rustls-tls-webpki-roots"]

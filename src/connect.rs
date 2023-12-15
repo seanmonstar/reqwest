@@ -3,6 +3,7 @@ use http::header::HeaderValue;
 use http::uri::{Authority, Scheme};
 use http::Uri;
 use hyper::rt::{Read, Write, ReadBufCursor};
+use hyper_util::rt::TokioIo;
 use hyper_util::client::legacy::connect::{Connected, Connection};
 use tower_service::Service;
 #[cfg(feature = "native-tls-crate")]
@@ -17,8 +18,8 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-#[cfg(feature = "default-tls")]
-use self::native_tls_conn::NativeTlsConn;
+//#[cfg(feature = "default-tls")]
+//use self::native_tls_conn::NativeTlsConn;
 #[cfg(feature = "__rustls")]
 use self::rustls_tls_conn::RustlsTlsConn;
 use crate::dns::DynResolver;
@@ -196,7 +197,7 @@ impl Connector {
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                     let io = tls_connector.connect(&host, conn).await?;
                     return Ok(Conn {
-                        inner: self.verbose.wrap(NativeTlsConn { inner: io }),
+                        inner: self.verbose.wrap(io/*NativeTlsConn { inner: io }*/),
                         is_proxy: false,
                         tls_info: self.tls_info,
                     });
@@ -262,10 +263,10 @@ impl Connector {
 
                 if let hyper_tls::MaybeHttpsStream::Https(stream) = io {
                     if !self.nodelay {
-                        stream.get_ref().get_ref().get_ref().set_nodelay(false)?;
+                        stream.inner().get_ref().get_ref().get_ref().inner().inner().set_nodelay(false)?;
                     }
                     Ok(Conn {
-                        inner: self.verbose.wrap(NativeTlsConn { inner: stream }),
+                        inner: self.verbose.wrap(stream/*NativeTlsConn { inner: stream }*/),
                         is_proxy,
                         tls_info: self.tls_info,
                     })
@@ -350,10 +351,10 @@ impl Connector {
                     .await?;
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                     let io = tls_connector
-                        .connect(host.ok_or("no host in url")?, tunneled)
+                        .connect(host.ok_or("no host in url")?, TokioIo::new(tunneled))
                         .await?;
                     return Ok(Conn {
-                        inner: self.verbose.wrap(NativeTlsConn { inner: io }),
+                        inner: self.verbose.wrap(io/*NativeTlsConn { inner: io }*/),
                         is_proxy: false,
                         tls_info: false,
                     });
@@ -476,8 +477,15 @@ impl TlsInfoFactory for tokio::net::TcpStream {
     }
 }
 
+#[cfg(feature = "__tls")]
+impl<T: TlsInfoFactory> TlsInfoFactory for TokioIo<T> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        self.inner().tls_info()
+    }
+}
+
 #[cfg(feature = "default-tls")]
-impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<tokio::net::TcpStream> {
+impl<T: TlsInfoFactory> TlsInfoFactory for hyper_tls::MaybeHttpsStream<T> {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         match self {
             hyper_tls::MaybeHttpsStream::Https(tls) => tls.tls_info(),
@@ -487,71 +495,24 @@ impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<tokio::net::TcpStream> {
 }
 
 #[cfg(feature = "default-tls")]
-impl TlsInfoFactory for hyper_tls::TlsStream<hyper_tls::MaybeHttpsStream<tokio::net::TcpStream>> {
-    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .peer_certificate()
-            .ok()
-            .flatten()
-            .and_then(|c| c.to_der().ok());
-        Some(crate::tls::TlsInfo { peer_certificate })
-    }
-}
-
-#[cfg(feature = "default-tls")]
-impl TlsInfoFactory for tokio_native_tls::TlsStream<tokio::net::TcpStream> {
-    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .peer_certificate()
-            .ok()
-            .flatten()
-            .and_then(|c| c.to_der().ok());
-        Some(crate::tls::TlsInfo { peer_certificate })
-    }
-}
-
-#[cfg(feature = "__rustls")]
-impl TlsInfoFactory for hyper_rustls::MaybeHttpsStream<tokio::net::TcpStream> {
-    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        match self {
-            hyper_rustls::MaybeHttpsStream::Https(tls) => tls.tls_info(),
-            hyper_rustls::MaybeHttpsStream::Http(_) => None,
-        }
-    }
-}
-
-#[cfg(feature = "__rustls")]
-impl TlsInfoFactory for tokio_rustls::TlsStream<tokio::net::TcpStream> {
-    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .1
-            .peer_certificates()
-            .and_then(|certs| certs.first())
-            .map(|c| c.0.clone());
-        Some(crate::tls::TlsInfo { peer_certificate })
-    }
-}
-
-#[cfg(feature = "__rustls")]
-impl TlsInfoFactory
-    for tokio_rustls::client::TlsStream<hyper_rustls::MaybeHttpsStream<tokio::net::TcpStream>>
+impl<T> TlsInfoFactory for hyper_tls::TlsStream<T>
+where
+    tokio_native_tls::AllowStd<T>: std::io::Read + std::io::Write,
 {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         let peer_certificate = self
             .get_ref()
-            .1
-            .peer_certificates()
-            .and_then(|certs| certs.first())
-            .map(|c| c.0.clone());
+            .peer_certificate()
+            .ok()
+            .flatten()
+            .and_then(|c| c.to_der().ok());
         Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
 
+
 #[cfg(feature = "__rustls")]
-impl TlsInfoFactory for tokio_rustls::client::TlsStream<tokio::net::TcpStream> {
+impl<T> TlsInfoFactory for tokio_rustls::TlsStream<T> {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         let peer_certificate = self
             .get_ref()
@@ -737,110 +698,6 @@ where
 #[cfg(feature = "__tls")]
 fn tunnel_eof() -> BoxError {
     "unexpected eof while tunneling".into()
-}
-
-#[cfg(feature = "default-tls")]
-mod native_tls_conn {
-    use super::TlsInfoFactory;
-    use hyper_util::client::legacy::connect::{Connected, Connection};
-    use pin_project_lite::pin_project;
-    use std::{
-        io::{self, IoSlice},
-        pin::Pin,
-        task::{Context, Poll},
-    };
-    use hyper::rt::{Read, ReadBufCursor, Write};
-    use tokio_native_tls::TlsStream;
-
-    pin_project! {
-        pub(super) struct NativeTlsConn<T> {
-            #[pin] pub(super) inner: TlsStream<T>,
-        }
-    }
-
-    impl<T: Connection + Read + Write + Unpin> Connection for NativeTlsConn<T> {
-        #[cfg(feature = "native-tls-alpn")]
-        fn connected(&self) -> Connected {
-            match self.inner.get_ref().negotiated_alpn().ok() {
-                Some(Some(alpn_protocol)) if alpn_protocol == b"h2" => self
-                    .inner
-                    .get_ref()
-                    .get_ref()
-                    .get_ref()
-                    .connected()
-                    .negotiated_h2(),
-                _ => self.inner.get_ref().get_ref().get_ref().connected(),
-            }
-        }
-
-        #[cfg(not(feature = "native-tls-alpn"))]
-        fn connected(&self) -> Connected {
-            self.inner.get_ref().get_ref().get_ref().connected()
-        }
-    }
-
-    impl<T: Read + Write + Unpin> Read for NativeTlsConn<T> {
-        fn poll_read(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-            buf: ReadBufCursor<'_>,
-        ) -> Poll<tokio::io::Result<()>> {
-            let this = self.project();
-            Read::poll_read(this.inner, cx, buf)
-        }
-    }
-
-    impl<T: Read + Write + Unpin> Write for NativeTlsConn<T> {
-        fn poll_write(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-            buf: &[u8],
-        ) -> Poll<Result<usize, tokio::io::Error>> {
-            let this = self.project();
-            AsyncWrite::poll_write(this.inner, cx, buf)
-        }
-
-        fn poll_write_vectored(
-            self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-            bufs: &[IoSlice<'_>],
-        ) -> Poll<Result<usize, io::Error>> {
-            let this = self.project();
-            AsyncWrite::poll_write_vectored(this.inner, cx, bufs)
-        }
-
-        fn is_write_vectored(&self) -> bool {
-            self.inner.is_write_vectored()
-        }
-
-        fn poll_flush(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-        ) -> Poll<Result<(), tokio::io::Error>> {
-            let this = self.project();
-            AsyncWrite::poll_flush(this.inner, cx)
-        }
-
-        fn poll_shutdown(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-        ) -> Poll<Result<(), tokio::io::Error>> {
-            let this = self.project();
-            AsyncWrite::poll_shutdown(this.inner, cx)
-        }
-    }
-
-    impl TlsInfoFactory for NativeTlsConn<tokio::net::TcpStream> {
-        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-            self.inner.tls_info()
-        }
-    }
-
-    impl TlsInfoFactory for NativeTlsConn<hyper_tls::MaybeHttpsStream<tokio::net::TcpStream>> {
-        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-            self.inner.tls_info()
-        }
-    }
 }
 
 #[cfg(feature = "__rustls")]
