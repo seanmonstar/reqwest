@@ -2367,6 +2367,10 @@ impl Future for PendingRequest {
                         redirect::ActionKind::Follow => {
                             debug!("redirecting '{}' to '{}'", self.url, loc);
 
+                            if loc.scheme() != "http" && loc.scheme() != "https" {
+                                return Poll::Ready(Err(error::url_bad_scheme(loc)));
+                            }
+
                             if self.client.https_only && loc.scheme() != "https" {
                                 return Poll::Ready(Err(error::redirect(
                                     error::url_bad_scheme(loc.clone()),
