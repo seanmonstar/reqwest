@@ -286,6 +286,22 @@ async fn test_invalid_location_stops_redirect_gh484() {
     assert_eq!(res.status(), reqwest::StatusCode::FOUND);
 }
 
+#[tokio::test]
+async fn test_invalid_scheme_is_rejected() {
+    let server = server::http(move |_req| async move {
+        http::Response::builder()
+            .status(302)
+            .header("location", "htt://www.yikes.com/")
+            .body(Body::default())
+            .unwrap()
+    });
+
+    let url = format!("http://{}/yikes", server.addr());
+
+    let err = reqwest::get(&url).await.unwrap_err();
+    assert!(err.is_builder());
+}
+
 #[cfg(feature = "cookies")]
 #[tokio::test]
 async fn test_redirect_302_with_set_cookies() {
