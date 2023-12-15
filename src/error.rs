@@ -121,6 +121,7 @@ impl Error {
         matches!(self.inner.kind, Kind::Request)
     }
 
+    /*
     #[cfg(not(target_arch = "wasm32"))]
     /// Returns true if the error is related to connect
     pub fn is_connect(&self) -> bool {
@@ -138,6 +139,7 @@ impl Error {
 
         false
     }
+    */
 
     /// Returns true if the error is related to the request or response body
     pub fn is_body(&self) -> bool {

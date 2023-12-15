@@ -497,7 +497,7 @@ impl<T: TlsInfoFactory> TlsInfoFactory for hyper_tls::MaybeHttpsStream<T> {
 #[cfg(feature = "default-tls")]
 impl<T> TlsInfoFactory for hyper_tls::TlsStream<T>
 where
-    tokio_native_tls::AllowStd<T>: std::io::Read + std::io::Write,
+    native_tls_crate::TlsStream<tokio_native_tls::AllowStd<T>>: std::io::Read + std::io::Write,
 {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         let peer_certificate = self
@@ -699,6 +699,107 @@ where
 fn tunnel_eof() -> BoxError {
     "unexpected eof while tunneling".into()
 }
+
+/*
+#[cfg(feature = "default-tls")]
+mod native_tls_conn {
+    use super::TlsInfoFactory;
+    use hyper_util::client::legacy::connect::{Connected, Connection};
+    use hyper_util::rt::TokioIo;
+    use pin_project_lite::pin_project;
+    use std::{
+        io::{self, IoSlice},
+        pin::Pin,
+        task::{Context, Poll},
+    };
+    use hyper::rt::{Read, ReadBufCursor, Write};
+    use tokio_native_tls::TlsStream;
+
+    pin_project! {
+        pub(super) struct NativeTlsConn<T> {
+            #[pin] pub(super) inner: TokioIo<TlsStream<T>>,
+        }
+    }
+
+    impl<T: Connection + Read + Write + Unpin> Connection for NativeTlsConn<T> {
+        #[cfg(feature = "native-tls-alpn")]
+        fn connected(&self) -> Connected {
+            match self.inner.inner().get_ref().negotiated_alpn().ok() {
+                Some(Some(alpn_protocol)) if alpn_protocol == b"h2" => self
+                    .inner
+                    .get_ref()
+                    .get_ref()
+                    .get_ref()
+                    .connected()
+                    .negotiated_h2(),
+                _ => self.inner.inner().get_ref().get_ref().get_ref().connected(),
+            }
+        }
+
+        #[cfg(not(feature = "native-tls-alpn"))]
+        fn connected(&self) -> Connected {
+            self.inner.inner().get_ref().get_ref().get_ref().connected()
+        }
+    }
+
+    impl<T: Read + Write + Unpin> Read for NativeTlsConn<T> {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            cx: &mut Context,
+            buf: ReadBufCursor<'_>,
+        ) -> Poll<tokio::io::Result<()>> {
+            let this = self.project();
+            Read::poll_read(this.inner, cx, buf)
+        }
+    }
+
+    impl<T: Read + Write + Unpin> Write for NativeTlsConn<T> {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            cx: &mut Context,
+            buf: &[u8],
+        ) -> Poll<Result<usize, tokio::io::Error>> {
+            let this = self.project();
+            Write::poll_write(this.inner, cx, buf)
+        }
+
+        fn poll_write_vectored(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            bufs: &[IoSlice<'_>],
+        ) -> Poll<Result<usize, io::Error>> {
+            let this = self.project();
+            Write::poll_write_vectored(this.inner, cx, bufs)
+        }
+
+        fn is_write_vectored(&self) -> bool {
+            self.inner.is_write_vectored()
+        }
+
+        fn poll_flush(
+            self: Pin<&mut Self>,
+            cx: &mut Context,
+        ) -> Poll<Result<(), tokio::io::Error>> {
+            let this = self.project();
+            Write::poll_flush(this.inner, cx)
+        }
+
+        fn poll_shutdown(
+            self: Pin<&mut Self>,
+            cx: &mut Context,
+        ) -> Poll<Result<(), tokio::io::Error>> {
+            let this = self.project();
+            Write::poll_shutdown(this.inner, cx)
+        }
+    }
+
+    impl<T: TlsInfoFactory> TlsInfoFactory for NativeTlsConn<T> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+            self.inner.tls_info()
+        }
+    }
+}
+*/
 
 #[cfg(feature = "__rustls")]
 mod rustls_tls_conn {
@@ -905,8 +1006,11 @@ mod verbose {
         ) -> Poll<std::io::Result<()>> {
             match Pin::new(&mut self.inner).poll_read(cx, buf) {
                 Poll::Ready(Ok(())) => {
+                    /*
                     log::trace!("{:08x} read: {:?}", self.id, Escape(buf.filled()));
                     Poll::Ready(Ok(()))
+                    */
+                    todo!("verbose poll_read");
                 }
                 Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
                 Poll::Pending => Poll::Pending,

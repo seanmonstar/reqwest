@@ -17,6 +17,7 @@ use futures_core::Stream;
 use futures_util::stream::Peekable;
 use http::HeaderMap;
 use hyper::body::Body as HttpBody;
+use hyper::body::Frame;
 
 #[cfg(any(feature = "gzip", feature = "brotli", feature = "deflate"))]
 use tokio_util::codec::{BytesCodec, FramedRead};
@@ -261,18 +262,11 @@ impl HttpBody for Decoder {
     type Data = Bytes;
     type Error = crate::Error;
 
-    fn poll_data(
+    fn poll_frame(
         self: Pin<&mut Self>,
         cx: &mut Context,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         self.poll_next(cx)
-    }
-
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        _cx: &mut Context,
-    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        Poll::Ready(Ok(None))
     }
 
     fn size_hint(&self) -> http_body::SizeHint {
