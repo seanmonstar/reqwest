@@ -52,6 +52,8 @@ use quinn::TransportConfig;
 #[cfg(feature = "http3")]
 use quinn::VarInt;
 
+type HyperResponseFuture = hyper_util::client::legacy::ResponseFuture;
+
 /// An asynchronous `Client` to make Requests with.
 ///
 /// The Client has various configuration values to tweak, but the defaults
@@ -612,7 +614,7 @@ impl ClientBuilder {
         connector.set_timeout(config.connect_timeout);
         connector.set_verbose(config.connection_verbose);
 
-        let mut builder = HyperClient::builder();
+        let mut builder = HyperClient::builder(hyper_util::rt::TokioExecutor::new());
         if matches!(config.http_version_pref, HttpVersionPref::Http2) {
             builder.http2_only(true);
         }
@@ -1651,7 +1653,7 @@ impl ClientBuilder {
     }
 }
 
-type HyperClient = hyper_util::client::legacy::Client<Connector, super::body::ImplStream>;
+type HyperClient = hyper_util::client::legacy::Client<Connector, super::Body>;
 
 impl Default for Client {
     fn default() -> Self {
@@ -1829,7 +1831,7 @@ impl Client {
             }
             _ => {
                 let mut req = builder
-                    .body(body.into_stream())
+                    .body(body)
                     .expect("valid request parts");
                 *req.headers_mut() = headers.clone();
                 ResponseFuture::Default(self.inner.hyper.request(req))
@@ -2194,7 +2196,7 @@ impl PendingRequest {
                 let mut req = hyper::Request::builder()
                     .method(self.method.clone())
                     .uri(uri)
-                    .body(body.into_stream())
+                    .body(body)
                     .expect("valid request parts");
                 *req.headers_mut() = self.headers.clone();
                 ResponseFuture::Default(self.client.hyper.request(req))
@@ -2423,7 +2425,7 @@ impl Future for PendingRequest {
                                         let mut req = hyper::Request::builder()
                                             .method(self.method.clone())
                                             .uri(uri.clone())
-                                            .body(body.into_stream())
+                                            .body(body)
                                             .expect("valid request parts");
                                         *req.headers_mut() = headers.clone();
                                         std::mem::swap(self.as_mut().headers(), &mut headers);

@@ -237,6 +237,36 @@ impl fmt::Debug for Body {
     }
 }
 
+impl hyper::body::Body for Body {
+    type Data = Bytes;
+    type Error = crate::Error;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context,
+    ) -> Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        match self.inner {
+            Inner::Reusable(ref mut bytes) => {
+                let out = bytes.split_off(0);
+                if out.is_empty() {
+                    Poll::Ready(None)
+                } else {
+                    Poll::Ready(Some(Ok(hyper::body::Frame::data(out))))
+                }
+            },
+            Inner::Streaming { ref mut body, ref mut timeout } => {
+                if let Some(timeout) = timeout {
+                    if let Poll::Ready(()) = timeout.as_mut().poll(cx) {
+                        return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
+                    }
+                }
+                Poll::Ready(futures_core::ready!(Pin::new(body).poll_frame(cx))
+                    .map(|opt_chunk| opt_chunk.map_err(crate::error::body)))
+            }
+        }
+    }
+}
+
 // ===== impl TotalTimeoutBody =====
 
 pub(crate) fn total_timeout<B>(body: B, timeout: Pin<Box<Sleep>>) -> TotalTimeoutBody<B> {

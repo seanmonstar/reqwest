@@ -214,22 +214,31 @@ impl Decoder {
     }
 }
 
-impl Stream for Decoder {
-    type Item = Result<Bytes, error::Error>;
+impl HttpBody for Decoder {
+    type Data = Bytes;
+    type Error = crate::Error;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        // Do a read or poll for a pending decoder value.
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         match self.inner {
             #[cfg(any(feature = "brotli", feature = "gzip", feature = "deflate"))]
             Inner::Pending(ref mut future) => match Pin::new(future).poll(cx) {
                 Poll::Ready(Ok(inner)) => {
                     self.inner = inner;
-                    self.poll_next(cx)
+                    self.poll_frame(cx)
                 }
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(crate::error::decode_io(e)))),
                 Poll::Pending => Poll::Pending,
             },
-            Inner::PlainText(ref mut body) => Pin::new(body).poll_next(cx),
+            Inner::PlainText(ref mut body) => {
+                match futures_core::ready!(Pin::new(body).poll_frame(cx)) {
+                    Some(Ok(frame)) => Poll::Ready(Some(Ok(frame))),
+                    Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode(err)))),
+                    None => Poll::Ready(None),
+                }
+            },
             #[cfg(feature = "gzip")]
             Inner::Gzip(ref mut decoder) => {
                 match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
@@ -256,18 +265,6 @@ impl Stream for Decoder {
             }
         }
     }
-}
-
-impl HttpBody for Decoder {
-    type Data = Bytes;
-    type Error = crate::Error;
-
-    fn poll_frame(
-        self: Pin<&mut Self>,
-        cx: &mut Context,
-    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
-        self.poll_next(cx)
-    }
 
     fn size_hint(&self) -> http_body::SizeHint {
         match self.inner {
@@ -277,6 +274,11 @@ impl HttpBody for Decoder {
             _ => http_body::SizeHint::default(),
         }
     }
+}
+
+fn empty() -> ResponseBody {
+    use http_body_util::{combinators::BoxBody, BodyExt, Empty};
+    BoxBody::new(Empty::new().map_err(|never| match never {}))
 }
 
 impl Future for Pending {
@@ -297,12 +299,12 @@ impl Future for Pending {
                 .expect("just peeked Some")
                 .unwrap_err()));
             }
-            None => return Poll::Ready(Ok(Inner::PlainText(Body::empty().into_stream()))),
+            None => return Poll::Ready(Ok(Inner::PlainText(empty()))),
         };
 
         let _body = std::mem::replace(
             &mut self.0,
-            IoStream(Body::empty().into_stream()).peekable(),
+            IoStream(empty()).peekable(),
         );
 
         match self.1 {
