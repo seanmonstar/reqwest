@@ -289,9 +289,8 @@ pub(crate) fn upgrade<E: Into<BoxError>>(e: E) -> Error {
 
 // io::Error helpers
 
-#[allow(unused)]
-pub(crate) fn into_io(e: Error) -> io::Error {
-    e.into_io()
+pub(crate) fn into_io(e: BoxError) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, e)
 }
 
 #[allow(unused)]

@@ -18,8 +18,8 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-//#[cfg(feature = "default-tls")]
-//use self::native_tls_conn::NativeTlsConn;
+#[cfg(feature = "default-tls")]
+use self::native_tls_conn::NativeTlsConn;
 #[cfg(feature = "__rustls")]
 use self::rustls_tls_conn::RustlsTlsConn;
 use crate::dns::DynResolver;
@@ -266,7 +266,7 @@ impl Connector {
                         stream.inner().get_ref().get_ref().get_ref().inner().inner().set_nodelay(false)?;
                     }
                     Ok(Conn {
-                        inner: self.verbose.wrap(stream/*NativeTlsConn { inner: stream }*/),
+                        inner: self.verbose.wrap(NativeTlsConn { inner: stream }),
                         is_proxy,
                         tls_info: self.tls_info,
                     })
@@ -354,7 +354,7 @@ impl Connector {
                         .connect(host.ok_or("no host in url")?, TokioIo::new(tunneled))
                         .await?;
                     return Ok(Conn {
-                        inner: self.verbose.wrap(io/*NativeTlsConn { inner: io }*/),
+                        inner: self.verbose.wrap(NativeTlsConn { inner: io }),
                         is_proxy: false,
                         tls_info: false,
                     });
@@ -477,6 +477,7 @@ impl TlsInfoFactory for tokio::net::TcpStream {
     }
 }
 
+/*
 #[cfg(feature = "__tls")]
 impl<T: TlsInfoFactory> TlsInfoFactory for TokioIo<T> {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
@@ -497,7 +498,7 @@ impl<T: TlsInfoFactory> TlsInfoFactory for hyper_tls::MaybeHttpsStream<T> {
 #[cfg(feature = "default-tls")]
 impl<T> TlsInfoFactory for hyper_tls::TlsStream<T>
 where
-    native_tls_crate::TlsStream<tokio_native_tls::AllowStd<T>>: std::io::Read + std::io::Write,
+    T: tokio::io::AsyncRead + tokio::io::AsyncWrite,
 {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         let peer_certificate = self
@@ -523,6 +524,7 @@ impl<T> TlsInfoFactory for tokio_rustls::TlsStream<T> {
         Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
+*/
 
 pub(crate) trait AsyncConn:
     Read + Write + Connection + Send + Sync + Unpin + 'static
@@ -700,7 +702,6 @@ fn tunnel_eof() -> BoxError {
     "unexpected eof while tunneling".into()
 }
 
-/*
 #[cfg(feature = "default-tls")]
 mod native_tls_conn {
     use super::TlsInfoFactory;
@@ -713,6 +714,7 @@ mod native_tls_conn {
         task::{Context, Poll},
     };
     use hyper::rt::{Read, ReadBufCursor, Write};
+    use tokio::io::{AsyncRead, AsyncWrite};
     use tokio_native_tls::TlsStream;
 
     pin_project! {
@@ -742,7 +744,7 @@ mod native_tls_conn {
         }
     }
 
-    impl<T: Read + Write + Unpin> Read for NativeTlsConn<T> {
+    impl<T: AsyncRead + AsyncWrite + Unpin> Read for NativeTlsConn<T> {
         fn poll_read(
             self: Pin<&mut Self>,
             cx: &mut Context,
@@ -753,7 +755,7 @@ mod native_tls_conn {
         }
     }
 
-    impl<T: Read + Write + Unpin> Write for NativeTlsConn<T> {
+    impl<T: AsyncRead + AsyncWrite + Unpin> Write for NativeTlsConn<T> {
         fn poll_write(
             self: Pin<&mut Self>,
             cx: &mut Context,
@@ -799,7 +801,6 @@ mod native_tls_conn {
         }
     }
 }
-*/
 
 #[cfg(feature = "__rustls")]
 mod rustls_tls_conn {

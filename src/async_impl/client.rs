@@ -614,7 +614,7 @@ impl ClientBuilder {
         connector.set_timeout(config.connect_timeout);
         connector.set_verbose(config.connection_verbose);
 
-        let mut builder = HyperClient::builder(hyper_util::rt::TokioExecutor::new());
+        let mut builder = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
         if matches!(config.http_version_pref, HttpVersionPref::Http2) {
             builder.http2_only(true);
         }

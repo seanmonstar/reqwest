@@ -331,10 +331,19 @@ impl Stream for IoStream {
     type Item = Result<Bytes, std::io::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        match futures_core::ready!(Pin::new(&mut self.0).poll_next(cx)) {
-            Some(Ok(chunk)) => Poll::Ready(Some(Ok(chunk))),
-            Some(Err(err)) => Poll::Ready(Some(Err(err.into_io()))),
-            None => Poll::Ready(None),
+        loop {
+            return match futures_core::ready!(Pin::new(&mut self.0).poll_frame(cx)) {
+                Some(Ok(frame)) => {
+                    // skip non-data frames
+                    if let Ok(buf) = frame.into_data() {
+                        Poll::Ready(Some(Ok(buf)))
+                    } else {
+                        continue;
+                    }
+                },
+                Some(Err(err)) => Poll::Ready(Some(Err(error::into_io(err)))),
+                None => Poll::Ready(None),
+            };
         }
     }
 }

@@ -4,7 +4,6 @@ use std::pin::Pin;
 
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
-use futures_util::stream::StreamExt;
 use hyper_util::client::legacy::connect::HttpInfo;
 use hyper::{HeaderMap, StatusCode, Version};
 use mime::Mime;
@@ -278,10 +277,19 @@ impl Response {
     /// # }
     /// ```
     pub async fn chunk(&mut self) -> crate::Result<Option<Bytes>> {
-        if let Some(item) = self.res.body_mut().next().await {
-            Ok(Some(item?))
-        } else {
-            Ok(None)
+        use http_body_util::BodyExt;
+
+        // loop to ignore unrecognized frames
+        loop {
+            if let Some(res) = self.res.body_mut().frame().await {
+                let frame = res?;
+                if let Ok(buf) = frame.into_data() {
+                    return Ok(Some(buf));
+                }
+                // else continue
+            } else {
+                return Ok(None);
+            }
         }
     }
 

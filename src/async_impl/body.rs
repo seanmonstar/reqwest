@@ -5,7 +5,7 @@ use std::task::{Context, Poll};
 
 use bytes::Bytes;
 use http_body::Body as HttpBody;
-use pin_project_lite::pin_project;
+use http_body_util::combinators::BoxBody;
 #[cfg(feature = "stream")]
 use tokio::fs::File;
 use tokio::time::Sleep;
@@ -20,14 +20,7 @@ pub struct Body {
 enum Inner {
     Reusable(Bytes),
     Streaming {
-        body: Pin<
-            Box<
-                dyn HttpBody<Data = Bytes, Error = Box<dyn std::error::Error + Send + Sync>>
-                    + Send
-                    + Sync,
-            >,
-        >,
-        timeout: Option<Pin<Box<Sleep>>>,
+        body: BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>,
     },
 }
 
@@ -38,13 +31,6 @@ enum Inner {
 pub(crate) struct TotalTimeoutBody<B> {
     inner: B,
     timeout: Pin<Box<Sleep>>,
-}
-
-pin_project! {
-    struct WrapStream<S> {
-        #[pin]
-        inner: S,
-    }
 }
 
 impl Body {
@@ -99,34 +85,25 @@ impl Body {
         Bytes: From<S::Ok>,
     {
         use futures_util::TryStreamExt;
+        use http_body::Frame;
+        use http_body_util::StreamBody;
 
-        let body = Box::pin(WrapStream {
-            inner: stream.map_ok(Bytes::from).map_err(Into::into),
-        });
+        let body = http_body_util::BodyExt::boxed(StreamBody::new(
+            stream.map_ok(|d| Frame::data(Bytes::from(d))).map_err(Into::into),
+        ));
         Body {
             inner: Inner::Streaming {
                 body,
-                timeout: None,
             },
         }
     }
 
     /*
-    pub(crate) fn response(body: hyper::Body, timeout: Option<Pin<Box<Sleep>>>) -> Body {
-        Body {
-            inner: Inner::Streaming {
-                body: Box::pin(WrapHyper(body)),
-                timeout,
-            },
-        }
-    }
-
     #[cfg(feature = "blocking")]
     pub(crate) fn wrap(body: hyper::Body) -> Body {
         Body {
             inner: Inner::Streaming {
                 body: Box::pin(WrapHyper(body)),
-                timeout: None,
             },
         }
     }
@@ -180,7 +157,6 @@ impl From<hyper::Body> for Body {
         Self {
             inner: Inner::Streaming {
                 body: Box::pin(WrapHyper(body)),
-                timeout: None,
             },
         }
     }
@@ -237,7 +213,7 @@ impl fmt::Debug for Body {
     }
 }
 
-impl hyper::body::Body for Body {
+impl HttpBody for Body {
     type Data = Bytes;
     type Error = crate::Error;
 
@@ -254,12 +230,7 @@ impl hyper::body::Body for Body {
                     Poll::Ready(Some(Ok(hyper::body::Frame::data(out))))
                 }
             },
-            Inner::Streaming { ref mut body, ref mut timeout } => {
-                if let Some(timeout) = timeout {
-                    if let Poll::Ready(()) = timeout.as_mut().poll(cx) {
-                        return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
-                    }
-                }
+            Inner::Streaming { ref mut body } => {
                 Poll::Ready(futures_core::ready!(Pin::new(body).poll_frame(cx))
                     .map(|opt_chunk| opt_chunk.map_err(crate::error::body)))
             }
