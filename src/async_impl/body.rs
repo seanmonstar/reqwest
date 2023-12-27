@@ -19,9 +19,7 @@ pub struct Body {
 
 enum Inner {
     Reusable(Bytes),
-    Streaming {
-        body: BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>,
-    },
+    Streaming(BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>),
 }
 
 /// A body with a total timeout.
@@ -40,7 +38,7 @@ impl Body {
     pub fn as_bytes(&self) -> Option<&[u8]> {
         match &self.inner {
             Inner::Reusable(bytes) => Some(bytes.as_ref()),
-            Inner::Streaming { .. } => None,
+            Inner::Streaming(..) => None,
         }
     }
 
@@ -75,15 +73,6 @@ impl Body {
         S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
         Bytes: From<S::Ok>,
     {
-        Body::stream(stream)
-    }
-
-    pub(crate) fn stream<S>(stream: S) -> Body
-    where
-        S: futures_core::stream::TryStream + Send + Sync + 'static,
-        S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
-        Bytes: From<S::Ok>,
-    {
         use futures_util::TryStreamExt;
         use http_body::Frame;
         use http_body_util::StreamBody;
@@ -92,9 +81,7 @@ impl Body {
             stream.map_ok(|d| Frame::data(Bytes::from(d))).map_err(Into::into),
         ));
         Body {
-            inner: Inner::Streaming {
-                body,
-            },
+            inner: Inner::Streaming(body),
         }
     }
 
@@ -116,6 +103,22 @@ impl Body {
     pub(crate) fn reusable(chunk: Bytes) -> Body {
         Body {
             inner: Inner::Reusable(chunk),
+        }
+    }
+
+    // pub?
+    pub(crate) fn streaming<B>(inner: B) -> Body
+    where
+        B: HttpBody + Send + Sync + 'static,
+        B::Data: Into<Bytes>,
+        B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    {
+        use http_body_util::BodyExt;
+
+        let boxed = inner.map_frame(|f| f.map_data(Into::into)).map_err(Into::into).boxed();
+
+        Body {
+            inner: Inner::Streaming(boxed),
         }
     }
 
@@ -145,7 +148,7 @@ impl Body {
     pub(crate) fn content_length(&self) -> Option<u64> {
         match self.inner {
             Inner::Reusable(ref bytes) => Some(bytes.len() as u64),
-            Inner::Streaming { ref body, .. } => body.size_hint().exact(),
+            Inner::Streaming(ref body) => body.size_hint().exact(),
         }
     }
 }
@@ -230,7 +233,7 @@ impl HttpBody for Body {
                     Poll::Ready(Some(Ok(hyper::body::Frame::data(out))))
                 }
             },
-            Inner::Streaming { ref mut body } => {
+            Inner::Streaming(ref mut body) => {
                 Poll::Ready(futures_core::ready!(Pin::new(body).poll_frame(cx))
                     .map(|opt_chunk| opt_chunk.map_err(crate::error::body)))
             }

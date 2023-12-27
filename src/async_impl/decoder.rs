@@ -351,6 +351,7 @@ impl Stream for IoStream {
 // ===== impl Accepts =====
 
 impl Accepts {
+    /*
     pub(super) fn none() -> Self {
         Accepts {
             #[cfg(feature = "gzip")]
@@ -361,6 +362,7 @@ impl Accepts {
             deflate: false,
         }
     }
+    */
 
     pub(super) fn as_str(&self) -> Option<&'static str> {
         match (self.is_gzip(), self.is_brotli(), self.is_deflate()) {
