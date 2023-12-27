@@ -354,7 +354,7 @@ impl Connector {
                         .connect(host.ok_or("no host in url")?, TokioIo::new(tunneled))
                         .await?;
                     return Ok(Conn {
-                        inner: self.verbose.wrap(NativeTlsConn { inner: io }),
+                        inner: self.verbose.wrap(NativeTlsConn { inner: TokioIo::new(io) }),
                         is_proxy: false,
                         tls_info: false,
                     });
@@ -474,6 +474,49 @@ trait TlsInfoFactory {
 impl TlsInfoFactory for tokio::net::TcpStream {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         None
+    }
+}
+
+#[cfg(feature = "__tls")]
+impl<T: TlsInfoFactory> TlsInfoFactory for TokioIo<T> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        self.inner().tls_info()
+    }
+}
+
+#[cfg(feature = "default-tls")]
+impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<TokioIo<tokio::net::TcpStream>>> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .peer_certificate()
+            .ok()
+            .flatten()
+            .and_then(|c| c.to_der().ok());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
+#[cfg(feature = "default-tls")]
+impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>>>> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .peer_certificate()
+            .ok()
+            .flatten()
+            .and_then(|c| c.to_der().ok());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
+#[cfg(feature = "default-tls")]
+impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        match self {
+            hyper_tls::MaybeHttpsStream::Https(tls) => tls.tls_info(),
+            hyper_tls::MaybeHttpsStream::Http(_) => None,
+        }
     }
 }
 
@@ -714,7 +757,9 @@ mod native_tls_conn {
         task::{Context, Poll},
     };
     use hyper::rt::{Read, ReadBufCursor, Write};
+    use hyper_tls::MaybeHttpsStream;
     use tokio::io::{AsyncRead, AsyncWrite};
+    use tokio::net::TcpStream;
     use tokio_native_tls::TlsStream;
 
     pin_project! {
@@ -723,24 +768,15 @@ mod native_tls_conn {
         }
     }
 
-    impl<T: Connection + Read + Write + Unpin> Connection for NativeTlsConn<T> {
-        #[cfg(feature = "native-tls-alpn")]
+    impl Connection for NativeTlsConn<TokioIo<TokioIo<TcpStream>>> {
         fn connected(&self) -> Connected {
-            match self.inner.inner().get_ref().negotiated_alpn().ok() {
-                Some(Some(alpn_protocol)) if alpn_protocol == b"h2" => self
-                    .inner
-                    .get_ref()
-                    .get_ref()
-                    .get_ref()
-                    .connected()
-                    .negotiated_h2(),
-                _ => self.inner.inner().get_ref().get_ref().get_ref().connected(),
-            }
+            self.inner.inner().get_ref().get_ref().get_ref().inner().connected()
         }
+    }
 
-        #[cfg(not(feature = "native-tls-alpn"))]
+    impl Connection for NativeTlsConn<TokioIo<MaybeHttpsStream<TokioIo<tokio::net::TcpStream>>>> {
         fn connected(&self) -> Connected {
-            self.inner.inner().get_ref().get_ref().get_ref().connected()
+            self.inner.inner().get_ref().get_ref().get_ref().inner().connected()
         }
     }
 
@@ -795,7 +831,10 @@ mod native_tls_conn {
         }
     }
 
-    impl<T: TlsInfoFactory> TlsInfoFactory for NativeTlsConn<T> {
+    impl<T> TlsInfoFactory for NativeTlsConn<T>
+    where
+        TokioIo<TlsStream<T>>: TlsInfoFactory,
+    {
         fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
             self.inner.tls_info()
         }

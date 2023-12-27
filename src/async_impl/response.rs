@@ -18,7 +18,6 @@ use super::body::Body;
 use super::decoder::{Accepts, Decoder};
 #[cfg(feature = "cookies")]
 use crate::cookie;
-use crate::response::ResponseUrl;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -408,6 +407,10 @@ impl fmt::Debug for Response {
 
 impl<T: Into<Body>> From<http::Response<T>> for Response {
     fn from(r: http::Response<T>) -> Response {
+        todo!()
+        /*
+        use crate::response::ResponseUrl;
+
         let (mut parts, body) = r.into_parts();
         let body = body.into();
         let decoder = Decoder::detect(&mut parts.headers, body, Accepts::none());
@@ -421,13 +424,15 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
             res,
             url: Box::new(url),
         }
+        */
     }
 }
 
 /// A `Response` can be piped as the `Body` of another request.
 impl From<Response> for Body {
     fn from(r: Response) -> Body {
-        Body::stream(r.res.into_body())
+        todo!()
+        //Body::stream(r.res.into_body())
     }
 }
 
