@@ -116,7 +116,7 @@ impl Decoder {
 
         Decoder {
             inner: Inner::Pending(Box::pin(Pending(
-                IoStream(body.into_stream()).peekable(),
+                IoStream(body).peekable(),
                 DecoderType::Gzip,
             ))),
         }
@@ -131,7 +131,7 @@ impl Decoder {
 
         Decoder {
             inner: Inner::Pending(Box::pin(Pending(
-                IoStream(body.into_stream()).peekable(),
+                IoStream(body).peekable(),
                 DecoderType::Brotli,
             ))),
         }
@@ -146,7 +146,7 @@ impl Decoder {
 
         Decoder {
             inner: Inner::Pending(Box::pin(Pending(
-                IoStream(body.into_stream()).peekable(),
+                IoStream(body).peekable(),
                 DecoderType::Deflate,
             ))),
         }
@@ -242,7 +242,7 @@ impl HttpBody for Decoder {
             #[cfg(feature = "gzip")]
             Inner::Gzip(ref mut decoder) => {
                 match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
-                    Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.freeze()))),
+                    Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes.freeze())))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                     None => Poll::Ready(None),
                 }
@@ -250,7 +250,7 @@ impl HttpBody for Decoder {
             #[cfg(feature = "brotli")]
             Inner::Brotli(ref mut decoder) => {
                 match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
-                    Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.freeze()))),
+                    Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes.freeze())))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                     None => Poll::Ready(None),
                 }
@@ -258,7 +258,7 @@ impl HttpBody for Decoder {
             #[cfg(feature = "deflate")]
             Inner::Deflate(ref mut decoder) => {
                 match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
-                    Some(Ok(bytes)) => Poll::Ready(Some(Ok(bytes.freeze()))),
+                    Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes.freeze())))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                     None => Poll::Ready(None),
                 }
