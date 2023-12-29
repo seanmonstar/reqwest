@@ -31,6 +31,9 @@ pub(crate) struct TotalTimeoutBody<B> {
     timeout: Pin<Box<Sleep>>,
 }
 
+/// Converts any `impl Body` into a `impl Stream` of just its DATA frames.
+pub(crate) struct DataStream<B>(pub(crate) B);
+
 impl Body {
     /// Returns a reference to the internal data of the `Body`.
     ///
@@ -68,6 +71,16 @@ impl Body {
     #[cfg(feature = "stream")]
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     pub fn wrap_stream<S>(stream: S) -> Body
+    where
+        S: futures_core::stream::TryStream + Send + Sync + 'static,
+        S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+        Bytes: From<S::Ok>,
+    {
+        Body::stream(stream)
+    }
+
+    #[cfg(any(feature = "stream", feature = "multipart"))]
+    pub(crate) fn stream<S>(stream: S) -> Body
     where
         S: futures_core::stream::TryStream + Send + Sync + 'static,
         S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
@@ -143,11 +156,10 @@ impl Body {
         }
     }
 
-    /*
-    pub(crate) fn into_stream(self) -> ImplStream {
-        ImplStream(self)
+    #[cfg(feature = "multipart")]
+    pub(crate) fn into_stream(self) -> DataStream<Body> {
+        DataStream(self)
     }
-    */
 
     #[cfg(feature = "multipart")]
     pub(crate) fn content_length(&self) -> Option<u64> {
@@ -157,6 +169,8 @@ impl Body {
         }
     }
 }
+
+
 
 /*
 impl From<hyper::Body> for Body {
@@ -290,6 +304,32 @@ pub(crate) fn response(
         total_timeout(body, timeout).map_err(Into::into).boxed()
     } else {
         body.map_err(Into::into).boxed()
+    }
+}
+
+// ===== impl DataStream =====
+
+impl<B> futures_core::Stream for DataStream<B>
+where
+    B: HttpBody<Data = Bytes> + Unpin,
+{
+    type Item = Result<Bytes, B::Error>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        loop {
+            return match futures_core::ready!(Pin::new(&mut self.0).poll_frame(cx)) {
+                Some(Ok(frame)) => {
+                    // skip non-data frames
+                    if let Ok(buf) = frame.into_data() {
+                        Poll::Ready(Some(Ok(buf)))
+                    } else {
+                        continue;
+                    }
+                }
+                Some(Err(err)) => Poll::Ready(Some(Err(err))),
+                None => Poll::Ready(None),
+            };
+        }
     }
 }
 

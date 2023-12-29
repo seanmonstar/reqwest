@@ -323,33 +323,7 @@ impl Response {
     #[cfg(feature = "stream")]
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
-        use std::task::{Context, Poll};
-
-        struct DataStream(Decoder);
-
-        impl futures_core::Stream for DataStream {
-            type Item = crate::Result<Bytes>;
-
-            fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-                use hyper::body::Body as _;
-                loop {
-                    return match futures_core::ready!(Pin::new(&mut self.0).poll_frame(cx)) {
-                        Some(Ok(frame)) => {
-                            // skip non-data frames
-                            if let Ok(buf) = frame.into_data() {
-                                Poll::Ready(Some(Ok(buf)))
-                            } else {
-                                continue;
-                            }
-                        }
-                        Some(Err(err)) => Poll::Ready(Some(Err(err))),
-                        None => Poll::Ready(None),
-                    };
-                }
-            }
-        }
-
-        DataStream(self.res.into_body())
+        super::body::DataStream(self.res.into_body())
     }
 
     // util methods
