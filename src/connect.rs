@@ -2,12 +2,12 @@
 use http::header::HeaderValue;
 use http::uri::{Authority, Scheme};
 use http::Uri;
-use hyper::rt::{Read, Write, ReadBufCursor};
-use hyper_util::rt::TokioIo;
+use hyper::rt::{Read, ReadBufCursor, Write};
 use hyper_util::client::legacy::connect::{Connected, Connection};
-use tower_service::Service;
+use hyper_util::rt::TokioIo;
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
+use tower_service::Service;
 
 use pin_project_lite::pin_project;
 use std::future::Future;
@@ -197,7 +197,7 @@ impl Connector {
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                     let io = tls_connector.connect(&host, conn).await?;
                     return Ok(Conn {
-                        inner: self.verbose.wrap(io/*NativeTlsConn { inner: io }*/),
+                        inner: self.verbose.wrap(io /*NativeTlsConn { inner: io }*/),
                         is_proxy: false,
                         tls_info: self.tls_info,
                     });
@@ -263,7 +263,14 @@ impl Connector {
 
                 if let hyper_tls::MaybeHttpsStream::Https(stream) = io {
                     if !self.nodelay {
-                        stream.inner().get_ref().get_ref().get_ref().inner().inner().set_nodelay(false)?;
+                        stream
+                            .inner()
+                            .get_ref()
+                            .get_ref()
+                            .get_ref()
+                            .inner()
+                            .inner()
+                            .set_nodelay(false)?;
                     }
                     Ok(Conn {
                         inner: self.verbose.wrap(NativeTlsConn { inner: stream }),
@@ -354,7 +361,9 @@ impl Connector {
                         .connect(host.ok_or("no host in url")?, TokioIo::new(tunneled))
                         .await?;
                     return Ok(Conn {
-                        inner: self.verbose.wrap(NativeTlsConn { inner: TokioIo::new(io) }),
+                        inner: self.verbose.wrap(NativeTlsConn {
+                            inner: TokioIo::new(io),
+                        }),
                         is_proxy: false,
                         tls_info: false,
                     });
@@ -498,7 +507,11 @@ impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<TokioIo<tokio::net::
 }
 
 #[cfg(feature = "default-tls")]
-impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>>>> {
+impl TlsInfoFactory
+    for tokio_native_tls::TlsStream<
+        TokioIo<hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>>>,
+    >
+{
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         let peer_certificate = self
             .get_ref()
@@ -748,6 +761,8 @@ fn tunnel_eof() -> BoxError {
 #[cfg(feature = "default-tls")]
 mod native_tls_conn {
     use super::TlsInfoFactory;
+    use hyper::rt::{Read, ReadBufCursor, Write};
+    use hyper_tls::MaybeHttpsStream;
     use hyper_util::client::legacy::connect::{Connected, Connection};
     use hyper_util::rt::TokioIo;
     use pin_project_lite::pin_project;
@@ -756,8 +771,6 @@ mod native_tls_conn {
         pin::Pin,
         task::{Context, Poll},
     };
-    use hyper::rt::{Read, ReadBufCursor, Write};
-    use hyper_tls::MaybeHttpsStream;
     use tokio::io::{AsyncRead, AsyncWrite};
     use tokio::net::TcpStream;
     use tokio_native_tls::TlsStream;
@@ -770,13 +783,25 @@ mod native_tls_conn {
 
     impl Connection for NativeTlsConn<TokioIo<TokioIo<TcpStream>>> {
         fn connected(&self) -> Connected {
-            self.inner.inner().get_ref().get_ref().get_ref().inner().connected()
+            self.inner
+                .inner()
+                .get_ref()
+                .get_ref()
+                .get_ref()
+                .inner()
+                .connected()
         }
     }
 
     impl Connection for NativeTlsConn<TokioIo<MaybeHttpsStream<TokioIo<tokio::net::TcpStream>>>> {
         fn connected(&self) -> Connected {
-            self.inner.inner().get_ref().get_ref().get_ref().inner().connected()
+            self.inner
+                .inner()
+                .get_ref()
+                .get_ref()
+                .get_ref()
+                .inner()
+                .connected()
         }
     }
 
@@ -1000,13 +1025,13 @@ mod socks {
 }
 
 mod verbose {
+    use hyper::rt::{Read, ReadBufCursor, Write};
+    use hyper_util::client::legacy::connect::{Connected, Connection};
     use std::cmp::min;
     use std::fmt;
     use std::io::{self, IoSlice};
     use std::pin::Pin;
     use std::task::{Context, Poll};
-    use hyper::rt::{Read, Write, ReadBufCursor};
-    use hyper_util::client::legacy::connect::{Connected, Connection};
 
     pub(super) const OFF: Wrapper = Wrapper(false);
 

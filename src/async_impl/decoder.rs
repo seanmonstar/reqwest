@@ -188,7 +188,11 @@ impl Decoder {
     /// how to decode the content body of the request.
     ///
     /// Uses the correct variant by inspecting the Content-Encoding header.
-    pub(super) fn detect(_headers: &mut HeaderMap, body: ResponseBody, _accepts: Accepts) -> Decoder {
+    pub(super) fn detect(
+        _headers: &mut HeaderMap,
+        body: ResponseBody,
+        _accepts: Accepts,
+    ) -> Decoder {
         #[cfg(feature = "gzip")]
         {
             if _accepts.gzip && Decoder::detect_encoding(_headers, "gzip") {
@@ -238,7 +242,7 @@ impl HttpBody for Decoder {
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode(err)))),
                     None => Poll::Ready(None),
                 }
-            },
+            }
             #[cfg(feature = "gzip")]
             Inner::Gzip(ref mut decoder) => {
                 match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
@@ -302,10 +306,7 @@ impl Future for Pending {
             None => return Poll::Ready(Ok(Inner::PlainText(empty()))),
         };
 
-        let _body = std::mem::replace(
-            &mut self.0,
-            IoStream(empty()).peekable(),
-        );
+        let _body = std::mem::replace(&mut self.0, IoStream(empty()).peekable());
 
         match self.1 {
             #[cfg(feature = "brotli")]
@@ -340,7 +341,7 @@ impl Stream for IoStream {
                     } else {
                         continue;
                     }
-                },
+                }
                 Some(Err(err)) => Poll::Ready(Some(Err(error::into_io(err)))),
                 None => Poll::Ready(None),
             };

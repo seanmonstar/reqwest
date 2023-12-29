@@ -78,7 +78,9 @@ impl Body {
         use http_body_util::StreamBody;
 
         let body = http_body_util::BodyExt::boxed(StreamBody::new(
-            stream.map_ok(|d| Frame::data(Bytes::from(d))).map_err(Into::into),
+            stream
+                .map_ok(|d| Frame::data(Bytes::from(d)))
+                .map_err(Into::into),
         ));
         Body {
             inner: Inner::Streaming(body),
@@ -115,7 +117,10 @@ impl Body {
     {
         use http_body_util::BodyExt;
 
-        let boxed = inner.map_frame(|f| f.map_data(Into::into)).map_err(Into::into).boxed();
+        let boxed = inner
+            .map_frame(|f| f.map_data(Into::into))
+            .map_err(Into::into)
+            .boxed();
 
         Body {
             inner: Inner::Streaming(boxed),
@@ -232,11 +237,11 @@ impl HttpBody for Body {
                 } else {
                     Poll::Ready(Some(Ok(hyper::body::Frame::data(out))))
                 }
-            },
-            Inner::Streaming(ref mut body) => {
-                Poll::Ready(futures_core::ready!(Pin::new(body).poll_frame(cx))
-                    .map(|opt_chunk| opt_chunk.map_err(crate::error::body)))
             }
+            Inner::Streaming(ref mut body) => Poll::Ready(
+                futures_core::ready!(Pin::new(body).poll_frame(cx))
+                    .map(|opt_chunk| opt_chunk.map_err(crate::error::body)),
+            ),
         }
     }
 }
@@ -265,14 +270,20 @@ where
         if let Poll::Ready(()) = self.timeout.as_mut().poll(cx) {
             return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
         }
-        Poll::Ready(futures_core::ready!(Pin::new(&mut self.inner).poll_frame(cx))
-            .map(|opt_chunk| opt_chunk.map_err(crate::error::body)))
+        Poll::Ready(
+            futures_core::ready!(Pin::new(&mut self.inner).poll_frame(cx))
+                .map(|opt_chunk| opt_chunk.map_err(crate::error::body)),
+        )
     }
 }
 
-pub(crate) type ResponseBody = http_body_util::combinators::BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>;
+pub(crate) type ResponseBody =
+    http_body_util::combinators::BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>;
 
-pub(crate) fn response(body: hyper::body::Incoming, timeout: Option<Pin<Box<Sleep>>>) -> ResponseBody {
+pub(crate) fn response(
+    body: hyper::body::Incoming,
+    timeout: Option<Pin<Box<Sleep>>>,
+) -> ResponseBody {
     use http_body_util::BodyExt;
 
     if let Some(timeout) = timeout {

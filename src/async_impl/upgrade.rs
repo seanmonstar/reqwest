@@ -59,7 +59,9 @@ impl fmt::Debug for Upgraded {
 
 impl From<hyper::upgrade::Upgraded> for Upgraded {
     fn from(inner: hyper::upgrade::Upgraded) -> Self {
-        Upgraded { inner: TokioIo::new(inner) }
+        Upgraded {
+            inner: TokioIo::new(inner),
+        }
     }
 }
 

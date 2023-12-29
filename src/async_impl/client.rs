@@ -13,7 +13,9 @@ use http::header::{
 };
 use http::uri::Scheme;
 use http::Uri;
-use hyper_util::client::legacy::{connect::HttpConnector/*, ResponseFuture as HyperResponseFuture*/};
+use hyper_util::client::legacy::{
+    connect::HttpConnector, /*, ResponseFuture as HyperResponseFuture*/
+};
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
@@ -614,7 +616,8 @@ impl ClientBuilder {
         connector.set_timeout(config.connect_timeout);
         connector.set_verbose(config.connection_verbose);
 
-        let mut builder = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
+        let mut builder =
+            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
         if matches!(config.http_version_pref, HttpVersionPref::Http2) {
             builder.http2_only(true);
         }
@@ -1830,9 +1833,7 @@ impl Client {
                 ResponseFuture::H3(self.inner.h3_client.as_ref().unwrap().request(req))
             }
             _ => {
-                let mut req = builder
-                    .body(body)
-                    .expect("valid request parts");
+                let mut req = builder.body(body).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
                 ResponseFuture::Default(self.inner.hyper.request(req))
             }

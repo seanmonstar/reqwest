@@ -4,8 +4,8 @@ use std::pin::Pin;
 
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
-use hyper_util::client::legacy::connect::HttpInfo;
 use hyper::{HeaderMap, StatusCode, Version};
+use hyper_util::client::legacy::connect::HttpInfo;
 use mime::Mime;
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
@@ -35,7 +35,11 @@ impl Response {
         timeout: Option<Pin<Box<Sleep>>>,
     ) -> Response {
         let (mut parts, body) = res.into_parts();
-        let decoder = Decoder::detect(&mut parts.headers, super::body::response(body, timeout), accepts);
+        let decoder = Decoder::detect(
+            &mut parts.headers,
+            super::body::response(body, timeout),
+            accepts,
+        );
         let res = hyper::Response::from_parts(parts, decoder);
 
         Response {
@@ -256,7 +260,9 @@ impl Response {
     pub async fn bytes(self) -> crate::Result<Bytes> {
         use http_body_util::BodyExt;
 
-        BodyExt::collect(self.res.into_body()).await.map(|buf| buf.to_bytes())
+        BodyExt::collect(self.res.into_body())
+            .await
+            .map(|buf| buf.to_bytes())
     }
 
     /// Stream a chunk of the response body.
@@ -335,7 +341,7 @@ impl Response {
                             } else {
                                 continue;
                             }
-                        },
+                        }
                         Some(Err(err)) => Poll::Ready(Some(Err(err))),
                         None => Poll::Ready(None),
                     };
