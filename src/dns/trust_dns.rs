@@ -2,7 +2,6 @@
 
 use hyper::client::connect::dns::Name;
 use once_cell::sync::OnceCell;
-pub use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 use trust_dns_resolver::{lookup_ip::LookupIpIntoIter, system_conf, TokioAsyncResolver};
 
 use std::io;
