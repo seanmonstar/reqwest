@@ -312,6 +312,9 @@ fn _assert_impls() {
 
     assert_send::<Error>();
     assert_sync::<Error>();
+
+    assert_send::<Body>();
+    assert_sync::<Body>();
 }
 
 if_hyper! {
