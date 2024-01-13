@@ -7,6 +7,7 @@ use bytes::Bytes;
 use futures_core::Stream;
 use http_body::Body as HttpBody;
 use pin_project_lite::pin_project;
+use sync_wrapper::SyncWrapper;
 #[cfg(feature = "stream")]
 use tokio::fs::File;
 use tokio::time::Sleep;
@@ -38,7 +39,7 @@ enum Inner {
 pin_project! {
     struct WrapStream<S> {
         #[pin]
-        inner: S,
+        inner: SyncWrapper<S>,
     }
 }
 
@@ -82,7 +83,7 @@ impl Body {
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     pub fn wrap_stream<S>(stream: S) -> Body
     where
-        S: futures_core::stream::TryStream + Send + Sync + 'static,
+        S: futures_core::stream::TryStream + Send + 'static,
         S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
         Bytes: From<S::Ok>,
     {
@@ -91,14 +92,14 @@ impl Body {
 
     pub(crate) fn stream<S>(stream: S) -> Body
     where
-        S: futures_core::stream::TryStream + Send + Sync + 'static,
+        S: futures_core::stream::TryStream + Send + 'static,
         S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
         Bytes: From<S::Ok>,
     {
         use futures_util::TryStreamExt;
 
         let body = Box::pin(WrapStream {
-            inner: stream.map_ok(Bytes::from).map_err(Into::into),
+            inner: SyncWrapper::new(stream.map_ok(Bytes::from).map_err(Into::into)),
         });
         Body {
             inner: Inner::Streaming {
@@ -312,7 +313,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let item = futures_core::ready!(self.project().inner.poll_next(cx)?);
+        let item = futures_core::ready!(self.project().inner.get_pin_mut().poll_next(cx)?);
 
         Poll::Ready(item.map(|val| Ok(val.into())))
     }
