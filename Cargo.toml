@@ -74,7 +74,7 @@ __tls = []
 
 # Enables common rustls code.
 # Equivalent to rustls-tls-manual-roots but shorter :)
-__rustls = ["hyper-rustls", "tokio-rustls", "rustls", "__tls", "rustls-pemfile"]
+__rustls = ["hyper-rustls", "tokio-rustls", "rustls", "__tls", "rustls-pemfile", "rustls-pki-types"]
 
 # When enabled, disable using the cached SYS_PROXIES.
 __internal_proxy_sys_no_cache = []
@@ -120,10 +120,11 @@ native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls"
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
-hyper-rustls = { version = "0.24.0", default-features = false, optional = true }
-rustls = { version = "0.21.6", features = ["dangerous_configuration"], optional = true }
-tokio-rustls = { version = "0.24", optional = true }
-webpki-roots = { version = "0.25", optional = true }
+hyper-rustls = { version = "0.26.0", default-features = false, optional = true }
+rustls = { version = "0.22.2", optional = true }
+rustls-pki-types = { version = "1.1.0", features = ["alloc"] ,optional = true }
+tokio-rustls = { version = "0.25", optional = true }
+webpki-roots = { version = "0.26.0", optional = true }
 rustls-native-certs = { version = "0.6", optional = true }
 rustls-pemfile = { version = "1.0", optional = true }
 
@@ -150,7 +151,7 @@ futures-channel = { version="0.3", optional = true}
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.8"
-hyper = { version = "0.14", default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server", "runtime"] }
+hyper = { version = "1.1.0", default-features = false, features = ["http1", "http2", "client", "server"] }
 serde = { version = "1.0", features = ["derive"] }
 libflate = "1.0"
 brotli_crate = { package = "brotli", version = "3.3.0" }

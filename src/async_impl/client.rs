@@ -468,18 +468,7 @@ impl ClientBuilder {
 
                     #[cfg(feature = "rustls-tls-webpki-roots")]
                     if config.tls_built_in_root_certs {
-                        use rustls::OwnedTrustAnchor;
-
-                        let trust_anchors =
-                            webpki_roots::TLS_SERVER_ROOTS.iter().map(|trust_anchor| {
-                                OwnedTrustAnchor::from_subject_spki_name_constraints(
-                                    trust_anchor.subject,
-                                    trust_anchor.spki,
-                                    trust_anchor.name_constraints,
-                                )
-                            });
-
-                        root_cert_store.add_trust_anchors(trust_anchors);
+                        root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
                     }
 
                     #[cfg(feature = "rustls-tls-native-roots")]
@@ -489,11 +478,10 @@ impl ClientBuilder {
                         for cert in rustls_native_certs::load_native_certs()
                             .map_err(crate::error::builder)?
                         {
-                            let cert = rustls::Certificate(cert.0);
                             // Continue on parsing errors, as native stores often include ancient or syntactically
                             // invalid certificates, like root certificates without any X509 extensions.
                             // Inspiration: https://github.com/rustls/rustls/blob/633bf4ba9d9521a95f68766d04c22e2b01e68318/rustls/src/anchors.rs#L105-L112
-                            match root_cert_store.add(&cert) {
+                            match root_cert_store.add(cert.into()) {
                                 Ok(_) => valid_count += 1,
                                 Err(err) => {
                                     invalid_count += 1;
@@ -537,10 +525,6 @@ impl ClientBuilder {
 
                     // Build TLS config
                     let config_builder = rustls::ClientConfig::builder()
-                        .with_safe_default_cipher_suites()
-                        .with_safe_default_kx_groups()
-                        .with_protocol_versions(&versions)
-                        .map_err(crate::error::builder)?
                         .with_root_certificates(root_cert_store);
 
                     // Finalize TLS config
