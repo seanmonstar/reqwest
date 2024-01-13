@@ -13,9 +13,7 @@ use http::header::{
 };
 use http::uri::Scheme;
 use http::Uri;
-use hyper_util::client::legacy::{
-    connect::HttpConnector, /*, ResponseFuture as HyperResponseFuture*/
-};
+use hyper_util::client::legacy::connect::HttpConnector;
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
@@ -524,8 +522,8 @@ impl ClientBuilder {
                     }
 
                     // Build TLS config
-                    let config_builder = rustls::ClientConfig::builder()
-                        .with_root_certificates(root_cert_store);
+                    let config_builder =
+                        rustls::ClientConfig::builder().with_root_certificates(root_cert_store);
 
                     // Finalize TLS config
                     let mut tls = if let Some(id) = config.identity {

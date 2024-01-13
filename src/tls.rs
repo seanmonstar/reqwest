@@ -12,14 +12,12 @@
 //!   `ClientBuilder`.
 
 #[cfg(feature = "__rustls")]
-use rustls_pki_types::{
-    ServerName, UnixTime
+use rustls::{
+    client::danger::HandshakeSignatureValid, client::danger::ServerCertVerified,
+    client::danger::ServerCertVerifier, DigitallySignedStruct, Error as TLSError, SignatureScheme,
 };
 #[cfg(feature = "__rustls")]
-use rustls::{
-    client::danger::HandshakeSignatureValid, client::danger::ServerCertVerified, client::danger::ServerCertVerifier,
-    DigitallySignedStruct, Error as TLSError, SignatureScheme,
-};
+use rustls_pki_types::{ServerName, UnixTime};
 use std::fmt;
 
 /// Represents a server X509 certificate.
@@ -65,14 +63,15 @@ impl Clone for ClientCert {
             #[cfg(feature = "native-tls")]
             Self::Pkcs12(i) => Self::Pkcs12(i.clone()),
             #[cfg(feature = "__rustls")]
-            ClientCert::Pem { key, certs } => {
-                ClientCert::Pem {
-                    key: key.clone_key(),
-                    certs: certs.clone(),
-                }
-            }
-            #[cfg_attr(any(feature = "native-tls", feature = "__rustls"), allow(unreachable_patterns))]
-            _ => unreachable!()
+            ClientCert::Pem { key, certs } => ClientCert::Pem {
+                key: key.clone_key(),
+                certs: certs.clone(),
+            },
+            #[cfg_attr(
+                any(feature = "native-tls", feature = "__rustls"),
+                allow(unreachable_patterns)
+            )]
+            _ => unreachable!(),
         }
     }
 }
@@ -277,12 +276,16 @@ impl Identity {
                         "Invalid identity PEM file",
                     )))
                 })? {
-                    rustls_pemfile::Item::X509Certificate(cert) => {
-                        certs.push(cert.into())
+                    rustls_pemfile::Item::X509Certificate(cert) => certs.push(cert.into()),
+                    rustls_pemfile::Item::PKCS8Key(key) => {
+                        sk.push(rustls_pki_types::PrivateKeyDer::Pkcs8(key.into()))
                     }
-                    rustls_pemfile::Item::PKCS8Key(key) => sk.push(rustls_pki_types::PrivateKeyDer::Pkcs8(key.into())),
-                    rustls_pemfile::Item::RSAKey(key) => sk.push(rustls_pki_types::PrivateKeyDer::Pkcs1(key.into())),
-                    rustls_pemfile::Item::ECKey(key) => sk.push(rustls_pki_types::PrivateKeyDer::Sec1(key.into())),
+                    rustls_pemfile::Item::RSAKey(key) => {
+                        sk.push(rustls_pki_types::PrivateKeyDer::Pkcs1(key.into()))
+                    }
+                    rustls_pemfile::Item::ECKey(key) => {
+                        sk.push(rustls_pki_types::PrivateKeyDer::Sec1(key.into()))
+                    }
                     _ => {
                         return Err(crate::error::builder(TLSError::General(String::from(
                             "No valid certificate was found",
