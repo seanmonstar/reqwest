@@ -53,7 +53,7 @@ where
         + 'static,
 {
     let srv = {
-        let builder = hyper::Server::bind(&([127, 0, 0, 1], 19999).into());
+        let builder = hyper::Server::bind(&([127, 0, 0, 1], 0).into());
 
         apply_config(builder).serve(hyper::service::make_service_fn(move |_| {
             let func = func.clone();
