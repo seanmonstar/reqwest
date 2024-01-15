@@ -3,10 +3,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, Cursor, Read};
 
-use super::wasi::http::*;
 use super::wasi::io::*;
-
-use super::client::failure_point;
 
 /// An asynchronous request body.
 #[derive(Debug)]
@@ -103,15 +100,21 @@ impl Body {
                 self.buffer()
             }
             Some(Kind::Bytes(ref bytes)) => Ok(bytes.as_ref()),
-            Some(Kind::Incoming(handle)) => {
-                let mut bytes = Vec::new();
+            Some(Kind::Incoming(ref body_stream)) => {
+                let mut body = Vec::new();
                 let mut eof = false;
                 while !eof {
-                    let (mut body_chunk, stream_status) = streams::read(handle, u64::MAX).map_err(|e| failure_point("read", e))?;
-                    eof = stream_status == streams::StreamStatus::Ended;
-                    bytes.append(&mut body_chunk);
+                    match body_stream.read(u64::MAX) {
+                        Ok(mut body_chunk) => {
+                            body.append(&mut body_chunk);
+                        }
+                        Err(streams::StreamError::Closed) => {
+                            eof = true;
+                        }
+                        Err(err) => return Err(err.into()),
+                    }
                 }
-                self.kind = Some(Kind::Bytes(bytes.into()));
+                self.kind = Some(Kind::Bytes(body.into()));
                 self.buffer()
             }
             None => panic!("Body has already been extracted")
@@ -145,12 +148,18 @@ impl Body {
                 Ok(())
             }
             Kind::Bytes(bytes) => f(&bytes),
-            Kind::Incoming(handle) => {
+            Kind::Incoming(ref body_stream) => {
                 let mut eof = false;
                 while !eof {
-                    let (body_chunk, stream_status) = streams::read(handle, u64::MAX).map_err(|e| failure_point("read", e))?;
-                    eof = stream_status == streams::StreamStatus::Ended;
-                    f(&body_chunk)?;
+                    match body_stream.read(u64::MAX) {
+                        Ok(body_chunk) => {
+                            f(&body_chunk)?;
+                        }
+                        Err(streams::StreamError::Closed) => {
+                            eof = true;
+                        }
+                        Err(err) => return Err(err.into()),
+                    }
                 }
                 Ok(())
             }
@@ -161,7 +170,7 @@ impl Body {
 enum Kind {
     Reader(Box<dyn Read + Send>, Option<u64>),
     Bytes(Bytes),
-    Incoming(types::IncomingStream),
+    Incoming(streams::InputStream),
 }
 
 impl Kind {
@@ -225,9 +234,9 @@ impl From<Bytes> for Body {
     }
 }
 
-impl From<types::IncomingStream> for Body {
+impl From<streams::InputStream> for Body {
     #[inline]
-    fn from(s: types::IncomingStream) -> Body {
+    fn from(s: streams::InputStream) -> Body {
         Body {
             kind: Some(Kind::Incoming(s)),
         }
@@ -261,7 +270,7 @@ impl<'a> fmt::Debug for DebugLength<'a> {
 pub(crate) enum Reader {
     Reader(Box<dyn Read + Send>),
     Bytes(Cursor<Bytes>),
-    Wasi(types::IncomingStream),
+    Wasi(streams::InputStream),
 }
 
 impl Read for Reader {
@@ -269,34 +278,23 @@ impl Read for Reader {
         match *self {
             Reader::Reader(ref mut rdr) => rdr.read(buf),
             Reader::Bytes(ref mut rdr) => rdr.read(buf),
-            Reader::Wasi(handle) => {
-                let (body_chunk, stream_status) = streams::read(handle, buf.len() as u64).map_err(|_| io::Error::new(io::ErrorKind::Other, "read chunk"))?;
-                if stream_status == streams::StreamStatus::Ended {
-                    return Ok(0);
-                } else {
-                    let len = body_chunk.len();
-                    buf[..len].copy_from_slice(&body_chunk);
-                    Ok(len)
+            Reader::Wasi(ref mut body_stream) => {
+                match body_stream.read(buf.len() as u64) {
+                    Ok(body_chunk) => {
+                        let len = body_chunk.len();
+                        buf[..len].copy_from_slice(&body_chunk);
+                        Ok(len)
+                    }
+                    Err(streams::StreamError::Closed) => {
+                        Ok(0)
+                    }
+                    Err(_err) => {
+                        // TODO: include information from 'err'
+                        Err(io::Error::new(io::ErrorKind::Other, "read chunk"))
+                    },
                 }
             }
         }
     }
 }
 
-impl Drop for Body {
-    fn drop(&mut self) {
-        match self.kind {
-            Some(Kind::Incoming(handle)) => streams::drop_input_stream(handle),
-            _ => {}
-        }
-    }
-}
-
-impl Drop for Reader {
-    fn drop(&mut self) {
-        match self {
-            Reader::Wasi(handle) => streams::drop_input_stream(*handle),
-            _ => {}
-        }
-    }
-}

@@ -15,7 +15,6 @@ use super::response::Response;
 use super::wasi::clocks::*;
 use super::wasi::http::*;
 use super::wasi::io::*;
-use super::wasi::poll::*;
 
 #[derive(Debug)]
 struct Config {
@@ -177,10 +176,10 @@ impl Client {
         &self,
         request: Request,
     ) -> Result<Response, crate::Error> {
-        let mut header_key_values: Vec<(String, String)> = vec![];
+        let mut header_key_values: Vec<(String, Vec<u8>)> = vec![];
         for (name, value) in self.inner.headers.iter() {
             match value.to_str() {
-                Ok(value) => header_key_values.push((name.as_str().to_string(), value.to_string())),
+                Ok(value) => header_key_values.push((name.as_str().to_string(), value.into())),
                 Err(_) => {}
             }
         }
@@ -188,7 +187,7 @@ impl Client {
         let (method, url, headers, body, timeout, _version) = request.pieces();
         for (name, value) in headers.iter() {
             match value.to_str() {
-                Ok(value) => header_key_values.push((name.as_str().to_string(), value.to_string())),
+                Ok(value) => header_key_values.push((name.as_str().to_string(), value.into())),
                 Err(_) => {}
             }
         }
@@ -198,68 +197,67 @@ impl Client {
             "https" => types::Scheme::Https,
             other => types::Scheme::Other(other.to_string())
         };
-        let headers = types::new_fields(&header_key_values);
+        let headers = types::Fields::from_list(&header_key_values)?;
+        let request = types::OutgoingRequest::new(headers);
         let path_with_query = match url.query() {
             Some(query) => format!("{}?{}", url.path(), query),
             None => url.path().to_string()
         };
-        let request = types::new_outgoing_request(
-            &method.into(),
-            Some(&path_with_query),
-            Some(&scheme),
-            Some(url.authority()),
-            headers,
-        );
+        request.set_method(&method.into()).map_err(|e| failure_point("set_method", e))?;
+        request.set_path_with_query(Some(&path_with_query)).map_err(|e| failure_point("set_path_with_query", e))?;
+        request.set_scheme(Some(&scheme)).map_err(|e| failure_point("set_scheme", e))?;
+        request.set_authority(Some(url.authority())).map_err(|e| failure_point("set_authority", e))?;
 
         match body {
             Some(body) => {
-                let request_body_stream = types::outgoing_request_write(request).map_err(|e| failure_point("outgoing_request_write", e))?;
+                let request_body = request.body().map_err(|e| failure_point("body", e))?;
+                let request_body_stream = request_body.write().map_err(|e| failure_point("write", e))?;
                 body.write(|chunk| {
-                    streams::write(request_body_stream, chunk).map_err(|e| failure_point("write chunk", e))?;
+                    request_body_stream.write(chunk)?;
                     Ok(())
                 })?;
-                types::finish_outgoing_stream(request_body_stream, None);
-                streams::drop_output_stream(request_body_stream);
+                drop(request_body_stream);
+                types::OutgoingBody::finish(request_body, None)?;
             }
             None => {}
         }
 
-        let future_incoming_response = outgoing_handler::handle(request, Some(types::RequestOptions {
-            connect_timeout_ms: self.inner.connect_timeout.map(|d| d.as_millis() as u32),
-            first_byte_timeout_ms: timeout.or(self.inner.first_byte_timeout).map(|d| d.as_millis() as u32),
-            between_bytes_timeout_ms: timeout.or(self.inner.between_bytes_timeout).map(|d| d.as_millis() as u32),
-        }));
+        let options = types::RequestOptions::new();
+        options.set_connect_timeout_ms(self.inner.connect_timeout.map(|d| d.as_millis() as u64)).map_err(|e| failure_point("set_connect_timeout_ms", e))?;
+        options.set_first_byte_timeout_ms(timeout.or(self.inner.first_byte_timeout).map(|d| d.as_millis() as u64)).map_err(|e| failure_point("set_first_byte_timeout_ms", e))?;
+        options.set_between_bytes_timeout_ms(timeout.or(self.inner.between_bytes_timeout).map(|d| d.as_millis() as u64)).map_err(|e| failure_point("set_between_bytes_timeout_ms", e))?;
+
+        let future_incoming_response = outgoing_handler::handle(request, Some(options))?;
 
         let receive_timeout = timeout.or(self.inner.first_byte_timeout);
-        let incoming_response = Self::get_incoming_response(future_incoming_response, receive_timeout)?;
+        let incoming_response = Self::get_incoming_response(&future_incoming_response, receive_timeout)?;
 
-        let status = types::incoming_response_status(incoming_response);
+        let status = incoming_response.status();
         let status_code = StatusCode::from_u16(status).map_err(|e| crate::Error::new(crate::error::Kind::Decode, Some(e)))?;
 
-        let response_fields = types::incoming_response_headers(incoming_response);
-        let response_headers = Self::fields_to_header_map(response_fields);
-        types::drop_fields(headers);
-        types::drop_fields(response_fields);
-        let response_body_stream = types::incoming_response_consume(incoming_response).map_err(|e| failure_point("incoming_response_consume", e))?;
-        let response_body: Body = response_body_stream.into();
+        let response_fields = incoming_response.headers();
+        let response_headers = Self::fields_to_header_map(&response_fields);
 
-        Ok(Response::new(status_code, response_headers, response_body, incoming_response, url))
+        let response_body = incoming_response.consume().map_err(|e| failure_point("consume", e))?;
+        let response_body_stream = response_body.stream().map_err(|e| failure_point("stream", e))?;
+        let body: Body = response_body_stream.into();
+
+        Ok(Response::new(status_code, response_headers, body, incoming_response, response_body, url))
     }
 
-    fn get_incoming_response(future_incoming_response: types::FutureIncomingResponse, timeout: Option<Duration>) -> Result<types::IncomingResponse, crate::Error> {
-        let deadline_pollable = monotonic_clock::subscribe(timeout.unwrap_or(Duration::from_secs(0)).as_nanos() as u64, false);
+    fn get_incoming_response(future_incoming_response: &types::FutureIncomingResponse, timeout: Option<Duration>) -> Result<types::IncomingResponse, crate::Error> {
+        let deadline_pollable = monotonic_clock::subscribe_duration(timeout.unwrap_or(Duration::from_secs(10000000000)).as_nanos() as u64);
         loop {
-            match types::future_incoming_response_get(future_incoming_response) {
-                Some(Ok(incoming_response)) => {
-                    types::drop_future_incoming_response(future_incoming_response);
+            match future_incoming_response.get() {
+                Some(Ok(Ok(incoming_response))) => {
                     return Ok(incoming_response);
                 }
-                Some(Err(err)) => return Err(err.into()),
+                Some(Ok(Err(err))) => return Err(err.into()),
+                Some(Err(err)) => return Err(failure_point("get_incoming_response", err)),
                 None => {
-                    let pollable = types::listen_to_future_incoming_response(future_incoming_response);
-                    let bitmap = poll::poll_oneoff(&vec!(pollable, deadline_pollable));
-                    if timeout.is_none() || !bitmap[1] {
-                        poll::drop_pollable(pollable);
+                    let pollable = future_incoming_response.subscribe();
+                    let bitmap = poll::poll(&[&pollable, &deadline_pollable]);
+                    if timeout.is_none() || !bitmap.contains(&1) {
                         continue;
                     } else {
                         return Err(crate::Error::new(Kind::Request, Some(crate::error::TimedOut)));
@@ -269,9 +267,9 @@ impl Client {
         }
     }
 
-    fn fields_to_header_map(fields: types::Fields) -> HeaderMap {
+    fn fields_to_header_map(fields: &types::Fields) -> HeaderMap {
         let mut headers = HeaderMap::new();
-        let entries = types::fields_entries(fields);
+        let entries = fields.entries();
         for (name, value) in entries {
             headers.insert(HeaderName::try_from(&name).expect("Invalid header name"),
                            HeaderValue::from_bytes(&value).expect("Invalid header value"));
@@ -432,8 +430,20 @@ impl From<Method> for types::Method {
     }
 }
 
-impl From<types::Error> for crate::Error {
-    fn from(value: types::Error) -> Self {
+impl From<types::ErrorCode> for crate::Error {
+    fn from(value: types::ErrorCode) -> Self {
+        crate::Error::new(Kind::Request, Some(std::io::Error::new(ErrorKind::Other, format!("{:?}", value))))
+    }
+}
+
+impl From<streams::StreamError> for crate::Error {
+    fn from(value: streams::StreamError) -> Self {
+        crate::Error::new(Kind::Request, Some(std::io::Error::new(ErrorKind::Other, format!("{:?}", value))))
+    }
+}
+
+impl From<types::HeaderError> for crate::Error {
+    fn from(value: types::HeaderError) -> Self {
         crate::Error::new(Kind::Request, Some(std::io::Error::new(ErrorKind::Other, format!("{:?}", value))))
     }
 }

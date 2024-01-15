@@ -23,18 +23,20 @@ pub struct Response {
     status: StatusCode,
     headers: HeaderMap,
     body: Option<Body>,
-    handle: types::IncomingResponse,
+    #[allow(dead_code)] incoming_response: types::IncomingResponse,
+    #[allow(dead_code)] incoming_response_body: types::IncomingBody,
     url: Url,
     extensions: Extensions,
 }
 
 impl Response {
-    pub(crate) fn new(status: StatusCode, headers: HeaderMap, body: Body, handle: types::IncomingResponse, url: Url) -> Response {
+    pub(crate) fn new(status: StatusCode, headers: HeaderMap, body: Body, incoming_response: types::IncomingResponse, incoming_response_body: types::IncomingBody, url: Url) -> Response {
         Response {
             status,
             headers,
             body: Some(body),
-            handle,
+            incoming_response,
+            incoming_response_body,
             url,
             extensions: Extensions::default(),
         }
@@ -403,11 +405,5 @@ impl Response {
 impl Read for Response {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.body.take().unwrap().into_reader().read(buf)
-    }
-}
-
-impl Drop for Response {
-    fn drop(&mut self) {
-        types::drop_incoming_response(self.handle);
     }
 }
