@@ -2,6 +2,7 @@
 mod support;
 
 use futures_util::stream::StreamExt;
+use support::delay_server;
 use support::server;
 
 #[cfg(feature = "json")]
@@ -437,4 +438,71 @@ async fn test_tls_info() {
         .expect("response");
     let tls_info = resp.extensions().get::<reqwest::tls::TlsInfo>();
     assert!(tls_info.is_none());
+}
+
+// NOTE: using the default "curernt_thread" runtime here would cause the test to
+// fail, because the only thread would block until `panic_rx` receives a
+// notification while the client needs to be driven to get the graceful shutdown
+// done.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn highly_concurrent_requests_to_http2_server_with_low_max_concurrent_streams() {
+    let client = reqwest::Client::builder()
+        .http2_prior_knowledge()
+        .build()
+        .unwrap();
+
+    let server = server::http_with_config(
+        move |req| async move {
+            assert_eq!(req.version(), http::Version::HTTP_2);
+            http::Response::default()
+        },
+        |builder| builder.http2_only(true).http2_max_concurrent_streams(1),
+    );
+
+    let url = format!("http://{}", server.addr());
+
+    let futs = (0..100).map(|_| {
+        let client = client.clone();
+        let url = url.clone();
+        async move {
+            let res = client.get(&url).send().await.unwrap();
+            assert_eq!(res.status(), reqwest::StatusCode::OK);
+        }
+    });
+    futures_util::future::join_all(futs).await;
+}
+
+#[tokio::test]
+async fn highly_concurrent_requests_to_slow_http2_server_with_low_max_concurrent_streams() {
+    let client = reqwest::Client::builder()
+        .http2_prior_knowledge()
+        .build()
+        .unwrap();
+
+    let server = delay_server::Server::new(
+        move |req| async move {
+            assert_eq!(req.version(), http::Version::HTTP_2);
+            http::Response::default()
+        },
+        |mut http| {
+            http.http2_only(true).http2_max_concurrent_streams(1);
+            http
+        },
+        std::time::Duration::from_secs(2),
+    )
+    .await;
+
+    let url = format!("http://{}", server.addr());
+
+    let futs = (0..100).map(|_| {
+        let client = client.clone();
+        let url = url.clone();
+        async move {
+            let res = client.get(&url).send().await.unwrap();
+            assert_eq!(res.status(), reqwest::StatusCode::OK);
+        }
+    });
+    futures_util::future::join_all(futs).await;
+
+    server.shutdown().await;
 }
