@@ -52,46 +52,51 @@ where
         + Send
         + 'static,
 {
-    let srv = {
-        let builder = hyper::Server::bind(&([127, 0, 0, 1], 0).into());
+    // Spawn new runtime in thread to prevent reactor execution context conflict
+    thread::spawn(move || {
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
+        let srv = rt.block_on(async move {
+            let builder = hyper::Server::bind(&([127, 0, 0, 1], 0).into());
 
-        apply_config(builder).serve(hyper::service::make_service_fn(move |_| {
-            let func = func.clone();
-            async move {
-                Ok::<_, Infallible>(hyper::service::service_fn(move |req| {
-                    let fut = func(req);
-                    async move { Ok::<_, Infallible>(fut.await) }
-                }))
-            }
-        }))
-    };
+            apply_config(builder).serve(hyper::service::make_service_fn(move |_| {
+                let func = func.clone();
+                async move {
+                    Ok::<_, Infallible>(hyper::service::service_fn(move |req| {
+                        let fut = func(req);
+                        async move { Ok::<_, Infallible>(fut.await) }
+                    }))
+                }
+            }))
+        });
 
-    let addr = srv.local_addr();
-    let (shutdown_tx, shutdown_rx) = oneshot::channel();
-    let srv = srv.with_graceful_shutdown(async move {
-        let _ = shutdown_rx.await;
-    });
+        let addr = srv.local_addr();
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let srv = srv.with_graceful_shutdown(async move {
+            let _ = shutdown_rx.await;
+        });
 
-    let (panic_tx, panic_rx) = std_mpsc::channel();
-    let tname = format!(
-        "test({})-support-server",
-        thread::current().name().unwrap_or("<unknown>")
-    );
-    thread::Builder::new()
-        .name(tname)
-        .spawn(move || {
-            let rt = runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("new rt");
-            rt.block_on(srv).unwrap();
-            let _ = panic_tx.send(());
-        })
-        .expect("thread spawn");
+        let (panic_tx, panic_rx) = std_mpsc::channel();
+        let tname = format!(
+            "test({})-support-server",
+            thread::current().name().unwrap_or("<unknown>")
+        );
+        thread::Builder::new()
+            .name(tname)
+            .spawn(move || {
+                rt.block_on(srv).unwrap();
+                let _ = panic_tx.send(());
+            })
+            .expect("thread spawn");
 
-    Server {
-        addr,
-        panic_rx,
-        shutdown_tx: Some(shutdown_tx),
-    }
+        Server {
+            addr,
+            panic_rx,
+            shutdown_tx: Some(shutdown_tx),
+        }
+    })
+    .join()
+    .unwrap()
 }
