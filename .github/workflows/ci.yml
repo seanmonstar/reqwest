@@ -209,6 +209,7 @@ jobs:
 
   docs:
     name: Docs
+    needs: [test]
     runs-on: ubuntu-latest
 
     steps:

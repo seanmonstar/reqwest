@@ -6,7 +6,6 @@ use std::sync::mpsc as std_mpsc;
 use std::thread;
 use std::time::Duration;
 
-use hyper::server::conn::AddrIncoming;
 use tokio::runtime;
 use tokio::sync::oneshot;
 
@@ -38,19 +37,19 @@ impl Drop for Server {
 
 pub fn http<F, Fut>(func: F) -> Server
 where
-    F: Fn(http::Request<hyper::Body>) -> Fut + Clone + Send + 'static,
-    Fut: Future<Output = http::Response<hyper::Body>> + Send + 'static,
+    F: Fn(http::Request<hyper::body::Incoming>) -> Fut + Clone + Send + 'static,
+    Fut: Future<Output = http::Response<reqwest::Body>> + Send + 'static,
 {
     http_with_config(func, identity)
 }
 
-pub fn http_with_config<F1, Fut, F2>(func: F1, apply_config: F2) -> Server
+type Builder = hyper_util::server::conn::auto::Builder<hyper_util::rt::TokioExecutor>;
+
+pub fn http_with_config<F1, Fut, F2, Bu>(func: F1, apply_config: F2) -> Server
 where
-    F1: Fn(http::Request<hyper::Body>) -> Fut + Clone + Send + 'static,
-    Fut: Future<Output = http::Response<hyper::Body>> + Send + 'static,
-    F2: FnOnce(hyper::server::Builder<AddrIncoming>) -> hyper::server::Builder<AddrIncoming>
-        + Send
-        + 'static,
+    F1: Fn(http::Request<hyper::body::Incoming>) -> Fut + Clone + Send + 'static,
+    Fut: Future<Output = http::Response<reqwest::Body>> + Send + 'static,
+    F2: FnOnce(&mut Builder) -> Bu + Send + 'static,
 {
     // Spawn new runtime in thread to prevent reactor execution context conflict
     thread::spawn(move || {
@@ -59,17 +58,24 @@ where
             .build()
             .expect("new rt");
         let srv = rt.block_on(async move {
-            let builder = hyper::Server::bind(&([127, 0, 0, 1], 0).into());
+            let listener = tokio::net::TcpListener::bind(&([127, 0, 0, 1], 0).into())
+                .await
+                .unwrap();
+            let mut builder =
+                hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
+            apply_config(&mut builder);
 
-            apply_config(builder).serve(hyper::service::make_service_fn(move |_| {
+            while let Ok((io, _)) = listener.accept().await {
                 let func = func.clone();
-                async move {
-                    Ok::<_, Infallible>(hyper::service::service_fn(move |req| {
-                        let fut = func(req);
-                        async move { Ok::<_, Infallible>(fut.await) }
-                    }))
-                }
-            }))
+                let svc = hyper::service::service_fn(move |req| {
+                    let fut = func(req);
+                    async move { Ok::<_, Infallible>(fut.await) }
+                });
+                let fut = builder.serve_connection(hyper_util::rt::TokioIo::new(io), svc);
+                tokio::spawn(async move {
+                    let _ = fut.await;
+                });
+            }
         });
 
         let addr = srv.local_addr();

@@ -1,6 +1,6 @@
 use futures_util::future::FutureExt;
-use hyper::client::connect::dns::{GaiResolver as HyperGaiResolver, Name};
-use hyper::service::Service;
+use hyper_util::client::legacy::connect::dns::{GaiResolver as HyperGaiResolver, Name};
+use tower_service::Service;
 
 use crate::dns::{Addrs, Resolve, Resolving};
 use crate::error::BoxError;

@@ -121,6 +121,7 @@ impl Error {
         matches!(self.inner.kind, Kind::Request)
     }
 
+    /*
     #[cfg(not(target_arch = "wasm32"))]
     /// Returns true if the error is related to connect
     pub fn is_connect(&self) -> bool {
@@ -138,6 +139,7 @@ impl Error {
 
         false
     }
+    */
 
     /// Returns true if the error is related to the request or response body
     pub fn is_body(&self) -> bool {
@@ -287,9 +289,8 @@ pub(crate) fn upgrade<E: Into<BoxError>>(e: E) -> Error {
 
 // io::Error helpers
 
-#[allow(unused)]
-pub(crate) fn into_io(e: Error) -> io::Error {
-    e.into_io()
+pub(crate) fn into_io(e: BoxError) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, e)
 }
 
 #[allow(unused)]
