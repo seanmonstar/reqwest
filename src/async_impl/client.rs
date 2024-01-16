@@ -1471,9 +1471,7 @@ impl ClientBuilder {
                 (&mut tls as &mut dyn Any).downcast_mut::<Option<native_tls_crate::TlsConnector>>()
             {
                 let tls = conn.take().expect("is definitely Some");
-                let tls = crate::tls::TlsBackend::BuiltNativeTls(tls);
-                self.config.tls = tls;
-                return self;
+                return self.use_preconfigured_native_tls(tls);
             }
         }
         #[cfg(feature = "__rustls")]
@@ -1482,15 +1480,62 @@ impl ClientBuilder {
                 (&mut tls as &mut dyn Any).downcast_mut::<Option<rustls::ClientConfig>>()
             {
                 let tls = conn.take().expect("is definitely Some");
-                let tls = crate::tls::TlsBackend::BuiltRustls(tls);
-                self.config.tls = tls;
-                return self;
+                return self.use_preconfigured_rustls(tls);
             }
         }
 
         // Otherwise, we don't recognize the TLS backend!
         self.config.tls = crate::tls::TlsBackend::UnknownPreconfigured;
         self
+    }
+
+    /// Use a preconfigured native TLS backend.
+    ///
+    /// # Advanced
+    ///
+    /// This is an advanced option, and can be somewhat brittle. Usage requires
+    /// keeping the preconfigured TLS argument version in sync with reqwest,
+    /// since version mismatches will result in an "unknown" TLS backend.
+    ///
+    /// If possible, it's preferable to use the methods on `ClientBuilder`
+    /// to configure reqwest's TLS.
+    ///
+    /// # Optional
+    ///
+    /// This requires one of the optional features `native-tls` or
+    /// `rustls-tls(-...)` to be enabled.
+    #[cfg(feature = "native-tls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "native-tls")))]
+    pub fn use_preconfigured_native_tls(
+        mut self,
+        tls: native_tls_crate::TlsConnector,
+    ) -> ClientBuilder {
+        let tls = crate::tls::TlsBackend::BuiltNativeTls(tls);
+        self.config.tls = tls;
+        return self;
+    }
+
+    /// Use a preconfigured rustls TLS backend.
+    ///
+    /// # Advanced
+    ///
+    /// This is an advanced option, and can be somewhat brittle. Usage requires
+    /// keeping the preconfigured TLS argument version in sync with reqwest,
+    /// since version mismatches will result in an "unknown" TLS backend.
+    ///
+    /// If possible, it's preferable to use the methods on `ClientBuilder`
+    /// to configure reqwest's TLS.
+    ///
+    /// # Optional
+    ///
+    /// This requires one of the optional features `native-tls` or
+    /// `rustls-tls(-...)` to be enabled.
+    #[cfg(feature = "__rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    pub fn use_preconfigured_rustls(mut self, tls: rustls::ClientConfig) -> ClientBuilder {
+        let tls = crate::tls::TlsBackend::BuiltRustls(tls);
+        self.config.tls = tls;
+        return self;
     }
 
     /// Add TLS information as `TlsInfo` extension to responses.

@@ -247,6 +247,20 @@ macro_rules! if_hyper {
     )*}
 }
 
+macro_rules! if_native_tls {
+    ($($item:item)*) => {$(
+        #[cfg(feature = "native-tls")]
+        $item
+    )*}
+}
+
+macro_rules! if_rustls {
+    ($($item:item)*) => {$(
+        #[cfg(feature = "__rustls")]
+        $item
+    )*}
+}
+
 pub use http::header;
 pub use http::Method;
 pub use http::{StatusCode, Version};
@@ -357,4 +371,14 @@ if_wasm! {
     pub use self::wasm::{Body, Client, ClientBuilder, Request, RequestBuilder, Response};
     #[cfg(feature = "multipart")]
     pub use self::wasm::multipart;
+}
+
+if_native_tls! {
+    // Re-export for `use_preconfigured_native_tls`
+    pub use native_tls_crate;
+}
+
+if_rustls! {
+    // Re-export for `use_preconfigured_rustls`
+    pub use rustls;
 }
