@@ -478,6 +478,14 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.http2_max_frame_size(sz))
     }
 
+    /// This requires the optional `http3` feature to be
+    /// enabled.
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http3")))]
+    pub fn http3_prior_knowledge(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.http3_prior_knowledge())
+    }
+
     // TCP options
 
     /// Set whether sockets have `TCP_NODELAY` enabled.
