@@ -121,14 +121,13 @@ impl Error {
         matches!(self.inner.kind, Kind::Request)
     }
 
-    /*
     #[cfg(not(target_arch = "wasm32"))]
     /// Returns true if the error is related to connect
     pub fn is_connect(&self) -> bool {
         let mut source = self.source();
 
         while let Some(err) = source {
-            if let Some(hyper_err) = err.downcast_ref::<hyper::Error>() {
+            if let Some(hyper_err) = err.downcast_ref::<hyper_util::client::legacy::Error>() {
                 if hyper_err.is_connect() {
                     return true;
                 }
@@ -139,7 +138,6 @@ impl Error {
 
         false
     }
-    */
 
     /// Returns true if the error is related to the request or response body
     pub fn is_body(&self) -> bool {

@@ -139,7 +139,7 @@ impl Decoder {
     ///
     /// This decoder will buffer and decompress chunks that are brotlied.
     #[cfg(feature = "brotli")]
-    fn brotli(body: Body) -> Decoder {
+    fn brotli(body: ResponseBody) -> Decoder {
         use futures_util::StreamExt;
 
         Decoder {
@@ -154,7 +154,7 @@ impl Decoder {
     ///
     /// This decoder will buffer and decompress chunks that are deflated.
     #[cfg(feature = "deflate")]
-    fn deflate(body: Body) -> Decoder {
+    fn deflate(body: ResponseBody) -> Decoder {
         use futures_util::StreamExt;
 
         Decoder {
