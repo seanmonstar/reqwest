@@ -37,6 +37,19 @@ pub(super) struct Accepts {
     pub(super) deflate: bool,
 }
 
+impl Accepts {
+    pub fn none() -> Self {
+        Self {
+            #[cfg(feature = "gzip")]
+            gzip: false,
+            #[cfg(feature = "brotli")]
+            brotli: false,
+            #[cfg(feature = "deflate")]
+            deflate: false,
+        }
+    }
+}
+
 /// A response decompressor over a non-blocking stream of chunks.
 ///
 /// The inner decoder may be constructed asynchronously.
