@@ -4,6 +4,7 @@ use std::pin::Pin;
 
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
+use http_body_util::BodyExt;
 use hyper::{HeaderMap, StatusCode, Version};
 use hyper_util::client::legacy::connect::HttpInfo;
 use mime::Mime;
@@ -16,6 +17,7 @@ use url::Url;
 
 use super::body::Body;
 use super::decoder::{Accepts, Decoder};
+use crate::async_impl::body::ResponseBody;
 #[cfg(feature = "cookies")]
 use crate::cookie;
 
@@ -418,7 +420,6 @@ impl From<Response> for Body {
     }
 }
 
-/*
 // I'm not sure this conversion is that useful... People should be encouraged
 // to use `http::Resposne`, not `reqwest::Response`.
 impl<T: Into<Body>> From<http::Response<T>> for Response {
@@ -426,8 +427,12 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
         use crate::response::ResponseUrl;
 
         let (mut parts, body) = r.into_parts();
-        let body = body.into();
-        let decoder = Decoder::detect(&mut parts.headers, body, Accepts::none());
+        let body: crate::async_impl::body::Body = body.into();
+        let decoder = Decoder::detect(
+            &mut parts.headers,
+            ResponseBody::new(body.map_err(Into::into)),
+            Accepts::none(),
+        );
         let url = parts
             .extensions
             .remove::<ResponseUrl>()
@@ -440,7 +445,6 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -463,4 +467,3 @@ mod tests {
         assert_eq!(*response.url(), url);
     }
 }
-*/
