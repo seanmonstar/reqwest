@@ -264,6 +264,17 @@ impl HttpBody for Body {
             ),
         }
     }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        match self.inner {
+            Inner::Reusable(ref bytes) => {
+                let mut hint = http_body::SizeHint::default();
+                hint.set_exact(bytes.len() as u64);
+                hint
+            }
+            Inner::Streaming(ref body) => body.size_hint(),
+        }
+    }
 }
 
 // ===== impl TotalTimeoutBody =====
