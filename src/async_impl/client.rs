@@ -628,6 +628,8 @@ impl ClientBuilder {
             builder.http2_keep_alive_while_idle(true);
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
+        builder.timer(hyper_util::rt::TokioTimer::new());
         builder.pool_idle_timeout(config.pool_idle_timeout);
         builder.pool_max_idle_per_host(config.pool_max_idle_per_host);
         connector.set_keepalive(config.tcp_keepalive);
