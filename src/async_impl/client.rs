@@ -37,7 +37,7 @@ use crate::cookie;
 use crate::dns::trust_dns::TrustDnsResolver;
 use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
 use crate::error;
-use crate::into_url::{expect_uri, try_uri};
+use crate::into_url::try_uri;
 use crate::redirect::{self, remove_sensitive_headers};
 #[cfg(feature = "__tls")]
 use crate::tls::{self, TlsBackend};
@@ -1810,7 +1810,10 @@ impl Client {
             }
         }
 
-        let uri = expect_uri(&url);
+        let uri = match try_uri(&url) {
+            Ok(uri) => uri,
+            _ => return Pending::new_err(error::url_invalid_uri(url)),
+        };
 
         let (reusable, body) = match body {
             Some(body) => {
@@ -2178,7 +2181,8 @@ impl PendingRequest {
         }
         self.retry_count += 1;
 
-        let uri = expect_uri(&self.url);
+        // If it parsed once, it should parse again
+        let uri = try_uri(&self.url).expect("URL was already validated as URI");
 
         *self.as_mut().in_flight().get_mut() = match *self.as_mut().in_flight().as_ref() {
             #[cfg(feature = "http3")]
@@ -2358,7 +2362,7 @@ impl Future for PendingRequest {
                     //
                     // If not, just log it and skip the redirect.
                     let loc = loc.and_then(|url| {
-                        if try_uri(&url).is_some() {
+                        if try_uri(&url).is_ok() {
                             Some(url)
                         } else {
                             None
@@ -2403,7 +2407,7 @@ impl Future for PendingRequest {
                                 std::mem::replace(self.as_mut().headers(), HeaderMap::new());
 
                             remove_sensitive_headers(&mut headers, &self.url, &self.urls);
-                            let uri = expect_uri(&self.url);
+                            let uri = try_uri(&self.url)?;
                             let body = match self.body {
                                 Some(Some(ref body)) => Body::reusable(body.clone()),
                                 _ => Body::empty(),
@@ -2503,8 +2507,21 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &dyn cookie::CookieS
 #[cfg(test)]
 mod tests {
     #[tokio::test]
-    async fn execute_request_rejects_invald_urls() {
+    async fn execute_request_rejects_invalid_urls() {
         let url_str = "hxxps://www.rust-lang.org/";
+        let url = url::Url::parse(url_str).unwrap();
+        let result = crate::get(url.clone()).await;
+
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        assert!(err.is_builder());
+        assert_eq!(url_str, err.url().unwrap().as_str());
+    }
+
+    /// https://github.com/seanmonstar/reqwest/issues/668
+    #[tokio::test]
+    async fn execute_request_rejects_invalid_hostname() {
+        let url_str = "https://{{hostname}}/";
         let url = url::Url::parse(url_str).unwrap();
         let result = crate::get(url.clone()).await;
 
