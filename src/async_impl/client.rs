@@ -38,7 +38,7 @@ use crate::dns::trust_dns::TrustDnsResolver;
 use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
 use crate::error;
 use crate::into_url::{expect_uri, try_uri};
-use crate::redirect::{self, remove_sensitive_headers};
+use crate::redirect::{self};
 #[cfg(feature = "__tls")]
 use crate::tls::{self, TlsBackend};
 #[cfg(feature = "__tls")]
@@ -2402,7 +2402,11 @@ impl Future for PendingRequest {
                             let mut headers =
                                 std::mem::replace(self.as_mut().headers(), HeaderMap::new());
 
-                            remove_sensitive_headers(&mut headers, &self.url, &self.urls);
+                            self.client.redirect_policy.handle_sensitive_headers(
+                                &mut headers,
+                                &self.url,
+                                &self.urls,
+                            );
                             let uri = expect_uri(&self.url);
                             let body = match self.body {
                                 Some(Some(ref body)) => Body::reusable(body.clone()),
