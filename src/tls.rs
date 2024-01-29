@@ -49,7 +49,10 @@ use rustls::{
     client::HandshakeSignatureValid, client::ServerCertVerified, client::ServerCertVerifier,
     DigitallySignedStruct, Error as TLSError, ServerName,
 };
-use std::fmt;
+use std::{
+    fmt,
+    io::{BufRead, BufReader},
+};
 
 /// Represents a server X509 certificate.
 #[derive(Clone)]
@@ -138,6 +141,32 @@ impl Certificate {
         })
     }
 
+    /// Create a collection of `Certificate`s from a PEM encoded certificate bundle.
+    /// Example byte sources may be `.crt`, `.cer` or `.pem` files.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::fs::File;
+    /// # use std::io::Read;
+    /// # fn cert() -> Result<(), Box<std::error::Error>> {
+    /// let mut buf = Vec::new();
+    /// File::open("ca-bundle.crt")?
+    ///     .read_to_end(&mut buf)?;
+    /// let certs = reqwest::Certificate::from_pem_bundle(&buf)?;
+    /// # drop(certs);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn from_pem_bundle(pem_bundle: &[u8]) -> crate::Result<Vec<Certificate>> {
+        let mut reader = BufReader::new(pem_bundle);
+
+        Self::read_pem_certs(&mut reader)?
+            .iter()
+            .map(|cert_vec| Certificate::from_pem(&cert_vec))
+            .collect::<crate::Result<Vec<Certificate>>>()
+    }
+
     #[cfg(feature = "native-tls-crate")]
     pub(crate) fn add_to_native_tls(self, tls: &mut native_tls_crate::TlsConnectorBuilder) {
         tls.add_root_certificate(self.native);
@@ -155,12 +184,8 @@ impl Certificate {
                 .add(&rustls::Certificate(buf))
                 .map_err(crate::error::builder)?,
             Cert::Pem(buf) => {
-                let mut pem = Cursor::new(buf);
-                let certs = rustls_pemfile::certs(&mut pem).map_err(|_| {
-                    crate::error::builder(TLSError::General(String::from(
-                        "No valid certificate was found",
-                    )))
-                })?;
+                let mut reader = Cursor::new(buf);
+                let certs = Self::read_pem_certs(&mut reader)?;
                 for c in certs {
                     root_cert_store
                         .add(&rustls::Certificate(c))
@@ -169,6 +194,11 @@ impl Certificate {
             }
         }
         Ok(())
+    }
+
+    fn read_pem_certs(reader: &mut impl BufRead) -> crate::Result<Vec<Vec<u8>>> {
+        rustls_pemfile::certs(reader)
+            .map_err(|_| crate::error::builder("invalid certificate encoding"))
     }
 }
 
