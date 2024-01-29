@@ -1,15 +1,48 @@
-//! TLS configuration
+//! TLS configuration and types
 //!
-//! By default, a `Client` will make use of system-native transport layer
-//! security to connect to HTTPS destinations. This means schannel on Windows,
-//! Security-Framework on macOS, and OpenSSL on Linux.
+//! A `Client` will use transport layer security (TLS) by default to connect to
+//! HTTPS destinations.
 //!
-//! - Additional X509 certificates can be configured on a `ClientBuilder` with the
-//!   [`Certificate`] type.
-//! - Client certificates can be added to a `ClientBuilder` with the
-//!   [`Identity`] type.
-//! - Various parts of TLS can also be configured or even disabled on the
-//!   `ClientBuilder`.
+//! # Backends
+//!
+//! reqwest supports several TLS backends, enabled with Cargo features.
+//!
+//! ## default-tls
+//!
+//! reqwest will pick a TLS backend by default. This is true when the
+//! `default-tls` feature is enabled.
+//!
+//! While it currently uses `native-tls`, the feature set is designed to only
+//! enable configuration that is shared among available backends. This allows
+//! reqwest to change the default to `rustls` (or another) at some point in the
+//! future.
+//!
+//! <div class="warning">This feature is enabled by default, and takes
+//! precedence if any other crate enables it. This is true even if you declare
+//! `features = []`. You must set `no-default-features = false` instead.</div>
+//!
+//! Since Cargo features are additive, other crates in your dependency tree can
+//! cause the default backend to be enabled. If you wish to ensure your
+//! `Client` uses a specific backend, call the appropriate builder methods
+//! (such as [`use_rustls_tls()`][]).
+//!
+//! [`use_rustls_tls()`]: crate::ClientBuilder::use_rustls_tls()
+//!
+//! ## native-tls
+//!
+//! This backend uses the [native-tls][] crate. That will try to use the system
+//! TLS on Windows and Mac, and OpenSSL on Linux targets.
+//!
+//! Enabling the feature explicitly allows for `native-tls`-specific
+//! configuration options.
+//!
+//! [native-tls]: https://crates.io/crates/native-tls
+//!
+//! ## rustls-tls
+//!
+//! This backend uses the [rustls][] crate, a TLS library written in Rust.
+//!
+//! [rustls]: https://crates.io/crates/rustls
 
 #[cfg(feature = "__rustls")]
 use rustls::{
