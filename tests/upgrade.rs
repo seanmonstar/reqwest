@@ -1,5 +1,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 mod support;
+use http_body_util::Empty;
 use support::server;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -25,7 +26,7 @@ async fn http_upgrade() {
                 .status(http::StatusCode::SWITCHING_PROTOCOLS)
                 .header(http::header::CONNECTION, "upgrade")
                 .header(http::header::UPGRADE, "foobar")
-                .body(hyper::Body::empty())
+                .body(Empty::<Vec<u8>>::new())
                 .unwrap()
         }
     });
