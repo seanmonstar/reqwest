@@ -26,6 +26,9 @@ features = [
     "multipart",
 ]
 
+[patch.crates-io]
+hyper-util = { git = "https://github.com/grafbase/hyper-util", rev = "c7acf8968d96a4408e952a097d93602d2e8ed01a" }
+
 [features]
 default = ["default-tls"]
 
