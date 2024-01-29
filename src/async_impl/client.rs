@@ -37,7 +37,7 @@ use crate::cookie;
 use crate::dns::trust_dns::TrustDnsResolver;
 use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
 use crate::error;
-use crate::into_url::{expect_uri, try_uri};
+use crate::into_url::{expect_uri, try_uri, IntoUrlSealed};
 use crate::redirect::{self, remove_sensitive_headers};
 #[cfg(feature = "__tls")]
 use crate::tls::{self, TlsBackend};
@@ -150,6 +150,7 @@ struct Config {
     quic_send_window: Option<u64>,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
     dns_resolver: Option<Arc<dyn Resolve>>,
+    base_url: Option<String>,
 }
 
 impl Default for ClientBuilder {
@@ -234,6 +235,7 @@ impl ClientBuilder {
                 #[cfg(feature = "http3")]
                 quic_send_window: None,
                 dns_resolver: None,
+                base_url: None,
             },
         }
     }
@@ -667,6 +669,11 @@ impl ClientBuilder {
 
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
 
+        let base_url = config.base_url.map(|base| match base.ends_with('/') {
+            true => base,
+            false => base + "/",
+        });
+
         Ok(Client {
             inner: Arc::new(ClientRef {
                 accepts: config.accepts,
@@ -689,6 +696,7 @@ impl ClientBuilder {
                 proxies,
                 proxies_maybe_http_auth,
                 https_only: config.https_only,
+                base_url,
             }),
         })
     }
@@ -1559,6 +1567,12 @@ impl ClientBuilder {
         }
     }
 
+    /// Sets a base url to be used in all requests
+    pub fn base_url(mut self, base_url: String) -> ClientBuilder {
+        self.config.base_url = Some(base_url);
+        self
+    }
+
     /// Override DNS resolution for specific domains to a particular IP address.
     ///
     /// Warning
@@ -1750,7 +1764,17 @@ impl Client {
     ///
     /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
-        let req = url.into_url().map(move |url| Request::new(method, url));
+        let url = if let Some(base_url) = &self.inner.base_url {
+            let url = url.as_str().to_string();
+            let path = match url.strip_prefix('/') {
+                Some(s) => s,
+                None => url.as_str(),
+            };
+            (base_url.to_owned() + path).into_url()
+        } else {
+            url.into_url()
+        };
+        let req = url.map(move |url| Request::new(method, url));
         RequestBuilder::new(self.clone(), req)
     }
 
@@ -2065,6 +2089,7 @@ struct ClientRef {
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
     https_only: bool,
+    base_url: Option<String>,
 }
 
 impl ClientRef {
