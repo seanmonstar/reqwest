@@ -203,12 +203,12 @@ impl Connector {
                 }
             }
             #[cfg(feature = "__rustls")]
-            Inner::RustlsTls { tls_proxy, .. } => {
+            Inner::RustlsTls { tls, .. } => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     use std::convert::TryFrom;
                     use tokio_rustls::TlsConnector as RustlsConnector;
 
-                    let tls = tls_proxy.clone();
+                    let tls = tls.clone();
                     let host = dst.host().ok_or("no host in url")?.to_string();
                     let conn = socks::connect(proxy, dst, dns).await?;
                     let server_name = rustls::ServerName::try_from(host.as_str())
