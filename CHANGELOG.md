@@ -1,3 +1,11 @@
+## v0.11.24
+
+- Add `Certificate::from_pem_bundle()` to add a bundle.
+- Add `http3_prior_knowledge()` to blocking client builder.
+- Remove `Sync` bounds requirement for `Body::wrap_stream()`.
+- Fix HTTP/2 to retry `REFUSED_STREAM` requests.
+- Fix instances of converting `Url` to `Uri` that could panic.
+
 ## v0.11.23
 
 - Add `Proxy::custom_http_auth(val)` for setting the raw `Proxy-Authorization` header when connecting to proxies.
