@@ -7,6 +7,7 @@ use url::Url;
 use wasm_bindgen::prelude::{wasm_bindgen, UnwrapThrowExt as _};
 
 use super::{AbortGuard, Request, RequestBuilder, Response};
+use crate::wasm::redirect;
 use crate::IntoUrl;
 
 #[wasm_bindgen]
@@ -156,7 +157,7 @@ impl Client {
         mut req: Request,
     ) -> impl Future<Output = crate::Result<Response>> {
         self.merge_headers(&mut req);
-        fetch(req)
+        fetch(req, self.config.redirect_policy.clone())
     }
 }
 
@@ -182,7 +183,7 @@ impl fmt::Debug for ClientBuilder {
     }
 }
 
-async fn fetch(req: Request) -> crate::Result<Response> {
+async fn fetch(req: Request, redirect_policy: redirect::Policy) -> crate::Result<Response> {
     // Build the js Request
     let mut init = web_sys::RequestInit::new();
     init.method(req.method().as_str());
@@ -220,6 +221,10 @@ async fn fetch(req: Request) -> crate::Result<Response> {
 
     let abort = AbortGuard::new()?;
     init.signal(Some(&abort.signal()));
+
+    if redirect_policy == redirect::Policy::none() {
+        init.redirect(web_sys::RequestRedirect::Manual);
+    }
 
     let js_req = web_sys::Request::new_with_str_and_init(req.url().as_str(), &init)
         .map_err(crate::error::wasm)
@@ -295,6 +300,12 @@ impl ClientBuilder {
         self
     }
 
+    /// Set a redirect `Policy` for this client.
+    pub fn redirect(mut self, policy: redirect::Policy) -> ClientBuilder {
+        self.config.redirect_policy = policy;
+        self
+    }
+
     /// Sets the default headers for every request
     pub fn default_headers(mut self, headers: HeaderMap) -> ClientBuilder {
         for (key, value) in headers.iter() {
@@ -314,6 +325,7 @@ impl Default for ClientBuilder {
 struct Config {
     headers: HeaderMap,
     error: Option<crate::Error>,
+    redirect_policy: redirect::Policy,
 }
 
 impl Default for Config {
@@ -321,6 +333,7 @@ impl Default for Config {
         Config {
             headers: HeaderMap::new(),
             error: None,
+            redirect_policy: redirect::Policy::default(),
         }
     }
 }

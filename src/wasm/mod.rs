@@ -6,6 +6,7 @@ mod client;
 /// TODO
 #[cfg(feature = "multipart")]
 pub mod multipart;
+pub mod redirect;
 mod request;
 mod response;
 

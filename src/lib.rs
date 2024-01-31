@@ -368,7 +368,7 @@ if_wasm! {
     mod wasm;
     mod util;
 
-    pub use self::wasm::{Body, Client, ClientBuilder, Request, RequestBuilder, Response};
+    pub use self::wasm::{Body, Client, ClientBuilder, Request, RequestBuilder, Response, redirect};
     #[cfg(feature = "multipart")]
     pub use self::wasm::multipart;
 }
