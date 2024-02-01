@@ -194,7 +194,7 @@ wasm-bindgen = { version = "0.2.68", features = ["serde-serialize"] }
 wasm-bindgen-test = "0.3"
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "wasi"))'.dependencies]
-wit-bindgen = "0.14.0"
+wit-bindgen = "0.16.0"
 encoding_rs = "0.8"
 mime = "0.3.16"
 percent-encoding = "2.1"
