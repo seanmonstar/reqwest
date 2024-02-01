@@ -223,9 +223,9 @@ impl Client {
         }
 
         let options = types::RequestOptions::new();
-        options.set_connect_timeout_ms(self.inner.connect_timeout.map(|d| d.as_millis() as u64)).map_err(|e| failure_point("set_connect_timeout_ms", e))?;
-        options.set_first_byte_timeout_ms(timeout.or(self.inner.first_byte_timeout).map(|d| d.as_millis() as u64)).map_err(|e| failure_point("set_first_byte_timeout_ms", e))?;
-        options.set_between_bytes_timeout_ms(timeout.or(self.inner.between_bytes_timeout).map(|d| d.as_millis() as u64)).map_err(|e| failure_point("set_between_bytes_timeout_ms", e))?;
+        options.set_connect_timeout(self.inner.connect_timeout.map(|d| d.as_millis() as u64)).map_err(|e| failure_point("set_connect_timeout_ms", e))?;
+        options.set_first_byte_timeout(timeout.or(self.inner.first_byte_timeout).map(|d| d.as_millis() as u64)).map_err(|e| failure_point("set_first_byte_timeout_ms", e))?;
+        options.set_between_bytes_timeout(timeout.or(self.inner.between_bytes_timeout).map(|d| d.as_millis() as u64)).map_err(|e| failure_point("set_between_bytes_timeout_ms", e))?;
 
         let future_incoming_response = outgoing_handler::handle(request, Some(options))?;
 
