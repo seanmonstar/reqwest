@@ -87,6 +87,8 @@ bytes = "1.0"
 serde = "1.0"
 serde_urlencoded = "0.7.1"
 tower-service = "0.3"
+async-trait = "0.1"
+dyn-clone = "1"
 futures-core = { version = "0.3.0", default-features = false }
 futures-util = { version = "0.3.0", default-features = false }
 sync_wrapper = "0.1.2"
