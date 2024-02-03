@@ -1202,7 +1202,7 @@ mod tests {
                 assert_eq!(auth.unwrap(), encode_basic_auth("foo", "bar"));
                 assert_eq!(host, "localhost:1239");
             }
-            other => panic!("unexpected: {:?}", other),
+            other => panic!("unexpected: {other:?}"),
         }
     }
 
@@ -1215,7 +1215,7 @@ mod tests {
                 assert!(auth.is_none());
                 assert_eq!(host, "192.168.1.1:8888");
             }
-            other => panic!("unexpected: {:?}", other),
+            other => panic!("unexpected: {other:?}"),
         }
     }
 
@@ -1229,7 +1229,7 @@ mod tests {
                 assert_eq!(auth.unwrap(), encode_basic_auth("foo", "bar"));
                 assert_eq!(host, "localhost:1239");
             }
-            other => panic!("unexpected: {:?}", other),
+            other => panic!("unexpected: {other:?}"),
         }
     }
 
@@ -1791,7 +1791,7 @@ mod test {
         fn check_parse_error(url: &str, needle: url::ParseError) {
             let error = Proxy::http(url).unwrap_err();
             if !includes(&error, needle) {
-                panic!("{:?} expected; {:?}, {} found", needle, error, error);
+                panic!("{needle:?} expected; {error:?}, {error} found");
             }
         }
 

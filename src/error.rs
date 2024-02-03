@@ -366,7 +366,7 @@ mod tests {
         // It should have pulled out the original, not nested it...
         match err.inner.kind {
             Kind::Request => (),
-            _ => panic!("{:?}", err),
+            _ => panic!("{err:?}"),
         }
     }
 
@@ -376,7 +376,7 @@ mod tests {
         let err = super::decode_io(orig);
         match err.inner.kind {
             Kind::Decode => (),
-            _ => panic!("{:?}", err),
+            _ => panic!("{err:?}"),
         }
     }
 
