@@ -98,7 +98,7 @@ impl Certificate {
     /// ```
     /// # use std::fs::File;
     /// # use std::io::Read;
-    /// # fn cert() -> Result<(), Box<std::error::Error>> {
+    /// # fn cert() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut buf = Vec::new();
     /// File::open("my_cert.der")?
     ///     .read_to_end(&mut buf)?;
@@ -123,7 +123,7 @@ impl Certificate {
     /// ```
     /// # use std::fs::File;
     /// # use std::io::Read;
-    /// # fn cert() -> Result<(), Box<std::error::Error>> {
+    /// # fn cert() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut buf = Vec::new();
     /// File::open("my_cert.pem")?
     ///     .read_to_end(&mut buf)?;
@@ -149,7 +149,7 @@ impl Certificate {
     /// ```
     /// # use std::fs::File;
     /// # use std::io::Read;
-    /// # fn cert() -> Result<(), Box<std::error::Error>> {
+    /// # fn cert() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut buf = Vec::new();
     /// File::open("ca-bundle.crt")?
     ///     .read_to_end(&mut buf)?;
@@ -221,7 +221,7 @@ impl Identity {
     /// ```
     /// # use std::fs::File;
     /// # use std::io::Read;
-    /// # fn pkcs12() -> Result<(), Box<std::error::Error>> {
+    /// # fn pkcs12() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut buf = Vec::new();
     /// File::open("my-ident.pfx")?
     ///     .read_to_end(&mut buf)?;
@@ -256,7 +256,7 @@ impl Identity {
     ///
     /// ```
     /// # use std::fs;
-    /// # fn pkcs8() -> Result<(), Box<std::error::Error>> {
+    /// # fn pkcs8() -> Result<(), Box<dyn std::error::Error>> {
     /// let cert = fs::read("client.pem")?;
     /// let key = fs::read("key.pem")?;
     /// let pkcs8 = reqwest::Identity::from_pkcs8_pem(&cert, &key)?;
@@ -289,7 +289,7 @@ impl Identity {
     /// ```
     /// # use std::fs::File;
     /// # use std::io::Read;
-    /// # fn pem() -> Result<(), Box<std::error::Error>> {
+    /// # fn pem() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut buf = Vec::new();
     /// File::open("my-ident.pem")?
     ///     .read_to_end(&mut buf)?;
