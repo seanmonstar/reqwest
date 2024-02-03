@@ -1534,9 +1534,7 @@ impl ClientBuilder {
         let mut tls = Some(tls);
         #[cfg(feature = "native-tls")]
         {
-            if let Some(conn) =
-                (&mut tls as &mut dyn Any).downcast_mut::<Option<native_tls_crate::TlsConnector>>()
-            {
+            if let Some(conn) = (&mut tls as &mut dyn Any).downcast_mut::<Option<TlsConnector>>() {
                 let tls = conn.take().expect("is definitely Some");
                 let tls = crate::tls::TlsBackend::BuiltNativeTls(tls);
                 self.config.tls = tls;

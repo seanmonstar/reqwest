@@ -38,7 +38,7 @@ impl Drop for Server {
 pub fn http<F, Fut>(func: F) -> Server
 where
     F: Fn(http::Request<hyper::body::Incoming>) -> Fut + Clone + Send + 'static,
-    Fut: Future<Output = Response<reqwest::Body>> + Send + 'static,
+    Fut: Future<Output = http::Response<reqwest::Body>> + Send + 'static,
 {
     http_with_config(func, |_builder| {})
 }
