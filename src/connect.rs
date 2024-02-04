@@ -317,6 +317,7 @@ impl Connector {
         dst: Uri,
         proxy_scheme: ProxyScheme,
     ) -> Result<Conn, BoxError> {
+        #[cfg(feature = "log")]
         log::debug!("proxy({:?}) intercepts '{:?}'", proxy_scheme, dst);
 
         let (proxy_dst, _auth) = match proxy_scheme {
@@ -339,6 +340,7 @@ impl Connector {
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                     let mut http = hyper_tls::HttpsConnector::from((http, tls_connector));
                     let conn = http.call(proxy_dst).await?;
+                    #[cfg(feature = "log")]
                     log::trace!("tunneling HTTPS over proxy");
                     let tunneled = tunnel(
                         conn,
@@ -376,6 +378,7 @@ impl Connector {
                     let mut http = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
                     let tls = tls.clone();
                     let conn = http.call(proxy_dst).await?;
+                    #[cfg(feature = "log")]
                     log::trace!("tunneling HTTPS over proxy");
                     let maybe_server_name =
                         ServerName::try_from(host.as_str()).map_err(|_| "Invalid Server Name");
@@ -446,6 +449,7 @@ impl Service<Uri> for Connector {
     }
 
     fn call(&mut self, dst: Uri) -> Self::Future {
+        #[cfg(feature = "log")]
         log::debug!("starting new connection: {:?}", dst);
         let timeout = self.timeout;
         for prox in self.proxies.iter() {
@@ -692,6 +696,7 @@ where
 
     // proxy-authorization
     if let Some(value) = auth {
+        #[cfg(feature = "log")]
         log::debug!("tunnel to {}:{} using basic auth", host, port);
         buf.extend_from_slice(b"Proxy-Authorization: ");
         buf.extend_from_slice(value.as_bytes());
@@ -1014,6 +1019,7 @@ mod verbose {
 
     impl Wrapper {
         pub(super) fn wrap<T: super::AsyncConnWithInfo>(&self, conn: T) -> super::BoxConn {
+            #[cfg(feature = "log")]
             if self.0 && log::log_enabled!(log::Level::Trace) {
                 Box::new(Verbose {
                     // truncate is fine
@@ -1023,6 +1029,9 @@ mod verbose {
             } else {
                 Box::new(conn)
             }
+
+            #[cfg(not(feature = "log"))]
+            Box::new(conn)
         }
     }
 
@@ -1045,6 +1054,7 @@ mod verbose {
         ) -> Poll<std::io::Result<()>> {
             match Pin::new(&mut self.inner).poll_read(cx, buf) {
                 Poll::Ready(Ok(())) => {
+                    #[cfg(feature = "log")]
                     log::trace!("{:08x} read: {:?}", self.id, Escape(buf.filled()));
                     Poll::Ready(Ok(()))
                 }
@@ -1062,6 +1072,7 @@ mod verbose {
         ) -> Poll<Result<usize, std::io::Error>> {
             match Pin::new(&mut self.inner).poll_write(cx, buf) {
                 Poll::Ready(Ok(n)) => {
+                    #[cfg(feature = "log")]
                     log::trace!("{:08x} write: {:?}", self.id, Escape(&buf[..n]));
                     Poll::Ready(Ok(n))
                 }
@@ -1077,6 +1088,7 @@ mod verbose {
         ) -> Poll<Result<usize, io::Error>> {
             match Pin::new(&mut self.inner).poll_write_vectored(cx, bufs) {
                 Poll::Ready(Ok(nwritten)) => {
+                    #[cfg(feature = "log")]
                     log::trace!(
                         "{:08x} write (vectored): {:?}",
                         self.id,

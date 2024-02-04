@@ -13,6 +13,7 @@ where
     enter();
 
     let deadline = timeout.map(|d| {
+        #[cfg(feature = "log")]
         log::trace!("wait at most {:?}", d);
         Instant::now() + d
     });
@@ -35,10 +36,12 @@ where
         if let Some(deadline) = deadline {
             let now = Instant::now();
             if now >= deadline {
+                #[cfg(feature = "log")]
                 log::trace!("wait timeout exceeded");
                 return Err(Waited::TimedOut(crate::error::TimedOut));
             }
 
+            #[cfg(feature = "log")]
             log::trace!(
                 "({:?}) park timeout {:?}",
                 thread::current().id(),
@@ -46,6 +49,7 @@ where
             );
             thread::park_timeout(deadline - now);
         } else {
+            #[cfg(feature = "log")]
             log::trace!("({:?}) park without timeout", thread::current().id());
             thread::park();
         }

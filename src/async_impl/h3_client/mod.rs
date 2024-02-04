@@ -11,6 +11,7 @@ use connect::H3Connector;
 use futures_util::future;
 use http::{Request, Response};
 use hyper::Body as HyperBody;
+#[cfg(feature = "log")]
 use log::trace;
 use std::future::Future;
 use std::pin::Pin;
@@ -33,10 +34,12 @@ impl H3Client {
 
     async fn get_pooled_client(&mut self, key: Key) -> Result<PoolClient, BoxError> {
         if let Some(client) = self.pool.try_pool(&key) {
+            #[cfg(feature = "log")]
             trace!("getting client from pool with key {:?}", key);
             return Ok(client);
         }
 
+        #[cfg(feature = "log")]
         trace!("did not find connection {:?} in pool so connecting...", key);
 
         let dest = pool::domain_as_uri(key.clone());

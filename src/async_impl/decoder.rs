@@ -154,6 +154,7 @@ impl Decoder {
     #[cfg(any(feature = "brotli", feature = "gzip", feature = "deflate"))]
     fn detect_encoding(headers: &mut HeaderMap, encoding_str: &str) -> bool {
         use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, TRANSFER_ENCODING};
+        #[cfg(feature = "log")]
         use log::warn;
 
         let mut is_content_encoded = {
@@ -169,6 +170,7 @@ impl Decoder {
         if is_content_encoded {
             if let Some(content_length) = headers.get(CONTENT_LENGTH) {
                 if content_length == "0" {
+                    #[cfg(feature = "log")]
                     warn!("{} response with content-length of 0", encoding_str);
                     is_content_encoded = false;
                 }

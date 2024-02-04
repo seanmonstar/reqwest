@@ -46,6 +46,7 @@ use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
+#[cfg(feature = "log")]
 use log::{debug, trace};
 #[cfg(feature = "http3")]
 use quinn::TransportConfig;
@@ -493,6 +494,7 @@ impl ClientBuilder {
                                 Ok(_) => valid_count += 1,
                                 Err(err) => {
                                     invalid_count += 1;
+                                    #[cfg(feature = "log")]
                                     log::warn!(
                                         "rustls failed to parse DER certificate {:?} {:?}",
                                         &err,
@@ -2164,11 +2166,13 @@ impl PendingRequest {
             return false;
         }
 
+        #[cfg(feature = "log")]
         trace!("can retry {:?}", err);
 
         let body = match self.body {
             Some(Some(ref body)) => Body::reusable(body.clone()),
             Some(None) => {
+                #[cfg(feature = "log")]
                 debug!("error was retryable, but body not reusable");
                 return false;
             }
@@ -2176,6 +2180,7 @@ impl PendingRequest {
         };
 
         if self.retry_count >= 2 {
+            #[cfg(feature = "log")]
             trace!("retry count too high");
             return false;
         }
@@ -2220,6 +2225,7 @@ fn is_retryable_error(err: &(dyn std::error::Error + 'static)) -> bool {
     #[cfg(feature = "http3")]
     if let Some(cause) = err.source() {
         if let Some(err) = cause.downcast_ref::<h3::Error>() {
+            #[cfg(feature = "log")]
             debug!("determining if HTTP/3 error {} can be retried", err);
             // TODO: Does h3 provide an API for checking the error?
             return err.to_string().as_str() == "timeout";
@@ -2370,6 +2376,7 @@ impl Future for PendingRequest {
                     });
 
                     if loc.is_none() {
+                        #[cfg(feature = "log")]
                         debug!("Location header had invalid URI: {:?}", val);
                     }
                     loc
@@ -2389,6 +2396,7 @@ impl Future for PendingRequest {
 
                     match action {
                         redirect::ActionKind::Follow => {
+                            #[cfg(feature = "log")]
                             debug!("redirecting '{}' to '{}'", self.url, loc);
 
                             if loc.scheme() != "http" && loc.scheme() != "https" {
@@ -2452,6 +2460,7 @@ impl Future for PendingRequest {
                             continue;
                         }
                         redirect::ActionKind::Stop => {
+                            #[cfg(feature = "log")]
                             debug!("redirect policy disallowed redirection to '{}'", loc);
                         }
                         redirect::ActionKind::Error(err) => {

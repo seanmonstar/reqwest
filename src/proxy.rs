@@ -898,6 +898,7 @@ fn get_from_environment() -> SystemProxyMap {
     let mut proxies = HashMap::new();
 
     if is_cgi() {
+        #[cfg(feature = "log")]
         if log::log_enabled!(log::Level::Warn) && env::var_os("HTTP_PROXY").is_some() {
             log::warn!("HTTP_PROXY environment variable ignored in CGI");
         }

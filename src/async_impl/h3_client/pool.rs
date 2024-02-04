@@ -14,6 +14,7 @@ use h3_quinn::{Connection, OpenStreams};
 use http::uri::{Authority, Scheme};
 use http::{Request, Response, Uri};
 use hyper::Body as HyperBody;
+#[cfg(feature = "log")]
 use log::trace;
 
 pub(super) type Key = (Scheme, Authority);
@@ -49,6 +50,7 @@ impl Pool {
             // We check first if the connection still valid
             // and if not, we remove it from the pool.
             if conn.is_invalid() {
+                #[cfg(feature = "log")]
                 trace!("pooled HTTP/3 connection is invalid so removing it...");
                 inner.idle_conns.remove(&key);
                 return None;
@@ -56,6 +58,7 @@ impl Pool {
 
             if let Some(duration) = timeout {
                 if Instant::now().saturating_duration_since(conn.idle_timeout) > duration {
+                    #[cfg(feature = "log")]
                     trace!("pooled connection expired");
                     return None;
                 }
@@ -77,6 +80,7 @@ impl Pool {
         let (close_tx, close_rx) = std::sync::mpsc::channel();
         tokio::spawn(async move {
             if let Err(e) = future::poll_fn(|cx| driver.poll_close(cx)).await {
+                #[cfg(feature = "log")]
                 trace!("poll_close returned error {:?}", e);
                 close_tx.send(e).ok();
             }
@@ -105,6 +109,7 @@ struct PoolInner {
 impl PoolInner {
     fn insert(&mut self, key: Key, conn: PoolConnection) {
         if self.idle_conns.contains_key(&key) {
+            #[cfg(feature = "log")]
             trace!("connection already exists for key {:?}", key);
         }
 

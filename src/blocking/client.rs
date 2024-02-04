@@ -10,6 +10,7 @@ use std::thread;
 use std::time::Duration;
 
 use http::header::HeaderValue;
+#[cfg(feature = "log")]
 use log::{error, trace};
 use tokio::sync::{mpsc, oneshot};
 
@@ -1014,10 +1015,13 @@ impl Drop for InnerClientHandle {
             .map(|h| h.thread().id())
             .expect("thread not dropped yet");
 
+        #[cfg(feature = "log")]
         trace!("closing runtime thread ({:?})", id);
         self.tx.take();
+        #[cfg(feature = "log")]
         trace!("signaled close for runtime thread ({:?})", id);
         self.thread.take().map(|h| h.join());
+        #[cfg(feature = "log")]
         trace!("closed runtime thread ({:?})", id);
     }
 }
@@ -1039,6 +1043,7 @@ impl ClientHandle {
                 {
                     Err(e) => {
                         if let Err(e) = spawn_tx.send(Err(e)) {
+                            #[cfg(feature = "log")]
                             error!("Failed to communicate runtime creation failure: {:?}", e);
                         }
                         return;
@@ -1050,6 +1055,7 @@ impl ClientHandle {
                     let client = match builder.build() {
                         Err(e) => {
                             if let Err(e) = spawn_tx.send(Err(e)) {
+                                #[cfg(feature = "log")]
                                 error!("Failed to communicate client creation failure: {:?}", e);
                             }
                             return;
@@ -1057,6 +1063,7 @@ impl ClientHandle {
                         Ok(v) => v,
                     };
                     if let Err(e) = spawn_tx.send(Ok(())) {
+                        #[cfg(feature = "log")]
                         error!("Failed to communicate successful startup: {:?}", e);
                         return;
                     }
@@ -1068,13 +1075,17 @@ impl ClientHandle {
                         tokio::spawn(forward(req_fut, req_tx));
                     }
 
+                    #[cfg(feature = "log")]
                     trace!("({:?}) Receiver is shutdown", thread::current().id());
                 };
 
+                #[cfg(feature = "log")]
                 trace!("({:?}) start runtime::block_on", thread::current().id());
                 rt.block_on(f);
+                #[cfg(feature = "log")]
                 trace!("({:?}) end runtime::block_on", thread::current().id());
                 drop(rt);
+                #[cfg(feature = "log")]
                 trace!("({:?}) finished", thread::current().id());
             })
             .map_err(crate::error::builder)?;
