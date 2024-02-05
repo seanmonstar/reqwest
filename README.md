@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?
         .json::<HashMap<String, String>>()
         .await?;
-    println!("{:#?}", resp);
+    println!("{resp:#?}");
     Ok(())
 }
 ```
@@ -58,7 +58,7 @@ use std::collections::HashMap;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let resp = reqwest::blocking::get("https://httpbin.org/ip")?
         .json::<HashMap<String, String>>()?;
-    println!("{:#?}", resp);
+    println!("{resp:#?}");
     Ok(())
 }
 ```

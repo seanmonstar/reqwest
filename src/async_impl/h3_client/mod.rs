@@ -33,11 +33,11 @@ impl H3Client {
 
     async fn get_pooled_client(&mut self, key: Key) -> Result<PoolClient, BoxError> {
         if let Some(client) = self.pool.try_pool(&key) {
-            trace!("getting client from pool with key {:?}", key);
+            trace!("getting client from pool with key {key:?}");
             return Ok(client);
         }
 
-        trace!("did not find connection {:?} in pool so connecting...", key);
+        trace!("did not find connection {key:?} in pool so connecting...");
 
         let dest = pool::domain_as_uri(key.clone());
         self.pool.connecting(key.clone())?;

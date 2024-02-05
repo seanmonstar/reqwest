@@ -181,8 +181,7 @@ async fn overridden_dns_resolution_with_gai() {
 
     let overridden_domain = "rust-lang.org";
     let url = format!(
-        "http://{}:{}/domain_override",
-        overridden_domain,
+        "http://{overridden_domain}:{}/domain_override",
         server.addr().port()
     );
     let client = reqwest::Client::builder()
@@ -204,8 +203,7 @@ async fn overridden_dns_resolution_with_gai_multiple() {
 
     let overridden_domain = "rust-lang.org";
     let url = format!(
-        "http://{}:{}/domain_override",
-        overridden_domain,
+        "http://{overridden_domain}:{}/domain_override",
         server.addr().port()
     );
     // the server runs on IPv4 localhost, so provide both IPv4 and IPv6 and let the happy eyeballs
@@ -239,8 +237,7 @@ async fn overridden_dns_resolution_with_trust_dns() {
 
     let overridden_domain = "rust-lang.org";
     let url = format!(
-        "http://{}:{}/domain_override",
-        overridden_domain,
+        "http://{overridden_domain}:{}/domain_override",
         server.addr().port()
     );
     let client = reqwest::Client::builder()
@@ -264,8 +261,7 @@ async fn overridden_dns_resolution_with_trust_dns_multiple() {
 
     let overridden_domain = "rust-lang.org";
     let url = format!(
-        "http://{}:{}/domain_override",
-        overridden_domain,
+        "http://{overridden_domain}:{}/domain_override",
         server.addr().port()
     );
     // the server runs on IPv4 localhost, so provide both IPv4 and IPv6 and let the happy eyeballs

@@ -83,7 +83,7 @@ impl Response {
     ///     StatusCode::PAYLOAD_TOO_LARGE => {
     ///         println!("Request payload is too large!");
     ///     }
-    ///     s => println!("Received response status: {:?}", s),
+    ///     s => println!("Received response status: {s:?}"),
     /// };
     /// # Ok(())
     /// # }
@@ -252,7 +252,7 @@ impl Response {
     /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let bytes = reqwest::blocking::get("http://httpbin.org/ip")?.bytes()?;
     ///
-    /// println!("bytes: {:?}", bytes);
+    /// println!("bytes: {bytes:?}");
     /// # Ok(())
     /// # }
     /// ```
