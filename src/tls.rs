@@ -163,7 +163,7 @@ impl Certificate {
 
         Self::read_pem_certs(&mut reader)?
             .iter()
-            .map(|cert_vec| Certificate::from_pem(&cert_vec))
+            .map(|cert_vec| Certificate::from_der(&cert_vec))
             .collect::<crate::Result<Vec<Certificate>>>()
     }
 
