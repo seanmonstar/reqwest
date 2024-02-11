@@ -578,7 +578,7 @@ fn gen_boundary() -> String {
     let c = random();
     let d = random();
 
-    format!("{:016x}-{:016x}-{:016x}-{:016x}", a, b, c, d)
+    format!("{a:016x}-{b:016x}-{c:016x}-{d:016x}")
 }
 
 #[cfg(test)]
@@ -655,7 +655,7 @@ mod tests {
             "START REAL\n{}\nEND REAL",
             std::str::from_utf8(&out).unwrap()
         );
-        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
+        println!("START EXPECTED\n{expected}\nEND EXPECTED");
         assert_eq!(std::str::from_utf8(&out).unwrap(), expected);
     }
 
@@ -687,7 +687,7 @@ mod tests {
             "START REAL\n{}\nEND REAL",
             std::str::from_utf8(&out).unwrap()
         );
-        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
+        println!("START EXPECTED\n{expected}\nEND EXPECTED");
         assert_eq!(std::str::from_utf8(&out).unwrap(), expected);
     }
 

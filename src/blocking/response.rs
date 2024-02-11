@@ -53,7 +53,7 @@ impl Response {
     ///
     /// ```rust
     /// # #[cfg(feature = "json")]
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let resp = reqwest::blocking::get("http://httpbin.org/get")?;
     /// if resp.status().is_success() {
     ///     println!("success!");
@@ -71,7 +71,7 @@ impl Response {
     /// ```rust
     /// use reqwest::blocking::Client;
     /// use reqwest::StatusCode;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new();
     ///
     /// let resp = client.post("http://httpbin.org/post")
@@ -83,7 +83,7 @@ impl Response {
     ///     StatusCode::PAYLOAD_TOO_LARGE => {
     ///         println!("Request payload is too large!");
     ///     }
-    ///     s => println!("Received response status: {:?}", s),
+    ///     s => println!("Received response status: {s:?}"),
     /// };
     /// # Ok(())
     /// # }
@@ -103,7 +103,7 @@ impl Response {
     /// use reqwest::blocking::Client;
     /// use reqwest::header::ETAG;
     ///
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new();
     ///
     /// let mut resp = client.get("http://httpbin.org/cache").send()?;
@@ -152,7 +152,7 @@ impl Response {
     /// # Example
     ///
     /// ```rust
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let resp = reqwest::blocking::get("http://httpbin.org/redirect/1")?;
     /// assert_eq!(resp.url().as_str(), "http://httpbin.org/get");
     /// # Ok(())
@@ -168,7 +168,7 @@ impl Response {
     /// # Example
     ///
     /// ```rust
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let resp = reqwest::blocking::get("http://httpbin.org/redirect/1")?;
     /// println!("httpbin.org address: {:?}", resp.remote_addr());
     /// # Ok(())
@@ -252,7 +252,7 @@ impl Response {
     /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let bytes = reqwest::blocking::get("http://httpbin.org/ip")?.bytes()?;
     ///
-    /// println!("bytes: {:?}", bytes);
+    /// println!("bytes: {bytes:?}");
     /// # Ok(())
     /// # }
     /// ```
@@ -274,7 +274,7 @@ impl Response {
     ///
     /// ```rust
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let content = reqwest::blocking::get("http://httpbin.org/range/26")?.text()?;
     /// # Ok(())
     /// # }
@@ -297,7 +297,7 @@ impl Response {
     ///
     /// ```rust
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let content = reqwest::blocking::get("http://httpbin.org/range/26")?
     ///     .text_with_charset("utf-8")?;
     /// # Ok(())
@@ -324,7 +324,7 @@ impl Response {
     /// # Example
     ///
     /// ```rust
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut resp = reqwest::blocking::get("http://httpbin.org/range/5")?;
     /// let mut buf: Vec<u8> = vec![];
     /// resp.copy_to(&mut buf)?;
@@ -345,7 +345,7 @@ impl Response {
     ///
     /// ```rust,no_run
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let res = reqwest::blocking::get("http://httpbin.org/status/400")?
     ///     .error_for_status();
     /// if let Err(err) = res {
@@ -376,7 +376,7 @@ impl Response {
     ///
     /// ```rust,no_run
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let res = reqwest::blocking::get("http://httpbin.org/status/400")?;
     /// let res = res.error_for_status_ref();
     /// if let Err(err) = res {

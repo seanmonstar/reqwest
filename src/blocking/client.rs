@@ -1014,11 +1014,11 @@ impl Drop for InnerClientHandle {
             .map(|h| h.thread().id())
             .expect("thread not dropped yet");
 
-        trace!("closing runtime thread ({:?})", id);
+        trace!("closing runtime thread ({id:?})");
         self.tx.take();
-        trace!("signaled close for runtime thread ({:?})", id);
+        trace!("signaled close for runtime thread ({id:?})");
         self.thread.take().map(|h| h.join());
-        trace!("closed runtime thread ({:?})", id);
+        trace!("closed runtime thread ({id:?})");
     }
 }
 
@@ -1039,7 +1039,7 @@ impl ClientHandle {
                 {
                     Err(e) => {
                         if let Err(e) = spawn_tx.send(Err(e)) {
-                            error!("Failed to communicate runtime creation failure: {:?}", e);
+                            error!("Failed to communicate runtime creation failure: {e:?}");
                         }
                         return;
                     }
@@ -1050,14 +1050,14 @@ impl ClientHandle {
                     let client = match builder.build() {
                         Err(e) => {
                             if let Err(e) = spawn_tx.send(Err(e)) {
-                                error!("Failed to communicate client creation failure: {:?}", e);
+                                error!("Failed to communicate client creation failure: {e:?}");
                             }
                             return;
                         }
                         Ok(v) => v,
                     };
                     if let Err(e) = spawn_tx.send(Ok(())) {
-                        error!("Failed to communicate successful startup: {:?}", e);
+                        error!("Failed to communicate successful startup: {e:?}");
                         return;
                     }
 

@@ -494,9 +494,7 @@ impl ClientBuilder {
                                 Err(err) => {
                                     invalid_count += 1;
                                     log::warn!(
-                                        "rustls failed to parse DER certificate {:?} {:?}",
-                                        &err,
-                                        &cert
+                                        "rustls failed to parse DER certificate {err:?} {cert:?}"
                                     );
                                 }
                             }
@@ -2164,7 +2162,7 @@ impl PendingRequest {
             return false;
         }
 
-        trace!("can retry {:?}", err);
+        trace!("can retry {err:?}");
 
         let body = match self.body {
             Some(Some(ref body)) => Body::reusable(body.clone()),
@@ -2220,7 +2218,7 @@ fn is_retryable_error(err: &(dyn std::error::Error + 'static)) -> bool {
     #[cfg(feature = "http3")]
     if let Some(cause) = err.source() {
         if let Some(err) = cause.downcast_ref::<h3::Error>() {
-            debug!("determining if HTTP/3 error {} can be retried", err);
+            debug!("determining if HTTP/3 error {err} can be retried");
             // TODO: Does h3 provide an API for checking the error?
             return err.to_string().as_str() == "timeout";
         }
@@ -2370,7 +2368,7 @@ impl Future for PendingRequest {
                     });
 
                     if loc.is_none() {
-                        debug!("Location header had invalid URI: {:?}", val);
+                        debug!("Location header had invalid URI: {val:?}");
                     }
                     loc
                 });
@@ -2452,7 +2450,7 @@ impl Future for PendingRequest {
                             continue;
                         }
                         redirect::ActionKind::Stop => {
-                            debug!("redirect policy disallowed redirection to '{}'", loc);
+                            debug!("redirect policy disallowed redirection to '{loc}'");
                         }
                         redirect::ActionKind::Error(err) => {
                             return Poll::Ready(Err(crate::error::redirect(err, self.url.clone())));
