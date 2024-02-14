@@ -565,10 +565,21 @@ impl ClientBuilder {
                         return Err(crate::error::builder("empty supported tls versions"));
                     }
 
+                    #[cfg(feature = "rustls-tls-platform-verifier")]
+                    let verifier = Arc::new(rustls_platform_verifier::Verifier::new());
+                    #[cfg(not(feature = "rustls-tls-platform-verifier"))]
+                    let verifier =
+                        rustls::client::WebPkiServerVerifier::builder(Arc::new(root_cert_store))
+                            .build()
+                            .map_err(|_| {
+                                crate::error::builder("no trust anchors have been provided")
+                            })?;
+
                     // Build TLS config
                     let config_builder =
                         rustls::ClientConfig::builder_with_protocol_versions(&versions)
-                            .with_root_certificates(root_cert_store);
+                            .dangerous()
+                            .with_custom_certificate_verifier(verifier);
 
                     // Finalize TLS config
                     let mut tls = if let Some(id) = config.identity {
@@ -1304,7 +1315,7 @@ impl ClientBuilder {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run
     /// use std::net::IpAddr;
     /// let local_addr = IpAddr::from([12, 4, 1, 8]);
     /// let client = reqwest::Client::builder()
@@ -1323,7 +1334,7 @@ impl ClientBuilder {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run
     /// let interface = "lo";
     /// let client = reqwest::Client::builder()
     ///     .interface(interface)
@@ -2745,6 +2756,7 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &dyn cookie::CookieS
     }
 }
 
+#[cfg(not(feature = "rustls-tls-manual-roots"))] // Building a client fails without roots
 #[cfg(test)]
 mod tests {
     #[tokio::test]
