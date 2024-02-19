@@ -5,7 +5,7 @@ use bytes::Bytes;
 use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::Uri;
-use hyper::client::connect::dns::Name;
+use hyper_util::client::legacy::connect::dns::Name;
 use quinn::{ClientConfig, Endpoint, TransportConfig};
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;

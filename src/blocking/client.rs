@@ -1172,7 +1172,7 @@ impl Default for Timeout {
     }
 }
 
-pub(crate) struct KeepCoreThreadAlive(Option<Arc<InnerClientHandle>>);
+pub(crate) struct KeepCoreThreadAlive(#[allow(dead_code)] Option<Arc<InnerClientHandle>>);
 
 impl KeepCoreThreadAlive {
     pub(crate) fn empty() -> KeepCoreThreadAlive {

@@ -9,6 +9,7 @@ use std::ptr;
 
 use bytes::buf::UninitSlice;
 use bytes::Bytes;
+use futures_channel::mpsc;
 
 use crate::async_impl;
 
@@ -133,12 +134,12 @@ impl Body {
     pub(crate) fn into_async(self) -> (Option<Sender>, async_impl::Body, Option<u64>) {
         match self.kind {
             Kind::Reader(read, len) => {
-                let (tx, rx) = hyper::Body::channel();
+                let (tx, rx) = mpsc::channel(0);
                 let tx = Sender {
                     body: (read, len),
                     tx,
                 };
-                (Some(tx), async_impl::Body::wrap(rx), len)
+                (Some(tx), async_impl::Body::stream(rx), len)
             }
             Kind::Bytes(chunk) => {
                 let len = chunk.len() as u64;
@@ -257,11 +258,23 @@ impl Read for Reader {
 
 pub(crate) struct Sender {
     body: (Box<dyn Read + Send>, Option<u64>),
-    tx: hyper::body::Sender,
+    tx: mpsc::Sender<Result<Bytes, Abort>>,
 }
+
+#[derive(Debug)]
+struct Abort;
+
+impl fmt::Display for Abort {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("abort request body")
+    }
+}
+
+impl std::error::Error for Abort {}
 
 async fn send_future(sender: Sender) -> Result<(), crate::Error> {
     use bytes::{BufMut, BytesMut};
+    use futures_util::SinkExt;
     use std::cmp;
 
     let con_len = sender.body.1;
@@ -312,7 +325,11 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
                     buf.advance_mut(n);
                 },
                 Err(e) => {
-                    tx.take().expect("tx only taken on error").abort();
+                    let _ = tx
+                        .take()
+                        .expect("tx only taken on error")
+                        .clone()
+                        .try_send(Err(Abort));
                     return Err(crate::error::body(e));
                 }
             }
@@ -324,7 +341,7 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
         let buf_len = buf.len() as u64;
         tx.as_mut()
             .expect("tx only taken on error")
-            .send_data(buf.split().freeze())
+            .send(Ok(buf.split().freeze()))
             .await
             .map_err(crate::error::body)?;
 
