@@ -1,162 +1,31 @@
-use futures_util::future::Either;
 #[cfg(feature = "__tls")]
 use http::header::HeaderValue;
 use http::uri::{Authority, Scheme};
 use http::Uri;
-use hyper::client::connect::{
-    dns::{GaiResolver, Name},
-    Connected, Connection,
-};
+use hyper::client::connect::{Connected, Connection};
 use hyper::service::Service;
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use pin_project_lite::pin_project;
-use std::io::IoSlice;
+use std::future::Future;
+use std::io::{self, IoSlice};
 use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use std::{collections::HashMap, io};
-use std::{future::Future, net::SocketAddr};
 
 #[cfg(feature = "default-tls")]
 use self::native_tls_conn::NativeTlsConn;
 #[cfg(feature = "__rustls")]
 use self::rustls_tls_conn::RustlsTlsConn;
-#[cfg(feature = "trust-dns")]
-use crate::dns::TrustDnsResolver;
+use crate::dns::DynResolver;
 use crate::error::BoxError;
 use crate::proxy::{Proxy, ProxyScheme};
 
-#[derive(Clone)]
-pub(crate) enum HttpConnector {
-    Gai(hyper::client::HttpConnector),
-    GaiWithDnsOverrides(hyper::client::HttpConnector<DnsResolverWithOverrides<GaiResolver>>),
-    #[cfg(feature = "trust-dns")]
-    TrustDns(hyper::client::HttpConnector<TrustDnsResolver>),
-    #[cfg(feature = "trust-dns")]
-    TrustDnsWithOverrides(hyper::client::HttpConnector<DnsResolverWithOverrides<TrustDnsResolver>>),
-}
-
-impl HttpConnector {
-    pub(crate) fn new_gai() -> Self {
-        Self::Gai(hyper::client::HttpConnector::new())
-    }
-
-    pub(crate) fn new_gai_with_overrides(overrides: HashMap<String, Vec<SocketAddr>>) -> Self {
-        let gai = hyper::client::connect::dns::GaiResolver::new();
-        let overridden_resolver = DnsResolverWithOverrides::new(gai, overrides);
-        Self::GaiWithDnsOverrides(hyper::client::HttpConnector::new_with_resolver(
-            overridden_resolver,
-        ))
-    }
-
-    #[cfg(feature = "trust-dns")]
-    pub(crate) fn new_trust_dns() -> crate::Result<HttpConnector> {
-        TrustDnsResolver::new()
-            .map(hyper::client::HttpConnector::new_with_resolver)
-            .map(Self::TrustDns)
-            .map_err(crate::error::builder)
-    }
-
-    #[cfg(feature = "trust-dns")]
-    pub(crate) fn new_trust_dns_with_overrides(
-        overrides: HashMap<String, Vec<SocketAddr>>,
-    ) -> crate::Result<HttpConnector> {
-        TrustDnsResolver::new()
-            .map(|resolver| DnsResolverWithOverrides::new(resolver, overrides))
-            .map(hyper::client::HttpConnector::new_with_resolver)
-            .map(Self::TrustDnsWithOverrides)
-            .map_err(crate::error::builder)
-    }
-}
-
-macro_rules! impl_http_connector {
-    ($(fn $name:ident(&mut self, $($par_name:ident: $par_type:ty),*)$( -> $return:ty)?;)+) => {
-        #[allow(dead_code)]
-        impl HttpConnector {
-            $(
-                fn $name(&mut self, $($par_name: $par_type),*)$( -> $return)? {
-                    match self {
-                        Self::Gai(resolver) => resolver.$name($($par_name),*),
-                        Self::GaiWithDnsOverrides(resolver) => resolver.$name($($par_name),*),
-                        #[cfg(feature = "trust-dns")]
-                        Self::TrustDns(resolver) => resolver.$name($($par_name),*),
-                        #[cfg(feature = "trust-dns")]
-                        Self::TrustDnsWithOverrides(resolver) => resolver.$name($($par_name),*),
-                    }
-                }
-            )+
-        }
-    };
-}
-
-impl_http_connector! {
-    fn set_local_address(&mut self, addr: Option<IpAddr>);
-    fn enforce_http(&mut self, is_enforced: bool);
-    fn set_nodelay(&mut self, nodelay: bool);
-    fn set_keepalive(&mut self, dur: Option<Duration>);
-}
-
-impl Service<Uri> for HttpConnector {
-    type Response = <hyper::client::HttpConnector as Service<Uri>>::Response;
-    type Error = <hyper::client::HttpConnector as Service<Uri>>::Error;
-    #[cfg(feature = "trust-dns")]
-    type Future =
-        Either<
-            Either<
-                <hyper::client::HttpConnector as Service<Uri>>::Future,
-                <hyper::client::HttpConnector<DnsResolverWithOverrides<GaiResolver>> as Service<
-                    Uri,
-                >>::Future,
-            >,
-            Either<
-                    <hyper::client::HttpConnector<TrustDnsResolver> as Service<Uri>>::Future,
-                <hyper::client::HttpConnector<DnsResolverWithOverrides<TrustDnsResolver>> as Service<Uri>>::Future
-                 >
-        >;
-    #[cfg(not(feature = "trust-dns"))]
-    type Future =
-        Either<
-            Either<
-                <hyper::client::HttpConnector as Service<Uri>>::Future,
-                <hyper::client::HttpConnector<DnsResolverWithOverrides<GaiResolver>> as Service<
-                    Uri,
-                >>::Future,
-            >,
-            Either<
-                <hyper::client::HttpConnector as Service<Uri>>::Future,
-                <hyper::client::HttpConnector as Service<Uri>>::Future,
-            >,
-        >;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match self {
-            Self::Gai(resolver) => resolver.poll_ready(cx),
-            Self::GaiWithDnsOverrides(resolver) => resolver.poll_ready(cx),
-            #[cfg(feature = "trust-dns")]
-            Self::TrustDns(resolver) => resolver.poll_ready(cx),
-            #[cfg(feature = "trust-dns")]
-            Self::TrustDnsWithOverrides(resolver) => resolver.poll_ready(cx),
-        }
-    }
-
-    fn call(&mut self, dst: Uri) -> Self::Future {
-        match self {
-            Self::Gai(resolver) => Either::Left(Either::Left(resolver.call(dst))),
-            Self::GaiWithDnsOverrides(resolver) => Either::Left(Either::Right(resolver.call(dst))),
-            #[cfg(feature = "trust-dns")]
-            Self::TrustDns(resolver) => Either::Right(Either::Left(resolver.call(dst))),
-            #[cfg(feature = "trust-dns")]
-            Self::TrustDnsWithOverrides(resolver) => {
-                Either::Right(Either::Right(resolver.call(dst)))
-            }
-        }
-    }
-}
+pub(crate) type HttpConnector = hyper::client::HttpConnector<DynResolver>;
 
 #[derive(Clone)]
 pub(crate) struct Connector {
@@ -166,6 +35,8 @@ pub(crate) struct Connector {
     timeout: Option<Duration>,
     #[cfg(feature = "__tls")]
     nodelay: bool,
+    #[cfg(feature = "__tls")]
+    tls_info: bool,
     #[cfg(feature = "__tls")]
     user_agent: Option<HeaderValue>,
 }
@@ -197,6 +68,7 @@ impl Connector {
     {
         http.set_local_address(local_addr.into());
         http.set_nodelay(nodelay);
+
         Connector {
             inner: Inner::Http(http),
             verbose: verbose::OFF,
@@ -213,13 +85,14 @@ impl Connector {
         user_agent: Option<HeaderValue>,
         local_addr: T,
         nodelay: bool,
+        tls_info: bool,
     ) -> crate::Result<Connector>
     where
         T: Into<Option<IpAddr>>,
     {
         let tls = tls.build().map_err(crate::error::builder)?;
         Ok(Self::from_built_default_tls(
-            http, tls, proxies, user_agent, local_addr, nodelay,
+            http, tls, proxies, user_agent, local_addr, nodelay, tls_info,
         ))
     }
 
@@ -231,11 +104,13 @@ impl Connector {
         user_agent: Option<HeaderValue>,
         local_addr: T,
         nodelay: bool,
+        tls_info: bool,
     ) -> Connector
     where
         T: Into<Option<IpAddr>>,
     {
         http.set_local_address(local_addr.into());
+        http.set_nodelay(nodelay);
         http.enforce_http(false);
 
         Connector {
@@ -244,6 +119,7 @@ impl Connector {
             verbose: verbose::OFF,
             timeout: None,
             nodelay,
+            tls_info,
             user_agent,
         }
     }
@@ -256,11 +132,13 @@ impl Connector {
         user_agent: Option<HeaderValue>,
         local_addr: T,
         nodelay: bool,
+        tls_info: bool,
     ) -> Connector
     where
         T: Into<Option<IpAddr>>,
     {
         http.set_local_address(local_addr.into());
+        http.set_nodelay(nodelay);
         http.enforce_http(false);
 
         let (tls, tls_proxy) = if proxies.is_empty() {
@@ -282,6 +160,7 @@ impl Connector {
             verbose: verbose::OFF,
             timeout: None,
             nodelay,
+            tls_info,
             user_agent,
         }
     }
@@ -319,6 +198,7 @@ impl Connector {
                     return Ok(Conn {
                         inner: self.verbose.wrap(NativeTlsConn { inner: io }),
                         is_proxy: false,
+                        tls_info: self.tls_info,
                     });
                 }
             }
@@ -339,6 +219,7 @@ impl Connector {
                     return Ok(Conn {
                         inner: self.verbose.wrap(RustlsTlsConn { inner: io }),
                         is_proxy: false,
+                        tls_info: false,
                     });
                 }
             }
@@ -349,6 +230,7 @@ impl Connector {
         socks::connect(proxy, dst, dns).await.map(|tcp| Conn {
             inner: self.verbose.wrap(tcp),
             is_proxy: false,
+            tls_info: false,
         })
     }
 
@@ -360,6 +242,7 @@ impl Connector {
                 Ok(Conn {
                     inner: self.verbose.wrap(io),
                     is_proxy,
+                    tls_info: false,
                 })
             }
             #[cfg(feature = "default-tls")]
@@ -384,11 +267,13 @@ impl Connector {
                     Ok(Conn {
                         inner: self.verbose.wrap(NativeTlsConn { inner: stream }),
                         is_proxy,
+                        tls_info: self.tls_info,
                     })
                 } else {
                     Ok(Conn {
                         inner: self.verbose.wrap(io),
                         is_proxy,
+                        tls_info: false,
                     })
                 }
             }
@@ -414,11 +299,13 @@ impl Connector {
                     Ok(Conn {
                         inner: self.verbose.wrap(RustlsTlsConn { inner: stream }),
                         is_proxy,
+                        tls_info: self.tls_info,
                     })
                 } else {
                     Ok(Conn {
                         inner: self.verbose.wrap(io),
                         is_proxy,
+                        tls_info: false,
                     })
                 }
             }
@@ -430,7 +317,7 @@ impl Connector {
         dst: Uri,
         proxy_scheme: ProxyScheme,
     ) -> Result<Conn, BoxError> {
-        log::debug!("proxy({:?}) intercepts '{:?}'", proxy_scheme, dst);
+        log::debug!("proxy({proxy_scheme:?}) intercepts '{dst:?}'");
 
         let (proxy_dst, _auth) = match proxy_scheme {
             ProxyScheme::Http { host, auth } => (into_uri(Scheme::HTTP, host), auth),
@@ -468,6 +355,7 @@ impl Connector {
                     return Ok(Conn {
                         inner: self.verbose.wrap(NativeTlsConn { inner: io }),
                         is_proxy: false,
+                        tls_info: false,
                     });
                 }
             }
@@ -500,6 +388,7 @@ impl Connector {
                     return Ok(Conn {
                         inner: self.verbose.wrap(RustlsTlsConn { inner: io }),
                         is_proxy: false,
+                        tls_info: false,
                     });
                 }
             }
@@ -557,7 +446,7 @@ impl Service<Uri> for Connector {
     }
 
     fn call(&mut self, dst: Uri) -> Self::Future {
-        log::debug!("starting new connection: {:?}", dst);
+        log::debug!("starting new connection: {dst:?}");
         let timeout = self.timeout;
         for prox in self.proxies.iter() {
             if let Some(proxy_scheme) = prox.intercept(&dst) {
@@ -575,6 +464,105 @@ impl Service<Uri> for Connector {
     }
 }
 
+#[cfg(feature = "__tls")]
+trait TlsInfoFactory {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo>;
+}
+
+#[cfg(feature = "__tls")]
+impl TlsInfoFactory for tokio::net::TcpStream {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        None
+    }
+}
+
+#[cfg(feature = "default-tls")]
+impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<tokio::net::TcpStream> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        match self {
+            hyper_tls::MaybeHttpsStream::Https(tls) => tls.tls_info(),
+            hyper_tls::MaybeHttpsStream::Http(_) => None,
+        }
+    }
+}
+
+#[cfg(feature = "default-tls")]
+impl TlsInfoFactory for hyper_tls::TlsStream<hyper_tls::MaybeHttpsStream<tokio::net::TcpStream>> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .peer_certificate()
+            .ok()
+            .flatten()
+            .and_then(|c| c.to_der().ok());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
+#[cfg(feature = "default-tls")]
+impl TlsInfoFactory for tokio_native_tls::TlsStream<tokio::net::TcpStream> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .peer_certificate()
+            .ok()
+            .flatten()
+            .and_then(|c| c.to_der().ok());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
+#[cfg(feature = "__rustls")]
+impl TlsInfoFactory for hyper_rustls::MaybeHttpsStream<tokio::net::TcpStream> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        match self {
+            hyper_rustls::MaybeHttpsStream::Https(tls) => tls.tls_info(),
+            hyper_rustls::MaybeHttpsStream::Http(_) => None,
+        }
+    }
+}
+
+#[cfg(feature = "__rustls")]
+impl TlsInfoFactory for tokio_rustls::TlsStream<tokio::net::TcpStream> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .1
+            .peer_certificates()
+            .and_then(|certs| certs.first())
+            .map(|c| c.0.clone());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
+#[cfg(feature = "__rustls")]
+impl TlsInfoFactory
+    for tokio_rustls::client::TlsStream<hyper_rustls::MaybeHttpsStream<tokio::net::TcpStream>>
+{
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .1
+            .peer_certificates()
+            .and_then(|certs| certs.first())
+            .map(|c| c.0.clone());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
+#[cfg(feature = "__rustls")]
+impl TlsInfoFactory for tokio_rustls::client::TlsStream<tokio::net::TcpStream> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .1
+            .peer_certificates()
+            .and_then(|certs| certs.first())
+            .map(|c| c.0.clone());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
 pub(crate) trait AsyncConn:
     AsyncRead + AsyncWrite + Connection + Send + Sync + Unpin + 'static
 {
@@ -582,7 +570,17 @@ pub(crate) trait AsyncConn:
 
 impl<T: AsyncRead + AsyncWrite + Connection + Send + Sync + Unpin + 'static> AsyncConn for T {}
 
-type BoxConn = Box<dyn AsyncConn>;
+#[cfg(feature = "__tls")]
+trait AsyncConnWithInfo: AsyncConn + TlsInfoFactory {}
+#[cfg(not(feature = "__tls"))]
+trait AsyncConnWithInfo: AsyncConn {}
+
+#[cfg(feature = "__tls")]
+impl<T: AsyncConn + TlsInfoFactory> AsyncConnWithInfo for T {}
+#[cfg(not(feature = "__tls"))]
+impl<T: AsyncConn> AsyncConnWithInfo for T {}
+
+type BoxConn = Box<dyn AsyncConnWithInfo>;
 
 pin_project! {
     /// Note: the `is_proxy` member means *is plain text HTTP proxy*.
@@ -593,12 +591,26 @@ pin_project! {
         #[pin]
         inner: BoxConn,
         is_proxy: bool,
+        // Only needed for __tls, but #[cfg()] on fields breaks pin_project!
+        tls_info: bool,
     }
 }
 
 impl Connection for Conn {
     fn connected(&self) -> Connected {
-        self.inner.connected().proxy(self.is_proxy)
+        let connected = self.inner.connected().proxy(self.is_proxy);
+        #[cfg(feature = "__tls")]
+        if self.tls_info {
+            if let Some(tls_info) = self.inner.tls_info() {
+                connected.extra(tls_info)
+            } else {
+                connected
+            }
+        } else {
+            connected
+        }
+        #[cfg(not(feature = "__tls"))]
+        connected
     }
 }
 
@@ -664,10 +676,9 @@ where
 
     let mut buf = format!(
         "\
-         CONNECT {0}:{1} HTTP/1.1\r\n\
-         Host: {0}:{1}\r\n\
-         ",
-        host, port
+         CONNECT {host}:{port} HTTP/1.1\r\n\
+         Host: {host}:{port}\r\n\
+         "
     )
     .into_bytes();
 
@@ -680,7 +691,7 @@ where
 
     // proxy-authorization
     if let Some(value) = auth {
-        log::debug!("tunnel to {}:{} using basic auth", host, port);
+        log::debug!("tunnel to {host}:{port} using basic auth");
         buf.extend_from_slice(b"Proxy-Authorization: ");
         buf.extend_from_slice(value.as_bytes());
         buf.extend_from_slice(b"\r\n");
@@ -726,6 +737,7 @@ fn tunnel_eof() -> BoxError {
 
 #[cfg(feature = "default-tls")]
 mod native_tls_conn {
+    use super::TlsInfoFactory;
     use hyper::client::connect::{Connected, Connection};
     use pin_project_lite::pin_project;
     use std::{
@@ -813,10 +825,23 @@ mod native_tls_conn {
             AsyncWrite::poll_shutdown(this.inner, cx)
         }
     }
+
+    impl TlsInfoFactory for NativeTlsConn<tokio::net::TcpStream> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+            self.inner.tls_info()
+        }
+    }
+
+    impl TlsInfoFactory for NativeTlsConn<hyper_tls::MaybeHttpsStream<tokio::net::TcpStream>> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+            self.inner.tls_info()
+        }
+    }
 }
 
 #[cfg(feature = "__rustls")]
 mod rustls_tls_conn {
+    use super::TlsInfoFactory;
     use hyper::client::connect::{Connected, Connection};
     use pin_project_lite::pin_project;
     use std::{
@@ -893,6 +918,18 @@ mod rustls_tls_conn {
             AsyncWrite::poll_shutdown(this.inner, cx)
         }
     }
+
+    impl TlsInfoFactory for RustlsTlsConn<tokio::net::TcpStream> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+            self.inner.tls_info()
+        }
+    }
+
+    impl TlsInfoFactory for RustlsTlsConn<hyper_rustls::MaybeHttpsStream<tokio::net::TcpStream>> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+            self.inner.tls_info()
+        }
+    }
 }
 
 #[cfg(feature = "socks")]
@@ -949,116 +986,20 @@ mod socks {
                 &password,
             )
             .await
-            .map_err(|e| format!("socks connect error: {}", e))?
+            .map_err(|e| format!("socks connect error: {e}"))?
         } else {
             Socks5Stream::connect(socket_addr, (host.as_str(), port))
                 .await
-                .map_err(|e| format!("socks connect error: {}", e))?
+                .map_err(|e| format!("socks connect error: {e}"))?
         };
 
         Ok(stream.into_inner())
     }
 }
 
-pub(crate) mod itertools {
-    pub(crate) enum Either<A, B> {
-        Left(A),
-        Right(B),
-    }
-
-    impl<A, B> Iterator for Either<A, B>
-    where
-        A: Iterator,
-        B: Iterator<Item = <A as Iterator>::Item>,
-    {
-        type Item = <A as Iterator>::Item;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            match self {
-                Either::Left(a) => a.next(),
-                Either::Right(b) => b.next(),
-            }
-        }
-    }
-}
-
-pin_project! {
-    pub(crate) struct WrappedResolverFuture<Fut> {
-        #[pin]
-        fut: Fut,
-    }
-}
-
-impl<Fut, FutOutput, FutError> std::future::Future for WrappedResolverFuture<Fut>
-where
-    Fut: std::future::Future<Output = Result<FutOutput, FutError>>,
-    FutOutput: Iterator<Item = SocketAddr>,
-{
-    type Output = Result<itertools::Either<FutOutput, std::vec::IntoIter<SocketAddr>>, FutError>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-        this.fut
-            .poll(cx)
-            .map(|result| result.map(itertools::Either::Left))
-    }
-}
-
-#[derive(Clone)]
-pub(crate) struct DnsResolverWithOverrides<Resolver>
-where
-    Resolver: Clone,
-{
-    dns_resolver: Resolver,
-    overrides: Arc<HashMap<String, Vec<SocketAddr>>>,
-}
-
-impl<Resolver: Clone> DnsResolverWithOverrides<Resolver> {
-    fn new(dns_resolver: Resolver, overrides: HashMap<String, Vec<SocketAddr>>) -> Self {
-        DnsResolverWithOverrides {
-            dns_resolver,
-            overrides: Arc::new(overrides),
-        }
-    }
-}
-
-impl<Resolver, Iter> Service<Name> for DnsResolverWithOverrides<Resolver>
-where
-    Resolver: Service<Name, Response = Iter> + Clone,
-    Iter: Iterator<Item = SocketAddr>,
-{
-    type Response = itertools::Either<Iter, std::vec::IntoIter<SocketAddr>>;
-    type Error = <Resolver as Service<Name>>::Error;
-    type Future = Either<
-        WrappedResolverFuture<<Resolver as Service<Name>>::Future>,
-        futures_util::future::Ready<
-            Result<itertools::Either<Iter, std::vec::IntoIter<SocketAddr>>, Self::Error>,
-        >,
-    >;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.dns_resolver.poll_ready(cx)
-    }
-
-    fn call(&mut self, name: Name) -> Self::Future {
-        match self.overrides.get(name.as_str()) {
-            Some(dest) => {
-                let fut = futures_util::future::ready(Ok(itertools::Either::Right(
-                    dest.clone().into_iter(),
-                )));
-                Either::Right(fut)
-            }
-            None => {
-                let resolver_fut = self.dns_resolver.call(name);
-                let y = WrappedResolverFuture { fut: resolver_fut };
-                Either::Left(y)
-            }
-        }
-    }
-}
-
 mod verbose {
     use hyper::client::connect::{Connected, Connection};
+    use std::cmp::min;
     use std::fmt;
     use std::io::{self, IoSlice};
     use std::pin::Pin;
@@ -1071,7 +1012,7 @@ mod verbose {
     pub(super) struct Wrapper(pub(super) bool);
 
     impl Wrapper {
-        pub(super) fn wrap<T: super::AsyncConn>(&self, conn: T) -> super::BoxConn {
+        pub(super) fn wrap<T: super::AsyncConnWithInfo>(&self, conn: T) -> super::BoxConn {
             if self.0 && log::log_enabled!(log::Level::Trace) {
                 Box::new(Verbose {
                     // truncate is fine
@@ -1133,7 +1074,18 @@ mod verbose {
             cx: &mut Context<'_>,
             bufs: &[IoSlice<'_>],
         ) -> Poll<Result<usize, io::Error>> {
-            Pin::new(&mut self.inner).poll_write_vectored(cx, bufs)
+            match Pin::new(&mut self.inner).poll_write_vectored(cx, bufs) {
+                Poll::Ready(Ok(nwritten)) => {
+                    log::trace!(
+                        "{:08x} write (vectored): {:?}",
+                        self.id,
+                        Vectored { bufs, nwritten }
+                    );
+                    Poll::Ready(Ok(nwritten))
+                }
+                Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+                Poll::Pending => Poll::Pending,
+            }
         }
 
         fn is_write_vectored(&self) -> bool {
@@ -1152,6 +1104,13 @@ mod verbose {
             cx: &mut Context,
         ) -> Poll<Result<(), std::io::Error>> {
             Pin::new(&mut self.inner).poll_shutdown(cx)
+        }
+    }
+
+    #[cfg(feature = "__tls")]
+    impl<T: super::TlsInfoFactory> super::TlsInfoFactory for Verbose<T> {
+        fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+            self.inner.tls_info()
         }
     }
 
@@ -1176,10 +1135,30 @@ mod verbose {
                 } else if c >= 0x20 && c < 0x7f {
                     write!(f, "{}", c as char)?;
                 } else {
-                    write!(f, "\\x{:02x}", c)?;
+                    write!(f, "\\x{c:02x}")?;
                 }
             }
             write!(f, "\"")?;
+            Ok(())
+        }
+    }
+
+    struct Vectored<'a, 'b> {
+        bufs: &'a [IoSlice<'b>],
+        nwritten: usize,
+    }
+
+    impl fmt::Debug for Vectored<'_, '_> {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            let mut left = self.nwritten;
+            for buf in self.bufs.iter() {
+                if left == 0 {
+                    break;
+                }
+                let n = min(left, buf.len());
+                Escape(&buf[..n]).fmt(f)?;
+                left -= n;
+            }
             Ok(())
         }
     }

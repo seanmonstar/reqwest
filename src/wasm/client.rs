@@ -1,10 +1,12 @@
-use http::{HeaderMap, Method};
+use http::header::USER_AGENT;
+use http::{HeaderMap, HeaderValue, Method};
 use js_sys::{Promise, JSON};
+use std::convert::TryInto;
 use std::{fmt, future::Future, sync::Arc};
 use url::Url;
 use wasm_bindgen::prelude::{wasm_bindgen, UnwrapThrowExt as _};
 
-use super::{Request, RequestBuilder, Response};
+use super::{AbortGuard, Request, RequestBuilder, Response};
 use crate::IntoUrl;
 
 #[wasm_bindgen]
@@ -216,6 +218,9 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         }
     }
 
+    let abort = AbortGuard::new()?;
+    init.signal(Some(&abort.signal()));
+
     let js_req = web_sys::Request::new_with_str_and_init(req.url().as_str(), &init)
         .map_err(crate::error::wasm)
         .map_err(crate::error::builder)?;
@@ -247,7 +252,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     }
 
     resp.body(js_resp)
-        .map(|resp| Response::new(resp, url))
+        .map(|resp| Response::new(resp, url, abort))
         .map_err(crate::error::request)
 }
 
@@ -263,10 +268,31 @@ impl ClientBuilder {
 
     /// Returns a 'Client' that uses this ClientBuilder configuration
     pub fn build(mut self) -> Result<Client, crate::Error> {
+        if let Some(err) = self.config.error {
+            return Err(err);
+        }
+
         let config = std::mem::take(&mut self.config);
         Ok(Client {
             config: Arc::new(config),
         })
+    }
+
+    /// Sets the `User-Agent` header to be used by this client.
+    pub fn user_agent<V>(mut self, value: V) -> ClientBuilder
+    where
+        V: TryInto<HeaderValue>,
+        V::Error: Into<http::Error>,
+    {
+        match value.try_into() {
+            Ok(value) => {
+                self.config.headers.insert(USER_AGENT, value);
+            }
+            Err(e) => {
+                self.config.error = Some(crate::error::builder(e.into()));
+            }
+        }
+        self
     }
 
     /// Sets the default headers for every request
@@ -284,15 +310,17 @@ impl Default for ClientBuilder {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct Config {
     headers: HeaderMap,
+    error: Option<crate::Error>,
 }
 
 impl Default for Config {
     fn default() -> Config {
         Config {
             headers: HeaderMap::new(),
+            error: None,
         }
     }
 }
@@ -371,6 +399,49 @@ mod tests {
             headers2.get(CONTENT_TYPE).unwrap(),
             "application/json",
             "request headers don't change client defaults"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn user_agent_header() {
+        use crate::header::USER_AGENT;
+
+        let client = crate::Client::builder()
+            .user_agent("FooBar/1.2.3")
+            .build()
+            .expect("client");
+
+        let mut req = client
+            .get("https://www.example.com")
+            .build()
+            .expect("request");
+
+        // Merge the client headers with the request's one.
+        client.merge_headers(&mut req);
+        let headers1 = req.headers();
+
+        // Confirm that we have the `User-Agent` header set
+        assert_eq!(
+            headers1.get(USER_AGENT).unwrap(),
+            "FooBar/1.2.3",
+            "The user-agent header was not set: {req:#?}"
+        );
+
+        // Now we try to overwrite the `User-Agent` value
+
+        let mut req2 = client
+            .get("https://www.example.com")
+            .header(USER_AGENT, "Another-User-Agent/42")
+            .build()
+            .expect("request 2");
+
+        client.merge_headers(&mut req2);
+        let headers2 = req2.headers();
+
+        assert_eq!(
+            headers2.get(USER_AGENT).expect("headers2 user agent"),
+            "Another-User-Agent/42",
+            "Was not able to overwrite the User-Agent value on the request-builder"
         );
     }
 }

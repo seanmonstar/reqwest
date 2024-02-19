@@ -1,7 +1,7 @@
 //! multipart/form-data
 //!
-//! To send a `multipart/form-data` body, a [`Form`](crate::blocking::multipart::Form) is built up, adding
-//! fields or customized [`Part`](crate::blocking::multipart::Part)s, and then calling the
+//! To send a `multipart/form-data` body, a [`Form`] is built up, adding
+//! fields or customized [`Part`]s, and then calling the
 //! [`multipart`][builder] method on the `RequestBuilder`.
 //!
 //! # Example
@@ -46,6 +46,7 @@ use mime_guess::{self, Mime};
 
 use super::Body;
 use crate::async_impl::multipart::{FormParts, PartMetadata, PartProps};
+use crate::header::HeaderMap;
 
 /// A multipart/form-data request.
 pub struct Form {
@@ -256,6 +257,11 @@ impl Part {
         self.with_inner(move |inner| inner.file_name(filename))
     }
 
+    /// Sets custom headers for the part.
+    pub fn headers(self, headers: HeaderMap) -> Part {
+        self.with_inner(move |inner| inner.headers(headers))
+    }
+
     fn with_inner<F>(self, func: F) -> Self
     where
         F: FnOnce(PartMetadata) -> PartMetadata,
@@ -414,7 +420,7 @@ mod tests {
             "START REAL\n{}\nEND REAL",
             std::str::from_utf8(&output).unwrap()
         );
-        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
+        println!("START EXPECTED\n{expected}\nEND EXPECTED");
         assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
         assert!(length.is_none());
     }
@@ -444,7 +450,7 @@ mod tests {
             "START REAL\n{}\nEND REAL",
             std::str::from_utf8(&output).unwrap()
         );
-        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
+        println!("START EXPECTED\n{expected}\nEND EXPECTED");
         assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
         assert_eq!(length.unwrap(), expected.len() as u64);
     }
@@ -453,7 +459,9 @@ mod tests {
     fn read_to_end_with_header() {
         let mut output = Vec::new();
         let mut part = Part::text("value2").mime(mime::IMAGE_BMP);
-        part.meta.headers.insert("Hdr3", "/a/b/c".parse().unwrap());
+        let mut headers = HeaderMap::new();
+        headers.insert("Hdr3", "/a/b/c".parse().unwrap());
+        part = part.headers(headers);
         let mut form = Form::new().part("key2", part);
         form.inner.boundary = "boundary".to_string();
         let expected = "--boundary\r\n\
@@ -469,7 +477,7 @@ mod tests {
             "START REAL\n{}\nEND REAL",
             std::str::from_utf8(&output).unwrap()
         );
-        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
+        println!("START EXPECTED\n{expected}\nEND EXPECTED");
         assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
     }
 }

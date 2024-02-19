@@ -1,8 +1,6 @@
 use std::convert::TryFrom;
 use std::fmt;
-use std::io::Write;
 
-use base64::write::EncoderWriter as Base64Encoder;
 use bytes::Bytes;
 use http::{request::Parts, Method, Request as HttpRequest};
 use serde::Serialize;
@@ -214,16 +212,7 @@ impl RequestBuilder {
         U: fmt::Display,
         P: fmt::Display,
     {
-        let mut header_value = b"Basic ".to_vec();
-        {
-            let mut encoder = Base64Encoder::new(&mut header_value, base64::STANDARD);
-            // The unwraps here are fine because Vec::write* is infallible.
-            write!(encoder, "{}:", username).unwrap();
-            if let Some(password) = password {
-                write!(encoder, "{}", password).unwrap();
-            }
-        }
-
+        let header_value = crate::util::basic_auth(username, password);
         self.header(crate::header::AUTHORIZATION, header_value)
     }
 
@@ -232,7 +221,7 @@ impl RequestBuilder {
     where
         T: fmt::Display,
     {
-        let header_value = format!("Bearer {}", token);
+        let header_value = format!("Bearer {token}");
         self.header(crate::header::AUTHORIZATION, header_value)
     }
 

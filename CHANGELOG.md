@@ -1,3 +1,82 @@
+## v0.11.24
+
+- Add `Certificate::from_pem_bundle()` to add a bundle.
+- Add `http3_prior_knowledge()` to blocking client builder.
+- Remove `Sync` bounds requirement for `Body::wrap_stream()`.
+- Fix HTTP/2 to retry `REFUSED_STREAM` requests.
+- Fix instances of converting `Url` to `Uri` that could panic.
+
+## v0.11.23
+
+- Add `Proxy::custom_http_auth(val)` for setting the raw `Proxy-Authorization` header when connecting to proxies.
+- Fix redirect to reject locations that are not `http://` or `https://`.
+- Fix setting `nodelay` when TLS is enabled but URL is HTTP.
+- (wasm) Add `ClientBuilder::user_agent(val)`.
+- (wasm) add `multipart::Form::headers(headers)`.
+
+## v0.11.22
+
+- Fix compilation on Windows when `trust-dns` is enabled.
+
+## v0.11.21
+
+- Add automatically detecting macOS proxy settings.
+- Add `ClientBuilder::tls_info(bool)`, which will put `tls::TlsInfo` into the response extensions.
+- Fix trust-dns resolver from possible hangs.
+- Fix connect timeout to be split among multiple IP addresses.
+
+## v0.11.20
+
+- Fix `deflate` decompression back to using zlib, as outlined in the spec.
+
+## v0.11.19
+
+- Add `ClientBuilder::http1_ignore_invalid_headers_in_responses()` option.
+- Add `ClientBuilder::http1_allow_spaces_after_header_name_in_responses()` option.
+- Add support for `ALL_PROXY` environment variable.
+- Add support for `use_preconfigured_tls` when combined with HTTP/3.
+- Fix `deflate` decompression from using the zlib decoder.
+- Fix `Response::{text, text_with_charset}()` to strip BOM characters.
+- Fix a panic when HTTP/3 is used if UDP isn't able to connect.
+- Fix some dependencies for HTTP/3.
+- Increase MSRV to 1.63.
+
+## v0.11.18
+
+- Fix `RequestBuilder::json()` method from overriding a previously set `content-type` header. An existing value will be left in place.
+- Upgrade internal dependencies for rustls and compression.
+
+## v0.11.17
+
+- Upgrade internal dependencies of Experimental HTTP/3 to use quinn v0.9
+- (wasm) Fix blob url support
+
+## v0.11.16
+
+- Chore: set MSRV in `Cargo.toml`.
+- Docs: fix build on docs.rs
+
+## v0.11.15
+
+- Add `RequestBuilder` methods to split and reconstruct from its parts.
+- Add experimental HTTP/3 support.
+- Fix `connection_verbose` to log `write_vectored` calls.
+- (wasm) Make requests actually cancel if the future is dropped.
+
+## v0.11.14
+
+- Adds `Proxy::no_proxy(url)` that works like the NO_PROXY environment variable.
+- Adds `multipart::Part::headers(headers)` method to add custom headers.
+- (wasm) Add `Response::bytes_stream()`.
+- Perf: several internal optimizations reducing copies and memory allocations.
+
+## v0.11.13
+
+- Add `ClientBuilder::dns_resolver()` option for custom DNS resolvers.
+- Add `ClientBuilder::tls_sni(bool)` option to enable or disable TLS Server Name Indication.
+- Add `Identity::from_pkcs8_pem()` constructor when using `native-tls`.
+- Fix `redirect::Policy::limited(0)` from following any redirects.
+
 ## v0.11.12
 
 - Add `ClientBuilder::resolve_to_addrs()` which allows a slice of IP addresses to be specified for a single host.

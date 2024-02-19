@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    eprintln!("Fetching {:?}...", url);
+    eprintln!("Fetching {url:?}...");
 
     // reqwest::blocking::get() is a convenience function.
     //

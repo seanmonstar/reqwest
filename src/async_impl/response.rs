@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -127,8 +126,10 @@ impl Response {
     ///
     /// This method decodes the response body with BOM sniffing
     /// and with malformed sequences replaced with the REPLACEMENT CHARACTER.
-    /// Encoding is determinated from the `charset` parameter of `Content-Type` header,
+    /// Encoding is determined from the `charset` parameter of `Content-Type` header,
     /// and defaults to `utf-8` if not presented.
+    ///
+    /// Note that the BOM is stripped from the returned String.
     ///
     /// # Example
     ///
@@ -139,7 +140,7 @@ impl Response {
     ///     .text()
     ///     .await?;
     ///
-    /// println!("text: {:?}", content);
+    /// println!("text: {content:?}");
     /// # Ok(())
     /// # }
     /// ```
@@ -155,6 +156,8 @@ impl Response {
     /// `charset` parameter of `Content-Type` header is still prioritized. For more information
     /// about the possible encoding name, please go to [`encoding_rs`] docs.
     ///
+    /// Note that the BOM is stripped from the returned String.
+    ///
     /// [`encoding_rs`]: https://docs.rs/encoding_rs/0.8/encoding_rs/#relationship-with-windows-code-pages
     ///
     /// # Example
@@ -166,7 +169,7 @@ impl Response {
     ///     .text_with_charset("utf-8")
     ///     .await?;
     ///
-    /// println!("text: {:?}", content);
+    /// println!("text: {content:?}");
     /// # Ok(())
     /// # }
     /// ```
@@ -185,14 +188,7 @@ impl Response {
         let full = self.bytes().await?;
 
         let (text, _, _) = encoding.decode(&full);
-        if let Cow::Owned(s) = text {
-            return Ok(s);
-        }
-        unsafe {
-            // decoding returned Cow::Borrowed, meaning these bytes
-            // are already valid utf8
-            Ok(String::from_utf8_unchecked(full.to_vec()))
-        }
+        Ok(text.into_owned())
     }
 
     /// Try to deserialize the response body as JSON.
@@ -255,7 +251,7 @@ impl Response {
     ///     .bytes()
     ///     .await?;
     ///
-    /// println!("bytes: {:?}", bytes);
+    /// println!("bytes: {bytes:?}");
     /// # Ok(())
     /// # }
     /// ```
@@ -274,7 +270,7 @@ impl Response {
     /// let mut res = reqwest::get("https://hyper.rs").await?;
     ///
     /// while let Some(chunk) = res.chunk().await? {
-    ///     println!("Chunk: {:?}", chunk);
+    ///     println!("Chunk: {chunk:?}");
     /// }
     /// # Ok(())
     /// # }

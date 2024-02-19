@@ -21,6 +21,16 @@ pub trait IntoUrlSealed {
 
 impl IntoUrlSealed for Url {
     fn into_url(self) -> crate::Result<Url> {
+        // With blob url the `self.has_host()` check is always false, so we
+        // remove the `blob:` scheme and check again if the url is valid.
+        #[cfg(target_arch = "wasm32")]
+        if self.scheme() == "blob"
+            && self.path().starts_with("http") // Check if the path starts with http or https to avoid validating a `blob:blob:...` url.
+            && self.as_str()[5..].into_url().is_ok()
+        {
+            return Ok(self);
+        }
+
         if self.has_host() {
             Ok(self)
         } else {
@@ -64,14 +74,10 @@ impl<'a> IntoUrlSealed for String {
 }
 
 if_hyper! {
-    pub(crate) fn expect_uri(url: &Url) -> http::Uri {
+    pub(crate) fn try_uri(url: &Url) -> crate::Result<http::Uri> {
         url.as_str()
             .parse()
-            .expect("a parsed Url should always be a valid Uri")
-    }
-
-    pub(crate) fn try_uri(url: &Url) -> Option<http::Uri> {
-        url.as_str().parse().ok()
+            .map_err(|_| crate::error::url_invalid_uri(url.clone()))
     }
 }
 
@@ -86,5 +92,25 @@ mod tests {
             err.to_string(),
             "builder error for url (file:///etc/hosts): URL scheme is not allowed"
         );
+    }
+
+    #[test]
+    fn into_url_blob_scheme() {
+        let err = "blob:https://example.com".into_url().unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "builder error for url (blob:https://example.com): URL scheme is not allowed"
+        );
+    }
+
+    if_wasm! {
+        use wasm_bindgen_test::*;
+
+        #[wasm_bindgen_test]
+        fn into_url_blob_scheme_wasm() {
+            let url = "blob:http://example.com".into_url().unwrap();
+
+            assert_eq!(url.as_str(), "blob:http://example.com");
+        }
     }
 }

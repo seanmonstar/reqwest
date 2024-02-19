@@ -1,5 +1,9 @@
 mod support;
-use support::*;
+
+use http::header::CONTENT_TYPE;
+use http::HeaderValue;
+use std::collections::HashMap;
+use support::server;
 
 #[test]
 fn test_response_text() {
@@ -327,4 +331,56 @@ fn test_body_from_bytes() {
         .expect("Invalid body");
 
     assert_eq!(request.body().unwrap().as_bytes(), Some(body.as_bytes()));
+}
+
+#[test]
+#[cfg(feature = "json")]
+fn blocking_add_json_default_content_type_if_not_set_manually() {
+    let mut map = HashMap::new();
+    map.insert("body", "json");
+    let content_type = HeaderValue::from_static("application/vnd.api+json");
+    let req = reqwest::blocking::Client::new()
+        .post("https://google.com/")
+        .header(CONTENT_TYPE, &content_type)
+        .json(&map)
+        .build()
+        .expect("request is not valid");
+
+    assert_eq!(content_type, req.headers().get(CONTENT_TYPE).unwrap());
+}
+
+#[test]
+#[cfg(feature = "json")]
+fn blocking_update_json_content_type_if_set_manually() {
+    let mut map = HashMap::new();
+    map.insert("body", "json");
+    let req = reqwest::blocking::Client::new()
+        .post("https://google.com/")
+        .json(&map)
+        .build()
+        .expect("request is not valid");
+
+    assert_eq!("application/json", req.headers().get(CONTENT_TYPE).unwrap());
+}
+
+#[test]
+fn test_response_no_tls_info_for_http() {
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
+
+    let url = format!("http://{}/text", server.addr());
+
+    let client = reqwest::blocking::Client::builder()
+        .tls_info(true)
+        .build()
+        .unwrap();
+
+    let res = client.get(&url).send().unwrap();
+    assert_eq!(res.url().as_str(), &url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.content_length(), Some(5));
+    let tls_info = res.extensions().get::<reqwest::tls::TlsInfo>();
+    assert_eq!(tls_info.is_none(), true);
+
+    let body = res.text().unwrap();
+    assert_eq!(b"Hello", body.as_bytes());
 }

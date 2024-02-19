@@ -1,6 +1,6 @@
 mod support;
 use std::io::Read;
-use support::*;
+use support::server;
 
 #[tokio::test]
 async fn brotli_response() {
@@ -90,7 +90,7 @@ async fn brotli_case(response_size: usize, chunk_size: usize) {
 
     let content: String = (0..response_size)
         .into_iter()
-        .map(|i| format!("test {}", i))
+        .map(|i| format!("test {i}"))
         .collect();
 
     let mut encoder = brotli_crate::CompressorReader::new(content.as_bytes(), 4096, 5, 20);

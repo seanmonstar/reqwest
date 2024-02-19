@@ -16,7 +16,7 @@
 //!
 //! # Making a GET request
 //!
-//! For a single request, you can use the [`get`](get) shortcut method.
+//! For a single request, you can use the [`get`] shortcut method.
 //!
 //! ```rust
 //! # use reqwest::{Error, Response};
@@ -25,24 +25,23 @@
 //! let body = reqwest::blocking::get("https://www.rust-lang.org")?
 //!     .text()?;
 //!
-//! println!("body = {:?}", body);
+//! println!("body = {body:?}");
 //! # Ok(())
 //! # }
 //! ```
 //!
-//! Additionally, the blocking [`Response`](Response) struct implements Rust's
+//! Additionally, the blocking [`Response`] struct implements Rust's
 //! `Read` trait, so many useful standard library and third party crates will
 //! have convenience methods that take a `Response` anywhere `T: Read` is
 //! acceptable.
 //!
 //! **NOTE**: If you plan to perform multiple requests, it is best to create a
-//! [`Client`](Client) and reuse it, taking advantage of keep-alive connection
-//! pooling.
+//! [`Client`] and reuse it, taking advantage of keep-alive connection pooling.
 //!
 //! # Making POST requests (or setting request bodies)
 //!
 //! There are several ways you can set the body of a request. The basic one is
-//! by using the `body()` method of a [`RequestBuilder`](RequestBuilder). This lets you set the
+//! by using the `body()` method of a [`RequestBuilder`]. This lets you set the
 //! exact raw bytes of what the body should be. It accepts various types,
 //! including `String`, `Vec<u8>`, and `File`. If you wish to pass a custom
 //! Reader, you can use the `reqwest::blocking::Body::new()` constructor.
@@ -98,11 +97,12 @@ pub use self::response::Response;
 ///
 /// This function fails if:
 ///
-/// - native TLS backend cannot be initialized
-/// - supplied `Url` cannot be parsed
-/// - there was an error while sending request
-/// - redirect loop was detected
-/// - redirect limit was exhausted
+/// - the native TLS backend cannot be initialized,
+/// - the supplied `Url` cannot be parsed,
+/// - there was an error while sending request,
+/// - a redirect loop was detected,
+/// - the redirect limit was exhausted, or
+/// - the total download time exceeds 30 seconds.
 pub fn get<T: crate::IntoUrl>(url: T) -> crate::Result<Response> {
     Client::builder().build()?.get(url).send()
 }

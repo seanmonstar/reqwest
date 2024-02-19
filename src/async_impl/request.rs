@@ -1,10 +1,8 @@
 use std::convert::TryFrom;
 use std::fmt;
 use std::future::Future;
-use std::io::Write;
 use std::time::Duration;
 
-use base64::write::EncoderWriter as Base64Encoder;
 use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
@@ -134,7 +132,7 @@ impl Request {
             None => None,
         };
         let mut req = Request::new(self.method().clone(), self.url().clone());
-        *req.timeout_mut() = self.timeout().cloned();
+        *req.timeout_mut() = self.timeout().copied();
         *req.headers_mut() = self.headers().clone();
         *req.version_mut() = self.version();
         req.body = body;
@@ -179,6 +177,14 @@ impl RequestBuilder {
         }
     }
 
+    /// Assemble a builder starting from an existing `Client` and a `Request`.
+    pub fn from_parts(client: Client, request: Request) -> RequestBuilder {
+        RequestBuilder {
+            client,
+            request: crate::Result::Ok(request),
+        }
+    }
+
     /// Add a `Header` to this Request.
     pub fn header<K, V>(self, key: K, value: V) -> RequestBuilder
     where
@@ -190,7 +196,7 @@ impl RequestBuilder {
         self.header_sensitive(key, value, false)
     }
 
-    /// Add a `Header` to this Request with ability to define if header_value is sensitive.
+    /// Add a `Header` to this Request with ability to define if `header_value` is sensitive.
     fn header_sensitive<K, V>(mut self, key: K, value: V, sensitive: bool) -> RequestBuilder
     where
         HeaderName: TryFrom<K>,
@@ -251,16 +257,7 @@ impl RequestBuilder {
         U: fmt::Display,
         P: fmt::Display,
     {
-        let mut header_value = b"Basic ".to_vec();
-        {
-            let mut encoder = Base64Encoder::new(&mut header_value, base64::STANDARD);
-            // The unwraps here are fine because Vec::write* is infallible.
-            write!(encoder, "{}:", username).unwrap();
-            if let Some(password) = password {
-                write!(encoder, "{}", password).unwrap();
-            }
-        }
-
+        let header_value = crate::util::basic_auth(username, password);
         self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
     }
 
@@ -269,7 +266,7 @@ impl RequestBuilder {
     where
         T: fmt::Display,
     {
-        let header_value = format!("Bearer {}", token);
+        let header_value = format!("Bearer {token}");
         self.header_sensitive(crate::header::AUTHORIZATION, header_value, true)
     }
 
@@ -443,8 +440,10 @@ impl RequestBuilder {
         if let Ok(ref mut req) = self.request {
             match serde_json::to_vec(json) {
                 Ok(body) => {
-                    req.headers_mut()
-                        .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+                    if !req.headers().contains_key(CONTENT_TYPE) {
+                        req.headers_mut()
+                            .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+                    }
                     *req.body_mut() = Some(body.into());
                 }
                 Err(err) => error = Some(crate::error::builder(err)),
@@ -473,6 +472,15 @@ impl RequestBuilder {
     /// `Client::execute()`.
     pub fn build(self) -> crate::Result<Request> {
         self.request
+    }
+
+    /// Build a `Request`, which can be inspected, modified and executed with
+    /// `Client::execute()`.
+    ///
+    /// This is similar to [`RequestBuilder::build()`], but also returns the
+    /// embedded `Client`.
+    pub fn build_split(self) -> (Client, crate::Result<Request>) {
+        (self.client, self.request)
     }
 
     /// Constructs the Request and sends it to the target URL, returning a
@@ -641,7 +649,7 @@ impl TryFrom<Request> for HttpRequest<Body> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Client, HttpRequest, Request, Version};
+    use super::{Client, HttpRequest, Request, RequestBuilder, Version};
     use crate::Method;
     use serde::Serialize;
     use std::collections::BTreeMap;
@@ -900,6 +908,18 @@ mod tests {
         assert_eq!(req.method(), Method::GET);
         assert_eq!(req.url().as_str(), "http://localhost/");
         assert_eq!(req.version(), Version::HTTP_11);
+    }
+
+    #[test]
+    fn builder_split_reassemble() {
+        let builder = {
+            let client = Client::new();
+            client.get("http://example.com")
+        };
+        let (client, inner) = builder.build_split();
+        let request = inner.unwrap();
+        let builder = RequestBuilder::from_parts(client, request);
+        builder.build().unwrap();
     }
 
     /*

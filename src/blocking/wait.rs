@@ -13,7 +13,7 @@ where
     enter();
 
     let deadline = timeout.map(|d| {
-        log::trace!("wait at most {:?}", d);
+        log::trace!("wait at most {d:?}");
         Instant::now() + d
     });
 

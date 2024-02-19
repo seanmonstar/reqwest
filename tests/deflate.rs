@@ -1,6 +1,6 @@
 mod support;
 use std::io::Write;
-use support::*;
+use support::server;
 
 #[tokio::test]
 async fn deflate_response() {
@@ -90,7 +90,7 @@ async fn deflate_case(response_size: usize, chunk_size: usize) {
 
     let content: String = (0..response_size)
         .into_iter()
-        .map(|i| format!("test {}", i))
+        .map(|i| format!("test {i}"))
         .collect();
     let mut encoder = libflate::zlib::Encoder::new(Vec::new()).unwrap();
     match encoder.write(content.as_bytes()) {

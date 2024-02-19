@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?
         .json::<HashMap<String, String>>()
         .await?;
-    println!("{:#?}", resp);
+    println!("{resp:#?}");
     Ok(())
 }
 ```
@@ -58,7 +58,7 @@ use std::collections::HashMap;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let resp = reqwest::blocking::get("https://httpbin.org/ip")?
         .json::<HashMap<String, String>>()?;
-    println!("{:#?}", resp);
+    println!("{resp:#?}");
     Ok(())
 }
 ```
@@ -67,7 +67,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 On Linux:
 
-- OpenSSL 1.0.1, 1.0.2, 1.1.0, or 1.1.1 with headers (see https://github.com/sfackler/rust-openssl)
+- OpenSSL with headers. See https://docs.rs/openssl for supported versions
+  and more details. Alternatively you can enable the `native-tls-vendored`
+  feature to compile a copy of OpenSSL.
 
 On Windows and macOS:
 
@@ -75,7 +77,8 @@ On Windows and macOS:
 
 Reqwest uses [rust-native-tls](https://github.com/sfackler/rust-native-tls),
 which will use the operating system TLS framework if available, meaning Windows
-and macOS. On Linux, it will use OpenSSL 1.1.
+and macOS. On Linux, it will use the available OpenSSL or fail to build if
+not found.
 
 
 ## License

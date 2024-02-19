@@ -2,7 +2,7 @@
 name = "wasm"
 version = "0.1.0"
 authors = ["John Gallagher <john.willis.gallagher@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 # Config mostly pulled from: https://github.com/rustwasm/wasm-bindgen/blob/master/examples/fetch/Cargo.toml
 
