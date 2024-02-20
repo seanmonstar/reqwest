@@ -224,6 +224,11 @@ path = "examples/form.rs"
 name = "simple"
 path = "examples/simple.rs"
 
+[[example]]
+name = "put_with_checksum"
+path = "examples/put_with_checksum.rs"
+required-features = ["stream"]
+
 [[test]]
 name = "blocking"
 path = "tests/blocking.rs"
