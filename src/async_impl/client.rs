@@ -464,18 +464,9 @@ impl ClientBuilder {
 
                     #[cfg(feature = "rustls-tls-webpki-roots")]
                     if config.tls_built_in_root_certs {
-                        use rustls::OwnedTrustAnchor;
-
-                        let trust_anchors =
-                            webpki_roots::TLS_SERVER_ROOTS.iter().map(|trust_anchor| {
-                                OwnedTrustAnchor::from_subject_spki_name_constraints(
-                                    trust_anchor.subject,
-                                    trust_anchor.spki,
-                                    trust_anchor.name_constraints,
-                                )
-                            });
-
-                        root_cert_store.add_trust_anchors(trust_anchors);
+                        root_cert_store
+                            .roots
+                            .extend_from_slice(webpki_roots::TLS_SERVER_ROOTS);
                     }
 
                     #[cfg(feature = "rustls-tls-native-roots")]
@@ -530,12 +521,13 @@ impl ClientBuilder {
                     }
 
                     // Build TLS config
-                    let config_builder = rustls::ClientConfig::builder()
-                        .with_safe_default_cipher_suites()
-                        .with_safe_default_kx_groups()
-                        .with_protocol_versions(&versions)
-                        .map_err(crate::error::builder)?
-                        .with_root_certificates(root_cert_store);
+                    let config_builder = if config.certs_verification {
+                        rustls::ClientConfig::builder().with_root_certificates(root_cert_store)
+                    } else {
+                        rustls::ClientConfig::builder()
+                            .dangerous()
+                            .with_custom_certificate_verifier(Arc::new(NoVerifier))
+                    };
 
                     // Finalize TLS config
                     let mut tls = if let Some(id) = config.identity {
@@ -543,12 +535,6 @@ impl ClientBuilder {
                     } else {
                         config_builder.with_no_client_auth()
                     };
-
-                    // Certificate verifier
-                    if !config.certs_verification {
-                        tls.dangerous()
-                            .set_certificate_verifier(Arc::new(NoVerifier));
-                    }
 
                     tls.enable_sni = config.tls_sni;
 

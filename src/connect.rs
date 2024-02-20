@@ -366,8 +366,7 @@ impl Connector {
                 tls_proxy,
             } => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
-                    use rustls::ServerName;
-                    use std::convert::TryFrom;
+                    use rustls::pki_types::ServerName;
                     use tokio_rustls::TlsConnector as RustlsConnector;
 
                     let host = dst.host().ok_or("no host in url")?.to_string();
