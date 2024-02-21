@@ -73,7 +73,7 @@ socks = ["tokio-socks"]
 # Don't rely on these whatsoever. They may disappear at anytime.
 
 # Enables common types used for TLS. Useless on its own.
-__tls = ["dep:rustls-pemfile"]
+__tls = ["dep:rustls-pemfile", "tokio/io-util"]
 
 # Enables common rustls code.
 # Equivalent to rustls-tls-manual-roots but shorter :)
