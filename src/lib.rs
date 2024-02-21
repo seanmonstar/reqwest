@@ -173,6 +173,7 @@
 //! The following are a list of [Cargo features][cargo-features] that can be
 //! enabled or disabled:
 //!
+//! - **http2** *(enabled by default)*: Enables HTTP/2 support.
 //! - **default-tls** *(enabled by default)*: Provides TLS support to connect
 //!   over HTTPS.
 //! - **native-tls**: Enables TLS functionality provided by `native-tls`.
