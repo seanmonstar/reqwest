@@ -184,6 +184,7 @@ impl fmt::Debug for ClientBuilder {
 
 async fn fetch(req: Request) -> crate::Result<Response> {
     // Build the js Request
+    eprintln!("[fetch] BRANCH 0");
     let mut init = web_sys::RequestInit::new();
     init.method(req.method().as_str());
 
@@ -193,6 +194,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         .map_err(crate::error::builder)?;
 
     for (name, value) in req.headers() {
+        eprintln!("[fetch] BRANCH 1");
         js_headers
             .append(
                 name.as_str(),
@@ -205,15 +207,19 @@ async fn fetch(req: Request) -> crate::Result<Response> {
 
     // When req.cors is true, do nothing because the default mode is 'cors'
     if !req.cors {
+        eprintln!("[fetch] BRANCH 2");
         init.mode(web_sys::RequestMode::NoCors);
     }
 
     if let Some(creds) = req.credentials {
+        eprintln!("[fetch] BRANCH 3");
         init.credentials(creds);
     }
 
     if let Some(body) = req.body() {
+        eprintln!("[fetch] BRANCH 4");
         if !body.is_empty() {
+            eprintln!("[fetch] BRANCH 5");
             init.body(Some(body.to_js_value()?.as_ref()));
         }
     }
@@ -242,6 +248,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         .expect_throw("headers have an iterator");
 
     for item in js_iter {
+        eprintln!("[fetch] BRANCH 6");
         let item = item.expect_throw("headers iterator doesn't throw");
         let serialized_headers: String = JSON::stringify(&item)
             .expect_throw("serialized headers")

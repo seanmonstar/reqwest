@@ -175,14 +175,16 @@ impl Connector {
 
     #[cfg(feature = "socks")]
     async fn connect_socks(&self, dst: Uri, proxy: ProxyScheme) -> Result<Conn, BoxError> {
+        eprintln!("[connect_socks] BRANCH 1");
         let dns = match proxy {
             ProxyScheme::Socks5 {
                 remote_dns: false, ..
-            } => socks::DnsResolve::Local,
+            } => {eprintln!("[connect_socks] BRANCH 2"); return socks::DnsResolve::Local},
             ProxyScheme::Socks5 {
                 remote_dns: true, ..
             } => socks::DnsResolve::Proxy,
             ProxyScheme::Http { .. } | ProxyScheme::Https { .. } => {
+                eprintln!("[connect_socks] BRANCH 3");
                 unreachable!("connect_socks is only called for socks proxies");
             }
         };
@@ -190,7 +192,9 @@ impl Connector {
         match &self.inner {
             #[cfg(feature = "default-tls")]
             Inner::DefaultTls(_http, tls) => {
+                eprintln!("[connect_socks] BRANCH 4");
                 if dst.scheme() == Some(&Scheme::HTTPS) {
+                    eprintln!("[connect_socks] BRANCH 5");
                     let host = dst.host().ok_or("no host in url")?.to_string();
                     let conn = socks::connect(proxy, dst, dns).await?;
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
@@ -204,7 +208,9 @@ impl Connector {
             }
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { tls_proxy, .. } => {
+                eprintln!("[connect_socks] BRANCH 6");
                 if dst.scheme() == Some(&Scheme::HTTPS) {
+                    eprintln!("[connect_socks] BRANCH 7");
                     use std::convert::TryFrom;
                     use tokio_rustls::TlsConnector as RustlsConnector;
 
@@ -224,7 +230,7 @@ impl Connector {
                 }
             }
             #[cfg(not(feature = "__tls"))]
-            Inner::Http(_) => (),
+            Inner::Http(_) => {eprintln!("[connect_socks] BRANCH 8");},
         }
 
         socks::connect(proxy, dst, dns).await.map(|tcp| Conn {
@@ -238,6 +244,7 @@ impl Connector {
         match self.inner {
             #[cfg(not(feature = "__tls"))]
             Inner::Http(mut http) => {
+                eprintln!("[connect_with_maybe_proxy] BRANCH 1");
                 let io = http.call(dst).await?;
                 Ok(Conn {
                     inner: self.verbose.wrap(io),
@@ -248,11 +255,12 @@ impl Connector {
             #[cfg(feature = "default-tls")]
             Inner::DefaultTls(http, tls) => {
                 let mut http = http.clone();
-
+                eprintln!("[connect_with_maybe_proxy] BRANCH 2"); // this
                 // Disable Nagle's algorithm for TLS handshake
                 //
                 // https://www.openssl.org/docs/man1.1.1/man3/SSL_connect.html#NOTES
                 if !self.nodelay && (dst.scheme() == Some(&Scheme::HTTPS)) {
+                    eprintln!("[connect_with_maybe_proxy] BRANCH 3");
                     http.set_nodelay(true);
                 }
 
@@ -261,7 +269,9 @@ impl Connector {
                 let io = http.call(dst).await?;
 
                 if let hyper_tls::MaybeHttpsStream::Https(stream) = io {
+                    eprintln!("[connect_with_maybe_proxy] BRANCH 4"); // this
                     if !self.nodelay {
+                        eprintln!("[connect_with_maybe_proxy] BRANCH 5");
                         stream.get_ref().get_ref().get_ref().set_nodelay(false)?;
                     }
                     Ok(Conn {
@@ -270,6 +280,7 @@ impl Connector {
                         tls_info: self.tls_info,
                     })
                 } else {
+                    eprintln!("[connect_with_maybe_proxy] BRANCH 6"); // this
                     Ok(Conn {
                         inner: self.verbose.wrap(io),
                         is_proxy,
@@ -279,12 +290,14 @@ impl Connector {
             }
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, tls, .. } => {
+                eprintln!("[connect_with_maybe_proxy] BRANCH 7");
                 let mut http = http.clone();
 
                 // Disable Nagle's algorithm for TLS handshake
                 //
                 // https://www.openssl.org/docs/man1.1.1/man3/SSL_connect.html#NOTES
                 if !self.nodelay && (dst.scheme() == Some(&Scheme::HTTPS)) {
+                    eprintln!("[connect_with_maybe_proxy] BRANCH 8");
                     http.set_nodelay(true);
                 }
 
@@ -292,7 +305,9 @@ impl Connector {
                 let io = http.call(dst).await?;
 
                 if let hyper_rustls::MaybeHttpsStream::Https(stream) = io {
+                    eprintln!("[connect_with_maybe_proxy] BRANCH 9");
                     if !self.nodelay {
+                        eprintln!("[connect_with_maybe_proxy] BRANCH 10");
                         let (io, _) = stream.get_ref();
                         io.set_nodelay(false)?;
                     }
@@ -302,6 +317,7 @@ impl Connector {
                         tls_info: self.tls_info,
                     })
                 } else {
+                    eprintln!("[connect_with_maybe_proxy] BRANCH 11");
                     Ok(Conn {
                         inner: self.verbose.wrap(io),
                         is_proxy,
@@ -320,10 +336,19 @@ impl Connector {
         log::debug!("proxy({proxy_scheme:?}) intercepts '{dst:?}'");
 
         let (proxy_dst, _auth) = match proxy_scheme {
-            ProxyScheme::Http { host, auth } => (into_uri(Scheme::HTTP, host), auth),
-            ProxyScheme::Https { host, auth } => (into_uri(Scheme::HTTPS, host), auth),
+            ProxyScheme::Http { host, auth } => {
+                eprintln!("[connect_with_proxy] BRANCH 1");
+                (into_uri(Scheme::HTTP, host), auth)
+            },
+            ProxyScheme::Https { host, auth } => {
+                eprintln!("[connect_with_proxy] BRANCH 2");
+                (into_uri(Scheme::HTTPS, host), auth)
+            },
             #[cfg(feature = "socks")]
-            ProxyScheme::Socks5 { .. } => return self.connect_socks(dst, proxy_scheme).await,
+            ProxyScheme::Socks5 { .. } => {
+                eprintln!("[connect_with_proxy] BRANCH 3");
+                return self.connect_socks(dst, proxy_scheme).await;
+            },
         };
 
         #[cfg(feature = "__tls")]
@@ -332,7 +357,9 @@ impl Connector {
         match &self.inner {
             #[cfg(feature = "default-tls")]
             Inner::DefaultTls(http, tls) => {
+                eprintln!("[connect_with_proxy] BRANCH 4");
                 if dst.scheme() == Some(&Scheme::HTTPS) {
+                    eprintln!("[connect_with_proxy] BRANCH 5");
                     let host = dst.host().to_owned();
                     let port = dst.port().map(|p| p.as_u16()).unwrap_or(443);
                     let http = http.clone();
@@ -365,7 +392,9 @@ impl Connector {
                 tls,
                 tls_proxy,
             } => {
+                eprintln!("[connect_with_proxy] BRANCH 6");
                 if dst.scheme() == Some(&Scheme::HTTPS) {
+                    eprintln!("[connect_with_proxy] BRANCH 7");
                     use rustls::ServerName;
                     use std::convert::TryFrom;
                     use tokio_rustls::TlsConnector as RustlsConnector;
@@ -393,7 +422,10 @@ impl Connector {
                 }
             }
             #[cfg(not(feature = "__tls"))]
-            Inner::Http(_) => (),
+            Inner::Http(_) => {
+                eprintln!("[connect_with_proxy] BRANCH 8");
+                ()
+            },
         }
 
         self.connect_with_maybe_proxy(proxy_dst, true).await

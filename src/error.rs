@@ -185,16 +185,37 @@ impl fmt::Debug for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.inner.kind {
-            Kind::Builder => f.write_str("builder error")?,
-            Kind::Request => f.write_str("error sending request")?,
-            Kind::Body => f.write_str("request or response body error")?,
-            Kind::Decode => f.write_str("error decoding response body")?,
-            Kind::Redirect => f.write_str("error following redirect")?,
-            Kind::Upgrade => f.write_str("error upgrading connection")?,
+            Kind::Builder => {
+                eprintln!("[fmt] BRANCH 1");
+                f.write_str("builder error")?
+            },
+            Kind::Request => {
+                eprintln!("[fmt] BRANCH 2");
+                f.write_str("error sending request")?
+            },
+            Kind::Body => {
+                eprintln!("[fmt] BRANCH 3");
+                f.write_str("request or response body error")?
+            },
+            Kind::Decode => {
+                eprintln!("[fmt] BRANCH 4");
+                f.write_str("error decoding response body")?
+            },
+            Kind::Redirect => {
+                eprintln!("[fmt] BRANCH 5");
+                f.write_str("error following redirect")?
+            },
+            Kind::Upgrade => {
+                eprintln!("[fmt] BRANCH 6");
+                f.write_str("error upgrading connection")?
+            }
             Kind::Status(ref code) => {
+                eprintln!("[fmt] BRANCH 7");
                 let prefix = if code.is_client_error() {
+                    eprintln!("[fmt] BRANCH 8");
                     "HTTP status client error"
                 } else {
+                    eprintln!("[fmt] BRANCH 9");
                     debug_assert!(code.is_server_error());
                     "HTTP status server error"
                 };
@@ -203,10 +224,12 @@ impl fmt::Display for Error {
         };
 
         if let Some(url) = &self.inner.url {
+            eprintln!("[fmt] BRANCH 10");
             write!(f, " for url ({url})")?;
         }
 
         if let Some(e) = &self.inner.source {
+            eprintln!("[fmt] BRANCH 11");
             write!(f, ": {e}")?;
         }
 
