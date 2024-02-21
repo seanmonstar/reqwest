@@ -169,7 +169,7 @@ impl Decoder {
         if is_content_encoded {
             if let Some(content_length) = headers.get(CONTENT_LENGTH) {
                 if content_length == "0" {
-                    warn!("{} response with content-length of 0", encoding_str);
+                    warn!("{encoding_str} response with content-length of 0");
                     is_content_encoded = false;
                 }
             }

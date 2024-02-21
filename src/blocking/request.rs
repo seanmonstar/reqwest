@@ -172,7 +172,7 @@ impl RequestBuilder {
     /// ```rust
     /// use reqwest::header::USER_AGENT;
     ///
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = reqwest::blocking::Client::new();
     /// let res = client.get("https://www.rust-lang.org")
     ///     .header(USER_AGENT, "foo")
@@ -232,7 +232,7 @@ impl RequestBuilder {
     ///     headers
     /// }
     ///
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let file = fs::File::open("much_beauty.png")?;
     /// let client = reqwest::blocking::Client::new();
     /// let res = client.post("http://httpbin.org/post")
@@ -252,7 +252,7 @@ impl RequestBuilder {
     /// Enable HTTP basic authentication.
     ///
     /// ```rust
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = reqwest::blocking::Client::new();
     /// let resp = client.delete("http://httpbin.org/delete")
     ///     .basic_auth("admin", Some("good password"))
@@ -272,7 +272,7 @@ impl RequestBuilder {
     /// Enable HTTP bearer authentication.
     ///
     /// ```rust
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = reqwest::blocking::Client::new();
     /// let resp = client.delete("http://httpbin.org/delete")
     ///     .bearer_auth("token")
@@ -284,7 +284,7 @@ impl RequestBuilder {
     where
         T: fmt::Display,
     {
-        let header_value = format!("Bearer {}", token);
+        let header_value = format!("Bearer {token}");
         self.header_sensitive(crate::header::AUTHORIZATION, &*header_value, true)
     }
 
@@ -295,7 +295,7 @@ impl RequestBuilder {
     /// Using a string:
     ///
     /// ```rust
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = reqwest::blocking::Client::new();
     /// let res = client.post("http://httpbin.org/post")
     ///     .body("from a &str!")
@@ -307,7 +307,7 @@ impl RequestBuilder {
     /// Using a `File`:
     ///
     /// ```rust
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let file = std::fs::File::open("from_a_file.txt")?;
     /// let client = reqwest::blocking::Client::new();
     /// let res = client.post("http://httpbin.org/post")
@@ -321,7 +321,7 @@ impl RequestBuilder {
     ///
     /// ```rust
     /// # use std::fs;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// // from bytes!
     /// let bytes: Vec<u8> = vec![1, 10, 100];
     /// let client = reqwest::blocking::Client::new();
@@ -514,7 +514,7 @@ impl RequestBuilder {
     /// ```
     /// # use reqwest::Error;
     ///
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = reqwest::blocking::Client::new();
     /// let form = reqwest::blocking::multipart::Form::new()
     ///     .text("key3", "value3")
@@ -570,7 +570,7 @@ impl RequestBuilder {
     /// With a static body
     ///
     /// ```rust
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = reqwest::blocking::Client::new();
     /// let builder = client.post("http://httpbin.org/post")
     ///     .body("from a &str!");
@@ -583,7 +583,7 @@ impl RequestBuilder {
     /// Without a body
     ///
     /// ```rust
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = reqwest::blocking::Client::new();
     /// let builder = client.get("http://httpbin.org/get");
     /// let clone = builder.try_clone();
@@ -595,7 +595,7 @@ impl RequestBuilder {
     /// With a non-clonable body
     ///
     /// ```rust
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = reqwest::blocking::Client::new();
     /// let builder = client.get("http://httpbin.org/get")
     ///     .body(reqwest::blocking::Body::new(std::io::empty()));

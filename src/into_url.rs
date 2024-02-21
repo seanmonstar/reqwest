@@ -74,14 +74,10 @@ impl<'a> IntoUrlSealed for String {
 }
 
 if_hyper! {
-    pub(crate) fn expect_uri(url: &Url) -> http::Uri {
+    pub(crate) fn try_uri(url: &Url) -> crate::Result<http::Uri> {
         url.as_str()
             .parse()
-            .expect("a parsed Url should always be a valid Uri")
-    }
-
-    pub(crate) fn try_uri(url: &Url) -> Option<http::Uri> {
-        url.as_str().parse().ok()
+            .map_err(|_| crate::error::url_invalid_uri(url.clone()))
     }
 }
 

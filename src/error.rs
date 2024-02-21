@@ -50,7 +50,7 @@ impl Error {
     /// if let Err(e) = response {
     ///     if e.is_redirect() {
     ///         if let Some(final_stop) = e.url() {
-    ///             println!("redirect loop at {}", final_stop);
+    ///             println!("redirect loop at {final_stop}");
     ///         }
     ///     }
     /// }
@@ -104,6 +104,11 @@ impl Error {
         while let Some(err) = source {
             if err.is::<TimedOut>() {
                 return true;
+            }
+            if let Some(io) = err.downcast_ref::<io::Error>() {
+                if io.kind() == io::ErrorKind::TimedOut {
+                    return true;
+                }
             }
             source = err.source();
         }
@@ -193,16 +198,16 @@ impl fmt::Display for Error {
                     debug_assert!(code.is_server_error());
                     "HTTP status server error"
                 };
-                write!(f, "{} ({})", prefix, code)?;
+                write!(f, "{prefix} ({code})")?;
             }
         };
 
         if let Some(url) = &self.inner.url {
-            write!(f, " for url ({})", url.as_str())?;
+            write!(f, " for url ({url})")?;
         }
 
         if let Some(e) = &self.inner.source {
-            write!(f, ": {}", e)?;
+            write!(f, ": {e}")?;
         }
 
         Ok(())
@@ -225,7 +230,7 @@ impl From<crate::error::Error> for wasm_bindgen::JsValue {
 #[cfg(target_arch = "wasm32")]
 impl From<crate::error::Error> for js_sys::Error {
     fn from(err: Error) -> js_sys::Error {
-        js_sys::Error::new(&format!("{}", err))
+        js_sys::Error::new(&format!("{err}"))
     }
 }
 
@@ -270,9 +275,13 @@ pub(crate) fn url_bad_scheme(url: Url) -> Error {
     Error::new(Kind::Builder, Some(BadScheme)).with_url(url)
 }
 
+pub(crate) fn url_invalid_uri(url: Url) -> Error {
+    Error::new(Kind::Builder, Some("Parsed Url is not a valid Uri")).with_url(url)
+}
+
 if_wasm! {
     pub(crate) fn wasm(js_val: wasm_bindgen::JsValue) -> BoxError {
-        format!("{:?}", js_val).into()
+        format!("{js_val:?}").into()
     }
 }
 
@@ -357,7 +366,7 @@ mod tests {
         // It should have pulled out the original, not nested it...
         match err.inner.kind {
             Kind::Request => (),
-            _ => panic!("{:?}", err),
+            _ => panic!("{err:?}"),
         }
     }
 
@@ -367,7 +376,7 @@ mod tests {
         let err = super::decode_io(orig);
         match err.inner.kind {
             Kind::Decode => (),
-            _ => panic!("{:?}", err),
+            _ => panic!("{err:?}"),
         }
     }
 

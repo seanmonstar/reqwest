@@ -420,6 +420,20 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.http1_allow_obsolete_multiline_headers_in_responses(value))
     }
 
+    /// Sets whether invalid header lines should be silently ignored in HTTP/1 responses.
+    pub fn http1_ignore_invalid_headers_in_responses(self, value: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.http1_ignore_invalid_headers_in_responses(value))
+    }
+
+    /// Set whether HTTP/1 connections will accept spaces between header
+    /// names and the colon that follow them in responses.
+    ///
+    /// Newline codepoints (\r and \n) will be transformed to spaces when
+    /// parsing.
+    pub fn http1_allow_spaces_after_header_name_in_responses(self, value: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.http1_allow_spaces_after_header_name_in_responses(value))
+    }
+
     /// Only use HTTP/1.
     pub fn http1_only(self) -> ClientBuilder {
         self.with_inner(|inner| inner.http1_only())
@@ -462,6 +476,14 @@ impl ClientBuilder {
     /// Default is currently 16,384 but may change internally to optimize for common uses.
     pub fn http2_max_frame_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
         self.with_inner(|inner| inner.http2_max_frame_size(sz))
+    }
+
+    /// This requires the optional `http3` feature to be
+    /// enabled.
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http3")))]
+    pub fn http3_prior_knowledge(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.http3_prior_knowledge())
     }
 
     // TCP options
@@ -724,6 +746,25 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.use_rustls_tls())
     }
 
+    /// Add TLS information as `TlsInfo` extension to responses.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
+    pub fn tls_info(self, tls_info: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.tls_info(tls_info))
+    }
+
     /// Use a preconfigured TLS backend.
     ///
     /// If the passed `Any` argument is not a TLS backend that reqwest
@@ -973,11 +1014,11 @@ impl Drop for InnerClientHandle {
             .map(|h| h.thread().id())
             .expect("thread not dropped yet");
 
-        trace!("closing runtime thread ({:?})", id);
+        trace!("closing runtime thread ({id:?})");
         self.tx.take();
-        trace!("signaled close for runtime thread ({:?})", id);
+        trace!("signaled close for runtime thread ({id:?})");
         self.thread.take().map(|h| h.join());
-        trace!("closed runtime thread ({:?})", id);
+        trace!("closed runtime thread ({id:?})");
     }
 }
 
@@ -998,7 +1039,7 @@ impl ClientHandle {
                 {
                     Err(e) => {
                         if let Err(e) = spawn_tx.send(Err(e)) {
-                            error!("Failed to communicate runtime creation failure: {:?}", e);
+                            error!("Failed to communicate runtime creation failure: {e:?}");
                         }
                         return;
                     }
@@ -1009,14 +1050,14 @@ impl ClientHandle {
                     let client = match builder.build() {
                         Err(e) => {
                             if let Err(e) = spawn_tx.send(Err(e)) {
-                                error!("Failed to communicate client creation failure: {:?}", e);
+                                error!("Failed to communicate client creation failure: {e:?}");
                             }
                             return;
                         }
                         Ok(v) => v,
                     };
                     if let Err(e) = spawn_tx.send(Ok(())) {
-                        error!("Failed to communicate successful startup: {:?}", e);
+                        error!("Failed to communicate successful startup: {e:?}");
                         return;
                     }
 

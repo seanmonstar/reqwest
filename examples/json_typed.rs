@@ -35,7 +35,7 @@ async fn main() -> Result<(), reqwest::Error> {
         .json()
         .await?;
 
-    println!("{:#?}", new_post);
+    println!("{new_post:#?}");
     // Post {
     //     id: Some(
     //         101

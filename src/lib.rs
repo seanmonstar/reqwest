@@ -2,7 +2,6 @@
 #![deny(missing_debug_implementations)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(test, deny(warnings))]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.11.18")]
 
 //! # reqwest
 //!
@@ -12,11 +11,11 @@
 //! It handles many of the things that most people just expect an HTTP client
 //! to do for them.
 //!
-//! - Async and [blocking](blocking) Clients
-//! - Plain bodies, [JSON](#json), [urlencoded](#forms), [multipart](multipart)
+//! - Async and [blocking] Clients
+//! - Plain bodies, [JSON](#json), [urlencoded](#forms), [multipart]
 //! - Customizable [redirect policy](#redirect-policies)
 //! - HTTP [Proxies](#proxies)
-//! - Uses system-native [TLS](#tls)
+//! - Uses [TLS](#tls) by default
 //! - Cookies
 //!
 //! The [`reqwest::Client`][client] is asynchronous. For applications wishing
@@ -39,7 +38,7 @@
 //!     .text()
 //!     .await?;
 //!
-//! println!("body = {:?}", body);
+//! println!("body = {body:?}");
 //! # Ok(())
 //! # }
 //! ```
@@ -138,7 +137,7 @@
 //! `HTTP_PROXY` or `http_proxy` provide http proxies for http connections while
 //! `HTTPS_PROXY` or `https_proxy` provide HTTPS proxies for HTTPS connections.
 //!
-//! These can be overwritten by adding a [`Proxy`](Proxy) to `ClientBuilder`
+//! These can be overwritten by adding a [`Proxy`] to `ClientBuilder`
 //! i.e. `let proxy = reqwest::Proxy::http("https://secure.example")?;`
 //! or disabled by calling `ClientBuilder::no_proxy()`.
 //!
@@ -150,16 +149,24 @@
 //!
 //! ## TLS
 //!
-//! By default, a `Client` will make use of system-native transport layer
-//! security to connect to HTTPS destinations. This means schannel on Windows,
-//! Security-Framework on macOS, and OpenSSL on Linux.
+//! A `Client` will use transport layer security (TLS) by default to connect to
+//! HTTPS destinations.
 //!
-//! - Additional X509 certificates can be configured on a `ClientBuilder` with the
-//!   [`Certificate`](Certificate) type.
+//! - Additional server certificates can be configured on a `ClientBuilder`
+//!   with the [`Certificate`] type.
 //! - Client certificates can be added to a `ClientBuilder` with the
-//!   [`Identity`][Identity] type.
+//!   [`Identity`] type.
 //! - Various parts of TLS can also be configured or even disabled on the
 //!   `ClientBuilder`.
+//!
+//! See more details in the [`tls`] module.
+//!
+//! ## WASM
+//!
+//! The Client implementation automatically switches to the WASM one when the target_arch is wasm32,
+//! the usage is basically the same as the async api. Some of the features are disabled in wasm
+//! : [`tls`], [`cookie`], [`blocking`].
+//!
 //!
 //! ## Optional Features
 //!
@@ -306,6 +313,9 @@ fn _assert_impls() {
 
     assert_send::<Error>();
     assert_sync::<Error>();
+
+    assert_send::<Body>();
+    assert_sync::<Body>();
 }
 
 if_hyper! {

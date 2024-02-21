@@ -37,7 +37,7 @@ use crate::cookie;
 use crate::dns::trust_dns::TrustDnsResolver;
 use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
 use crate::error;
-use crate::into_url::{expect_uri, try_uri};
+use crate::into_url::try_uri;
 use crate::redirect::{self, remove_sensitive_headers};
 #[cfg(feature = "__tls")]
 use crate::tls::{self, TlsBackend};
@@ -115,11 +115,15 @@ struct Config {
     #[cfg(feature = "__tls")]
     max_tls_version: Option<tls::Version>,
     #[cfg(feature = "__tls")]
+    tls_info: bool,
+    #[cfg(feature = "__tls")]
     tls: TlsBackend,
     http_version_pref: HttpVersionPref,
     http09_responses: bool,
     http1_title_case_headers: bool,
     http1_allow_obsolete_multiline_headers_in_responses: bool,
+    http1_ignore_invalid_headers_in_responses: bool,
+    http1_allow_spaces_after_header_name_in_responses: bool,
     http2_initial_stream_window_size: Option<u32>,
     http2_initial_connection_window_size: Option<u32>,
     http2_adaptive_window: bool,
@@ -196,11 +200,15 @@ impl ClientBuilder {
                 #[cfg(feature = "__tls")]
                 max_tls_version: None,
                 #[cfg(feature = "__tls")]
+                tls_info: false,
+                #[cfg(feature = "__tls")]
                 tls: TlsBackend::default(),
                 http_version_pref: HttpVersionPref::All,
                 http09_responses: false,
                 http1_title_case_headers: false,
                 http1_allow_obsolete_multiline_headers_in_responses: false,
+                http1_ignore_invalid_headers_in_responses: false,
+                http1_allow_spaces_after_header_name_in_responses: false,
                 http2_initial_stream_window_size: None,
                 http2_initial_connection_window_size: None,
                 http2_adaptive_window: false,
@@ -262,7 +270,7 @@ impl ClientBuilder {
             let mut resolver: Arc<dyn Resolve> = match config.trust_dns {
                 false => Arc::new(GaiResolver::new()),
                 #[cfg(feature = "trust-dns")]
-                true => Arc::new(TrustDnsResolver::new().map_err(crate::error::builder)?),
+                true => Arc::new(TrustDnsResolver::default()),
                 #[cfg(not(feature = "trust-dns"))]
                 true => unreachable!("trust-dns shouldn't be enabled unless the feature is"),
             };
@@ -275,7 +283,57 @@ impl ClientBuilder {
                     config.dns_overrides,
                 ));
             }
-            let http = HttpConnector::new_with_resolver(DynResolver::new(resolver.clone()));
+            let mut http = HttpConnector::new_with_resolver(DynResolver::new(resolver.clone()));
+            http.set_connect_timeout(config.connect_timeout);
+
+            #[cfg(all(feature = "http3", feature = "__rustls"))]
+            let build_h3_connector =
+                |resolver,
+                 tls,
+                 quic_max_idle_timeout: Option<Duration>,
+                 quic_stream_receive_window,
+                 quic_receive_window,
+                 quic_send_window,
+                 local_address,
+                 http_version_pref: &HttpVersionPref| {
+                    let mut transport_config = TransportConfig::default();
+
+                    if let Some(max_idle_timeout) = quic_max_idle_timeout {
+                        transport_config.max_idle_timeout(Some(
+                            max_idle_timeout.try_into().map_err(error::builder)?,
+                        ));
+                    }
+
+                    if let Some(stream_receive_window) = quic_stream_receive_window {
+                        transport_config.stream_receive_window(stream_receive_window);
+                    }
+
+                    if let Some(receive_window) = quic_receive_window {
+                        transport_config.receive_window(receive_window);
+                    }
+
+                    if let Some(send_window) = quic_send_window {
+                        transport_config.send_window(send_window);
+                    }
+
+                    let res = H3Connector::new(
+                        DynResolver::new(resolver),
+                        tls,
+                        local_address,
+                        transport_config,
+                    );
+
+                    match res {
+                        Ok(connector) => Ok(Some(connector)),
+                        Err(err) => {
+                            if let HttpVersionPref::Http3 = http_version_pref {
+                                Err(error::builder(err))
+                            } else {
+                                Ok(None)
+                            }
+                        }
+                    }
+                };
 
             #[cfg(feature = "__tls")]
             match config.tls {
@@ -319,6 +377,13 @@ impl ClientBuilder {
                             id.add_to_native_tls(&mut tls)?;
                         }
                     }
+                    #[cfg(all(feature = "__rustls", not(feature = "native-tls")))]
+                    {
+                        // Default backend + rustls Identity doesn't work.
+                        if let Some(_id) = config.identity {
+                            return Err(crate::error::builder("incompatible TLS identity type"));
+                        }
+                    }
 
                     if let Some(min_tls_version) = config.min_tls_version {
                         let protocol = min_tls_version.to_native_tls().ok_or_else(|| {
@@ -348,6 +413,7 @@ impl ClientBuilder {
                         user_agent(&config.headers),
                         config.local_address,
                         config.nodelay,
+                        config.tls_info,
                     )?
                 }
                 #[cfg(feature = "native-tls")]
@@ -358,37 +424,22 @@ impl ClientBuilder {
                     user_agent(&config.headers),
                     config.local_address,
                     config.nodelay,
+                    config.tls_info,
                 ),
                 #[cfg(feature = "__rustls")]
                 TlsBackend::BuiltRustls(conn) => {
                     #[cfg(feature = "http3")]
                     {
-                        let mut transport_config = TransportConfig::default();
-
-                        if let Some(max_idle_timeout) = config.quic_max_idle_timeout {
-                            transport_config.max_idle_timeout(Some(
-                                max_idle_timeout.try_into().map_err(error::builder)?,
-                            ));
-                        }
-
-                        if let Some(stream_receive_window) = config.quic_stream_receive_window {
-                            transport_config.stream_receive_window(stream_receive_window);
-                        }
-
-                        if let Some(receive_window) = config.quic_receive_window {
-                            transport_config.receive_window(receive_window);
-                        }
-
-                        if let Some(send_window) = config.quic_send_window {
-                            transport_config.send_window(send_window);
-                        }
-
-                        h3_connector = Some(H3Connector::new(
-                            DynResolver::new(resolver),
+                        h3_connector = build_h3_connector(
+                            resolver,
                             conn.clone(),
+                            config.quic_max_idle_timeout,
+                            config.quic_stream_receive_window,
+                            config.quic_receive_window,
+                            config.quic_send_window,
                             config.local_address,
-                            transport_config,
-                        ));
+                            &config.http_version_pref,
+                        )?;
                     }
 
                     Connector::new_rustls_tls(
@@ -398,6 +449,7 @@ impl ClientBuilder {
                         user_agent(&config.headers),
                         config.local_address,
                         config.nodelay,
+                        config.tls_info,
                     )
                 }
                 #[cfg(feature = "__rustls")]
@@ -442,9 +494,7 @@ impl ClientBuilder {
                                 Err(err) => {
                                     invalid_count += 1;
                                     log::warn!(
-                                        "rustls failed to parse DER certificate {:?} {:?}",
-                                        &err,
-                                        &cert
+                                        "rustls failed to parse DER certificate {err:?} {cert:?}"
                                     );
                                 }
                             }
@@ -523,32 +573,16 @@ impl ClientBuilder {
                     {
                         tls.enable_early_data = config.tls_enable_early_data;
 
-                        let mut transport_config = TransportConfig::default();
-
-                        if let Some(max_idle_timeout) = config.quic_max_idle_timeout {
-                            transport_config.max_idle_timeout(Some(
-                                max_idle_timeout.try_into().map_err(error::builder)?,
-                            ));
-                        }
-
-                        if let Some(stream_receive_window) = config.quic_stream_receive_window {
-                            transport_config.stream_receive_window(stream_receive_window);
-                        }
-
-                        if let Some(receive_window) = config.quic_receive_window {
-                            transport_config.receive_window(receive_window);
-                        }
-
-                        if let Some(send_window) = config.quic_send_window {
-                            transport_config.send_window(send_window);
-                        }
-
-                        h3_connector = Some(H3Connector::new(
-                            DynResolver::new(resolver),
+                        h3_connector = build_h3_connector(
+                            resolver,
                             tls.clone(),
+                            config.quic_max_idle_timeout,
+                            config.quic_stream_receive_window,
+                            config.quic_receive_window,
+                            config.quic_send_window,
                             config.local_address,
-                            transport_config,
-                        ));
+                            &config.http_version_pref,
+                        )?;
                     }
 
                     Connector::new_rustls_tls(
@@ -558,6 +592,7 @@ impl ClientBuilder {
                         user_agent(&config.headers),
                         config.local_address,
                         config.nodelay,
+                        config.tls_info,
                     )
                 }
                 #[cfg(any(feature = "native-tls", feature = "__rustls",))]
@@ -620,6 +655,14 @@ impl ClientBuilder {
             builder.http1_allow_obsolete_multiline_headers_in_responses(true);
         }
 
+        if config.http1_ignore_invalid_headers_in_responses {
+            builder.http1_ignore_invalid_headers_in_responses(true);
+        }
+
+        if config.http1_allow_spaces_after_header_name_in_responses {
+            builder.http1_allow_spaces_after_header_name_in_responses(true);
+        }
+
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
 
         Ok(Client {
@@ -627,11 +670,15 @@ impl ClientBuilder {
                 accepts: config.accepts,
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store,
+                // Use match instead of map since config is partially moved
+                // and it cannot be used in closure
                 #[cfg(feature = "http3")]
-                h3_client: H3Client::new(
-                    h3_connector.expect("missing HTTP/3 connector"),
-                    config.pool_idle_timeout,
-                ),
+                h3_client: match h3_connector {
+                    Some(h3_connector) => {
+                        Some(H3Client::new(h3_connector, config.pool_idle_timeout))
+                    }
+                    None => None,
+                },
                 hyper: builder.build(connector),
                 headers: config.headers,
                 redirect_policy: config.redirect_policy,
@@ -737,7 +784,11 @@ impl ClientBuilder {
     /// Cookies received in responses will be preserved and included in
     /// additional requests.
     ///
-    /// By default, no cookie store is used.
+    /// By default, no cookie store is used. Enabling the cookie store
+    /// with `cookie_store(true)` will set the store to a default implementation.
+    /// It is **not** necessary to call [cookie_store(true)](crate::ClientBuilder::cookie_store) if [cookie_provider(my_cookie_store)](crate::ClientBuilder::cookie_provider)
+    /// is used; calling [cookie_store(true)](crate::ClientBuilder::cookie_store) _after_ [cookie_provider(my_cookie_store)](crate::ClientBuilder::cookie_provider) will result
+    /// in the provided `my_cookie_store` being **overridden** with a default implementation.
     ///
     /// # Optional
     ///
@@ -758,7 +809,10 @@ impl ClientBuilder {
     /// Cookies received in responses will be passed to this store, and
     /// additional requests will query this store for cookies.
     ///
-    /// By default, no cookie store is used.
+    /// By default, no cookie store is used. It is **not** necessary to also call
+    /// [cookie_store(true)](crate::ClientBuilder::cookie_store) if [cookie_provider(my_cookie_store)](crate::ClientBuilder::cookie_provider) is used; calling
+    /// [cookie_store(true)](crate::ClientBuilder::cookie_store) _after_ [cookie_provider(my_cookie_store)](crate::ClientBuilder::cookie_provider) will result
+    /// in the provided `my_cookie_store` being **overridden** with a default implementation.
     ///
     /// # Optional
     ///
@@ -1015,6 +1069,26 @@ impl ClientBuilder {
         self
     }
 
+    /// Sets whether invalid header lines should be silently ignored in HTTP/1 responses.
+    pub fn http1_ignore_invalid_headers_in_responses(mut self, value: bool) -> ClientBuilder {
+        self.config.http1_ignore_invalid_headers_in_responses = value;
+        self
+    }
+
+    /// Set whether HTTP/1 connections will accept spaces between header
+    /// names and the colon that follow them in responses.
+    ///
+    /// Newline codepoints (`\r` and `\n`) will be transformed to spaces when
+    /// parsing.
+    pub fn http1_allow_spaces_after_header_name_in_responses(
+        mut self,
+        value: bool,
+    ) -> ClientBuilder {
+        self.config
+            .http1_allow_spaces_after_header_name_in_responses = value;
+        self
+    }
+
     /// Only use HTTP/1.
     pub fn http1_only(mut self) -> ClientBuilder {
         self.config.http_version_pref = HttpVersionPref::Http1;
@@ -1035,6 +1109,7 @@ impl ClientBuilder {
 
     /// Only use HTTP/3.
     #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
     pub fn http3_prior_knowledge(mut self) -> ClientBuilder {
         self.config.http_version_pref = HttpVersionPref::Http3;
         self
@@ -1423,6 +1498,34 @@ impl ClientBuilder {
         self
     }
 
+    /// Add TLS information as `TlsInfo` extension to responses.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
+    pub fn tls_info(mut self, tls_info: bool) -> ClientBuilder {
+        self.config.tls_info = tls_info;
+        self
+    }
+
+    /// Restrict the Client to be used with HTTPS only requests.
+    ///
+    /// Defaults to false.
+    pub fn https_only(mut self, enabled: bool) -> ClientBuilder {
+        self.config.https_only = enabled;
+        self
+    }
+
     /// Enables the [trust-dns](trust_dns_resolver) async resolver instead of a default threadpool using `getaddrinfo`.
     ///
     /// If the `trust-dns` feature is turned on, the default option is enabled.
@@ -1452,14 +1555,6 @@ impl ClientBuilder {
         {
             self
         }
-    }
-
-    /// Restrict the Client to be used with HTTPS only requests.
-    ///
-    /// Defaults to false.
-    pub fn https_only(mut self, enabled: bool) -> ClientBuilder {
-        self.config.https_only = enabled;
-        self
     }
 
     /// Override DNS resolution for specific domains to a particular IP address.
@@ -1504,6 +1599,7 @@ impl ClientBuilder {
     ///
     /// The default is false.
     #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
     pub fn set_tls_enable_early_data(mut self, enabled: bool) -> ClientBuilder {
         self.config.tls_enable_early_data = enabled;
         self
@@ -1515,6 +1611,7 @@ impl ClientBuilder {
     ///
     /// [`TransportConfig`]: https://docs.rs/quinn/latest/quinn/struct.TransportConfig.html
     #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
     pub fn set_quic_max_idle_timeout(mut self, value: Duration) -> ClientBuilder {
         self.config.quic_max_idle_timeout = Some(value);
         self
@@ -1527,6 +1624,7 @@ impl ClientBuilder {
     ///
     /// [`TransportConfig`]: https://docs.rs/quinn/latest/quinn/struct.TransportConfig.html
     #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
     pub fn set_quic_stream_receive_window(mut self, value: VarInt) -> ClientBuilder {
         self.config.quic_stream_receive_window = Some(value);
         self
@@ -1539,6 +1637,7 @@ impl ClientBuilder {
     ///
     /// [`TransportConfig`]: https://docs.rs/quinn/latest/quinn/struct.TransportConfig.html
     #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
     pub fn set_quic_receive_window(mut self, value: VarInt) -> ClientBuilder {
         self.config.quic_receive_window = Some(value);
         self
@@ -1550,6 +1649,7 @@ impl ClientBuilder {
     ///
     /// [`TransportConfig`]: https://docs.rs/quinn/latest/quinn/struct.TransportConfig.html
     #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
     pub fn set_quic_send_window(mut self, value: u64) -> ClientBuilder {
         self.config.quic_send_window = Some(value);
         self
@@ -1708,7 +1808,10 @@ impl Client {
             }
         }
 
-        let uri = expect_uri(&url);
+        let uri = match try_uri(&url) {
+            Ok(uri) => uri,
+            _ => return Pending::new_err(error::url_invalid_uri(url)),
+        };
 
         let (reusable, body) = match body {
             Some(body) => {
@@ -1727,10 +1830,10 @@ impl Client {
 
         let in_flight = match version {
             #[cfg(feature = "http3")]
-            http::Version::HTTP_3 => {
+            http::Version::HTTP_3 if self.inner.h3_client.is_some() => {
                 let mut req = builder.body(body).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
-                ResponseFuture::H3(self.inner.h3_client.request(req))
+                ResponseFuture::H3(self.inner.h3_client.as_ref().unwrap().request(req))
             }
             _ => {
                 let mut req = builder
@@ -1873,6 +1976,14 @@ impl Config {
             f.field("http1_allow_obsolete_multiline_headers_in_responses", &true);
         }
 
+        if self.http1_ignore_invalid_headers_in_responses {
+            f.field("http1_ignore_invalid_headers_in_responses", &true);
+        }
+
+        if self.http1_allow_spaces_after_header_name_in_responses {
+            f.field("http1_allow_spaces_after_header_name_in_responses", &true);
+        }
+
         if matches!(self.http_version_pref, HttpVersionPref::Http1) {
             f.field("http1_only", &true);
         }
@@ -1919,6 +2030,8 @@ impl Config {
             }
 
             f.field("tls_sni", &self.tls_sni);
+
+            f.field("tls_info", &self.tls_info);
         }
 
         #[cfg(all(feature = "native-tls-crate", feature = "__rustls"))]
@@ -1946,7 +2059,7 @@ struct ClientRef {
     headers: HeaderMap,
     hyper: HyperClient,
     #[cfg(feature = "http3")]
-    h3_client: H3Client,
+    h3_client: Option<H3Client>,
     redirect_policy: redirect::Policy,
     referer: bool,
     request_timeout: Option<Duration>,
@@ -2049,7 +2162,7 @@ impl PendingRequest {
             return false;
         }
 
-        trace!("can retry {:?}", err);
+        trace!("can retry {err:?}");
 
         let body = match self.body {
             Some(Some(ref body)) => Body::reusable(body.clone()),
@@ -2066,7 +2179,8 @@ impl PendingRequest {
         }
         self.retry_count += 1;
 
-        let uri = expect_uri(&self.url);
+        // If it parsed once, it should parse again
+        let uri = try_uri(&self.url).expect("URL was already validated as URI");
 
         *self.as_mut().in_flight().get_mut() = match *self.as_mut().in_flight().as_ref() {
             #[cfg(feature = "http3")]
@@ -2077,7 +2191,13 @@ impl PendingRequest {
                     .body(body)
                     .expect("valid request parts");
                 *req.headers_mut() = self.headers.clone();
-                ResponseFuture::H3(self.client.h3_client.request(req))
+                ResponseFuture::H3(
+                    self.client
+                        .h3_client
+                        .as_ref()
+                        .expect("H3 client must exists, otherwise we can't have a h3 request here")
+                        .request(req),
+                )
             }
             _ => {
                 let mut req = hyper::Request::builder()
@@ -2098,7 +2218,7 @@ fn is_retryable_error(err: &(dyn std::error::Error + 'static)) -> bool {
     #[cfg(feature = "http3")]
     if let Some(cause) = err.source() {
         if let Some(err) = cause.downcast_ref::<h3::Error>() {
-            debug!("determining if HTTP/3 error {} can be retried", err);
+            debug!("determining if HTTP/3 error {err} can be retried");
             // TODO: Does h3 provide an API for checking the error?
             return err.to_string().as_str() == "timeout";
         }
@@ -2107,9 +2227,16 @@ fn is_retryable_error(err: &(dyn std::error::Error + 'static)) -> bool {
     if let Some(cause) = err.source() {
         if let Some(err) = cause.downcast_ref::<h2::Error>() {
             // They sent us a graceful shutdown, try with a new connection!
-            return err.is_go_away()
-                && err.is_remote()
-                && err.reason() == Some(h2::Reason::NO_ERROR);
+            if err.is_go_away() && err.is_remote() && err.reason() == Some(h2::Reason::NO_ERROR) {
+                return true;
+            }
+
+            // REFUSED_STREAM was sent from the server, which is safe to retry.
+            // https://www.rfc-editor.org/rfc/rfc9113.html#section-8.7-3.2
+            if err.is_reset() && err.is_remote() && err.reason() == Some(h2::Reason::REFUSED_STREAM)
+            {
+                return true;
+            }
         }
     }
     false
@@ -2233,7 +2360,7 @@ impl Future for PendingRequest {
                     //
                     // If not, just log it and skip the redirect.
                     let loc = loc.and_then(|url| {
-                        if try_uri(&url).is_some() {
+                        if try_uri(&url).is_ok() {
                             Some(url)
                         } else {
                             None
@@ -2241,7 +2368,7 @@ impl Future for PendingRequest {
                     });
 
                     if loc.is_none() {
-                        debug!("Location header had invalid URI: {:?}", val);
+                        debug!("Location header had invalid URI: {val:?}");
                     }
                     loc
                 });
@@ -2262,6 +2389,10 @@ impl Future for PendingRequest {
                         redirect::ActionKind::Follow => {
                             debug!("redirecting '{}' to '{}'", self.url, loc);
 
+                            if loc.scheme() != "http" && loc.scheme() != "https" {
+                                return Poll::Ready(Err(error::url_bad_scheme(loc)));
+                            }
+
                             if self.client.https_only && loc.scheme() != "https" {
                                 return Poll::Ready(Err(error::redirect(
                                     error::url_bad_scheme(loc.clone()),
@@ -2274,7 +2405,7 @@ impl Future for PendingRequest {
                                 std::mem::replace(self.as_mut().headers(), HeaderMap::new());
 
                             remove_sensitive_headers(&mut headers, &self.url, &self.urls);
-                            let uri = expect_uri(&self.url);
+                            let uri = try_uri(&self.url)?;
                             let body = match self.body {
                                 Some(Some(ref body)) => Body::reusable(body.clone()),
                                 _ => Body::empty(),
@@ -2299,7 +2430,10 @@ impl Future for PendingRequest {
                                             .expect("valid request parts");
                                         *req.headers_mut() = headers.clone();
                                         std::mem::swap(self.as_mut().headers(), &mut headers);
-                                        ResponseFuture::H3(self.client.h3_client.request(req))
+                                        ResponseFuture::H3(self.client.h3_client
+                        .as_ref()
+                        .expect("H3 client must exists, otherwise we can't have a h3 request here")
+                                            .request(req))
                                     }
                                     _ => {
                                         let mut req = hyper::Request::builder()
@@ -2316,7 +2450,7 @@ impl Future for PendingRequest {
                             continue;
                         }
                         redirect::ActionKind::Stop => {
-                            debug!("redirect policy disallowed redirection to '{}'", loc);
+                            debug!("redirect policy disallowed redirection to '{loc}'");
                         }
                         redirect::ActionKind::Error(err) => {
                             return Poll::Ready(Err(crate::error::redirect(err, self.url.clone())));
@@ -2371,8 +2505,21 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &dyn cookie::CookieS
 #[cfg(test)]
 mod tests {
     #[tokio::test]
-    async fn execute_request_rejects_invald_urls() {
+    async fn execute_request_rejects_invalid_urls() {
         let url_str = "hxxps://www.rust-lang.org/";
+        let url = url::Url::parse(url_str).unwrap();
+        let result = crate::get(url.clone()).await;
+
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        assert!(err.is_builder());
+        assert_eq!(url_str, err.url().unwrap().as_str());
+    }
+
+    /// https://github.com/seanmonstar/reqwest/issues/668
+    #[tokio::test]
+    async fn execute_request_rejects_invalid_hostname() {
+        let url_str = "https://{{hostname}}/";
         let url = url::Url::parse(url_str).unwrap();
         let result = crate::get(url.clone()).await;
 

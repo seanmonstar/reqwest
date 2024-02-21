@@ -13,6 +13,22 @@ use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::net::IpAddr;
+#[cfg(target_os = "macos")]
+use system_configuration::{
+    core_foundation::{
+        base::CFType,
+        dictionary::CFDictionary,
+        number::CFNumber,
+        string::{CFString, CFStringRef},
+    },
+    dynamic_store::SCDynamicStoreBuilder,
+    sys::schema_definitions::kSCPropNetProxiesHTTPEnable,
+    sys::schema_definitions::kSCPropNetProxiesHTTPPort,
+    sys::schema_definitions::kSCPropNetProxiesHTTPProxy,
+    sys::schema_definitions::kSCPropNetProxiesHTTPSEnable,
+    sys::schema_definitions::kSCPropNetProxiesHTTPSPort,
+    sys::schema_definitions::kSCPropNetProxiesHTTPSProxy,
+};
 #[cfg(target_os = "windows")]
 use winreg::enums::HKEY_CURRENT_USER;
 #[cfg(target_os = "windows")]
@@ -28,7 +44,7 @@ use winreg::RegKey;
 /// For instance, let's look at `Proxy::http`:
 ///
 /// ```rust
-/// # fn run() -> Result<(), Box<std::error::Error>> {
+/// # fn run() -> Result<(), Box<dyn std::error::Error>> {
 /// let proxy = reqwest::Proxy::http("https://secure.example")?;
 /// # Ok(())
 /// # }
@@ -45,7 +61,7 @@ use winreg::RegKey;
 ///
 /// By enabling the `"socks"` feature it is possible to use a socks proxy:
 /// ```rust
-/// # fn run() -> Result<(), Box<std::error::Error>> {
+/// # fn run() -> Result<(), Box<dyn std::error::Error>> {
 /// let proxy = reqwest::Proxy::http("socks5://192.168.1.1:9000")?;
 /// # Ok(())
 /// # }
@@ -180,7 +196,7 @@ impl Proxy {
     ///
     /// ```
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = reqwest::Client::builder()
     ///     .proxy(reqwest::Proxy::http("https://my.prox")?)
     ///     .build()?;
@@ -200,7 +216,7 @@ impl Proxy {
     ///
     /// ```
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = reqwest::Client::builder()
     ///     .proxy(reqwest::Proxy::https("https://example.prox:4545")?)
     ///     .build()?;
@@ -220,7 +236,7 @@ impl Proxy {
     ///
     /// ```
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = reqwest::Client::builder()
     ///     .proxy(reqwest::Proxy::all("http://pro.xy")?)
     ///     .build()?;
@@ -240,7 +256,7 @@ impl Proxy {
     ///
     /// ```
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let target = reqwest::Url::parse("https://my.prox")?;
     /// let client = reqwest::Client::builder()
     ///     .proxy(reqwest::Proxy::custom(move |url| {
@@ -268,7 +284,7 @@ impl Proxy {
     pub(crate) fn system() -> Proxy {
         let mut proxy = if cfg!(feature = "__internal_proxy_sys_no_cache") {
             Proxy::new(Intercept::System(Arc::new(get_sys_proxies(
-                get_from_registry(),
+                get_from_platform(),
             ))))
         } else {
             Proxy::new(Intercept::System(SYS_PROXIES.clone()))
@@ -290,7 +306,7 @@ impl Proxy {
     ///
     /// ```
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let proxy = reqwest::Proxy::https("http://localhost:1234")?
     ///     .basic_auth("Aladdin", "open sesame");
     /// # Ok(())
@@ -302,13 +318,32 @@ impl Proxy {
         self
     }
 
+    /// Set the `Proxy-Authorization` header to a specified value.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # extern crate reqwest;
+    /// # use reqwest::header::*;
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// let proxy = reqwest::Proxy::https("http://localhost:1234")?
+    ///     .custom_http_auth(HeaderValue::from_static("justletmeinalreadyplease"));
+    /// # Ok(())
+    /// # }
+    /// # fn main() {}
+    /// ```
+    pub fn custom_http_auth(mut self, header_value: HeaderValue) -> Proxy {
+        self.intercept.set_custom_http_auth(header_value);
+        self
+    }
+
     /// Adds a `No Proxy` exclusion list to this Proxy
     ///
     /// # Example
     ///
     /// ```
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let proxy = reqwest::Proxy::https("http://localhost:1234")?
     ///     .no_proxy(reqwest::NoProxy::from_string("direct.tld, sub.direct2.tld"));
     /// # Ok(())
@@ -603,6 +638,21 @@ impl ProxyScheme {
         }
     }
 
+    fn set_custom_http_auth(&mut self, header_value: HeaderValue) {
+        match *self {
+            ProxyScheme::Http { ref mut auth, .. } => {
+                *auth = Some(header_value);
+            }
+            ProxyScheme::Https { ref mut auth, .. } => {
+                *auth = Some(header_value);
+            }
+            #[cfg(feature = "socks")]
+            ProxyScheme::Socks5 { .. } => {
+                panic!("Socks is not supported for this method")
+            }
+        }
+    }
+
     fn if_no_auth(mut self, update: &Option<HeaderValue>) -> Self {
         match self {
             ProxyScheme::Http { ref mut auth, .. } => {
@@ -687,8 +737,8 @@ impl ProxyScheme {
 impl fmt::Debug for ProxyScheme {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ProxyScheme::Http { auth: _auth, host } => write!(f, "http://{}", host),
-            ProxyScheme::Https { auth: _auth, host } => write!(f, "https://{}", host),
+            ProxyScheme::Http { auth: _auth, host } => write!(f, "http://{host}"),
+            ProxyScheme::Https { auth: _auth, host } => write!(f, "https://{host}"),
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 {
                 addr,
@@ -696,14 +746,13 @@ impl fmt::Debug for ProxyScheme {
                 remote_dns,
             } => {
                 let h = if *remote_dns { "h" } else { "" };
-                write!(f, "socks5{}://{}", h, addr)
+                write!(f, "socks5{h}://{addr}")
             }
         }
     }
 }
 
 type SystemProxyMap = HashMap<String, ProxyScheme>;
-type RegistryProxyValues = (u32, String);
 
 #[derive(Clone, Debug)]
 enum Intercept {
@@ -724,6 +773,18 @@ impl Intercept {
             Intercept::Custom(ref mut custom) => {
                 let header = encode_basic_auth(username, password);
                 custom.auth = Some(header);
+            }
+        }
+    }
+
+    fn set_custom_http_auth(&mut self, header_value: HeaderValue) {
+        match self {
+            Intercept::All(ref mut s)
+            | Intercept::Http(ref mut s)
+            | Intercept::Https(ref mut s) => s.set_custom_http_auth(header_value),
+            Intercept::System(_) => unimplemented!(),
+            Intercept::Custom(ref mut custom) => {
+                custom.auth = Some(header_value);
             }
         }
     }
@@ -788,34 +849,36 @@ impl Dst for Uri {
 }
 
 static SYS_PROXIES: Lazy<Arc<SystemProxyMap>> =
-    Lazy::new(|| Arc::new(get_sys_proxies(get_from_registry())));
+    Lazy::new(|| Arc::new(get_sys_proxies(get_from_platform())));
 
 /// Get system proxies information.
 ///
-/// It can only support Linux, Unix like, and windows system.  Note that it will always
-/// return a HashMap, even if something runs into error when find registry information in
-/// Windows system.  Note that invalid proxy url in the system setting will be ignored.
+/// All platforms will check for proxy settings via environment variables.
+/// If those aren't set, platform-wide proxy settings will be looked up on
+/// Windows and MacOS platforms instead. Errors encountered while discovering
+/// these settings are ignored.
 ///
 /// Returns:
 ///     System proxies information as a hashmap like
 ///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}
 fn get_sys_proxies(
-    #[cfg_attr(not(target_os = "windows"), allow(unused_variables))] registry_values: Option<
-        RegistryProxyValues,
-    >,
+    #[cfg_attr(
+        not(any(target_os = "windows", target_os = "macos")),
+        allow(unused_variables)
+    )]
+    platform_proxies: Option<String>,
 ) -> SystemProxyMap {
     let proxies = get_from_environment();
 
-    // TODO: move the following #[cfg] to `if expression` when attributes on `if` expressions allowed
-    #[cfg(target_os = "windows")]
-    {
-        if proxies.is_empty() {
-            // don't care errors if can't get proxies from registry, just return an empty HashMap.
-            if let Some(registry_values) = registry_values {
-                return parse_registry_values(registry_values);
-            }
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    if proxies.is_empty() {
+        // if there are errors in acquiring the platform proxies,
+        // we'll just return an empty HashMap
+        if let Some(platform_proxies) = platform_proxies {
+            return parse_platform_values(platform_proxies);
         }
     }
+
     proxies
 }
 
@@ -873,7 +936,7 @@ fn is_cgi() -> bool {
 }
 
 #[cfg(target_os = "windows")]
-fn get_from_registry_impl() -> Result<RegistryProxyValues, Box<dyn Error>> {
+fn get_from_platform_impl() -> Result<Option<String>, Box<dyn Error>> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let internet_setting: RegKey =
         hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")?;
@@ -881,33 +944,94 @@ fn get_from_registry_impl() -> Result<RegistryProxyValues, Box<dyn Error>> {
     let proxy_enable: u32 = internet_setting.get_value("ProxyEnable")?;
     let proxy_server: String = internet_setting.get_value("ProxyServer")?;
 
-    Ok((proxy_enable, proxy_server))
+    Ok((proxy_enable == 1).then_some(proxy_server))
 }
 
-#[cfg(target_os = "windows")]
-fn get_from_registry() -> Option<RegistryProxyValues> {
-    get_from_registry_impl().ok()
-}
+#[cfg(target_os = "macos")]
+fn parse_setting_from_dynamic_store(
+    proxies_map: &CFDictionary<CFString, CFType>,
+    enabled_key: CFStringRef,
+    host_key: CFStringRef,
+    port_key: CFStringRef,
+    scheme: &str,
+) -> Option<String> {
+    let proxy_enabled = proxies_map
+        .find(enabled_key)
+        .and_then(|flag| flag.downcast::<CFNumber>())
+        .and_then(|flag| flag.to_i32())
+        .unwrap_or(0)
+        == 1;
 
-#[cfg(not(target_os = "windows"))]
-fn get_from_registry() -> Option<RegistryProxyValues> {
+    if proxy_enabled {
+        let proxy_host = proxies_map
+            .find(host_key)
+            .and_then(|host| host.downcast::<CFString>())
+            .map(|host| host.to_string());
+        let proxy_port = proxies_map
+            .find(port_key)
+            .and_then(|port| port.downcast::<CFNumber>())
+            .and_then(|port| port.to_i32());
+
+        return match (proxy_host, proxy_port) {
+            (Some(proxy_host), Some(proxy_port)) => {
+                Some(format!("{scheme}={proxy_host}:{proxy_port}"))
+            }
+            (Some(proxy_host), None) => Some(format!("{scheme}={proxy_host}")),
+            (None, Some(_)) => None,
+            (None, None) => None,
+        };
+    }
+
     None
 }
 
-#[cfg(target_os = "windows")]
-fn parse_registry_values_impl(
-    registry_values: RegistryProxyValues,
-) -> Result<SystemProxyMap, Box<dyn Error>> {
-    let (proxy_enable, proxy_server) = registry_values;
+#[cfg(target_os = "macos")]
+fn get_from_platform_impl() -> Result<Option<String>, Box<dyn Error>> {
+    let store = SCDynamicStoreBuilder::new("reqwest").build();
 
-    if proxy_enable == 0 {
-        return Ok(HashMap::new());
+    let proxies_map = if let Some(proxies_map) = store.get_proxies() {
+        proxies_map
+    } else {
+        return Ok(None);
+    };
+
+    let http_proxy_config = parse_setting_from_dynamic_store(
+        &proxies_map,
+        unsafe { kSCPropNetProxiesHTTPEnable },
+        unsafe { kSCPropNetProxiesHTTPProxy },
+        unsafe { kSCPropNetProxiesHTTPPort },
+        "http",
+    );
+    let https_proxy_config = parse_setting_from_dynamic_store(
+        &proxies_map,
+        unsafe { kSCPropNetProxiesHTTPSEnable },
+        unsafe { kSCPropNetProxiesHTTPSProxy },
+        unsafe { kSCPropNetProxiesHTTPSPort },
+        "https",
+    );
+
+    match http_proxy_config.as_ref().zip(https_proxy_config.as_ref()) {
+        Some((http_config, https_config)) => Ok(Some(format!("{http_config};{https_config}"))),
+        None => Ok(http_proxy_config.or(https_proxy_config)),
     }
+}
 
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn get_from_platform() -> Option<String> {
+    get_from_platform_impl().ok().flatten()
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn get_from_platform() -> Option<String> {
+    None
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn parse_platform_values_impl(platform_values: String) -> SystemProxyMap {
     let mut proxies = HashMap::new();
-    if proxy_server.contains("=") {
+    if platform_values.contains("=") {
         // per-protocol settings.
-        for p in proxy_server.split(";") {
+        for p in platform_values.split(";") {
             let protocol_parts: Vec<&str> = p.split("=").collect();
             match protocol_parts.as_slice() {
                 [protocol, address] => {
@@ -916,7 +1040,7 @@ fn parse_registry_values_impl(
                     let address = if extract_type_prefix(*address).is_some() {
                         String::from(*address)
                     } else {
-                        format!("http://{}", address)
+                        format!("http://{address}")
                     };
 
                     insert_proxy(&mut proxies, *protocol, address);
@@ -930,21 +1054,21 @@ fn parse_registry_values_impl(
             }
         }
     } else {
-        if let Some(scheme) = extract_type_prefix(&proxy_server) {
+        if let Some(scheme) = extract_type_prefix(&platform_values) {
             // Explicit protocol has been specified
-            insert_proxy(&mut proxies, scheme, proxy_server.to_owned());
+            insert_proxy(&mut proxies, scheme, platform_values.to_owned());
         } else {
             // No explicit protocol has been specified, default to HTTP
-            insert_proxy(&mut proxies, "http", format!("http://{}", proxy_server));
-            insert_proxy(&mut proxies, "https", format!("http://{}", proxy_server));
+            insert_proxy(&mut proxies, "http", format!("http://{platform_values}"));
+            insert_proxy(&mut proxies, "https", format!("http://{platform_values}"));
         }
     }
-    Ok(proxies)
+    proxies
 }
 
 /// Extract the protocol from the given address, if present
 /// For example, "https://example.com" will return Some("https")
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn extract_type_prefix(address: &str) -> Option<&str> {
     if let Some(indice) = address.find("://") {
         if indice == 0 {
@@ -964,9 +1088,9 @@ fn extract_type_prefix(address: &str) -> Option<&str> {
     }
 }
 
-#[cfg(target_os = "windows")]
-fn parse_registry_values(registry_values: RegistryProxyValues) -> SystemProxyMap {
-    parse_registry_values_impl(registry_values).unwrap_or(HashMap::new())
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn parse_platform_values(platform_values: String) -> SystemProxyMap {
+    parse_platform_values_impl(platform_values)
 }
 
 #[cfg(test)]
@@ -1078,7 +1202,7 @@ mod tests {
                 assert_eq!(auth.unwrap(), encode_basic_auth("foo", "bar"));
                 assert_eq!(host, "localhost:1239");
             }
-            other => panic!("unexpected: {:?}", other),
+            other => panic!("unexpected: {other:?}"),
         }
     }
 
@@ -1091,7 +1215,7 @@ mod tests {
                 assert!(auth.is_none());
                 assert_eq!(host, "192.168.1.1:8888");
             }
-            other => panic!("unexpected: {:?}", other),
+            other => panic!("unexpected: {other:?}"),
         }
     }
 
@@ -1105,7 +1229,7 @@ mod tests {
                 assert_eq!(auth.unwrap(), encode_basic_auth("foo", "bar"));
                 assert_eq!(host, "localhost:1239");
             }
-            other => panic!("unexpected: {:?}", other),
+            other => panic!("unexpected: {other:?}"),
         }
     }
 
@@ -1173,7 +1297,7 @@ mod tests {
         assert!(all_proxies.values().all(|p| p.host() == "127.0.0.2"));
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     #[test]
     fn test_get_sys_proxies_registry_parsing() {
         // Stop other threads from modifying process-global ENV while we are.
@@ -1185,20 +1309,16 @@ mod tests {
         // Mock ENV, get the results, before doing assertions
         // to avoid assert! -> panic! -> Mutex Poisoned.
         let baseline_proxies = get_sys_proxies(None);
-        // the system proxy in the registry has been disabled
-        let disabled_proxies = get_sys_proxies(Some((0, String::from("http://127.0.0.1/"))));
         // set valid proxy
-        let valid_proxies = get_sys_proxies(Some((1, String::from("http://127.0.0.1/"))));
-        let valid_proxies_no_scheme = get_sys_proxies(Some((1, String::from("127.0.0.1"))));
+        let valid_proxies = get_sys_proxies(Some(String::from("http://127.0.0.1/")));
+        let valid_proxies_no_scheme = get_sys_proxies(Some(String::from("127.0.0.1")));
         let valid_proxies_explicit_https =
-            get_sys_proxies(Some((1, String::from("https://127.0.0.1/"))));
-        let multiple_proxies = get_sys_proxies(Some((
-            1,
-            String::from("http=127.0.0.1:8888;https=127.0.0.2:8888"),
+            get_sys_proxies(Some(String::from("https://127.0.0.1/")));
+        let multiple_proxies = get_sys_proxies(Some(String::from(
+            "http=127.0.0.1:8888;https=127.0.0.2:8888",
         )));
-        let multiple_proxies_explicit_scheme = get_sys_proxies(Some((
-            1,
-            String::from("http=http://127.0.0.1:8888;https=https://127.0.0.2:8888"),
+        let multiple_proxies_explicit_scheme = get_sys_proxies(Some(String::from(
+            "http=http://127.0.0.1:8888;https=https://127.0.0.2:8888",
         )));
 
         // reset user setting when guards drop
@@ -1208,7 +1328,6 @@ mod tests {
         drop(_lock);
 
         assert_eq!(baseline_proxies.contains_key("http"), false);
-        assert_eq!(disabled_proxies.contains_key("http"), false);
 
         let p = &valid_proxies["http"];
         assert_eq!(p.scheme(), "http");
@@ -1491,7 +1610,7 @@ mod tests {
         drop(_lock);
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     #[test]
     fn test_type_prefix_extraction() {
         assert!(extract_type_prefix("test").is_none());
@@ -1672,7 +1791,7 @@ mod test {
         fn check_parse_error(url: &str, needle: url::ParseError) {
             let error = Proxy::http(url).unwrap_err();
             if !includes(&error, needle) {
-                panic!("{:?} expected; {:?}, {} found", needle, error, error);
+                panic!("{needle:?} expected; {error:?}, {error} found");
             }
         }
 

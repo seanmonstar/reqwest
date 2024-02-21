@@ -1,7 +1,7 @@
 //! multipart/form-data
 //!
-//! To send a `multipart/form-data` body, a [`Form`](crate::blocking::multipart::Form) is built up, adding
-//! fields or customized [`Part`](crate::blocking::multipart::Part)s, and then calling the
+//! To send a `multipart/form-data` body, a [`Form`] is built up, adding
+//! fields or customized [`Part`]s, and then calling the
 //! [`multipart`][builder] method on the `RequestBuilder`.
 //!
 //! # Example
@@ -420,7 +420,7 @@ mod tests {
             "START REAL\n{}\nEND REAL",
             std::str::from_utf8(&output).unwrap()
         );
-        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
+        println!("START EXPECTED\n{expected}\nEND EXPECTED");
         assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
         assert!(length.is_none());
     }
@@ -450,7 +450,7 @@ mod tests {
             "START REAL\n{}\nEND REAL",
             std::str::from_utf8(&output).unwrap()
         );
-        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
+        println!("START EXPECTED\n{expected}\nEND EXPECTED");
         assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
         assert_eq!(length.unwrap(), expected.len() as u64);
     }
@@ -477,7 +477,7 @@ mod tests {
             "START REAL\n{}\nEND REAL",
             std::str::from_utf8(&output).unwrap()
         );
-        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
+        println!("START EXPECTED\n{expected}\nEND EXPECTED");
         assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
     }
 }
