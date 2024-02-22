@@ -412,4 +412,12 @@ mod tests {
         let nested = super::request(io);
         assert!(nested.is_timeout());
     }
+
+    // cover [fmt] BRANCH 2
+    #[test]
+    fn test_fmt_request_error_msg() {
+        let err = Error::new(Kind::Request, None::<Error>);
+
+        assert!(err.to_string().contains("error sending request"));
+    }
 }
