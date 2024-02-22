@@ -420,4 +420,12 @@ mod tests {
 
         assert!(err.to_string().contains("error sending request"));
     }
+
+    // cover [fmt] BRANCH 3
+    #[test]
+    fn test_fmt_body_error_msg() {
+        let err = Error::new(Kind::Body, None::<Error>);
+
+        assert!(err.to_string().contains("request or response body error"));
+    }
 }
