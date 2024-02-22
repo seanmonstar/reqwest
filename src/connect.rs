@@ -1,4 +1,3 @@
-#[cfg(feature = "__tls")]
 use http::header::HeaderValue;
 use http::uri::{Authority, Scheme};
 use http::Uri;
@@ -1192,6 +1191,26 @@ mod verbose {
                 left -= n;
             }
             Ok(())
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::Escape;
+        use std::fmt::Write;
+
+        #[test]
+        fn escape_newline() {
+            let mut s = String::new();
+            write!(&mut s, "{:?}", Escape(b"hello\nworld")).unwrap();
+            assert_eq!(s, "b\"hello\\nworld\"");
+        }
+
+        #[test]
+        fn escape_carriage() {
+            let mut s = String::new();
+            write!(&mut s, "{:?}", Escape(b"hello\rworld")).unwrap();
+            assert_eq!(s, "b\"hello\\rworld\"");
         }
     }
 }
