@@ -2,6 +2,7 @@
 use std::error::Error as StdError;
 use std::fmt;
 use std::io;
+use std::time::Duration;
 
 use crate::{StatusCode, Url};
 
@@ -311,11 +312,11 @@ pub(crate) fn decode_io(e: io::Error) -> Error {
 // internal Error "sources"
 
 #[derive(Debug)]
-pub(crate) struct TimedOut;
+pub(crate) struct TimedOut(pub(crate) Duration);
 
 impl fmt::Display for TimedOut {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("operation timed out")
+        write!(f, "operation timed out ({}s)", self.0.as_secs_f32())
     }
 }
 

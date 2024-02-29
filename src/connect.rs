@@ -427,7 +427,7 @@ where
 {
     if let Some(to) = timeout {
         match tokio::time::timeout(to, f).await {
-            Err(_elapsed) => Err(Box::new(crate::error::TimedOut) as BoxError),
+            Err(_elapsed) => Err(Box::new(crate::error::TimedOut(to)) as BoxError),
             Ok(Ok(try_res)) => Ok(try_res),
             Ok(Err(e)) => Err(e),
         }
