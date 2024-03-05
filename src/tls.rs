@@ -19,7 +19,7 @@
 //!
 //! <div class="warning">This feature is enabled by default, and takes
 //! precedence if any other crate enables it. This is true even if you declare
-//! `features = []`. You must set `no-default-features = false` instead.</div>
+//! `features = []`. You must set `default-features = false` instead.</div>
 //!
 //! Since Cargo features are additive, other crates in your dependency tree can
 //! cause the default backend to be enabled. If you wish to ensure your
