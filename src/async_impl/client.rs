@@ -36,8 +36,7 @@ use crate::cookie;
 #[cfg(feature = "hickory-dns")]
 use crate::dns::hickory::HickoryDnsResolver;
 use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
-use crate::error;
-use crate::into_url::{expect_uri, try_uri, IntoUrlSealed};
+use crate::into_url::{expect_uri, try_uri};
 use crate::redirect::{self, remove_sensitive_headers};
 #[cfg(feature = "__tls")]
 use crate::tls::{self, TlsBackend};
@@ -45,6 +44,7 @@ use crate::tls::{self, TlsBackend};
 use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
+use crate::{error, Error};
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
 use log::debug;
 #[cfg(feature = "http3")]
@@ -744,10 +744,14 @@ impl ClientBuilder {
 
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
 
-        let base_url = config.base_url.map(|base| match base.ends_with('/') {
-            true => base,
-            false => base + "/",
-        });
+        let base_url = config
+            .base_url
+            .map(|base| match base.ends_with('/') {
+                true => base,
+                false => base + "/",
+            })
+            .map(|base| Url::parse(&base).ok())
+            .flatten();
 
         Ok(Client {
             inner: Arc::new(ClientRef {
@@ -2005,7 +2009,9 @@ impl Client {
                 Some(s) => s,
                 None => url.as_str(),
             };
-            (base_url.to_owned() + path).into_url()
+            base_url
+                .join(path)
+                .map_err(|source| Error::new(error::Kind::Builder, Some(source)))
         } else {
             url.into_url()
         };
@@ -2340,7 +2346,7 @@ struct ClientRef {
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
     https_only: bool,
-    base_url: Option<String>,
+    base_url: Option<Url>,
 }
 
 impl ClientRef {
