@@ -1,3 +1,8 @@
+## v0.11.25
+
+- Fix `Certificate::from_pem_bundle()` parsing.
+- Fix Apple linker errors from detecting system proxies.
+
 ## v0.11.24
 
 - Add `Certificate::from_pem_bundle()` to add a bundle.
