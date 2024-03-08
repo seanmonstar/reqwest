@@ -20,7 +20,6 @@ async fn test_gzip_empty_body() {
 
         http::Response::builder()
             .header("content-encoding", "gzip")
-            .header("content-length", 100)
             .body(Default::default())
             .unwrap()
     });
@@ -129,7 +128,7 @@ async fn gzip_case(response_size: usize, chunk_size: usize) {
                     Some((chunk, (gzipped, pos + 1)))
                 });
 
-            let body = hyper::Body::wrap_stream(stream.map(Ok::<_, std::convert::Infallible>));
+            let body = reqwest::Body::wrap_stream(stream.map(Ok::<_, std::convert::Infallible>));
 
             http::Response::builder()
                 .header("content-encoding", "gzip")
