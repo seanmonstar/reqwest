@@ -19,7 +19,6 @@ async fn test_deflate_empty_body() {
 
         http::Response::builder()
             .header("content-encoding", "deflate")
-            .header("content-length", 100)
             .body(Default::default())
             .unwrap()
     });
@@ -128,7 +127,7 @@ async fn deflate_case(response_size: usize, chunk_size: usize) {
                     Some((chunk, (deflated, pos + 1)))
                 });
 
-            let body = hyper::Body::wrap_stream(stream.map(Ok::<_, std::convert::Infallible>));
+            let body = reqwest::Body::wrap_stream(stream.map(Ok::<_, std::convert::Infallible>));
 
             http::Response::builder()
                 .header("content-encoding", "deflate")

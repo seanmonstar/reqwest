@@ -13,7 +13,7 @@ use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::uri::{Authority, Scheme};
 use http::{Request, Response, Uri};
-use hyper::Body as HyperBody;
+use hyper::body as HyperBody;
 use log::trace;
 
 pub(super) type Key = (Scheme, Authority);

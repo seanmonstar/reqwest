@@ -1,5 +1,5 @@
-use hyper::client::connect::dns::Name;
-use hyper::service::Service;
+use hyper_util::client::legacy::connect::dns::Name as HyperName;
+use tower_service::Service;
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -29,6 +29,17 @@ pub trait Resolve: Send + Sync {
     fn resolve(&self, name: Name) -> Resolving;
 }
 
+/// A name that must be resolved to addresses.
+#[derive(Debug)]
+pub struct Name(pub(super) HyperName);
+
+impl Name {
+    /// View the name as a string.
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct DynResolver {
     resolver: Arc<dyn Resolve>,
@@ -40,7 +51,7 @@ impl DynResolver {
     }
 }
 
-impl Service<Name> for DynResolver {
+impl Service<HyperName> for DynResolver {
     type Response = Addrs;
     type Error = BoxError;
     type Future = Resolving;
@@ -49,8 +60,8 @@ impl Service<Name> for DynResolver {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, name: Name) -> Self::Future {
-        self.resolver.resolve(name)
+    fn call(&mut self, name: HyperName) -> Self::Future {
+        self.resolver.resolve(Name(name))
     }
 }
 
