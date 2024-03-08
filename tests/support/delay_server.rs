@@ -1,14 +1,13 @@
 #![cfg(not(target_arch = "wasm32"))]
+#![allow(unused)]
 use std::convert::Infallible;
 use std::future::Future;
 use std::net;
-use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::FutureExt;
 use http::{Request, Response};
 use hyper::service::service_fn;
-use hyper::Body;
 use tokio::net::TcpListener;
 use tokio::select;
 use tokio::sync::oneshot;
@@ -29,12 +28,14 @@ pub struct Server {
     server_terminated_rx: oneshot::Receiver<()>,
 }
 
+type Builder = hyper_util::server::conn::auto::Builder<hyper_util::rt::TokioExecutor>;
+
 impl Server {
-    pub async fn new<F1, Fut, F2>(func: F1, apply_config: F2, delay: Duration) -> Self
+    pub async fn new<F1, Fut, F2, Bu>(func: F1, apply_config: F2, delay: Duration) -> Self
     where
-        F1: Fn(Request<Body>) -> Fut + Clone + Send + 'static,
-        Fut: Future<Output = Response<Body>> + Send + 'static,
-        F2: FnOnce(hyper::server::conn::Http) -> hyper::server::conn::Http + Send + 'static,
+        F1: Fn(Request<hyper::body::Incoming>) -> Fut + Clone + Send + 'static,
+        Fut: Future<Output = Response<reqwest::Body>> + Send + 'static,
+        F2: FnOnce(&mut Builder) -> Bu + Send + 'static,
     {
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let (server_terminated_tx, server_terminated_rx) = oneshot::channel();
@@ -43,9 +44,12 @@ impl Server {
         let addr = tcp_listener.local_addr().unwrap();
 
         tokio::spawn(async move {
-            let http = Arc::new(apply_config(hyper::server::conn::Http::new()));
+            let mut builder =
+                hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
+            apply_config(&mut builder);
 
             tokio::spawn(async move {
+                let builder = builder;
                 let (connection_shutdown_tx, connection_shutdown_rx) = oneshot::channel();
                 let connection_shutdown_rx = connection_shutdown_rx.shared();
                 let mut shutdown_rx = std::pin::pin!(shutdown_rx);
@@ -59,24 +63,24 @@ impl Server {
                         }
                         res = tcp_listener.accept() => {
                             let (stream, _) = res.unwrap();
+                            let io = hyper_util::rt::TokioIo::new(stream);
 
 
                             let handle = tokio::spawn({
                                 let connection_shutdown_rx = connection_shutdown_rx.clone();
-                                let http = http.clone();
                                 let func = func.clone();
+                                let svc = service_fn(move |req| {
+                                    let fut = func(req);
+                                    async move {
+                                    Ok::<_, Infallible>(fut.await)
+                                }});
+                                let builder = builder.clone();
 
                                 async move {
+                                    let fut = builder.serve_connection_with_upgrades(io, svc);
                                     tokio::time::sleep(delay).await;
 
-                                    let mut conn = std::pin::pin!(http.serve_connection(
-                                        stream,
-                                        service_fn(move |req| {
-                                            let fut = func(req);
-                                            async move {
-                                            Ok::<_, Infallible>(fut.await)
-                                        }})
-                                    ));
+                                    let mut conn = std::pin::pin!(fut);
 
                                     select! {
                                         _ = conn.as_mut() => {}
