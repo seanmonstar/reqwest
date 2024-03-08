@@ -1,6 +1,6 @@
 //! DNS resolution
 
-pub use resolve::{Addrs, Resolve, Resolving};
+pub use resolve::{Addrs, Name, Resolve, Resolving};
 pub(crate) use resolve::{DnsResolverWithOverrides, DynResolver};
 
 pub(crate) mod gai;

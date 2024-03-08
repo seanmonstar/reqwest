@@ -1,12 +1,11 @@
 #![cfg(not(target_arch = "wasm32"))]
-use std::convert::{identity, Infallible};
+use std::convert::Infallible;
 use std::future::Future;
 use std::net;
 use std::sync::mpsc as std_mpsc;
 use std::thread;
 use std::time::Duration;
 
-use hyper::server::conn::AddrIncoming;
 use tokio::runtime;
 use tokio::sync::oneshot;
 
@@ -38,19 +37,19 @@ impl Drop for Server {
 
 pub fn http<F, Fut>(func: F) -> Server
 where
-    F: Fn(http::Request<hyper::Body>) -> Fut + Clone + Send + 'static,
-    Fut: Future<Output = http::Response<hyper::Body>> + Send + 'static,
+    F: Fn(http::Request<hyper::body::Incoming>) -> Fut + Clone + Send + 'static,
+    Fut: Future<Output = http::Response<reqwest::Body>> + Send + 'static,
 {
-    http_with_config(func, identity)
+    http_with_config(func, |_builder| {})
 }
 
-pub fn http_with_config<F1, Fut, F2>(func: F1, apply_config: F2) -> Server
+type Builder = hyper_util::server::conn::auto::Builder<hyper_util::rt::TokioExecutor>;
+
+pub fn http_with_config<F1, Fut, F2, Bu>(func: F1, apply_config: F2) -> Server
 where
-    F1: Fn(http::Request<hyper::Body>) -> Fut + Clone + Send + 'static,
-    Fut: Future<Output = http::Response<hyper::Body>> + Send + 'static,
-    F2: FnOnce(hyper::server::Builder<AddrIncoming>) -> hyper::server::Builder<AddrIncoming>
-        + Send
-        + 'static,
+    F1: Fn(http::Request<hyper::body::Incoming>) -> Fut + Clone + Send + 'static,
+    Fut: Future<Output = http::Response<reqwest::Body>> + Send + 'static,
+    F2: FnOnce(&mut Builder) -> Bu + Send + 'static,
 {
     // Spawn new runtime in thread to prevent reactor execution context conflict
     thread::spawn(move || {
@@ -58,26 +57,14 @@ where
             .enable_all()
             .build()
             .expect("new rt");
-        let srv = rt.block_on(async move {
-            let builder = hyper::Server::bind(&([127, 0, 0, 1], 0).into());
-
-            apply_config(builder).serve(hyper::service::make_service_fn(move |_| {
-                let func = func.clone();
-                async move {
-                    Ok::<_, Infallible>(hyper::service::service_fn(move |req| {
-                        let fut = func(req);
-                        async move { Ok::<_, Infallible>(fut.await) }
-                    }))
-                }
-            }))
+        let listener = rt.block_on(async move {
+            tokio::net::TcpListener::bind(&std::net::SocketAddr::from(([127, 0, 0, 1], 0)))
+                .await
+                .unwrap()
         });
+        let addr = listener.local_addr().unwrap();
 
-        let addr = srv.local_addr();
-        let (shutdown_tx, shutdown_rx) = oneshot::channel();
-        let srv = srv.with_graceful_shutdown(async move {
-            let _ = shutdown_rx.await;
-        });
-
+        let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
         let (panic_tx, panic_rx) = std_mpsc::channel();
         let tname = format!(
             "test({})-support-server",
@@ -86,11 +73,34 @@ where
         thread::Builder::new()
             .name(tname)
             .spawn(move || {
-                rt.block_on(srv).unwrap();
-                let _ = panic_tx.send(());
+                rt.block_on(async move {
+                    let mut builder =
+                        hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
+                    apply_config(&mut builder);
+
+                    loop {
+                        tokio::select! {
+                            _ = &mut shutdown_rx => {
+                                break;
+                            }
+                            accepted = listener.accept() => {
+                                let (io, _) = accepted.expect("accepted");
+                                let func = func.clone();
+                                let svc = hyper::service::service_fn(move |req| {
+                                    let fut = func(req);
+                                    async move { Ok::<_, Infallible>(fut.await) }
+                                });
+                                let builder = builder.clone();
+                                tokio::spawn(async move {
+                                    let _ = builder.serve_connection_with_upgrades(hyper_util::rt::TokioIo::new(io), svc).await;
+                                });
+                            }
+                        }
+                    }
+                    let _ = panic_tx.send(());
+                });
             })
             .expect("thread spawn");
-
         Server {
             addr,
             panic_rx,

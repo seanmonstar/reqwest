@@ -1,8 +1,8 @@
 use futures_util::future::FutureExt;
-use hyper::client::connect::dns::{GaiResolver as HyperGaiResolver, Name};
-use hyper::service::Service;
+use hyper_util::client::legacy::connect::dns::GaiResolver as HyperGaiResolver;
+use tower_service::Service;
 
-use crate::dns::{Addrs, Resolve, Resolving};
+use crate::dns::{Addrs, Name, Resolve, Resolving};
 use crate::error::BoxError;
 
 #[derive(Debug)]
@@ -23,7 +23,7 @@ impl Default for GaiResolver {
 impl Resolve for GaiResolver {
     fn resolve(&self, name: Name) -> Resolving {
         let this = &mut self.0.clone();
-        Box::pin(Service::<Name>::call(this, name).map(|result| {
+        Box::pin(this.call(name.0).map(|result| {
             result
                 .map(|addrs| -> Addrs { Box::new(addrs) })
                 .map_err(|err| -> BoxError { Box::new(err) })
