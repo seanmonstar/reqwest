@@ -1,6 +1,6 @@
 //! DNS resolution via the [trust_dns_resolver](https://github.com/bluejekyll/trust-dns) crate
 
-use hyper::client::connect::dns::Name;
+use hyper_util::client::legacy::connect::dns::Name;
 use once_cell::sync::OnceCell;
 use trust_dns_resolver::{lookup_ip::LookupIpIntoIter, system_conf, TokioAsyncResolver};
 

@@ -1,5 +1,5 @@
-use hyper::client::connect::dns::Name;
-use hyper::service::Service;
+use hyper_util::client::legacy::connect::dns::Name;
+use tower_service::Service;
 
 use std::collections::HashMap;
 use std::future::Future;

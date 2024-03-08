@@ -4,9 +4,9 @@ use std::pin::Pin;
 
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
-use futures_util::stream::StreamExt;
-use hyper::client::connect::HttpInfo;
+use http_body_util::BodyExt;
 use hyper::{HeaderMap, StatusCode, Version};
+use hyper_util::client::legacy::connect::HttpInfo;
 use mime::Mime;
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
@@ -17,9 +17,9 @@ use url::Url;
 
 use super::body::Body;
 use super::decoder::{Accepts, Decoder};
+use crate::async_impl::body::ResponseBody;
 #[cfg(feature = "cookies")]
 use crate::cookie;
-use crate::response::ResponseUrl;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -31,13 +31,17 @@ pub struct Response {
 
 impl Response {
     pub(super) fn new(
-        res: hyper::Response<hyper::Body>,
+        res: hyper::Response<hyper::body::Incoming>,
         url: Url,
         accepts: Accepts,
         timeout: Option<Pin<Box<Sleep>>>,
     ) -> Response {
         let (mut parts, body) = res.into_parts();
-        let decoder = Decoder::detect(&mut parts.headers, Body::response(body, timeout), accepts);
+        let decoder = Decoder::detect(
+            &mut parts.headers,
+            super::body::response(body, timeout),
+            accepts,
+        );
         let res = hyper::Response::from_parts(parts, decoder);
 
         Response {
@@ -78,9 +82,9 @@ impl Response {
     /// - The response is compressed and automatically decoded (thus changing
     ///   the actual decoded length).
     pub fn content_length(&self) -> Option<u64> {
-        use hyper::body::HttpBody;
+        use hyper::body::Body;
 
-        HttpBody::size_hint(self.res.body()).exact()
+        Body::size_hint(self.res.body()).exact()
     }
 
     /// Retrieve the cookies contained in the response.
@@ -256,7 +260,11 @@ impl Response {
     /// # }
     /// ```
     pub async fn bytes(self) -> crate::Result<Bytes> {
-        hyper::body::to_bytes(self.res.into_body()).await
+        use http_body_util::BodyExt;
+
+        BodyExt::collect(self.res.into_body())
+            .await
+            .map(|buf| buf.to_bytes())
     }
 
     /// Stream a chunk of the response body.
@@ -276,10 +284,19 @@ impl Response {
     /// # }
     /// ```
     pub async fn chunk(&mut self) -> crate::Result<Option<Bytes>> {
-        if let Some(item) = self.res.body_mut().next().await {
-            Ok(Some(item?))
-        } else {
-            Ok(None)
+        use http_body_util::BodyExt;
+
+        // loop to ignore unrecognized frames
+        loop {
+            if let Some(res) = self.res.body_mut().frame().await {
+                let frame = res?;
+                if let Ok(buf) = frame.into_data() {
+                    return Ok(Some(buf));
+                }
+                // else continue
+            } else {
+                return Ok(None);
+            }
         }
     }
 
@@ -308,7 +325,7 @@ impl Response {
     #[cfg(feature = "stream")]
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
-        self.res.into_body()
+        super::body::DataStream(self.res.into_body())
     }
 
     // util methods
@@ -396,11 +413,26 @@ impl fmt::Debug for Response {
     }
 }
 
+/// A `Response` can be piped as the `Body` of another request.
+impl From<Response> for Body {
+    fn from(r: Response) -> Body {
+        Body::streaming(r.res.into_body())
+    }
+}
+
+// I'm not sure this conversion is that useful... People should be encouraged
+// to use `http::Resposne`, not `reqwest::Response`.
 impl<T: Into<Body>> From<http::Response<T>> for Response {
     fn from(r: http::Response<T>) -> Response {
+        use crate::response::ResponseUrl;
+
         let (mut parts, body) = r.into_parts();
-        let body = body.into();
-        let decoder = Decoder::detect(&mut parts.headers, body, Accepts::none());
+        let body: crate::async_impl::body::Body = body.into();
+        let decoder = Decoder::detect(
+            &mut parts.headers,
+            ResponseBody::new(body.map_err(Into::into)),
+            Accepts::none(),
+        );
         let url = parts
             .extensions
             .remove::<ResponseUrl>()
@@ -411,13 +443,6 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
             res,
             url: Box::new(url),
         }
-    }
-}
-
-/// A `Response` can be piped as the `Body` of another request.
-impl From<Response> for Body {
-    fn from(r: Response) -> Body {
-        Body::stream(r.res.into_body())
     }
 }
 

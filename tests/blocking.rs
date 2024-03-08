@@ -1,7 +1,9 @@
 mod support;
 
+#[cfg(feature = "json")]
 use http::header::CONTENT_TYPE;
-use http::HeaderValue;
+use http_body_util::BodyExt;
+#[cfg(feature = "json")]
 use std::collections::HashMap;
 use support::server;
 
@@ -88,7 +90,7 @@ fn test_post() {
         assert_eq!(req.method(), "POST");
         assert_eq!(req.headers()["content-length"], "5");
 
-        let data = hyper::body::to_bytes(req.into_body()).await.unwrap();
+        let data = req.into_body().collect().await.unwrap().to_bytes();
         assert_eq!(&*data, b"Hello");
 
         http::Response::default()
@@ -115,7 +117,7 @@ fn test_post_form() {
             "application/x-www-form-urlencoded"
         );
 
-        let data = hyper::body::to_bytes(req.into_body()).await.unwrap();
+        let data = req.into_body().collect().await.unwrap().to_bytes();
         assert_eq!(&*data, b"hello=world&sean=monstar");
 
         http::Response::default()
@@ -336,6 +338,8 @@ fn test_body_from_bytes() {
 #[test]
 #[cfg(feature = "json")]
 fn blocking_add_json_default_content_type_if_not_set_manually() {
+    use http::header::HeaderValue;
+
     let mut map = HashMap::new();
     map.insert("body", "json");
     let content_type = HeaderValue::from_static("application/vnd.api+json");

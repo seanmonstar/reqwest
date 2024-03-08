@@ -13,7 +13,7 @@ use http::header::{
 };
 use http::uri::Scheme;
 use http::Uri;
-use hyper::client::{HttpConnector, ResponseFuture as HyperResponseFuture};
+use hyper_util::client::legacy::connect::HttpConnector;
 #[cfg(feature = "native-tls-crate")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
@@ -51,6 +51,8 @@ use log::{debug, trace};
 use quinn::TransportConfig;
 #[cfg(feature = "http3")]
 use quinn::VarInt;
+
+type HyperResponseFuture = hyper_util::client::legacy::ResponseFuture;
 
 /// An asynchronous `Client` to make Requests with.
 ///
@@ -464,18 +466,7 @@ impl ClientBuilder {
 
                     #[cfg(feature = "rustls-tls-webpki-roots")]
                     if config.tls_built_in_root_certs {
-                        use rustls::OwnedTrustAnchor;
-
-                        let trust_anchors =
-                            webpki_roots::TLS_SERVER_ROOTS.iter().map(|trust_anchor| {
-                                OwnedTrustAnchor::from_subject_spki_name_constraints(
-                                    trust_anchor.subject,
-                                    trust_anchor.spki,
-                                    trust_anchor.name_constraints,
-                                )
-                            });
-
-                        root_cert_store.add_trust_anchors(trust_anchors);
+                        root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
                     }
 
                     #[cfg(feature = "rustls-tls-native-roots")]
@@ -485,17 +476,14 @@ impl ClientBuilder {
                         for cert in rustls_native_certs::load_native_certs()
                             .map_err(crate::error::builder)?
                         {
-                            let cert = rustls::Certificate(cert.0);
                             // Continue on parsing errors, as native stores often include ancient or syntactically
                             // invalid certificates, like root certificates without any X509 extensions.
                             // Inspiration: https://github.com/rustls/rustls/blob/633bf4ba9d9521a95f68766d04c22e2b01e68318/rustls/src/anchors.rs#L105-L112
-                            match root_cert_store.add(&cert) {
+                            match root_cert_store.add(cert.into()) {
                                 Ok(_) => valid_count += 1,
                                 Err(err) => {
                                     invalid_count += 1;
-                                    log::warn!(
-                                        "rustls failed to parse DER certificate {err:?} {cert:?}"
-                                    );
+                                    log::debug!("rustls failed to parse DER certificate: {err:?}");
                                 }
                             }
                         }
@@ -530,12 +518,8 @@ impl ClientBuilder {
                     }
 
                     // Build TLS config
-                    let config_builder = rustls::ClientConfig::builder()
-                        .with_safe_default_cipher_suites()
-                        .with_safe_default_kx_groups()
-                        .with_protocol_versions(&versions)
-                        .map_err(crate::error::builder)?
-                        .with_root_certificates(root_cert_store);
+                    let config_builder =
+                        rustls::ClientConfig::builder().with_root_certificates(root_cert_store);
 
                     // Finalize TLS config
                     let mut tls = if let Some(id) = config.identity {
@@ -610,7 +594,8 @@ impl ClientBuilder {
         connector.set_timeout(config.connect_timeout);
         connector.set_verbose(config.connection_verbose);
 
-        let mut builder = hyper::Client::builder();
+        let mut builder =
+            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
         if matches!(config.http_version_pref, HttpVersionPref::Http2) {
             builder.http2_only(true);
         }
@@ -639,6 +624,8 @@ impl ClientBuilder {
             builder.http2_keep_alive_while_idle(true);
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
+        builder.timer(hyper_util::rt::TokioTimer::new());
         builder.pool_idle_timeout(config.pool_idle_timeout);
         builder.pool_max_idle_per_host(config.pool_max_idle_per_host);
         connector.set_keepalive(config.tcp_keepalive);
@@ -1656,7 +1643,7 @@ impl ClientBuilder {
     }
 }
 
-type HyperClient = hyper::Client<Connector, super::body::ImplStream>;
+type HyperClient = hyper_util::client::legacy::Client<Connector, super::Body>;
 
 impl Default for Client {
     fn default() -> Self {
@@ -1836,9 +1823,7 @@ impl Client {
                 ResponseFuture::H3(self.inner.h3_client.as_ref().unwrap().request(req))
             }
             _ => {
-                let mut req = builder
-                    .body(body.into_stream())
-                    .expect("valid request parts");
+                let mut req = builder.body(body).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
                 ResponseFuture::Default(self.inner.hyper.request(req))
             }
@@ -2203,7 +2188,7 @@ impl PendingRequest {
                 let mut req = hyper::Request::builder()
                     .method(self.method.clone())
                     .uri(uri)
-                    .body(body.into_stream())
+                    .body(body)
                     .expect("valid request parts");
                 *req.headers_mut() = self.headers.clone();
                 ResponseFuture::Default(self.client.hyper.request(req))
@@ -2215,6 +2200,13 @@ impl PendingRequest {
 }
 
 fn is_retryable_error(err: &(dyn std::error::Error + 'static)) -> bool {
+    // pop the legacy::Error
+    let err = if let Some(err) = err.source() {
+        err
+    } else {
+        return false;
+    };
+
     #[cfg(feature = "http3")]
     if let Some(cause) = err.source() {
         if let Some(err) = cause.downcast_ref::<h3::Error>() {
@@ -2439,7 +2431,7 @@ impl Future for PendingRequest {
                                         let mut req = hyper::Request::builder()
                                             .method(self.method.clone())
                                             .uri(uri.clone())
-                                            .body(body.into_stream())
+                                            .body(body)
                                             .expect("valid request parts");
                                         *req.headers_mut() = headers.clone();
                                         std::mem::swap(self.as_mut().headers(), &mut headers);
