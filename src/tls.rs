@@ -46,11 +46,9 @@
 
 #[cfg(feature = "__rustls")]
 use rustls::{
-    client::danger::HandshakeSignatureValid, client::danger::ServerCertVerified,
-    client::danger::ServerCertVerifier, DigitallySignedStruct, Error as TLSError, SignatureScheme,
+    client::HandshakeSignatureValid, client::ServerCertVerified, client::ServerCertVerifier,
+    DigitallySignedStruct, Error as TLSError, ServerName,
 };
-#[cfg(feature = "__rustls")]
-use rustls_pki_types::{ServerName, UnixTime};
 use std::{
     fmt,
     io::{BufRead, BufReader},
@@ -79,6 +77,7 @@ pub struct Identity {
     inner: ClientCert,
 }
 
+#[derive(Clone)]
 enum ClientCert {
     #[cfg(feature = "native-tls")]
     Pkcs12(native_tls_crate::Identity),
@@ -86,30 +85,9 @@ enum ClientCert {
     Pkcs8(native_tls_crate::Identity),
     #[cfg(feature = "__rustls")]
     Pem {
-        key: rustls_pki_types::PrivateKeyDer<'static>,
-        certs: Vec<rustls_pki_types::CertificateDer<'static>>,
+        key: rustls::PrivateKey,
+        certs: Vec<rustls::Certificate>,
     },
-}
-
-impl Clone for ClientCert {
-    fn clone(&self) -> Self {
-        match self {
-            #[cfg(feature = "native-tls")]
-            Self::Pkcs8(i) => Self::Pkcs8(i.clone()),
-            #[cfg(feature = "native-tls")]
-            Self::Pkcs12(i) => Self::Pkcs12(i.clone()),
-            #[cfg(feature = "__rustls")]
-            ClientCert::Pem { key, certs } => ClientCert::Pem {
-                key: key.clone_key(),
-                certs: certs.clone(),
-            },
-            #[cfg_attr(
-                any(feature = "native-tls", feature = "__rustls"),
-                allow(unreachable_patterns)
-            )]
-            _ => unreachable!(),
-        }
-    }
 }
 
 impl Certificate {
@@ -203,14 +181,14 @@ impl Certificate {
 
         match self.original {
             Cert::Der(buf) => root_cert_store
-                .add(buf.into())
+                .add(&rustls::Certificate(buf))
                 .map_err(crate::error::builder)?,
             Cert::Pem(buf) => {
                 let mut reader = Cursor::new(buf);
                 let certs = Self::read_pem_certs(&mut reader)?;
                 for c in certs {
                     root_cert_store
-                        .add(c.into())
+                        .add(&rustls::Certificate(c))
                         .map_err(crate::error::builder)?;
                 }
             }
@@ -330,8 +308,8 @@ impl Identity {
 
         let (key, certs) = {
             let mut pem = Cursor::new(buf);
-            let mut sk = Vec::<rustls_pki_types::PrivateKeyDer>::new();
-            let mut certs = Vec::<rustls_pki_types::CertificateDer>::new();
+            let mut sk = Vec::<rustls::PrivateKey>::new();
+            let mut certs = Vec::<rustls::Certificate>::new();
 
             for item in std::iter::from_fn(|| rustls_pemfile::read_one(&mut pem).transpose()) {
                 match item.map_err(|_| {
@@ -339,16 +317,12 @@ impl Identity {
                         "Invalid identity PEM file",
                     )))
                 })? {
-                    rustls_pemfile::Item::X509Certificate(cert) => certs.push(cert.into()),
-                    rustls_pemfile::Item::PKCS8Key(key) => {
-                        sk.push(rustls_pki_types::PrivateKeyDer::Pkcs8(key.into()))
+                    rustls_pemfile::Item::X509Certificate(cert) => {
+                        certs.push(rustls::Certificate(cert))
                     }
-                    rustls_pemfile::Item::RSAKey(key) => {
-                        sk.push(rustls_pki_types::PrivateKeyDer::Pkcs1(key.into()))
-                    }
-                    rustls_pemfile::Item::ECKey(key) => {
-                        sk.push(rustls_pki_types::PrivateKeyDer::Sec1(key.into()))
-                    }
+                    rustls_pemfile::Item::PKCS8Key(key) => sk.push(rustls::PrivateKey(key)),
+                    rustls_pemfile::Item::RSAKey(key) => sk.push(rustls::PrivateKey(key)),
+                    rustls_pemfile::Item::ECKey(key) => sk.push(rustls::PrivateKey(key)),
                     _ => {
                         return Err(crate::error::builder(TLSError::General(String::from(
                             "No valid certificate was found",
@@ -391,8 +365,7 @@ impl Identity {
         self,
         config_builder: rustls::ConfigBuilder<
             rustls::ClientConfig,
-            // Not sure here
-            rustls::client::WantsClientCert,
+            rustls::client::WantsTransparencyPolicyOrClientCert,
         >,
     ) -> crate::Result<rustls::ClientConfig> {
         match self.inner {
@@ -518,18 +491,18 @@ impl Default for TlsBackend {
 }
 
 #[cfg(feature = "__rustls")]
-#[derive(Debug)]
 pub(crate) struct NoVerifier;
 
 #[cfg(feature = "__rustls")]
 impl ServerCertVerifier for NoVerifier {
     fn verify_server_cert(
         &self,
-        _end_entity: &rustls_pki_types::CertificateDer,
-        _intermediates: &[rustls_pki_types::CertificateDer],
+        _end_entity: &rustls::Certificate,
+        _intermediates: &[rustls::Certificate],
         _server_name: &ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp_response: &[u8],
-        _now: UnixTime,
+        _now: std::time::SystemTime,
     ) -> Result<ServerCertVerified, TLSError> {
         Ok(ServerCertVerified::assertion())
     }
@@ -537,7 +510,7 @@ impl ServerCertVerifier for NoVerifier {
     fn verify_tls12_signature(
         &self,
         _message: &[u8],
-        _cert: &rustls_pki_types::CertificateDer,
+        _cert: &rustls::Certificate,
         _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
         Ok(HandshakeSignatureValid::assertion())
@@ -546,28 +519,10 @@ impl ServerCertVerifier for NoVerifier {
     fn verify_tls13_signature(
         &self,
         _message: &[u8],
-        _cert: &rustls_pki_types::CertificateDer,
+        _cert: &rustls::Certificate,
         _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
         Ok(HandshakeSignatureValid::assertion())
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        vec![
-            SignatureScheme::RSA_PKCS1_SHA1,
-            SignatureScheme::ECDSA_SHA1_Legacy,
-            SignatureScheme::RSA_PKCS1_SHA256,
-            SignatureScheme::ECDSA_NISTP256_SHA256,
-            SignatureScheme::RSA_PKCS1_SHA384,
-            SignatureScheme::ECDSA_NISTP384_SHA384,
-            SignatureScheme::RSA_PKCS1_SHA512,
-            SignatureScheme::ECDSA_NISTP521_SHA512,
-            SignatureScheme::RSA_PSS_SHA256,
-            SignatureScheme::RSA_PSS_SHA384,
-            SignatureScheme::RSA_PSS_SHA512,
-            SignatureScheme::ED25519,
-            SignatureScheme::ED448,
-        ]
     }
 }
 

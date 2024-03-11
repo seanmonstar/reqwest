@@ -1,5 +1,5 @@
 use core::task;
-use hyper_util::client::legacy::connect::dns::Name;
+use hyper::client::connect::dns::Name;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::task::Poll;

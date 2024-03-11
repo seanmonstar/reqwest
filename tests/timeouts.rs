@@ -143,7 +143,6 @@ async fn connect_many_timeout() {
     assert!(err.is_connect() && err.is_timeout());
 }
 
-#[cfg(feature = "stream")]
 #[tokio::test]
 async fn response_timeout() {
     let _ = env_logger::try_init();
@@ -151,7 +150,7 @@ async fn response_timeout() {
     let server = server::http(move |_req| {
         async {
             // immediate response, but delayed body
-            let body = reqwest::Body::wrap_stream(futures_util::stream::once(async {
+            let body = hyper::Body::wrap_stream(futures_util::stream::once(async {
                 tokio::time::sleep(Duration::from_secs(2)).await;
                 Ok::<_, std::convert::Infallible>("Hello")
             }));
@@ -233,7 +232,6 @@ fn timeout_blocking_request() {
 }
 
 #[cfg(feature = "blocking")]
-#[cfg(feature = "stream")]
 #[test]
 fn blocking_request_timeout_body() {
     let _ = env_logger::try_init();
@@ -249,7 +247,7 @@ fn blocking_request_timeout_body() {
     let server = server::http(move |_req| {
         async {
             // immediate response, but delayed body
-            let body = reqwest::Body::wrap_stream(futures_util::stream::once(async {
+            let body = hyper::Body::wrap_stream(futures_util::stream::once(async {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 Ok::<_, std::convert::Infallible>("Hello")
             }));

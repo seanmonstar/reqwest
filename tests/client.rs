@@ -1,6 +1,8 @@
 #![cfg(not(target_arch = "wasm32"))]
 mod support;
 
+use futures_util::stream::StreamExt;
+use support::delay_server;
 use support::server;
 
 #[cfg(feature = "json")]
@@ -130,23 +132,19 @@ async fn response_json() {
 
 #[tokio::test]
 async fn body_pipe_response() {
-    use http_body_util::BodyExt;
     let _ = env_logger::try_init();
 
-    let server = server::http(move |req| async move {
+    let server = server::http(move |mut req| async move {
         if req.uri() == "/get" {
             http::Response::new("pipe me".into())
         } else {
             assert_eq!(req.uri(), "/pipe");
             assert_eq!(req.headers()["transfer-encoding"], "chunked");
 
-            let full: Vec<u8> = req
-                .into_body()
-                .collect()
-                .await
-                .expect("must succeed")
-                .to_bytes()
-                .to_vec();
+            let mut full: Vec<u8> = Vec::new();
+            while let Some(item) = req.body_mut().next().await {
+                full.extend(&*item.unwrap());
+            }
 
             assert_eq!(full, b"pipe me");
 
@@ -323,6 +321,7 @@ fn use_preconfigured_rustls_default() {
 
     let root_cert_store = rustls::RootCertStore::empty();
     let tls = rustls::ClientConfig::builder()
+        .with_safe_defaults()
         .with_root_certificates(root_cert_store)
         .with_no_client_auth();
 
@@ -441,7 +440,6 @@ async fn test_tls_info() {
 // fail, because the only thread would block until `panic_rx` receives a
 // notification while the client needs to be driven to get the graceful shutdown
 // done.
-#[cfg(feature = "http2")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn highly_concurrent_requests_to_http2_server_with_low_max_concurrent_streams() {
     let client = reqwest::Client::builder()
@@ -454,9 +452,7 @@ async fn highly_concurrent_requests_to_http2_server_with_low_max_concurrent_stre
             assert_eq!(req.version(), http::Version::HTTP_2);
             http::Response::default()
         },
-        |builder| {
-            builder.http2().max_concurrent_streams(1);
-        },
+        |builder| builder.http2_only(true).http2_max_concurrent_streams(1),
     );
 
     let url = format!("http://{}", server.addr());
@@ -472,11 +468,8 @@ async fn highly_concurrent_requests_to_http2_server_with_low_max_concurrent_stre
     futures_util::future::join_all(futs).await;
 }
 
-#[cfg(feature = "http2")]
 #[tokio::test]
 async fn highly_concurrent_requests_to_slow_http2_server_with_low_max_concurrent_streams() {
-    use support::delay_server;
-
     let client = reqwest::Client::builder()
         .http2_prior_knowledge()
         .build()
@@ -487,8 +480,9 @@ async fn highly_concurrent_requests_to_slow_http2_server_with_low_max_concurrent
             assert_eq!(req.version(), http::Version::HTTP_2);
             http::Response::default()
         },
-        |http| {
-            http.http2().max_concurrent_streams(1);
+        |mut http| {
+            http.http2_only(true).http2_max_concurrent_streams(1);
+            http
         },
         std::time::Duration::from_secs(2),
     )
