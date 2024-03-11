@@ -368,6 +368,7 @@ fn blocking_update_json_content_type_if_set_manually() {
 }
 
 #[test]
+#[cfg(feature = "__tls")]
 fn test_response_no_tls_info_for_http() {
     let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
 
