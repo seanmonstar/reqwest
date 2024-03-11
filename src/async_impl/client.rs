@@ -46,7 +46,7 @@ use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
-use log::{debug, trace};
+use log::debug;
 #[cfg(feature = "http3")]
 use quinn::TransportConfig;
 #[cfg(feature = "http3")]
@@ -80,6 +80,7 @@ pub struct ClientBuilder {
 
 enum HttpVersionPref {
     Http1,
+    #[cfg(feature = "http2")]
     Http2,
     #[cfg(feature = "http3")]
     Http3,
@@ -126,12 +127,19 @@ struct Config {
     http1_allow_obsolete_multiline_headers_in_responses: bool,
     http1_ignore_invalid_headers_in_responses: bool,
     http1_allow_spaces_after_header_name_in_responses: bool,
+    #[cfg(feature = "http2")]
     http2_initial_stream_window_size: Option<u32>,
+    #[cfg(feature = "http2")]
     http2_initial_connection_window_size: Option<u32>,
+    #[cfg(feature = "http2")]
     http2_adaptive_window: bool,
+    #[cfg(feature = "http2")]
     http2_max_frame_size: Option<u32>,
+    #[cfg(feature = "http2")]
     http2_keep_alive_interval: Option<Duration>,
+    #[cfg(feature = "http2")]
     http2_keep_alive_timeout: Option<Duration>,
+    #[cfg(feature = "http2")]
     http2_keep_alive_while_idle: bool,
     local_address: Option<IpAddr>,
     nodelay: bool,
@@ -211,12 +219,19 @@ impl ClientBuilder {
                 http1_allow_obsolete_multiline_headers_in_responses: false,
                 http1_ignore_invalid_headers_in_responses: false,
                 http1_allow_spaces_after_header_name_in_responses: false,
+                #[cfg(feature = "http2")]
                 http2_initial_stream_window_size: None,
+                #[cfg(feature = "http2")]
                 http2_initial_connection_window_size: None,
+                #[cfg(feature = "http2")]
                 http2_adaptive_window: false,
+                #[cfg(feature = "http2")]
                 http2_max_frame_size: None,
+                #[cfg(feature = "http2")]
                 http2_keep_alive_interval: None,
+                #[cfg(feature = "http2")]
                 http2_keep_alive_timeout: None,
+                #[cfg(feature = "http2")]
                 http2_keep_alive_while_idle: false,
                 local_address: None,
                 nodelay: true,
@@ -349,6 +364,7 @@ impl ClientBuilder {
                             HttpVersionPref::Http1 => {
                                 tls.request_alpns(&["http/1.1"]);
                             }
+                            #[cfg(feature = "http2")]
                             HttpVersionPref::Http2 => {
                                 tls.request_alpns(&["h2"]);
                             }
@@ -541,6 +557,7 @@ impl ClientBuilder {
                         HttpVersionPref::Http1 => {
                             tls.alpn_protocols = vec!["http/1.1".into()];
                         }
+                        #[cfg(feature = "http2")]
                         HttpVersionPref::Http2 => {
                             tls.alpn_protocols = vec!["h2".into()];
                         }
@@ -596,32 +613,36 @@ impl ClientBuilder {
 
         let mut builder =
             hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
-        if matches!(config.http_version_pref, HttpVersionPref::Http2) {
-            builder.http2_only(true);
-        }
-
-        if let Some(http2_initial_stream_window_size) = config.http2_initial_stream_window_size {
-            builder.http2_initial_stream_window_size(http2_initial_stream_window_size);
-        }
-        if let Some(http2_initial_connection_window_size) =
-            config.http2_initial_connection_window_size
+        #[cfg(feature = "http2")]
         {
-            builder.http2_initial_connection_window_size(http2_initial_connection_window_size);
-        }
-        if config.http2_adaptive_window {
-            builder.http2_adaptive_window(true);
-        }
-        if let Some(http2_max_frame_size) = config.http2_max_frame_size {
-            builder.http2_max_frame_size(http2_max_frame_size);
-        }
-        if let Some(http2_keep_alive_interval) = config.http2_keep_alive_interval {
-            builder.http2_keep_alive_interval(http2_keep_alive_interval);
-        }
-        if let Some(http2_keep_alive_timeout) = config.http2_keep_alive_timeout {
-            builder.http2_keep_alive_timeout(http2_keep_alive_timeout);
-        }
-        if config.http2_keep_alive_while_idle {
-            builder.http2_keep_alive_while_idle(true);
+            if matches!(config.http_version_pref, HttpVersionPref::Http2) {
+                builder.http2_only(true);
+            }
+
+            if let Some(http2_initial_stream_window_size) = config.http2_initial_stream_window_size
+            {
+                builder.http2_initial_stream_window_size(http2_initial_stream_window_size);
+            }
+            if let Some(http2_initial_connection_window_size) =
+                config.http2_initial_connection_window_size
+            {
+                builder.http2_initial_connection_window_size(http2_initial_connection_window_size);
+            }
+            if config.http2_adaptive_window {
+                builder.http2_adaptive_window(true);
+            }
+            if let Some(http2_max_frame_size) = config.http2_max_frame_size {
+                builder.http2_max_frame_size(http2_max_frame_size);
+            }
+            if let Some(http2_keep_alive_interval) = config.http2_keep_alive_interval {
+                builder.http2_keep_alive_interval(http2_keep_alive_interval);
+            }
+            if let Some(http2_keep_alive_timeout) = config.http2_keep_alive_timeout {
+                builder.http2_keep_alive_timeout(http2_keep_alive_timeout);
+            }
+            if config.http2_keep_alive_while_idle {
+                builder.http2_keep_alive_while_idle(true);
+            }
         }
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -1089,6 +1110,7 @@ impl ClientBuilder {
     }
 
     /// Only use HTTP/2.
+    #[cfg(feature = "http2")]
     pub fn http2_prior_knowledge(mut self) -> ClientBuilder {
         self.config.http_version_pref = HttpVersionPref::Http2;
         self
@@ -1105,6 +1127,7 @@ impl ClientBuilder {
     /// Sets the `SETTINGS_INITIAL_WINDOW_SIZE` option for HTTP2 stream-level flow control.
     ///
     /// Default is currently 65,535 but may change internally to optimize for common uses.
+    #[cfg(feature = "http2")]
     pub fn http2_initial_stream_window_size(mut self, sz: impl Into<Option<u32>>) -> ClientBuilder {
         self.config.http2_initial_stream_window_size = sz.into();
         self
@@ -1113,6 +1136,7 @@ impl ClientBuilder {
     /// Sets the max connection-level flow control for HTTP2
     ///
     /// Default is currently 65,535 but may change internally to optimize for common uses.
+    #[cfg(feature = "http2")]
     pub fn http2_initial_connection_window_size(
         mut self,
         sz: impl Into<Option<u32>>,
@@ -1125,6 +1149,7 @@ impl ClientBuilder {
     ///
     /// Enabling this will override the limits set in `http2_initial_stream_window_size` and
     /// `http2_initial_connection_window_size`.
+    #[cfg(feature = "http2")]
     pub fn http2_adaptive_window(mut self, enabled: bool) -> ClientBuilder {
         self.config.http2_adaptive_window = enabled;
         self
@@ -1133,6 +1158,7 @@ impl ClientBuilder {
     /// Sets the maximum frame size to use for HTTP2.
     ///
     /// Default is currently 16,384 but may change internally to optimize for common uses.
+    #[cfg(feature = "http2")]
     pub fn http2_max_frame_size(mut self, sz: impl Into<Option<u32>>) -> ClientBuilder {
         self.config.http2_max_frame_size = sz.into();
         self
@@ -1142,6 +1168,7 @@ impl ClientBuilder {
     ///
     /// Pass `None` to disable HTTP2 keep-alive.
     /// Default is currently disabled.
+    #[cfg(feature = "http2")]
     pub fn http2_keep_alive_interval(
         mut self,
         interval: impl Into<Option<Duration>>,
@@ -1155,6 +1182,7 @@ impl ClientBuilder {
     /// If the ping is not acknowledged within the timeout, the connection will be closed.
     /// Does nothing if `http2_keep_alive_interval` is disabled.
     /// Default is currently disabled.
+    #[cfg(feature = "http2")]
     pub fn http2_keep_alive_timeout(mut self, timeout: Duration) -> ClientBuilder {
         self.config.http2_keep_alive_timeout = Some(timeout);
         self
@@ -1166,6 +1194,7 @@ impl ClientBuilder {
     /// If enabled, pings are also sent when no streams are active.
     /// Does nothing if `http2_keep_alive_interval` is disabled.
     /// Default is `false`.
+    #[cfg(feature = "http2")]
     pub fn http2_keep_alive_while_idle(mut self, enabled: bool) -> ClientBuilder {
         self.config.http2_keep_alive_while_idle = enabled;
         self
@@ -2008,6 +2037,7 @@ impl Config {
             f.field("http1_only", &true);
         }
 
+        #[cfg(feature = "http2")]
         if matches!(self.http_version_pref, HttpVersionPref::Http2) {
             f.field("http2_prior_knowledge", &true);
         }
@@ -2177,7 +2207,10 @@ impl PendingRequest {
         self.project().headers
     }
 
+    #[cfg(feature = "http2")]
     fn retry_error(mut self: Pin<&mut Self>, err: &(dyn std::error::Error + 'static)) -> bool {
+        use log::trace;
+
         if !is_retryable_error(err) {
             return false;
         }
@@ -2234,6 +2267,7 @@ impl PendingRequest {
     }
 }
 
+#[cfg(feature = "http2")]
 fn is_retryable_error(err: &(dyn std::error::Error + 'static)) -> bool {
     // pop the legacy::Error
     let err = if let Some(err) = err.source() {
@@ -2311,6 +2345,7 @@ impl Future for PendingRequest {
             let res = match self.as_mut().in_flight().get_mut() {
                 ResponseFuture::Default(r) => match Pin::new(r).poll(cx) {
                     Poll::Ready(Err(e)) => {
+                        #[cfg(feature = "http2")]
                         if self.as_mut().retry_error(&e) {
                             continue;
                         }

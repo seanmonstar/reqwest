@@ -27,11 +27,13 @@ features = [
 ]
 
 [features]
-default = ["default-tls"]
+default = ["default-tls", "http2"]
 
 # Note: this doesn't enable the 'native-tls' feature, which adds specific
 # functionality for it.
 default-tls = ["hyper-tls", "native-tls-crate", "__tls", "tokio-native-tls"]
+
+http2 = ["h2", "hyper/http2", "hyper-util/http2"]
 
 # Enables native-tls specific functionality not available by default.
 native-tls = ["default-tls"]
@@ -105,9 +107,9 @@ mime_guess = { version = "2.0", default-features = false, optional = true }
 encoding_rs = "0.8"
 http-body = "1"
 http-body-util = "0.1"
-hyper = { version = "1", features = ["http1", "http2", "client"] }
-hyper-util = { version = "0.1.3", features = ["http1", "http2", "client", "client-legacy", "tokio"] }
-h2 = "0.4"
+hyper = { version = "1", features = ["http1", "client"] }
+hyper-util = { version = "0.1.3", features = ["http1", "client", "client-legacy", "tokio"] }
+h2 = { version = "0.4", optional = true }
 once_cell = "1"
 log = "0.4"
 mime = "0.3.16"

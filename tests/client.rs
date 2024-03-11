@@ -1,7 +1,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 mod support;
 
-use support::delay_server;
 use support::server;
 
 #[cfg(feature = "json")]
@@ -442,6 +441,7 @@ async fn test_tls_info() {
 // fail, because the only thread would block until `panic_rx` receives a
 // notification while the client needs to be driven to get the graceful shutdown
 // done.
+#[cfg(feature = "http2")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn highly_concurrent_requests_to_http2_server_with_low_max_concurrent_streams() {
     let client = reqwest::Client::builder()
@@ -472,8 +472,11 @@ async fn highly_concurrent_requests_to_http2_server_with_low_max_concurrent_stre
     futures_util::future::join_all(futs).await;
 }
 
+#[cfg(feature = "http2")]
 #[tokio::test]
 async fn highly_concurrent_requests_to_slow_http2_server_with_low_max_concurrent_streams() {
+    use support::delay_server;
+
     let client = reqwest::Client::builder()
         .http2_prior_knowledge()
         .build()
