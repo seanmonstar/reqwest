@@ -144,14 +144,11 @@ impl<S: IntoUrl> IntoProxyScheme for S {
                 let mut source = e.source();
                 while let Some(err) = source {
                     if let Some(parse_error) = err.downcast_ref::<url::ParseError>() {
-                        match parse_error {
-                            url::ParseError::RelativeUrlWithoutBase => {
-                                presumed_to_have_scheme = false;
-                                break;
-                            }
-                            _ => {}
+                        if parse_error == url::ParseError::RelativeUrlWithoutBase {
+                            presumed_to_have_scheme = false;
+                            break;
                         }
-                    } else if let Some(_) = err.downcast_ref::<crate::error::BadScheme>() {
+                    } else if err.downcast_ref::<crate::error::BadScheme>().is_some() {
                         presumed_to_have_scheme = false;
                         break;
                     }
@@ -272,8 +269,8 @@ impl Proxy {
     /// # fn main() {}
     /// ```
     pub fn custom<F, U: IntoProxyScheme>(fun: F) -> Proxy
-    where
-        F: Fn(&Url) -> Option<U> + Send + Sync + 'static,
+        where
+            F: Fn(&Url) -> Option<U> + Send + Sync + 'static,
     {
         Proxy::new(Intercept::Custom(Custom {
             auth: None,
@@ -657,12 +654,12 @@ impl ProxyScheme {
         match self {
             ProxyScheme::Http { ref mut auth, .. } => {
                 if auth.is_none() {
-                    *auth = update.clone();
+                    auth.clone_from(update);
                 }
             }
             ProxyScheme::Https { ref mut auth, .. } => {
                 if auth.is_none() {
-                    *auth = update.clone();
+                    auth.clone_from(update);
                 }
             }
             #[cfg(feature = "socks")]
@@ -681,7 +678,7 @@ impl ProxyScheme {
 
         // Resolve URL to a host and port
         #[cfg(feature = "socks")]
-        let to_addr = || {
+            let to_addr = || {
             let addrs = url
                 .socket_addrs(|| match url.scheme() {
                     "socks5" | "socks5h" => Some(1080),
@@ -806,8 +803,8 @@ impl Custom {
             uri.port().map_or("", |_| ":"),
             uri.port().map_or(String::new(), |p| p.to_string())
         )
-        .parse()
-        .expect("should be valid Url");
+            .parse()
+            .expect("should be valid Url");
 
         (self.func)(&url)
             .and_then(|result| result.ok())
@@ -863,8 +860,8 @@ static SYS_PROXIES: Lazy<Arc<SystemProxyMap>> =
 ///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}
 fn get_sys_proxies(
     #[cfg_attr(
-        not(any(target_os = "windows", target_os = "macos")),
-        allow(unused_variables)
+    not(any(target_os = "windows", target_os = "macos")),
+    allow(unused_variables)
     )]
     platform_proxies: Option<String>,
 ) -> SystemProxyMap {
@@ -1029,10 +1026,10 @@ fn get_from_platform() -> Option<String> {
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 fn parse_platform_values_impl(platform_values: String) -> SystemProxyMap {
     let mut proxies = HashMap::new();
-    if platform_values.contains("=") {
+    if platform_values.contains('=') {
         // per-protocol settings.
-        for p in platform_values.split(";") {
-            let protocol_parts: Vec<&str> = p.split("=").collect();
+        for p in platform_values.split(';') {
+            let protocol_parts: Vec<&str> = p.split('=').collect();
             match protocol_parts.as_slice() {
                 [protocol, address] => {
                     // If address doesn't specify an explicit protocol as protocol://address
@@ -1053,16 +1050,15 @@ fn parse_platform_values_impl(platform_values: String) -> SystemProxyMap {
                 }
             }
         }
+    } else if let Some(scheme) = extract_type_prefix(&platform_values) {
+        // Explicit protocol has been specified
+        insert_proxy(&mut proxies, scheme, platform_values.to_owned());
     } else {
-        if let Some(scheme) = extract_type_prefix(&platform_values) {
-            // Explicit protocol has been specified
-            insert_proxy(&mut proxies, scheme, platform_values.to_owned());
-        } else {
-            // No explicit protocol has been specified, default to HTTP
-            insert_proxy(&mut proxies, "http", format!("http://{platform_values}"));
-            insert_proxy(&mut proxies, "https", format!("http://{platform_values}"));
-        }
+        // No explicit protocol has been specified, default to HTTP
+        insert_proxy(&mut proxies, "http", format!("http://{platform_values}"));
+        insert_proxy(&mut proxies, "https", format!("http://{platform_values}"));
     }
+
     proxies
 }
 
@@ -1850,6 +1846,7 @@ mod test {
                         Proxy::http("ldap%5Cgremlin:pass%3Bword@proxy.example.com:8080").unwrap();
                 }
             }
+
             mod and_url_has_bad {
                 use super::super::check_parse_error;
 
@@ -1945,6 +1942,7 @@ mod test {
                             .unwrap();
                 }
             }
+
             mod and_url_has_bad {
                 use super::super::check_parse_error;
 
