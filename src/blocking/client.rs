@@ -513,21 +513,6 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.local_address(addr))
     }
 
-    /// Bind to an interface by `SO_BINDTODEVICE`.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// let interface = "lo";
-    /// let client = reqwest::blocking::Client::builder()
-    ///     .interface(interface)
-    ///     .build().unwrap();
-    /// ```
-    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
-    pub fn interface(self, interface: &str) -> ClientBuilder {
-        self.with_inner(move |inner| inner.interface(interface))
-    }
-
     /// Set that all sockets have `SO_KEEPALIVE` set with the supplied duration.
     ///
     /// If `None`, the option will not be set.
@@ -1187,7 +1172,7 @@ impl Default for Timeout {
     }
 }
 
-pub(crate) struct KeepCoreThreadAlive(#[allow(dead_code)] Option<Arc<InnerClientHandle>>);
+pub(crate) struct KeepCoreThreadAlive(#[allow(unused)] Option<Arc<InnerClientHandle>>);
 
 impl KeepCoreThreadAlive {
     pub(crate) fn empty() -> KeepCoreThreadAlive {

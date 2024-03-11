@@ -1,7 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 mod support;
-use http_body_util::BodyExt;
-use reqwest::Body;
+use futures_util::stream::StreamExt;
+use hyper::Body;
 use support::server;
 
 #[tokio::test]
@@ -87,14 +87,7 @@ async fn test_redirect_307_and_308_tries_to_post_again() {
             assert_eq!(req.method(), "POST");
             assert_eq!(req.headers()["content-length"], "5");
 
-            let data = req
-                .body_mut()
-                .frame()
-                .await
-                .unwrap()
-                .unwrap()
-                .into_data()
-                .unwrap();
+            let data = req.body_mut().next().await.unwrap().unwrap();
             assert_eq!(&*data, b"Hello");
 
             if req.uri() == &*format!("/{code}") {
@@ -137,14 +130,7 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
             assert_eq!(req.uri(), &*format!("/{code}"));
             assert_eq!(req.headers()["transfer-encoding"], "chunked");
 
-            let data = req
-                .body_mut()
-                .frame()
-                .await
-                .unwrap()
-                .unwrap()
-                .into_data()
-                .unwrap();
+            let data = req.body_mut().next().await.unwrap().unwrap();
             assert_eq!(&*data, b"Hello");
 
             http::Response::builder()

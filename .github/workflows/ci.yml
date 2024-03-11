@@ -71,7 +71,6 @@ jobs:
           - "feat.: default-tls disabled"
           - "feat.: rustls-tls"
           - "feat.: rustls-tls-manual-roots"
-          - "feat.: rustls-tls-native-roots"
           - "feat.: native-tls"
           - "feat.: default-tls and rustls-tls"
           - "feat.: cookies"
@@ -102,23 +101,23 @@ jobs:
           - name: windows / stable-x86_64-msvc
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            features: "--features blocking,gzip,brotli,deflate,json,multipart,stream"
+            features: "--features blocking,gzip,brotli,deflate,json,multipart"
           - name: windows / stable-i686-msvc
             os: windows-latest
             target: i686-pc-windows-msvc
-            features: "--features blocking,gzip,brotli,deflate,json,multipart,stream"
+            features: "--features blocking,gzip,brotli,deflate,json,multipart"
           - name: windows / stable-x86_64-gnu
             os: windows-latest
             rust: stable-x86_64-pc-windows-gnu
             target: x86_64-pc-windows-gnu
-            features: "--features blocking,gzip,brotli,deflate,json,multipart,stream"
+            features: "--features blocking,gzip,brotli,deflate,json,multipart"
             package_name: mingw-w64-x86_64-gcc
             mingw64_path: "C:\\msys64\\mingw64\\bin"
           - name: windows / stable-i686-gnu
             os: windows-latest
             rust: stable-i686-pc-windows-gnu
             target: i686-pc-windows-gnu
-            features: "--features blocking,gzip,brotli,deflate,json,multipart,stream"
+            features: "--features blocking,gzip,brotli,deflate,json,multipart"
             package_name: mingw-w64-i686-gcc
             mingw64_path: "C:\\msys64\\mingw32\\bin"
 
@@ -128,8 +127,6 @@ jobs:
             features: "--no-default-features --features rustls-tls"
           - name: "feat.: rustls-tls-manual-roots"
             features: "--no-default-features --features rustls-tls-manual-roots"
-          - name: "feat.: rustls-tls-native-roots"
-            features: "--no-default-features --features rustls-tls-native-roots"
           - name: "feat.: native-tls"
             features: "--features native-tls"
           - name: "feat.: default-tls and rustls-tls"
@@ -139,11 +136,11 @@ jobs:
           - name: "feat.: blocking"
             features: "--features blocking"
           - name: "feat.: gzip"
-            features: "--features gzip,stream"
+            features: "--features gzip"
           - name: "feat.: brotli"
-            features: "--features brotli,stream"
+            features: "--features brotli"
           - name: "feat.: deflate"
-            features: "--features deflate,stream"
+            features: "--features deflate"
           - name: "feat.: json"
             features: "--features json"
           - name: "feat.: multipart"
@@ -207,12 +204,11 @@ jobs:
         with:
           toolchain: 'stable'
 
-      #- name: Check
-      #  run: RUSTFLAGS="--cfg reqwest_unstable" cargo check --features http3
+      - name: Check
+        run: RUSTFLAGS="--cfg reqwest_unstable" cargo check --features http3
 
   docs:
     name: Docs
-    needs: [test]
     runs-on: ubuntu-latest
 
     steps:
