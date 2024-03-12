@@ -31,43 +31,43 @@ default = ["default-tls", "http2"]
 
 # Note: this doesn't enable the 'native-tls' feature, which adds specific
 # functionality for it.
-default-tls = ["hyper-tls", "native-tls-crate", "__tls", "tokio-native-tls"]
+default-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
 
 http2 = ["h2", "hyper/http2", "hyper-util/http2"]
 
 # Enables native-tls specific functionality not available by default.
 native-tls = ["default-tls"]
-native-tls-alpn = ["native-tls", "native-tls-crate/alpn", "hyper-tls/alpn"]
-native-tls-vendored = ["native-tls", "native-tls-crate/vendored"]
+native-tls-alpn = ["native-tls", "native-tls-crate?/alpn", "hyper-tls?/alpn"]
+native-tls-vendored = ["native-tls", "native-tls-crate?/vendored"]
 
 rustls-tls = ["rustls-tls-webpki-roots"]
 rustls-tls-manual-roots = ["__rustls"]
-rustls-tls-webpki-roots = ["webpki-roots", "__rustls"]
-rustls-tls-native-roots = ["rustls-native-certs", "__rustls"]
+rustls-tls-webpki-roots = ["dep:webpki-roots", "__rustls"]
+rustls-tls-native-roots = ["dep:rustls-native-certs", "__rustls"]
 
 blocking = ["futures-channel/sink", "futures-util/io", "futures-util/sink", "tokio/rt-multi-thread", "tokio/sync"]
 
-cookies = ["cookie_crate", "cookie_store"]
+cookies = ["dep:cookie_crate", "dep:cookie_store"]
 
-gzip = ["async-compression", "async-compression/gzip", "tokio-util"]
+gzip = ["dep:async-compression", "async-compression?/gzip", "dep:tokio-util"]
 
-brotli = ["async-compression", "async-compression/brotli", "tokio-util"]
+brotli = ["dep:async-compression", "async-compression?/brotli", "dep:tokio-util"]
 
-deflate = ["async-compression", "async-compression/zlib", "tokio-util"]
+deflate = ["dep:async-compression", "async-compression?/zlib", "dep:tokio-util"]
 
-json = ["serde_json"]
+json = ["dep:serde_json"]
 
-multipart = ["mime_guess"]
+multipart = ["dep:mime_guess"]
 
-trust-dns = ["trust-dns-resolver"]
+trust-dns = ["dep:trust-dns-resolver"]
 
-stream = ["tokio/fs", "tokio-util", "wasm-streams"]
+stream = ["tokio/fs", "dep:tokio-util", "dep:wasm-streams"]
 
-socks = ["tokio-socks"]
+socks = ["dep:tokio-socks"]
 
 # Experimental HTTP/3 client.
 # Disabled while waiting for quinn to upgrade.
-#http3 = ["rustls-tls-manual-roots", "h3", "h3-quinn", "quinn", "futures-channel"]
+#http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "dep:futures-channel"]
 
 # Internal (PRIVATE!) features used to aid testing.
 # Don't rely on these whatsoever. They may disappear at anytime.
@@ -77,7 +77,7 @@ __tls = ["dep:rustls-pemfile", "tokio/io-util"]
 
 # Enables common rustls code.
 # Equivalent to rustls-tls-manual-roots but shorter :)
-__rustls = ["hyper-rustls", "tokio-rustls", "rustls", "__tls", "dep:rustls-pemfile", "rustls-pki-types"]
+__rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls", "dep:rustls-pemfile", "rustls-pki-types"]
 
 # When enabled, disable using the cached SYS_PROXIES.
 __internal_proxy_sys_no_cache = []

@@ -4,9 +4,9 @@ use http::uri::{Authority, Scheme};
 use http::Uri;
 use hyper::rt::{Read, ReadBufCursor, Write};
 use hyper_util::client::legacy::connect::{Connected, Connection};
-#[cfg(feature = "__tls")]
+#[cfg(any(feature = "socks", feature = "__tls"))]
 use hyper_util::rt::TokioIo;
-#[cfg(feature = "native-tls-crate")]
+#[cfg(feature = "default-tls")]
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
 use tower_service::Service;
 
@@ -217,11 +217,11 @@ impl Connector {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     let host = dst.host().ok_or("no host in url")?.to_string();
                     let conn = socks::connect(proxy, dst, dns).await?;
-                    let conn = hyper_util::rt::TokioIo::new(conn);
-                    let conn = hyper_util::rt::TokioIo::new(conn);
+                    let conn = TokioIo::new(conn);
+                    let conn = TokioIo::new(conn);
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                     let io = tls_connector.connect(&host, conn).await?;
-                    let io = hyper_util::rt::TokioIo::new(io);
+                    let io = TokioIo::new(io);
                     return Ok(Conn {
                         inner: self.verbose.wrap(NativeTlsConn { inner: io }),
                         is_proxy: false,
@@ -238,15 +238,15 @@ impl Connector {
                     let tls = tls_proxy.clone();
                     let host = dst.host().ok_or("no host in url")?.to_string();
                     let conn = socks::connect(proxy, dst, dns).await?;
-                    let conn = hyper_util::rt::TokioIo::new(conn);
-                    let conn = hyper_util::rt::TokioIo::new(conn);
+                    let conn = TokioIo::new(conn);
+                    let conn = TokioIo::new(conn);
                     let server_name =
                         rustls_pki_types::ServerName::try_from(host.as_str().to_owned())
                             .map_err(|_| "Invalid Server Name")?;
                     let io = RustlsConnector::from(tls)
                         .connect(server_name, conn)
                         .await?;
-                    let io = hyper_util::rt::TokioIo::new(io);
+                    let io = TokioIo::new(io);
                     return Ok(Conn {
                         inner: self.verbose.wrap(RustlsTlsConn { inner: io }),
                         is_proxy: false,
@@ -259,7 +259,7 @@ impl Connector {
         }
 
         socks::connect(proxy, dst, dns).await.map(|tcp| Conn {
-            inner: self.verbose.wrap(hyper_util::rt::TokioIo::new(tcp)),
+            inner: self.verbose.wrap(TokioIo::new(tcp)),
             is_proxy: false,
             tls_info: false,
         })
