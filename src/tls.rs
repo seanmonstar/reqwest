@@ -59,7 +59,7 @@ use std::{
 /// Represents a server X509 certificate.
 #[derive(Clone)]
 pub struct Certificate {
-    #[cfg(feature = "native-tls-crate")]
+    #[cfg(feature = "default-tls")]
     native: native_tls_crate::Certificate,
     #[cfg(feature = "__rustls")]
     original: Cert,
@@ -131,7 +131,7 @@ impl Certificate {
     /// ```
     pub fn from_der(der: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
-            #[cfg(feature = "native-tls-crate")]
+            #[cfg(feature = "default-tls")]
             native: native_tls_crate::Certificate::from_der(der).map_err(crate::error::builder)?,
             #[cfg(feature = "__rustls")]
             original: Cert::Der(der.to_owned()),
@@ -156,7 +156,7 @@ impl Certificate {
     /// ```
     pub fn from_pem(pem: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
-            #[cfg(feature = "native-tls-crate")]
+            #[cfg(feature = "default-tls")]
             native: native_tls_crate::Certificate::from_pem(pem).map_err(crate::error::builder)?,
             #[cfg(feature = "__rustls")]
             original: Cert::Pem(pem.to_owned()),
@@ -189,7 +189,7 @@ impl Certificate {
             .collect::<crate::Result<Vec<Certificate>>>()
     }
 
-    #[cfg(feature = "native-tls-crate")]
+    #[cfg(feature = "default-tls")]
     pub(crate) fn add_to_native_tls(self, tls: &mut native_tls_crate::TlsConnectorBuilder) {
         tls.add_root_certificate(self.native);
     }
