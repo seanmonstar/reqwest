@@ -1,3 +1,7 @@
+## v0.11.26
+
+- Revert `system-configuration` upgrade, which broke MSRV on macOS.
+
 ## v0.11.25
 
 - Fix `Certificate::from_pem_bundle()` parsing.
