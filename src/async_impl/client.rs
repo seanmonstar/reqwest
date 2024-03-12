@@ -14,7 +14,7 @@ use http::header::{
 use http::uri::Scheme;
 use http::Uri;
 use hyper_util::client::legacy::connect::HttpConnector;
-#[cfg(feature = "native-tls-crate")]
+#[cfg(feature = "default-tls")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
 use std::future::Future;
@@ -1534,9 +1534,7 @@ impl ClientBuilder {
         let mut tls = Some(tls);
         #[cfg(feature = "native-tls")]
         {
-            if let Some(conn) =
-                (&mut tls as &mut dyn Any).downcast_mut::<Option<native_tls_crate::TlsConnector>>()
-            {
+            if let Some(conn) = (&mut tls as &mut dyn Any).downcast_mut::<Option<TlsConnector>>() {
                 let tls = conn.take().expect("is definitely Some");
                 let tls = crate::tls::TlsBackend::BuiltNativeTls(tls);
                 self.config.tls = tls;
@@ -2135,7 +2133,7 @@ impl Config {
             f.field("tls_info", &self.tls_info);
         }
 
-        #[cfg(all(feature = "native-tls-crate", feature = "__rustls"))]
+        #[cfg(all(feature = "default-tls", feature = "__rustls"))]
         {
             f.field("tls_backend", &self.tls);
         }
