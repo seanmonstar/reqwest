@@ -22,6 +22,7 @@ fn test_response_text() {
 }
 
 #[test]
+#[cfg(feature = "charset")]
 fn test_response_non_utf_8_text() {
     let server = server::http(move |_req| async {
         http::Response::builder()

@@ -27,7 +27,7 @@ features = [
 ]
 
 [features]
-default = ["default-tls", "http2", "macos-system-configuration"]
+default = ["default-tls", "charset", "http2", "macos-system-configuration"]
 
 # Note: this doesn't enable the 'native-tls' feature, which adds specific
 # functionality for it.
@@ -47,6 +47,8 @@ rustls-tls-native-roots = ["dep:rustls-native-certs", "__rustls"]
 
 blocking = ["futures-channel/sink", "futures-util/io", "futures-util/sink", "tokio/rt-multi-thread", "tokio/sync"]
 
+charset = ["dep:encoding_rs"]
+
 cookies = ["dep:cookie_crate", "dep:cookie_store"]
 
 gzip = ["dep:async-compression", "async-compression?/gzip", "dep:tokio-util"]
@@ -60,7 +62,7 @@ json = ["dep:serde_json"]
 multipart = ["dep:mime_guess"]
 
 # Deprecated, remove this feature while bumping minor versions.
-trust-dns = ["dep:trust-dns-resolver"]
+trust-dns = []
 hickory-dns = ["dep:hickory-resolver"]
 
 stream = ["tokio/fs", "dep:tokio-util", "dep:wasm-streams"]
@@ -107,7 +109,7 @@ serde_json = { version = "1.0", optional = true }
 mime_guess = { version = "2.0", default-features = false, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-encoding_rs = "0.8"
+encoding_rs = { version = "0.8", optional = true }
 http-body = "1"
 http-body-util = "0.1"
 hyper = { version = "1", features = ["http1", "client"] }
