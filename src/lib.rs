@@ -193,6 +193,7 @@
 //! - **rustls-tls-native-roots**: Enables TLS functionality provided by `rustls`,
 //!   while using root certificates from the `rustls-native-certs` crate.
 //! - **blocking**: Provides the [blocking][] client API.
+//! - **charset** *(enabled by default)*: Improved support for decoding text.
 //! - **cookies**: Provides cookie session support.
 //! - **gzip**: Provides response body gzip decompression.
 //! - **brotli**: Provides response body brotli decompression.

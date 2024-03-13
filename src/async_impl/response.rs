@@ -3,11 +3,9 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 
 use bytes::Bytes;
-use encoding_rs::{Encoding, UTF_8};
 use http_body_util::BodyExt;
 use hyper::{HeaderMap, StatusCode, Version};
 use hyper_util::client::legacy::connect::HttpInfo;
-use mime::Mime;
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
 #[cfg(feature = "json")]
@@ -20,6 +18,11 @@ use super::decoder::{Accepts, Decoder};
 use crate::async_impl::body::ResponseBody;
 #[cfg(feature = "cookies")]
 use crate::cookie;
+
+#[cfg(feature = "charset")]
+use encoding_rs::{Encoding, UTF_8};
+#[cfg(feature = "charset")]
+use mime::Mime;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -135,6 +138,11 @@ impl Response {
     ///
     /// Note that the BOM is stripped from the returned String.
     ///
+    /// # Note
+    ///
+    /// If the `charset` feature is disabled the method will only attempt to decode the
+    /// response as UTF-8, regardless of the given `Content-Type`
+    ///
     /// # Example
     ///
     /// ```
@@ -149,7 +157,17 @@ impl Response {
     /// # }
     /// ```
     pub async fn text(self) -> crate::Result<String> {
-        self.text_with_charset("utf-8").await
+        #[cfg(feature = "charset")]
+        {
+            self.text_with_charset("utf-8").await
+        }
+
+        #[cfg(not(feature = "charset"))]
+        {
+            let full = self.bytes().await?;
+            let text = String::from_utf8_lossy(&full);
+            Ok(text.into_owned())
+        }
     }
 
     /// Get the full response text given a specific encoding.
@@ -164,6 +182,10 @@ impl Response {
     ///
     /// [`encoding_rs`]: https://docs.rs/encoding_rs/0.8/encoding_rs/#relationship-with-windows-code-pages
     ///
+    /// # Optional
+    ///
+    /// This requires the optional `encoding_rs` feature enabled.
+    ///
     /// # Example
     ///
     /// ```
@@ -177,6 +199,8 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
+    #[cfg(feature = "charset")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "charset")))]
     pub async fn text_with_charset(self, default_encoding: &str) -> crate::Result<String> {
         let content_type = self
             .headers()
