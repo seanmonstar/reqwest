@@ -27,7 +27,7 @@ features = [
 ]
 
 [features]
-default = ["default-tls", "http2"]
+default = ["default-tls", "http2", "macos-system-configuration"]
 
 # Note: this doesn't enable the 'native-tls' feature, which adds specific
 # functionality for it.
@@ -64,6 +64,9 @@ trust-dns = ["dep:trust-dns-resolver"]
 stream = ["tokio/fs", "dep:tokio-util", "dep:wasm-streams"]
 
 socks = ["dep:tokio-socks"]
+
+# Use the system's proxy configuration.
+macos-system-configuration = ["dep:system-configuration"]
 
 # Experimental HTTP/3 client.
 # Disabled while waiting for quinn to upgrade.
@@ -168,7 +171,7 @@ futures-util = { version = "0.3.0", default-features = false, features = ["std",
 winreg = "0.50.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-system-configuration = "0.6"
+system-configuration = { version = "0.5.1", optional = true }
 
 # wasm
 
