@@ -229,9 +229,9 @@ async fn overridden_dns_resolution_with_gai_multiple() {
     assert_eq!("Hello", text);
 }
 
-#[cfg(feature = "trust-dns")]
+#[cfg(feature = "hickory-dns")]
 #[tokio::test]
-async fn overridden_dns_resolution_with_trust_dns() {
+async fn overridden_dns_resolution_with_hickory_dns() {
     let _ = env_logger::builder().is_test(true).try_init();
     let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
 
@@ -242,7 +242,7 @@ async fn overridden_dns_resolution_with_trust_dns() {
     );
     let client = reqwest::Client::builder()
         .resolve(overridden_domain, server.addr())
-        .trust_dns(true)
+        .hickory_dns(true)
         .build()
         .expect("client builder");
     let req = client.get(&url);
@@ -253,9 +253,9 @@ async fn overridden_dns_resolution_with_trust_dns() {
     assert_eq!("Hello", text);
 }
 
-#[cfg(feature = "trust-dns")]
+#[cfg(feature = "hickory-dns")]
 #[tokio::test]
-async fn overridden_dns_resolution_with_trust_dns_multiple() {
+async fn overridden_dns_resolution_with_hickory_dns_multiple() {
     let _ = env_logger::builder().is_test(true).try_init();
     let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
 
@@ -277,7 +277,7 @@ async fn overridden_dns_resolution_with_trust_dns_multiple() {
                 server.addr(),
             ],
         )
-        .trust_dns(true)
+        .hickory_dns(true)
         .build()
         .expect("client builder");
     let req = client.get(&url);
