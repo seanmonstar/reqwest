@@ -446,6 +446,16 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
     }
 }
 
+/// A `Response` can be converted into a `http::Response`.
+// It's supposed to be the inverse of the conversion above.
+impl From<Response> for http::Response<Body> {
+    fn from(r: Response) -> http::Response<Body> {
+        let (parts, body) = r.res.into_parts();
+        let body = Body::streaming(body);
+        http::Response::from_parts(parts, body)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Response;
