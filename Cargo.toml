@@ -60,7 +60,7 @@ json = ["dep:serde_json"]
 multipart = ["dep:mime_guess"]
 
 # Deprecated, remove this feature while bumping minor versions.
-trust-dns = ["dep:trust-dns-resolver"]
+trust-dns = []
 hickory-dns = ["dep:hickory-resolver"]
 
 stream = ["tokio/fs", "dep:tokio-util", "dep:wasm-streams"]
