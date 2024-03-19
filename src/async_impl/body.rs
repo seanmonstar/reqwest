@@ -167,6 +167,18 @@ impl Body {
     }
 }
 
+impl<T> From<Option<T>> for Body
+where
+    T: Into<Body>,
+{
+    fn from(value: Option<T>) -> Self {
+        match value {
+            Some(content) => content.into(),
+            None => Body::reusable(Bytes::new()),
+        }
+    }
+}
+
 impl From<hyper::Body> for Body {
     #[inline]
     fn from(body: hyper::Body) -> Body {
