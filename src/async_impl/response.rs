@@ -34,10 +34,11 @@ impl Response {
         res: hyper::Response<hyper::Body>,
         url: Url,
         accepts: Accepts,
+        body_limit: Option<u64>,
         timeout: Option<Pin<Box<Sleep>>>,
     ) -> Response {
         let (mut parts, body) = res.into_parts();
-        let decoder = Decoder::detect(&mut parts.headers, Body::response(body, timeout), accepts);
+        let decoder = Decoder::detect(&mut parts.headers, Body::response(body, timeout), accepts).with_limit(body_limit);
         let res = hyper::Response::from_parts(parts, decoder);
 
         Response {
@@ -256,6 +257,16 @@ impl Response {
     /// # }
     /// ```
     pub async fn bytes(self) -> crate::Result<Bytes> {
+        // Optimization: don't read any of the body if the content-length
+        // header exists and is too large.
+        if let Some(body_limit) = self.res.body().limit_remaining() {
+            if self.content_length() > Some(body_limit) {
+                return Err(crate::error::body(
+                    "Content length exceeds response body limit",
+                ));
+            };
+        }
+
         hyper::body::to_bytes(self.res.into_body()).await
     }
 
