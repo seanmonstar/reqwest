@@ -3,8 +3,9 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut, BufMut};
 use futures_core::Stream;
+use futures_util::stream::StreamExt;
 use http_body::Body as HttpBody;
 use pin_project_lite::pin_project;
 use sync_wrapper::SyncWrapper;
@@ -88,6 +89,29 @@ impl Body {
         Bytes: From<S::Ok>,
     {
         Body::stream(stream)
+    }
+
+    /// Returns a reference to the internal data of the `Body`.
+    ///
+    /// If the underlying data is a stream, it is first read into memory.
+    pub async fn buffer(&mut self) -> crate::Result<&[u8]> {
+        if let Inner::Reusable(ref bytes) = self.inner {
+            return Ok(bytes.as_ref())
+        }
+
+        let inner = std::mem::replace(&mut self.inner, Inner::Reusable(Bytes::new()));
+        let mut stream = ImplStream(Body { inner });
+
+        let mut buf = BytesMut::new();
+        while let Some(Ok(bytes)) = stream.next().await {
+            buf.put(bytes);
+       }
+
+        self.inner = Inner::Reusable(buf.into());
+        match self.inner {
+            Inner::Reusable(ref bytes) => Ok(bytes.as_ref()),
+            _ => unreachable!(),
+        }
     }
 
     pub(crate) fn stream<S>(stream: S) -> Body
