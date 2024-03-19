@@ -1,6 +1,7 @@
 use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::time::Duration;
 
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
@@ -34,7 +35,7 @@ impl Response {
         res: hyper::Response<hyper::Body>,
         url: Url,
         accepts: Accepts,
-        timeout: Option<Pin<Box<Sleep>>>,
+        timeout: Option<(Pin<Box<Sleep>>, Duration)>,
     ) -> Response {
         let (mut parts, body) = res.into_parts();
         let decoder = Decoder::detect(&mut parts.headers, Body::response(body, timeout), accepts);

@@ -1899,6 +1899,7 @@ impl Client {
 
                 in_flight,
                 timeout,
+                timeout_duration: self.inner.request_timeout,
             }),
         }
     }
@@ -2166,6 +2167,7 @@ pin_project! {
         in_flight: ResponseFuture,
         #[pin]
         timeout: Option<Pin<Box<Sleep>>>,
+        timeout_duration: Option<Duration>,
     }
 }
 
@@ -2310,7 +2312,7 @@ impl Future for PendingRequest {
         if let Some(delay) = self.as_mut().timeout().as_mut().as_pin_mut() {
             if let Poll::Ready(()) = delay.poll(cx) {
                 return Poll::Ready(Err(
-                    crate::error::request(crate::error::TimedOut).with_url(self.url.clone())
+                    crate::error::request(crate::error::TimedOut(self.timeout_duration.unwrap())).with_url(self.url.clone())
                 ));
             }
         }
@@ -2498,7 +2500,7 @@ impl Future for PendingRequest {
                 res,
                 self.url.clone(),
                 self.client.accepts,
-                self.timeout.take(),
+                self.timeout.take().map(|timeoout| (timeoout, self.timeout_duration.unwrap())),
             );
             return Poll::Ready(Ok(res));
         }

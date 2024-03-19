@@ -2,6 +2,7 @@ use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 use bytes::Bytes;
 use futures_core::Stream;
@@ -32,7 +33,7 @@ enum Inner {
                     + Sync,
             >,
         >,
-        timeout: Option<Pin<Box<Sleep>>>,
+        timeout: Option<(Pin<Box<Sleep>>, Duration)>,
     },
 }
 
@@ -109,7 +110,7 @@ impl Body {
         }
     }
 
-    pub(crate) fn response(body: hyper::Body, timeout: Option<Pin<Box<Sleep>>>) -> Body {
+    pub(crate) fn response(body: hyper::Body, timeout: Option<(Pin<Box<Sleep>>, Duration)>) -> Body {
         Body {
             inner: Inner::Streaming {
                 body: Box::pin(WrapHyper(body)),
@@ -244,9 +245,9 @@ impl HttpBody for ImplStream {
                 ref mut body,
                 ref mut timeout,
             } => {
-                if let Some(ref mut timeout) = timeout {
-                    if let Poll::Ready(()) = timeout.as_mut().poll(cx) {
-                        return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
+                if let Some((ref mut timeout_future, duration)) = timeout {
+                    if let Poll::Ready(()) = timeout_future.as_mut().poll(cx) {
+                        return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut(*duration)))));
                     }
                 }
                 futures_core::ready!(Pin::new(body).poll_data(cx))
