@@ -1,3 +1,8 @@
+## v0.11.27
+
+- Add `hickory-dns` feature, deprecating `trust-dns`.
+- (wasm) Fix `Form::text()` to not set octet-stream for plain text fields.
+
 ## v0.11.26
 
 - Revert `system-configuration` upgrade, which broke MSRV on macOS.
