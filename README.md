@@ -7,13 +7,13 @@
 
 An ergonomic, batteries-included HTTP Client for Rust.
 
+- Async and blocking `Client`s
 - Plain bodies, JSON, urlencoded, multipart
 - Customizable redirect policy
 - HTTP Proxies
 - HTTPS via system-native TLS (or optionally, rustls)
 - Cookie Store
 - WASM
-- [Changelog](CHANGELOG.md)
 
 
 ## Example
@@ -43,25 +43,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## Blocking Client
+## Commercial Support
 
-There is an optional "blocking" client API that can be enabled:
-
-```toml
-[dependencies]
-reqwest = { version = "0.11", features = ["blocking", "json"] }
-```
-
-```rust,no_run
-use std::collections::HashMap;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let resp = reqwest::blocking::get("https://httpbin.org/ip")?
-        .json::<HashMap<String, String>>()?;
-    println!("{resp:#?}");
-    Ok(())
-}
-```
+For private advice, support, reviews, access to the maintainer, and the like, reach out for [commercial support][sponsor].
 
 ## Requirements
 
@@ -93,3 +77,9 @@ Licensed under either of
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall
 be dual licensed as above, without any additional terms or conditions.
+
+## Sponsors
+
+Support this project by becoming a [sponsor][].
+
+[sponsor]: https://seanmonstar.com/sponsor

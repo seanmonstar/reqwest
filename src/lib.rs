@@ -27,6 +27,11 @@
 //! - [The Rust Cookbook](https://rust-lang-nursery.github.io/rust-cookbook/web/clients.html)
 //! - [Reqwest Repository Examples](https://github.com/seanmonstar/reqwest/tree/master/examples)
 //!
+//! ## Commercial Support
+//!
+//! For private advice, support, reviews, access to the maintainer, and the
+//! like, reach out for [commercial support][sponsor].
+//!
 //! ## Making a GET request
 //!
 //! For a single request, you can use the [`get`][get] shortcut method.
@@ -215,7 +220,11 @@
 //! RUSTFLAGS="--cfg reqwest_unstable" cargo build
 //! ```
 //!
-//! [hyper]: http://hyper.rs
+//! ## Sponsors
+//!
+//! Support this project by becoming a [sponsor][].
+//!
+//! [hyper]: https://hyper.rs
 //! [blocking]: ./blocking/index.html
 //! [client]: ./struct.Client.html
 //! [response]: ./struct.Response.html
@@ -225,6 +234,7 @@
 //! [redirect]: crate::redirect
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
+//! [sponsor]: https://seanmonstar.com/sponsor
 
 #[cfg(all(feature = "http3", not(reqwest_unstable)))]
 compile_error!(
