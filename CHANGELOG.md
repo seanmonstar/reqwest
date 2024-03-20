@@ -1,3 +1,14 @@
+# v0.12.0
+
+- Upgrade to `hyper`, `http`, and `http-body` v1.
+- Add better support for converting to and from `http::Request` and `http::Response`.
+- Add `http2` optional cargo feature, default on.
+- Add `charset` optional cargo feature, default on.
+- Add `macos-system-configuration` cargo feature, default on.
+- Change all optional dependencies to no longer be exposed as implicit features.
+- Add `ClientBuilder::interface(str)` to specify the local interface to bind to.
+- Experimental: disables the `http3` feature temporarily.
+
 ## v0.11.27
 
 - Add `hickory-dns` feature, deprecating `trust-dns`.
