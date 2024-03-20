@@ -590,7 +590,11 @@ impl ClientBuilder {
                             tls.alpn_protocols = vec!["h3".into()];
                         }
                         HttpVersionPref::All => {
-                            tls.alpn_protocols = vec!["h2".into(), "http/1.1".into()];
+                            tls.alpn_protocols = vec![
+                                #[cfg(feature = "http2")]
+                                "h2".into(),
+                                "http/1.1".into(),
+                            ];
                         }
                     }
 
