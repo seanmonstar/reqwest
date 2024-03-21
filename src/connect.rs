@@ -573,8 +573,7 @@ impl TlsInfoFactory for tokio_rustls::client::TlsStream<TokioIo<TokioIo<tokio::n
             .1
             .peer_certificates()
             .and_then(|certs| certs.first())
-            .map(|c| c.first())
-            .and_then(|c| c.map(|cc| vec![*cc]));
+            .map(|c| c.to_vec());
         Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
@@ -591,8 +590,7 @@ impl TlsInfoFactory
             .1
             .peer_certificates()
             .and_then(|certs| certs.first())
-            .map(|c| c.first())
-            .and_then(|c| c.map(|cc| vec![*cc]));
+            .map(|c| c.to_vec());
         Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
