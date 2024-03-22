@@ -206,10 +206,6 @@ impl fmt::Display for Error {
             write!(f, " for url ({url})")?;
         }
 
-        if let Some(e) = &self.inner.source {
-            write!(f, ": {e}")?;
-        }
-
         Ok(())
     }
 }
