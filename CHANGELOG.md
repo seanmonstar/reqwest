@@ -1,3 +1,10 @@
+## v0.12.1
+
+- Fix `ClientBuilder::interface()` when no TLS is enabled.
+- Fix `TlsInfo::peer_certificate()` being truncated with rustls.
+- Fix panic if `http2` feature disabled but TLS negotiated h2 in ALPN.
+- Fix `Display` for `Error` to not include its source error.
+
 # v0.12.0
 
 - Upgrade to `hyper`, `http`, and `http-body` v1.
