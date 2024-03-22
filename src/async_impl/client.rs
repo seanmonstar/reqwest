@@ -468,12 +468,6 @@ impl ClientBuilder {
                             config.quic_receive_window,
                             config.quic_send_window,
                             config.local_address,
-                            #[cfg(any(
-                                target_os = "android",
-                                target_os = "fuchsia",
-                                target_os = "linux"
-                            ))]
-                            config.interface.as_deref(),
                             &config.http_version_pref,
                         )?;
                     }
@@ -639,7 +633,14 @@ impl ClientBuilder {
             }
 
             #[cfg(not(feature = "__tls"))]
-            Connector::new(http, proxies.clone(), config.local_address, config.nodelay)
+            Connector::new(
+                http,
+                proxies.clone(),
+                config.local_address,
+                #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+                config.interface.as_deref(),
+                config.nodelay,
+            )
         };
 
         connector.set_timeout(config.connect_timeout);
