@@ -63,12 +63,18 @@ impl Connector {
         mut http: HttpConnector,
         proxies: Arc<Vec<Proxy>>,
         local_addr: T,
+        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+        interface: Option<&str>,
         nodelay: bool,
     ) -> Connector
     where
         T: Into<Option<IpAddr>>,
     {
         http.set_local_address(local_addr.into());
+        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+        if let Some(interface) = interface {
+            http.set_interface(interface.to_owned());
+        }
         http.set_nodelay(nodelay);
 
         Connector {
