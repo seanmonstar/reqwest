@@ -551,9 +551,14 @@ impl ClientBuilder {
                         });
                     }
 
+                    if versions.is_empty() {
+                        return Err(crate::error::builder("empty supported tls versions"));
+                    }
+
                     // Build TLS config
                     let config_builder =
-                        rustls::ClientConfig::builder().with_root_certificates(root_cert_store);
+                        rustls::ClientConfig::builder_with_protocol_versions(&versions)
+                            .with_root_certificates(root_cert_store);
 
                     // Finalize TLS config
                     let mut tls = if let Some(id) = config.identity {
@@ -1474,6 +1479,9 @@ impl ClientBuilder {
     /// `native-tls`/`default-tls` backend. This does not mean the version
     /// isn't supported, just that it can't be set as a maximum due to
     /// technical limitations.
+    ///
+    /// Cannot set a maximum outside the protocol versions supported by
+    /// `rustls` with the `rustls-tls` backend.
     ///
     /// # Optional
     ///
