@@ -1,3 +1,9 @@
+## v0.12.2
+
+- Fix missing ALPN when connecting to socks5 proxy with rustls.
+- Fix TLS version limits with rustls.
+- Fix not detected ALPN h2 from server with native-tls.
+
 ## v0.12.1
 
 - Fix `ClientBuilder::interface()` when no TLS is enabled.
