@@ -1,10 +1,11 @@
-use hyper_util::client::legacy::connect::dns::Name as HyperName;
+use hyper_util::client::legacy::connect::dns::{InvalidNameError, Name as HyperName};
 use tower_service::Service;
 
 use std::collections::HashMap;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
@@ -37,6 +38,14 @@ impl Name {
     /// View the name as a string.
     pub fn as_str(&self) -> &str {
         self.0.as_str()
+    }
+}
+
+impl FromStr for Name {
+    type Err = InvalidNameError;
+
+    fn from_str(host: &str) -> Result<Self, Self::Err> {
+        Ok(Name(HyperName::from_str(host.into())?))
     }
 }
 
