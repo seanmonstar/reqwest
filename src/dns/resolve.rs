@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
@@ -37,6 +38,16 @@ impl Name {
     /// View the name as a string.
     pub fn as_str(&self) -> &str {
         self.0.as_str()
+    }
+}
+
+impl FromStr for Name {
+    type Err = sealed::InvalidNameError;
+
+    fn from_str(host: &str) -> Result<Self, Self::Err> {
+        HyperName::from_str(host.into())
+            .map(Name)
+            .map_err(|_| sealed::InvalidNameError { _ext: () })
     }
 }
 
@@ -92,4 +103,21 @@ impl Resolve for DnsResolverWithOverrides {
             None => self.dns_resolver.resolve(name),
         }
     }
+}
+
+mod sealed {
+    use std::fmt;
+
+    #[derive(Debug)]
+    pub struct InvalidNameError {
+        pub(super) _ext: (),
+    }
+
+    impl fmt::Display for InvalidNameError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("invalid DNS name")
+        }
+    }
+
+    impl std::error::Error for InvalidNameError {}
 }
