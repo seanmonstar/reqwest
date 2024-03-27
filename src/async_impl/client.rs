@@ -1521,6 +1521,15 @@ impl ClientBuilder {
     /// Since multiple TLS backends can be optionally enabled, this option will
     /// force the `native-tls` backend to be used for this `Client`.
     ///
+    /// # Advanced
+    ///
+    /// This is an advanced option, and can be somewhat brittle. Usage requires
+    /// keeping the preconfigured TLS argument version in sync with reqwest,
+    /// since version mismatches will result in an "unknown" TLS backend.
+    ///
+    /// If possible, it's preferable to use the methods on `ClientBuilder`
+    /// to configure reqwest's TLS.
+    ///
     /// # Optional
     ///
     /// This requires the optional `native-tls` feature to be enabled.
@@ -1550,6 +1559,15 @@ impl ClientBuilder {
     ///
     /// Since multiple TLS backends can be optionally enabled, this option will
     /// force the `rustls` backend to be used for this `Client`.
+    ///
+    /// # Advanced
+    ///
+    /// This is an advanced option, and can be somewhat brittle. Usage requires
+    /// keeping the preconfigured TLS argument version in sync with reqwest,
+    /// since version mismatches will result in an "unknown" TLS backend.
+    ///
+    /// If possible, it's preferable to use the methods on `ClientBuilder`
+    /// to configure reqwest's TLS.
     ///
     /// # Optional
     ///
