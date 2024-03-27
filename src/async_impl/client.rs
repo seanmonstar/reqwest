@@ -1516,6 +1516,30 @@ impl ClientBuilder {
         self
     }
 
+    /// Use a preconfigured native TLS backend.
+    ///
+    /// Since multiple TLS backends can be optionally enabled, this option will
+    /// force the `native-tls` backend to be used for this `Client`.
+    ///
+    /// # Advanced
+    ///
+    /// This is an advanced option, and can be somewhat brittle. Usage requires
+    /// keeping the preconfigured TLS argument version in sync with reqwest,
+    /// since version mismatches will result in an "unknown" TLS backend.
+    ///
+    /// If possible, it's preferable to use the methods on `ClientBuilder`
+    /// to configure reqwest's TLS.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `native-tls` feature to be enabled.
+    #[cfg(feature = "native-tls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "native-tls")))]
+    pub fn use_preconfigured_native_tls(mut self, tls: TlsConnector) -> ClientBuilder {
+        self.config.tls = TlsBackend::BuiltNativeTls(tls);
+        self
+    }
+
     /// Force using the Rustls TLS backend.
     ///
     /// Since multiple TLS backends can be optionally enabled, this option will
@@ -1528,6 +1552,30 @@ impl ClientBuilder {
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
     pub fn use_rustls_tls(mut self) -> ClientBuilder {
         self.config.tls = TlsBackend::Rustls;
+        self
+    }
+
+    /// Use a preconfigured Rustls TLS backend.
+    ///
+    /// Since multiple TLS backends can be optionally enabled, this option will
+    /// force the `rustls` backend to be used for this `Client`.
+    ///
+    /// # Advanced
+    ///
+    /// This is an advanced option, and can be somewhat brittle. Usage requires
+    /// keeping the preconfigured TLS argument version in sync with reqwest,
+    /// since version mismatches will result in an "unknown" TLS backend.
+    ///
+    /// If possible, it's preferable to use the methods on `ClientBuilder`
+    /// to configure reqwest's TLS.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `rustls-tls(-...)` feature to be enabled.
+    #[cfg(feature = "__rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    pub fn use_preconfigured_rustls_tls(mut self, tls: rustls::ClientConfig) -> ClientBuilder {
+        self.config.tls = TlsBackend::BuiltRustls(tls);
         self
     }
 
@@ -1551,6 +1599,7 @@ impl ClientBuilder {
     /// `rustls-tls(-...)` to be enabled.
     #[cfg(any(feature = "native-tls", feature = "__rustls",))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
+    #[deprecated(note = "use `use_preconfigured_native_tls` or `use_preconfigured_rustls_tls` instead", since = "0.13.0")]
     pub fn use_preconfigured_tls(mut self, tls: impl Any) -> ClientBuilder {
         let mut tls = Some(tls);
         #[cfg(feature = "native-tls")]

@@ -318,10 +318,27 @@ async fn overridden_dns_resolution_with_hickory_dns_multiple() {
 fn use_preconfigured_tls_with_bogus_backend() {
     struct DefinitelyNotTls;
 
+    #[allow(deprecated)]
     reqwest::Client::builder()
         .use_preconfigured_tls(DefinitelyNotTls)
         .build()
         .expect_err("definitely is not TLS");
+}
+
+#[cfg(feature = "native-tls")]
+#[test]
+fn use_preconfigured_native_tls_dynamic_default() {
+    extern crate native_tls_crate;
+
+    let tls = native_tls_crate::TlsConnector::builder()
+        .build()
+        .expect("tls builder");
+
+    #[allow(deprecated)]
+    reqwest::Client::builder()
+        .use_preconfigured_tls(tls)
+        .build()
+        .expect("preconfigured default tls");
 }
 
 #[cfg(feature = "native-tls")]
@@ -334,9 +351,26 @@ fn use_preconfigured_native_tls_default() {
         .expect("tls builder");
 
     reqwest::Client::builder()
-        .use_preconfigured_tls(tls)
+        .use_preconfigured_native_tls(tls)
         .build()
         .expect("preconfigured default tls");
+}
+
+#[cfg(feature = "__rustls")]
+#[test]
+fn use_preconfigured_rustls_dynamic_default() {
+    extern crate rustls;
+
+    let root_cert_store = rustls::RootCertStore::empty();
+    let tls = rustls::ClientConfig::builder()
+        .with_root_certificates(root_cert_store)
+        .with_no_client_auth();
+
+    #[allow(deprecated)]
+    reqwest::Client::builder()
+        .use_preconfigured_tls(tls)
+        .build()
+        .expect("preconfigured rustls tls");
 }
 
 #[cfg(feature = "__rustls")]
@@ -350,7 +384,7 @@ fn use_preconfigured_rustls_default() {
         .with_no_client_auth();
 
     reqwest::Client::builder()
-        .use_preconfigured_tls(tls)
+        .use_preconfigured_rustls_tls(tls)
         .build()
         .expect("preconfigured rustls tls");
 }
