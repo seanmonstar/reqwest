@@ -318,6 +318,7 @@ async fn overridden_dns_resolution_with_hickory_dns_multiple() {
 fn use_preconfigured_tls_with_bogus_backend() {
     struct DefinitelyNotTls;
 
+    #[allow(deprecated)]
     reqwest::Client::builder()
         .use_preconfigured_tls(DefinitelyNotTls)
         .build()
@@ -333,6 +334,7 @@ fn use_preconfigured_native_tls_dynamic_default() {
         .build()
         .expect("tls builder");
 
+    #[allow(deprecated)]
     reqwest::Client::builder()
         .use_preconfigured_tls(tls)
         .build()
@@ -364,6 +366,7 @@ fn use_preconfigured_rustls_dynamic_default() {
         .with_root_certificates(root_cert_store)
         .with_no_client_auth();
 
+    #[allow(deprecated)]
     reqwest::Client::builder()
         .use_preconfigured_tls(tls)
         .build()
