@@ -326,7 +326,7 @@ fn use_preconfigured_tls_with_bogus_backend() {
 
 #[cfg(feature = "native-tls")]
 #[test]
-fn use_preconfigured_native_tls_default() {
+fn use_preconfigured_native_tls_dynamic_default() {
     extern crate native_tls_crate;
 
     let tls = native_tls_crate::TlsConnector::builder()
@@ -337,6 +337,37 @@ fn use_preconfigured_native_tls_default() {
         .use_preconfigured_tls(tls)
         .build()
         .expect("preconfigured default tls");
+}
+
+#[cfg(feature = "native-tls")]
+#[test]
+fn use_preconfigured_native_tls_default() {
+    extern crate native_tls_crate;
+
+    let tls = native_tls_crate::TlsConnector::builder()
+        .build()
+        .expect("tls builder");
+
+    reqwest::Client::builder()
+        .use_preconfigured_native_tls(tls)
+        .build()
+        .expect("preconfigured default tls");
+}
+
+#[cfg(feature = "__rustls")]
+#[test]
+fn use_preconfigured_rustls_dynamic_default() {
+    extern crate rustls;
+
+    let root_cert_store = rustls::RootCertStore::empty();
+    let tls = rustls::ClientConfig::builder()
+        .with_root_certificates(root_cert_store)
+        .with_no_client_auth();
+
+    reqwest::Client::builder()
+        .use_preconfigured_tls(tls)
+        .build()
+        .expect("preconfigured rustls tls");
 }
 
 #[cfg(feature = "__rustls")]
@@ -350,7 +381,7 @@ fn use_preconfigured_rustls_default() {
         .with_no_client_auth();
 
     reqwest::Client::builder()
-        .use_preconfigured_tls(tls)
+        .use_preconfigured_rustls_tls(tls)
         .build()
         .expect("preconfigured rustls tls");
 }
