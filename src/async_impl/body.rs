@@ -267,12 +267,15 @@ impl HttpBody for Body {
 
     fn size_hint(&self) -> http_body::SizeHint {
         match self.inner {
-            Inner::Reusable(ref bytes) => {
-                let mut hint = http_body::SizeHint::default();
-                hint.set_exact(bytes.len() as u64);
-                hint
-            }
+            Inner::Reusable(ref bytes) => http_body::SizeHint::with_exact(bytes.len() as u64),
             Inner::Streaming(ref body) => body.size_hint(),
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        match self.inner {
+            Inner::Reusable(ref bytes) => bytes.is_empty(),
+            Inner::Streaming(ref body) => body.is_end_stream(),
         }
     }
 }
