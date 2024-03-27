@@ -6,7 +6,8 @@ use std::io;
 use crate::{StatusCode, Url};
 
 /// A `Result` alias where the `Err` case is `reqwest::Error`.
-pub type Result<T> = std::result::Result<T, Error>;
+// The default error type is used to avoid breaking regular `Result<T, E>` when users glob-import `reqwest::*` 
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// The Errors that may occur when processing a `Request`.
 ///
