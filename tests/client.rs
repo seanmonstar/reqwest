@@ -3,8 +3,7 @@ mod support;
 
 use support::server;
 
-#[cfg(feature = "json")]
-use http::header::CONTENT_TYPE;
+use http::header::{CONTENT_LENGTH, CONTENT_TYPE, TRANSFER_ENCODING};
 #[cfg(feature = "json")]
 use std::collections::HashMap;
 
@@ -52,6 +51,30 @@ async fn auto_headers() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.remote_addr(), Some(server.addr()));
+}
+
+#[tokio::test]
+async fn donot_set_conent_length_0_if_have_no_body() {
+    let server = server::http(move |req| async move {
+        let headers = req.headers();
+        assert_eq!(headers.get(CONTENT_LENGTH), None);
+        assert!(headers.get(CONTENT_TYPE).is_none());
+        assert!(headers.get(TRANSFER_ENCODING).is_none());
+        dbg!(&headers);
+        http::Response::default()
+    });
+
+    let url = format!("http://{}/conent-length", server.addr());
+    let res = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client builder")
+        .get(&url)
+        .send()
+        .await
+        .expect("request");
+
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
 #[tokio::test]

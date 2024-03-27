@@ -267,12 +267,15 @@ impl HttpBody for Body {
 
     fn size_hint(&self) -> http_body::SizeHint {
         match self.inner {
-            Inner::Reusable(ref bytes) => {
-                let mut hint = http_body::SizeHint::default();
-                hint.set_exact(bytes.len() as u64);
-                hint
-            }
+            Inner::Reusable(ref bytes) => http_body::SizeHint::with_exact(bytes.len() as u64),
             Inner::Streaming(ref body) => body.size_hint(),
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        match self.inner {
+            Inner::Reusable(ref bytes) => bytes.is_empty(),
+            Inner::Streaming(ref body) => body.is_end_stream(),
         }
     }
 }
@@ -352,6 +355,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use http_body::Body as _;
+
     use super::Body;
 
     #[test]
@@ -359,5 +364,20 @@ mod tests {
         let test_data = b"Test body";
         let body = Body::from(&test_data[..]);
         assert_eq!(body.as_bytes(), Some(&test_data[..]));
+    }
+
+    #[test]
+    fn body_exact_length() {
+        let empty_body = Body::empty();
+        assert!(empty_body.is_end_stream());
+        assert_eq!(empty_body.size_hint().exact(), Some(0));
+
+        let bytes_body = Body::reusable("abc".into());
+        assert!(!bytes_body.is_end_stream());
+        assert_eq!(bytes_body.size_hint().exact(), Some(3));
+
+        let stream_body = Body::streaming(bytes_body);
+        assert!(!stream_body.is_end_stream());
+        assert_eq!(stream_body.size_hint().exact(), None);
     }
 }
