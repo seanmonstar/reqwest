@@ -220,7 +220,11 @@ impl Certificate {
 
     fn read_pem_certs(reader: &mut impl BufRead) -> crate::Result<Vec<Vec<u8>>> {
         rustls_pemfile::certs(reader)
-            .map_err(|_| crate::error::builder("invalid certificate encoding"))
+            .map(|result| match result {
+                Ok(cert) => Ok(cert.as_ref().to_vec()),
+                Err(_) => Err(crate::error::builder("invalid certificate encoding")),
+            })
+            .collect()
     }
 }
 
@@ -326,6 +330,7 @@ impl Identity {
     /// This requires the `rustls-tls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
     pub fn from_pem(buf: &[u8]) -> crate::Result<Identity> {
+        use rustls_pemfile::Item;
         use std::io::Cursor;
 
         let (key, certs) = {
@@ -333,25 +338,20 @@ impl Identity {
             let mut sk = Vec::<rustls_pki_types::PrivateKeyDer>::new();
             let mut certs = Vec::<rustls_pki_types::CertificateDer>::new();
 
-            for item in std::iter::from_fn(|| rustls_pemfile::read_one(&mut pem).transpose()) {
-                match item.map_err(|_| {
-                    crate::error::builder(TLSError::General(String::from(
-                        "Invalid identity PEM file",
-                    )))
-                })? {
-                    rustls_pemfile::Item::X509Certificate(cert) => certs.push(cert.into()),
-                    rustls_pemfile::Item::PKCS8Key(key) => {
-                        sk.push(rustls_pki_types::PrivateKeyDer::Pkcs8(key.into()))
-                    }
-                    rustls_pemfile::Item::RSAKey(key) => {
-                        sk.push(rustls_pki_types::PrivateKeyDer::Pkcs1(key.into()))
-                    }
-                    rustls_pemfile::Item::ECKey(key) => {
-                        sk.push(rustls_pki_types::PrivateKeyDer::Sec1(key.into()))
-                    }
-                    _ => {
+            for result in rustls_pemfile::read_all(&mut pem) {
+                match result {
+                    Ok(Item::X509Certificate(cert)) => certs.push(cert),
+                    Ok(Item::Pkcs1Key(key)) => sk.push(key.into()),
+                    Ok(Item::Pkcs8Key(key)) => sk.push(key.into()),
+                    Ok(Item::Sec1Key(key)) => sk.push(key.into()),
+                    Ok(_) => {
                         return Err(crate::error::builder(TLSError::General(String::from(
                             "No valid certificate was found",
+                        ))))
+                    }
+                    Err(_) => {
+                        return Err(crate::error::builder(TLSError::General(String::from(
+                            "Invalid identity PEM file",
                         ))))
                     }
                 }

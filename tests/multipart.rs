@@ -89,7 +89,7 @@ async fn stream_part() {
 
     let ct = format!("multipart/form-data; boundary={}", form.boundary());
 
-    let server = server::http(move |mut req| {
+    let server = server::http(move |req| {
         let ct = ct.clone();
         let expected_body = expected_body.clone();
         async move {
@@ -144,7 +144,7 @@ fn blocking_file_part() {
 
     let ct = format!("multipart/form-data; boundary={}", form.boundary());
 
-    let server = server::http(move |mut req| {
+    let server = server::http(move |req| {
         let ct = ct.clone();
         let expected_body = expected_body.clone();
         async move {
