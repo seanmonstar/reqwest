@@ -309,6 +309,16 @@ where
                 .map(|opt_chunk| opt_chunk.map_err(crate::error::body)),
         )
     }
+
+    #[inline]
+    fn size_hint(&self) -> http_body::SizeHint {
+        self.inner.size_hint()
+    }
+
+    #[inline]
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
+    }
 }
 
 pub(crate) type ResponseBody =
