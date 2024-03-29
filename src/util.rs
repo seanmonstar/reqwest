@@ -5,19 +5,18 @@ where
     U: std::fmt::Display,
     P: std::fmt::Display,
 {
-    use base64::prelude::BASE64_STANDARD;
-    use base64::write::EncoderWriter;
-    use std::io::Write;
+    use data_encoding::BASE64;
 
-    let mut buf = b"Basic ".to_vec();
-    {
-        let mut encoder = EncoderWriter::new(&mut buf, &BASE64_STANDARD);
-        let _ = write!(encoder, "{username}:");
-        if let Some(password) = password {
-            let _ = write!(encoder, "{password}");
-        }
+    let mut buf = String::from("Basic ");
+    let mut input = username.to_string();
+    input.push(':');
+    if let Some(password) = password {
+        input.push_str(&password.to_string());
     }
-    let mut header = HeaderValue::from_bytes(&buf).expect("base64 is always valid HeaderValue");
+    BASE64.encode_append(input.as_bytes(), &mut buf);
+
+    let mut header =
+        HeaderValue::from_bytes(buf.as_bytes()).expect("base64 is always valid HeaderValue");
     header.set_sensitive(true);
     header
 }
