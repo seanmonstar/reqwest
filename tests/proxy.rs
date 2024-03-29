@@ -31,6 +31,32 @@ async fn http_proxy() {
 }
 
 #[tokio::test]
+async fn https_proxy() {
+    let url = "https://hyper.rs/prox";
+    let server = server::http(move |req| {
+        assert_eq!(req.method(), "GET");
+        assert_eq!(req.uri(), url);
+        assert_eq!(req.headers()["host"], "hyper.rs");
+
+        async { http::Response::default() }
+    });
+
+    let proxy = format!("http://{}", server.addr());
+
+    let res = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::all(&proxy).unwrap())
+        .build()
+        .unwrap()
+        .get(url)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.url().as_str(), url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
+#[tokio::test]
 async fn http_proxy_basic_auth() {
     let url = "http://hyper.rs/prox";
     let server = server::http(move |req| {
