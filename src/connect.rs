@@ -21,7 +21,7 @@ use std::time::Duration;
 
 #[cfg(feature = "default-tls")]
 use self::native_tls_conn::NativeTlsConn;
-#[cfg(feature = "__rustls")]
+#[cfg(feature = "rustls-base")]
 use self::rustls_tls_conn::RustlsTlsConn;
 use crate::dns::DynResolver;
 use crate::error::BoxError;
@@ -49,7 +49,7 @@ enum Inner {
     Http(HttpConnector),
     #[cfg(feature = "default-tls")]
     DefaultTls(HttpConnector, TlsConnector),
-    #[cfg(feature = "__rustls")]
+    #[cfg(feature = "rustls-base")]
     RustlsTls {
         http: HttpConnector,
         tls: Arc<rustls::ClientConfig>,
@@ -148,7 +148,7 @@ impl Connector {
         }
     }
 
-    #[cfg(feature = "__rustls")]
+    #[cfg(feature = "rustls-base")]
     pub(crate) fn new_rustls_tls<T>(
         mut http: HttpConnector,
         tls: rustls::ClientConfig,
@@ -235,7 +235,7 @@ impl Connector {
                     });
                 }
             }
-            #[cfg(feature = "__rustls")]
+            #[cfg(feature = "rustls-base")]
             Inner::RustlsTls { tls, .. } => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     use std::convert::TryFrom;
@@ -321,7 +321,7 @@ impl Connector {
                     })
                 }
             }
-            #[cfg(feature = "__rustls")]
+            #[cfg(feature = "rustls-base")]
             Inner::RustlsTls { http, tls, .. } => {
                 let mut http = http.clone();
 
@@ -405,7 +405,7 @@ impl Connector {
                     });
                 }
             }
-            #[cfg(feature = "__rustls")]
+            #[cfg(feature = "rustls-base")]
             Inner::RustlsTls {
                 http,
                 tls,
@@ -451,7 +451,7 @@ impl Connector {
         match &mut self.inner {
             #[cfg(feature = "default-tls")]
             Inner::DefaultTls(http, _tls) => http.set_keepalive(dur),
-            #[cfg(feature = "__rustls")]
+            #[cfg(feature = "rustls-base")]
             Inner::RustlsTls { http, .. } => http.set_keepalive(dur),
             #[cfg(not(feature = "__tls"))]
             Inner::Http(http) => http.set_keepalive(dur),
@@ -571,7 +571,7 @@ impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::TcpStrea
     }
 }
 
-#[cfg(feature = "__rustls")]
+#[cfg(feature = "rustls-base")]
 impl TlsInfoFactory for tokio_rustls::client::TlsStream<TokioIo<TokioIo<tokio::net::TcpStream>>> {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         let peer_certificate = self
@@ -584,7 +584,7 @@ impl TlsInfoFactory for tokio_rustls::client::TlsStream<TokioIo<TokioIo<tokio::n
     }
 }
 
-#[cfg(feature = "__rustls")]
+#[cfg(feature = "rustls-base")]
 impl TlsInfoFactory
     for tokio_rustls::client::TlsStream<
         TokioIo<hyper_rustls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>>>,
@@ -601,7 +601,7 @@ impl TlsInfoFactory
     }
 }
 
-#[cfg(feature = "__rustls")]
+#[cfg(feature = "rustls-base")]
 impl TlsInfoFactory for hyper_rustls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>> {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         match self {
@@ -910,7 +910,7 @@ mod native_tls_conn {
     }
 }
 
-#[cfg(feature = "__rustls")]
+#[cfg(feature = "rustls-base")]
 mod rustls_tls_conn {
     use super::TlsInfoFactory;
     use hyper::rt::{Read, ReadBufCursor, Write};

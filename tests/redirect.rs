@@ -348,7 +348,7 @@ async fn test_redirect_302_with_set_cookies() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
-#[cfg(feature = "__rustls")]
+#[cfg(feature = "rustls-base")]
 #[tokio::test]
 #[ignore = "Needs TLS support in the test server"]
 async fn test_redirect_https_only_enforced_gh1312() {

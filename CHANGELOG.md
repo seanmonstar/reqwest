@@ -715,12 +715,12 @@
   - Timeouts now affect DNS and socket connection.
   - Pool much better at evicting sockets when they die.
   - An `unstable` Cargo feature to enable `reqwest::unstable::async`.
-- A huge docs improvement! 
+- A huge docs improvement!
 
 ### Fixes
 
 - Publicly exports `RedirectAction` and `RedirectAttempt`
-- `Error::get_ref` returns `Error + Send + Sync`  
+- `Error::get_ref` returns `Error + Send + Sync`
 
 ### Breaking Changes
 
@@ -789,7 +789,7 @@
 
 ### Breaking Changes
 
-The only breaking change is a behavioral one, all programs should still compile without modification. The automatic GZIP decoding could interfere in cases where a user was expecting the GZIP bytes, either to save to a file or decode themselves. To restore this functionality, set `client.gzip(false)`. 
+The only breaking change is a behavioral one, all programs should still compile without modification. The automatic GZIP decoding could interfere in cases where a user was expecting the GZIP bytes, either to save to a file or decode themselves. To restore this functionality, set `client.gzip(false)`.
 
 # v0.4.0
 

@@ -1,4 +1,4 @@
-#[cfg(any(feature = "native-tls", feature = "__rustls",))]
+#[cfg(any(feature = "native-tls", feature = "rustls-base",))]
 use std::any::Any;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -43,7 +43,7 @@ use crate::redirect::{self, remove_sensitive_headers};
 use crate::tls::{self, TlsBackend};
 #[cfg(feature = "__tls")]
 use crate::Certificate;
-#[cfg(any(feature = "native-tls", feature = "__rustls"))]
+#[cfg(any(feature = "native-tls", feature = "rustls-base"))]
 use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
 use log::debug;
@@ -102,7 +102,7 @@ struct Config {
     pool_idle_timeout: Option<Duration>,
     pool_max_idle_per_host: usize,
     tcp_keepalive: Option<Duration>,
-    #[cfg(any(feature = "native-tls", feature = "__rustls"))]
+    #[cfg(any(feature = "native-tls", feature = "rustls-base"))]
     identity: Option<Identity>,
     proxies: Vec<Proxy>,
     auto_sys_proxy: bool,
@@ -114,9 +114,9 @@ struct Config {
     root_certs: Vec<Certificate>,
     #[cfg(feature = "__tls")]
     tls_built_in_root_certs: bool,
-    #[cfg(feature = "rustls-tls-webpki-roots")]
+    #[cfg(feature = "__rustls_roots_webpki")]
     tls_built_in_certs_webpki: bool,
-    #[cfg(feature = "rustls-tls-native-roots")]
+    #[cfg(feature = "__rustls_roots_native")]
     tls_built_in_certs_native: bool,
     #[cfg(feature = "__tls")]
     min_tls_version: Option<tls::Version>,
@@ -211,11 +211,11 @@ impl ClientBuilder {
                 root_certs: Vec::new(),
                 #[cfg(feature = "__tls")]
                 tls_built_in_root_certs: true,
-                #[cfg(feature = "rustls-tls-webpki-roots")]
+                #[cfg(feature = "__rustls_roots_webpki")]
                 tls_built_in_certs_webpki: true,
-                #[cfg(feature = "rustls-tls-native-roots")]
+                #[cfg(feature = "__rustls_roots_native")]
                 tls_built_in_certs_native: true,
-                #[cfg(any(feature = "native-tls", feature = "__rustls"))]
+                #[cfg(any(feature = "native-tls", feature = "rustls-base"))]
                 identity: None,
                 #[cfg(feature = "__tls")]
                 min_tls_version: None,
@@ -317,7 +317,7 @@ impl ClientBuilder {
             let mut http = HttpConnector::new_with_resolver(DynResolver::new(resolver.clone()));
             http.set_connect_timeout(config.connect_timeout);
 
-            #[cfg(all(feature = "http3", feature = "__rustls"))]
+            #[cfg(all(feature = "http3", feature = "rustls-base"))]
             let build_h3_connector =
                 |resolver,
                  tls,
@@ -409,7 +409,7 @@ impl ClientBuilder {
                             id.add_to_native_tls(&mut tls)?;
                         }
                     }
-                    #[cfg(all(feature = "__rustls", not(feature = "native-tls")))]
+                    #[cfg(all(feature = "rustls-base", not(feature = "native-tls")))]
                     {
                         // Default backend + rustls Identity doesn't work.
                         if let Some(_id) = config.identity {
@@ -466,7 +466,7 @@ impl ClientBuilder {
                     config.nodelay,
                     config.tls_info,
                 ),
-                #[cfg(feature = "__rustls")]
+                #[cfg(feature = "rustls-base")]
                 TlsBackend::BuiltRustls(conn) => {
                     #[cfg(feature = "http3")]
                     {
@@ -498,7 +498,10 @@ impl ClientBuilder {
                         config.tls_info,
                     )
                 }
-                #[cfg(feature = "__rustls")]
+                #[cfg(any(
+                    feature = "__rustls_crypto_ring",
+                    feature = "__rustls_crypto_aws_lc-rs"
+                ))]
                 TlsBackend::Rustls => {
                     use crate::tls::NoVerifier;
 
@@ -508,12 +511,12 @@ impl ClientBuilder {
                         cert.add_to_rustls(&mut root_cert_store)?;
                     }
 
-                    #[cfg(feature = "rustls-tls-webpki-roots")]
+                    #[cfg(feature = "__rustls_roots_webpki")]
                     if config.tls_built_in_certs_webpki {
                         root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
                     }
 
-                    #[cfg(feature = "rustls-tls-native-roots")]
+                    #[cfg(feature = "__rustls_roots_native")]
                     if config.tls_built_in_certs_native {
                         let mut valid_count = 0;
                         let mut invalid_count = 0;
@@ -566,8 +569,19 @@ impl ClientBuilder {
                     }
 
                     // Build TLS config
+                    #[cfg(feature = "__rustls_crypto_ring")]
+                    let provider = rustls::crypto::ring::default_provider();
+
+                    #[cfg(all(
+                        feature = "__rustls_crypto_aws_lc-rs",
+                        not(feature = "__rustls_crypto_ring")
+                    ))]
+                    let provider = rustls::crypto::aws_lc_rs::default_provider();
+
                     let config_builder =
-                        rustls::ClientConfig::builder_with_protocol_versions(&versions)
+                        rustls::ClientConfig::builder_with_provider(Arc::new(provider))
+                            .with_protocol_versions(&versions)
+                            .map_err(|_| crate::error::builder("invalid TLS versions"))?
                             .with_root_certificates(root_cert_store);
 
                     // Finalize TLS config
@@ -639,7 +653,7 @@ impl ClientBuilder {
                         config.tls_info,
                     )
                 }
-                #[cfg(any(feature = "native-tls", feature = "__rustls",))]
+                #[cfg(any(feature = "native-tls", feature = "rustls-base",))]
                 TlsBackend::UnknownPreconfigured => {
                     return Err(crate::error::builder(
                         "Unknown TLS backend passed to `use_preconfigured_tls`",
@@ -1400,12 +1414,12 @@ impl ClientBuilder {
     pub fn tls_built_in_root_certs(mut self, tls_built_in_root_certs: bool) -> ClientBuilder {
         self.config.tls_built_in_root_certs = tls_built_in_root_certs;
 
-        #[cfg(feature = "rustls-tls-webpki-roots")]
+        #[cfg(feature = "__rustls_roots_webpki")]
         {
             self.config.tls_built_in_certs_webpki = tls_built_in_root_certs;
         }
 
-        #[cfg(feature = "rustls-tls-native-roots")]
+        #[cfg(feature = "__rustls_roots_native")]
         {
             self.config.tls_built_in_certs_native = tls_built_in_root_certs;
         }
@@ -1416,8 +1430,8 @@ impl ClientBuilder {
     /// Sets whether to load webpki root certs with rustls.
     ///
     /// If the feature is enabled, this value is `true` by default.
-    #[cfg(feature = "rustls-tls-webpki-roots")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls-webpki-roots")))]
+    #[cfg(feature = "__rustls_roots_webpki")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "__rustls_roots_webpki")))]
     pub fn tls_built_in_webpki_certs(mut self, enabled: bool) -> ClientBuilder {
         self.config.tls_built_in_certs_webpki = enabled;
         self
@@ -1426,8 +1440,8 @@ impl ClientBuilder {
     /// Sets whether to load native root certs with rustls.
     ///
     /// If the feature is enabled, this value is `true` by default.
-    #[cfg(feature = "rustls-tls-native-roots")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls-native-roots")))]
+    #[cfg(feature = "__rustls_roots_native")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "__rustls_roots_native")))]
     pub fn tls_built_in_native_certs(mut self, enabled: bool) -> ClientBuilder {
         self.config.tls_built_in_certs_native = enabled;
         self
@@ -1439,7 +1453,7 @@ impl ClientBuilder {
     ///
     /// This requires the optional `native-tls` or `rustls-tls(-...)` feature to be
     /// enabled.
-    #[cfg(any(feature = "native-tls", feature = "__rustls"))]
+    #[cfg(any(feature = "native-tls", feature = "rustls-base"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
     pub fn identity(mut self, identity: Identity) -> ClientBuilder {
         self.config.identity = Some(identity);
@@ -1606,8 +1620,17 @@ impl ClientBuilder {
     /// # Optional
     ///
     /// This requires the optional `rustls-tls(-...)` feature to be enabled.
-    #[cfg(feature = "__rustls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    #[cfg(any(
+        feature = "__rustls_crypto_ring",
+        feature = "__rustls_crypto_aws_lc-rs"
+    ))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "__rustls_crypto_ring",
+            feature = "__rustls_crypto_aws_lc-rs"
+        )))
+    )]
     pub fn use_rustls_tls(mut self) -> ClientBuilder {
         self.config.tls = TlsBackend::Rustls;
         self
@@ -1631,7 +1654,7 @@ impl ClientBuilder {
     ///
     /// This requires one of the optional features `native-tls` or
     /// `rustls-tls(-...)` to be enabled.
-    #[cfg(any(feature = "native-tls", feature = "__rustls",))]
+    #[cfg(any(feature = "native-tls", feature = "rustls-base",))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
     pub fn use_preconfigured_tls(mut self, tls: impl Any) -> ClientBuilder {
         let mut tls = Some(tls);
@@ -1644,7 +1667,7 @@ impl ClientBuilder {
                 return self;
             }
         }
-        #[cfg(feature = "__rustls")]
+        #[cfg(feature = "rustls-base")]
         {
             if let Some(conn) =
                 (&mut tls as &mut dyn Any).downcast_mut::<Option<rustls::ClientConfig>>()
@@ -2244,7 +2267,7 @@ impl Config {
             f.field("tls_info", &self.tls_info);
         }
 
-        #[cfg(all(feature = "default-tls", feature = "__rustls"))]
+        #[cfg(all(feature = "default-tls", feature = "rustls-base"))]
         {
             f.field("tls_backend", &self.tls);
         }

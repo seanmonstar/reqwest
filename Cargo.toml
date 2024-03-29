@@ -41,9 +41,13 @@ native-tls-alpn = ["native-tls", "native-tls-crate?/alpn", "hyper-tls?/alpn"]
 native-tls-vendored = ["native-tls", "native-tls-crate?/vendored"]
 
 rustls-tls = ["rustls-tls-webpki-roots"]
-rustls-tls-manual-roots = ["__rustls"]
-rustls-tls-webpki-roots = ["dep:webpki-roots", "__rustls"]
-rustls-tls-native-roots = ["dep:rustls-native-certs", "__rustls"]
+rustls-tls-manual-roots = ["__rustls_crypto_ring"]
+rustls-tls-webpki-roots = ["__rustls_roots_webpki", "__rustls_crypto_ring"]
+rustls-tls-native-roots = ["__rustls_roots_native", "__rustls_crypto_ring"]
+rustls-tls-aws-lc-manual-roots = ["__rustls_crypto_aws_lc"]
+rustls-tls-aws-lc-webpki-roots = ["__rustls_roots_webpki", "__rustls_crypto_aws_lc"]
+rustls-tls-aws-lc-native-roots = ["__rustls_roots_native", "__rustls_crypto_aws_lc"]
+rustls-base = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls", "rustls-pki-types"]
 
 blocking = ["futures-channel/sink", "futures-util/io", "futures-util/sink", "tokio/sync"]
 
@@ -84,9 +88,13 @@ macos-system-configuration = ["dep:system-configuration"]
 # Enables common types used for TLS. Useless on its own.
 __tls = ["dep:rustls-pemfile", "tokio/io-util"]
 
-# Enables common rustls code.
-# Equivalent to rustls-tls-manual-roots but shorter :)
-__rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls", "dep:rustls-pemfile", "rustls-pki-types"]
+# Provide common feature flags along two axes:
+# - crypto provider: ring or aws-lc
+# - root certificate provider: webpki-roots or rustls-native-certs
+__rustls_roots_webpki = ["dep:webpki-roots"]
+__rustls_roots_native = ["dep:rustls-native-certs"]
+__rustls_crypto_ring = ["rustls-base", "rustls/ring"]
+__rustls_crypto_aws_lc = ["rustls-base", "rustls/aws_lc_rs"]
 
 # When enabled, disable using the cached SYS_PROXIES.
 __internal_proxy_sys_no_cache = []
@@ -134,10 +142,10 @@ native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls"
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
-hyper-rustls = { version = "0.26.0", default-features = false, optional = true }
-rustls = { version = "0.22.2", optional = true }
-rustls-pki-types = { version = "1.1.0", features = ["alloc"] ,optional = true }
-tokio-rustls = { version = "0.25", optional = true }
+hyper-rustls = { version = "0.27", default-features = false, optional = true, features = ["http1", "http2", "logging", "native-tokio", "ring", "tls12"] }
+rustls = { version = "0.23.4", default-features = false, features = ["logging", "std", "tls12"], optional = true }
+rustls-pki-types = { version = "1.1.0", features = ["alloc"], optional = true }
+tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "ring", "tls12"], optional = true }
 webpki-roots = { version = "0.26.0", optional = true }
 rustls-native-certs = { version = "0.7", optional = true }
 

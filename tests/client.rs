@@ -319,7 +319,7 @@ async fn overridden_dns_resolution_with_hickory_dns_multiple() {
     assert_eq!("Hello", text);
 }
 
-#[cfg(any(feature = "native-tls", feature = "__rustls",))]
+#[cfg(any(feature = "native-tls", feature = "rustls-base",))]
 #[test]
 fn use_preconfigured_tls_with_bogus_backend() {
     struct DefinitelyNotTls;
@@ -345,7 +345,7 @@ fn use_preconfigured_native_tls_default() {
         .expect("preconfigured default tls");
 }
 
-#[cfg(feature = "__rustls")]
+#[cfg(feature = "rustls-base")]
 #[test]
 fn use_preconfigured_rustls_default() {
     extern crate rustls;
@@ -361,7 +361,7 @@ fn use_preconfigured_rustls_default() {
         .expect("preconfigured rustls tls");
 }
 
-#[cfg(feature = "__rustls")]
+#[cfg(feature = "rustls-base")]
 #[tokio::test]
 #[ignore = "Needs TLS support in the test server"]
 async fn http2_upgrade() {
