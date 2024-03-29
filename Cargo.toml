@@ -172,7 +172,7 @@ tokio = { version = "1.0", default-features = false, features = ["macros", "rt-m
 futures-util = { version = "0.3.0", default-features = false, features = ["std", "alloc"] }
 
 [target.'cfg(windows)'.dependencies]
-winreg = "0.50.0"
+winreg = "0.52.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 system-configuration = { version = "0.5.1", optional = true }
