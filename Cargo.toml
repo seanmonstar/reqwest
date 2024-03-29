@@ -90,7 +90,7 @@ __rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls", "dep:
 __internal_proxy_sys_no_cache = []
 
 [dependencies]
-base64 = "0.21"
+base64 = "0.22"
 http = "1"
 url = "2.2"
 bytes = "1.0"
