@@ -96,7 +96,7 @@ __rustls-ring = ["hyper-rustls?/ring", "tokio-rustls?/ring", "rustls?/ring", "qu
 __internal_proxy_sys_no_cache = []
 
 [dependencies]
-base64 = "0.22"
+data-encoding = "2.5"
 http = "1"
 url = "2.4"
 bytes = "1.0"
