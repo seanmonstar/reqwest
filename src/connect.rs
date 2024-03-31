@@ -1216,7 +1216,7 @@ mod verbose {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "b\"")?;
             for &c in self.0 {
-                // https://doc.rust-lang.org/reference.html#byte-escapes
+                // See: https://doc.rust-lang.org/reference.html#byte-escapes
 
                 match c {
                     b'\\' => f.write_str("\\\\"),
