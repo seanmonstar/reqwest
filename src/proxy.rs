@@ -129,7 +129,7 @@ impl ProxyScheme {
     }
 }
 
-/// Trait used for converting a URL into a proxy scheme. This trait supports
+/// Trait used for converting into a proxy scheme. This trait supports
 /// parsing from a URL-like type, whilst also supporting proxy schemes
 /// built directly using the factory methods.
 
