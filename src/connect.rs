@@ -1220,11 +1220,11 @@ mod verbose {
 
                 match c {
                     b'\\' => f.write_str("\\\\"),
-                    b'"' => f.write_str("\\\""), 
                     b'\n' => f.write_str("\\n"),
                     b'\r' => f.write_str("\\r"),
                     b'\t' => f.write_str("\\t"),
                     b'\0' => f.write_str("\\0"),
+                    b'"' => f.write_str("\\\""), 
 
                     // ASCII-printable range, no need to escape it if it's not anything above.
                     0x20..=0x7f => f.write_char(c as char),
