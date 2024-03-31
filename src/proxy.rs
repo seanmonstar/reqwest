@@ -105,10 +105,12 @@ pub enum ProxyScheme {
         auth: Option<HeaderValue>,
         host: http::uri::Authority,
     },
+    
     Https {
         auth: Option<HeaderValue>,
         host: http::uri::Authority,
     },
+
     #[cfg(feature = "socks")]
     Socks5 {
         addr: SocketAddr,
@@ -127,47 +129,43 @@ impl ProxyScheme {
     }
 }
 
-/// Trait used for converting into a proxy scheme. This trait supports
+/// Trait used for converting a URL into a proxy scheme. This trait supports
 /// parsing from a URL-like type, whilst also supporting proxy schemes
 /// built directly using the factory methods.
+
 pub trait IntoProxyScheme {
     fn into_proxy_scheme(self) -> crate::Result<ProxyScheme>;
 }
 
 impl<S: IntoUrl> IntoProxyScheme for S {
     fn into_proxy_scheme(self) -> crate::Result<ProxyScheme> {
-        // validate the URL
+        // Validate the URL.
         let url = match self.as_str().into_url() {
             Ok(ok) => ok,
-            Err(e) => {
-                let mut presumed_to_have_scheme = true;
-                let mut source = e.source();
-                while let Some(err) = source {
-                    if let Some(parse_error) = err.downcast_ref::<url::ParseError>() {
-                        match parse_error {
-                            url::ParseError::RelativeUrlWithoutBase => {
-                                presumed_to_have_scheme = false;
-                                break;
-                            }
-                            _ => {}
-                        }
-                    } else if let Some(_) = err.downcast_ref::<crate::error::BadScheme>() {
-                        presumed_to_have_scheme = false;
-                        break;
-                    }
-                    source = err.source();
+            Err(err) => {
+                let mut source = err.source();
+                let mut has_bad_scheme = false;
+                while source.is_some() && !has_bad_scheme {
+                    let src = source.unwrap();
+                    has_bad_scheme = src.downcast_ref::<url::ParseError>() == Some(&url::ParseError::RelativeUrlWithoutBase) || 
+                                     src.downcast_ref::<crate::error::BadScheme>().is_some();
+                    
+                    source = src.source();
                 }
-                if presumed_to_have_scheme {
-                    return Err(crate::error::builder(e));
+                
+                if !has_bad_scheme {
+                    return Err(crate::error::builder(err));
                 }
-                // the issue could have been caused by a missing scheme, so we try adding http://
-                let try_this = format!("http://{}", self.as_str());
-                try_this.into_url().map_err(|_| {
-                    // return the original error
-                    crate::error::builder(e)
+
+                // The issue could have been caused by a missing scheme, so we try adding http://
+
+                format!("http://{}", self.as_str()).into_url().map_err(|_| {
+                    // Return the original error if this still doesn't solve the problem.
+                    crate::error::builder(err)
                 })?
             }
         };
+
         ProxyScheme::parse(url)
     }
 }
@@ -657,12 +655,12 @@ impl ProxyScheme {
         match self {
             ProxyScheme::Http { ref mut auth, .. } => {
                 if auth.is_none() {
-                    *auth = update.clone();
+                    auth.clone_from(update);
                 }
             }
             ProxyScheme::Https { ref mut auth, .. } => {
                 if auth.is_none() {
-                    *auth = update.clone();
+                    auth.clone_from(update);
                 }
             }
             #[cfg(feature = "socks")]
@@ -791,6 +789,8 @@ impl Intercept {
 }
 
 #[derive(Clone)]
+#[allow(clippy::type_complexity)]
+
 struct Custom {
     // This auth only applies if the returned ProxyScheme doesn't have an auth...
     auth: Option<HeaderValue>,
@@ -861,13 +861,13 @@ static SYS_PROXIES: Lazy<Arc<SystemProxyMap>> =
 /// Returns:
 ///     System proxies information as a hashmap like
 ///     {"http": Url::parse("http://127.0.0.1:80"), "https": Url::parse("https://127.0.0.1:80")}
-fn get_sys_proxies(
-    #[cfg_attr(
-        not(any(target_os = "windows", target_os = "macos")),
-        allow(unused_variables)
-    )]
-    platform_proxies: Option<String>,
-) -> SystemProxyMap {
+
+#[cfg_attr(
+    not(any(target_os = "windows", target_os = "macos")),
+    allow(unused_variables, clippy::let_and_return)
+)]
+
+fn get_sys_proxies(platform_proxies: Option<String>) -> SystemProxyMap {
     let proxies = get_from_environment();
 
     #[cfg(any(target_os = "windows", target_os = "macos"))]

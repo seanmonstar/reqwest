@@ -43,11 +43,8 @@ impl Name {
 
 impl FromStr for Name {
     type Err = sealed::InvalidNameError;
-
     fn from_str(host: &str) -> Result<Self, Self::Err> {
-        HyperName::from_str(host.into())
-            .map(Name)
-            .map_err(|_| sealed::InvalidNameError { _ext: () })
+        HyperName::from_str(host).map(Name).map_err(|_| sealed::InvalidNameError { _ext: () })
     }
 }
 
