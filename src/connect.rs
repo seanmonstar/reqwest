@@ -297,6 +297,7 @@ impl Connector {
                 let mut http = hyper_tls::HttpsConnector::from((http, tls_connector));
                 let io = http.call(dst).await?;
 
+                dbg!(&io);
                 if let hyper_tls::MaybeHttpsStream::Https(stream) = io {
                     if !self.nodelay {
                         stream
@@ -362,6 +363,7 @@ impl Connector {
         proxy_scheme: ProxyScheme,
     ) -> Result<Conn, BoxError> {
         log::debug!("proxy({proxy_scheme:?}) intercepts '{dst:?}'");
+        dbg!(dst.clone());
 
         let (proxy_dst, _auth) = match proxy_scheme {
             ProxyScheme::Http { host, auth } => (into_uri(Scheme::HTTP, host), auth),
@@ -376,7 +378,7 @@ impl Connector {
         match &self.inner {
             #[cfg(feature = "default-tls")]
             Inner::DefaultTls(http, tls) => {
-                if dst.scheme() == Some(&Scheme::HTTPS) {
+                if proxy_dst.scheme() == Some(&Scheme::HTTPS) {
                     let host = dst.host().to_owned();
                     let port = dst.port().map(|p| p.as_u16()).unwrap_or(443);
                     let http = http.clone();
@@ -384,6 +386,31 @@ impl Connector {
                     let mut http = hyper_tls::HttpsConnector::from((http, tls_connector));
                     let conn = http.call(proxy_dst).await?;
                     log::trace!("tunneling HTTPS over proxy");
+                    let tunneled = tunnel(
+                        conn,
+                        host.ok_or("no host in url")?.to_string(),
+                        port,
+                        self.user_agent.clone(),
+                        auth,
+                    )
+                    .await?;
+                    let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
+                    let io = tls_connector
+                        .connect(host.ok_or("no host in url")?, TokioIo::new(tunneled))
+                        .await?;
+                    return Ok(Conn {
+                        inner: self.verbose.wrap(NativeTlsConn {
+                            inner: TokioIo::new(io),
+                        }),
+                        is_proxy: false,
+                        tls_info: false,
+                    });
+                } else if proxy_dst.scheme() == Some(&Scheme::HTTP) {
+                    let host = dst.host().to_owned();
+                    let port = dst.port().map(|p| p.as_u16()).unwrap_or(80);
+                    let mut http = http.clone();
+                    let conn = http.call(proxy_dst).await?;
+                    log::trace!("tunneling HTTPS over HTTP proxy");
                     let tunneled = tunnel(
                         conn,
                         host.ok_or("no host in url")?.to_string(),
