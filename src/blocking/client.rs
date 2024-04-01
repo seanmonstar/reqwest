@@ -615,6 +615,24 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.tls_built_in_root_certs(tls_built_in_root_certs))
     }
 
+    /// Sets whether to load webpki root certs with rustls.
+    ///
+    /// If the feature is enabled, this value is `true` by default.
+    #[cfg(feature = "rustls-tls-webpki-roots")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls-webpki-roots")))]
+    pub fn tls_built_in_webpki_certs(mut self, enabled: bool) -> ClientBuilder {
+        self.with_inner(move |inner| inner.tls_built_in_webpki_certs(enabled))
+    }
+
+    /// Sets whether to load native root certs with rustls.
+    ///
+    /// If the feature is enabled, this value is `true` by default.
+    #[cfg(feature = "rustls-tls-native-roots")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls-native-roots")))]
+    pub fn tls_built_in_native_certs(mut self, enabled: bool) -> ClientBuilder {
+        self.with_inner(move |inner| inner.tls_built_in_native_certs(enabled))
+    }
+
     /// Sets the identity to be used for client certificate authentication.
     ///
     /// # Optional
