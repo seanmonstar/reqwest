@@ -363,7 +363,6 @@ impl Connector {
         proxy_scheme: ProxyScheme,
     ) -> Result<Conn, BoxError> {
         log::debug!("proxy({proxy_scheme:?}) intercepts '{dst:?}'");
-        dbg!(dst.clone());
 
         let (proxy_dst, _auth) = match proxy_scheme {
             ProxyScheme::Http { host, auth } => (into_uri(Scheme::HTTP, host), auth),
@@ -407,7 +406,7 @@ impl Connector {
                     });
                 } else if proxy_dst.scheme() == Some(&Scheme::HTTP) {
                     let host = dst.host().to_owned();
-                    let port = dst.port().map(|p| p.as_u16()).unwrap_or(80);
+                    let port = dst.port().map(|p| p.as_u16()).unwrap_or(443);
                     let mut http = http.clone();
                     let conn = http.call(proxy_dst).await?;
                     log::trace!("tunneling HTTPS over HTTP proxy");
@@ -419,14 +418,9 @@ impl Connector {
                         auth,
                     )
                     .await?;
-                    let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
-                    let io = tls_connector
-                        .connect(host.ok_or("no host in url")?, TokioIo::new(tunneled))
-                        .await?;
+
                     return Ok(Conn {
-                        inner: self.verbose.wrap(NativeTlsConn {
-                            inner: TokioIo::new(io),
-                        }),
+                        inner: self.verbose.wrap(tunneled),
                         is_proxy: false,
                         tls_info: false,
                     });

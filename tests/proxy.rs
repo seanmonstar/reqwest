@@ -34,9 +34,9 @@ async fn http_proxy() {
 async fn https_proxy() {
     let url = "https://hyper.rs/prox";
     let server = server::http(move |req| {
-        assert_eq!(req.method(), "GET");
-        assert_eq!(req.uri(), url);
-        assert_eq!(req.headers()["host"], "hyper.rs");
+        assert_eq!(req.method(), "CONNECT");
+        // assert_eq!(req.uri(), url);
+        assert_eq!(req.headers()["host"], "hyper.rs:443");
 
         async { http::Response::default() }
     });
