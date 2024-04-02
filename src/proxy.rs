@@ -140,31 +140,28 @@ pub trait IntoProxyScheme {
 impl<S: IntoUrl> IntoProxyScheme for S {
     fn into_proxy_scheme(self) -> crate::Result<ProxyScheme> {
         // Validate the URL.
-        let url = match self.as_str().into_url() {
-            Ok(ok) => ok,
-            Err(err) => {
-                let mut source = err.source();
-                let mut has_bad_scheme = false;
-                while source.is_some() && !has_bad_scheme {
-                    let src = source.unwrap();
-                    has_bad_scheme = src.downcast_ref::<url::ParseError>() == Some(&url::ParseError::RelativeUrlWithoutBase) || 
-                                     src.downcast_ref::<crate::error::BadScheme>().is_some();
-                    
-                    source = src.source();
-                }
+        let url = self.as_str().into_url().or_else(|err| {
+            let mut source = err.source();
+            let mut has_bad_scheme = false;
+            while source.is_some() && !has_bad_scheme {
+                let src = source.unwrap();
+                has_bad_scheme = src.downcast_ref::<url::ParseError>() == Some(&url::ParseError::RelativeUrlWithoutBase) || 
+                                 src.downcast_ref::<crate::error::BadScheme>().is_some();
                 
-                if !has_bad_scheme {
-                    return Err(crate::error::builder(err));
-                }
-
-                // The issue could have been caused by a missing scheme, so we try adding http://
-
-                format!("http://{}", self.as_str()).into_url().map_err(|_| {
-                    // Return the original error if this still doesn't solve the problem.
-                    crate::error::builder(err)
-                })?
+                source = src.source();
             }
-        };
+            
+            if !has_bad_scheme {
+                return Err(crate::error::builder(err));
+            }
+
+            // The issue could have been caused by a missing scheme, so we try adding http://
+
+            format!("http://{}", self.as_str()).into_url().map_err(|_| {
+                // Return the original error if this still doesn't solve the problem.
+                crate::error::builder(err)
+            })
+        })?;
 
         ProxyScheme::parse(url)
     }
