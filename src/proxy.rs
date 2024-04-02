@@ -105,7 +105,7 @@ pub enum ProxyScheme {
         auth: Option<HeaderValue>,
         host: http::uri::Authority,
     },
-    
+
     Https {
         auth: Option<HeaderValue>,
         host: http::uri::Authority,
@@ -145,12 +145,13 @@ impl<S: IntoUrl> IntoProxyScheme for S {
             let mut has_bad_scheme = false;
             while source.is_some() && !has_bad_scheme {
                 let src = source.unwrap();
-                has_bad_scheme = src.downcast_ref::<url::ParseError>() == Some(&url::ParseError::RelativeUrlWithoutBase) || 
-                                 src.downcast_ref::<crate::error::BadScheme>().is_some();
-                
+                has_bad_scheme = src.downcast_ref::<url::ParseError>()
+                    == Some(&url::ParseError::RelativeUrlWithoutBase)
+                    || src.downcast_ref::<crate::error::BadScheme>().is_some();
+
                 source = src.source();
             }
-            
+
             if !has_bad_scheme {
                 return Err(crate::error::builder(err));
             }

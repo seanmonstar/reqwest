@@ -1223,7 +1223,7 @@ mod verbose {
                     b'\r' => write!(f, "\\r"),
                     b'\t' => write!(f, "\\t"),
                     b'\0' => write!(f, "\\0"),
-                    b'"' => write!(f, "\\\""), 
+                    b'"' => write!(f, "\\\""),
 
                     // ASCII-printable range, no need to escape it if it's not anything above.
                     0x20..=0x7f => write!(f, "{}", c as char),
