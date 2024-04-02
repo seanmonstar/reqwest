@@ -1210,7 +1210,6 @@ mod verbose {
         }
     }
 
-    use std::fmt::Write as _;
     struct Escape<'a>(&'a [u8]);
     impl fmt::Debug for Escape<'_> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1219,15 +1218,15 @@ mod verbose {
                 // See: https://doc.rust-lang.org/reference.html#byte-escapes
 
                 match c {
-                    b'\\' => f.write_str("\\\\"),
-                    b'\n' => f.write_str("\\n"),
-                    b'\r' => f.write_str("\\r"),
-                    b'\t' => f.write_str("\\t"),
-                    b'\0' => f.write_str("\\0"),
-                    b'"' => f.write_str("\\\""), 
+                    b'\\' => write!(f, "\\\\"),
+                    b'\n' => write!(f, "\\n"),
+                    b'\r' => write!(f, "\\r"),
+                    b'\t' => write!(f, "\\t"),
+                    b'\0' => write!(f, "\\0"),
+                    b'"' => write!(f, "\\\""), 
 
                     // ASCII-printable range, no need to escape it if it's not anything above.
-                    0x20..=0x7f => f.write_char(c as char),
+                    0x20..=0x7f => write!(f, "{}", c as char),
 
                     // Anything else should be a hex escape.
                     _ => write!(f, "\\x{c:02x}"),
