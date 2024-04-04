@@ -807,27 +807,6 @@ impl ClientBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    ///
-    /// Override the default headers:
-    ///
-    /// ```rust
-    /// use reqwest::header;
-    /// # async fn doc() -> Result<(), reqwest::Error> {
-    /// let mut headers = header::HeaderMap::new();
-    /// headers.insert("X-MY-HEADER", header::HeaderValue::from_static("value"));
-    ///
-    /// // get a client builder
-    /// let client = reqwest::Client::builder()
-    ///     .default_headers(headers)
-    ///     .build()?;
-    /// let res = client
-    ///     .get("https://www.rust-lang.org")
-    ///     .header("X-MY-HEADER", "new_value")
-    ///     .send()
-    ///     .await?;
-    /// # Ok(())
-    /// # }
-    /// ```
     pub fn default_headers(mut self, headers: HeaderMap) -> ClientBuilder {
         for (key, value) in headers.iter() {
             self.config.headers.insert(key, value.clone());
