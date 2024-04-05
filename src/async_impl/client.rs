@@ -1744,7 +1744,7 @@ impl ClientBuilder {
     pub fn resolve_to_addrs(mut self, domain: &str, addrs: &[SocketAddr]) -> ClientBuilder {
         self.config
             .dns_overrides
-            .insert(domain.to_string(), addrs.to_vec());
+            .insert(domain.to_ascii_lowercase(), addrs.to_vec());
         self
     }
 
