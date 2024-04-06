@@ -108,6 +108,23 @@ fn test_get() {
 }
 
 #[test]
+fn test_get_inside_tokio() {
+    let server = server::http(move |_req| async { http::Response::default() });
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let url = format!("http://{}/1", server.addr());
+            let res = reqwest::blocking::get(&url).unwrap();
+            assert_eq!(res.url().as_str(), &url);
+            assert_eq!(res.status(), reqwest::StatusCode::OK);
+            assert_eq!(res.remote_addr(), Some(server.addr()));
+            assert_eq!(res.text().unwrap().len(), 0)
+        });
+}
+
+#[test]
 fn test_post() {
     let server = server::http(move |req| async move {
         assert_eq!(req.method(), "POST");
