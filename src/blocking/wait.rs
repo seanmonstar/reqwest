@@ -10,7 +10,22 @@ pub(crate) fn timeout<F, I, E>(fut: F, timeout: Option<Duration>) -> Result<I, W
 where
     F: Future<Output = Result<I, E>>,
 {
-    enter();
+
+    let try_tokio_handle = tokio::runtime::Handle::try_current();
+    if let Ok(tokio_handle) = try_tokio_handle {
+        return tokio::task::block_in_place(||
+            tokio_handle.block_on(async {
+                if let Some(actual_timeout) = timeout {
+                    tokio::select! {
+                    result = fut => result.map_err(|e| Waited::Inner(e)),
+                    _ = tokio::time::sleep(actual_timeout) => Err(Waited::TimedOut(crate::error::TimedOut))
+                    }
+                } else {
+                    fut.await.map_err(|e| Waited::Inner(e))
+                }
+            })
+        )
+    }
 
     let deadline = timeout.map(|d| {
         log::trace!("wait at most {d:?}");
@@ -66,13 +81,3 @@ impl futures_util::task::ArcWake for ThreadWaker {
     }
 }
 
-fn enter() {
-    // Check we aren't already in a runtime
-    #[cfg(debug_assertions)]
-    {
-        let _enter = tokio::runtime::Builder::new_current_thread()
-            .build()
-            .expect("build shell runtime")
-            .enter();
-    }
-}
