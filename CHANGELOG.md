@@ -1,3 +1,12 @@
+## v0.12.3
+
+- Add `FromStr` for `dns::Name`.
+- Add `ClientBuilder::built_in_webpki_certs(bool)` to enable them separately.
+- Add `ClientBuilder::built_in_native_certs(bool)` to enable them separately.
+- Fix sending `content-length: 0` for GET requests.
+- Fix response body `content_length()` to return value when timeout is configured.
+- Fix `ClientBuilder::resolve()` to use lowercase domain names.
+
 ## v0.12.2
 
 - Fix missing ALPN when connecting to socks5 proxy with rustls.
