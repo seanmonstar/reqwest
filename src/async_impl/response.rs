@@ -1,6 +1,7 @@
 use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::time::Duration;
 
 use bytes::Bytes;
 use http_body_util::BodyExt;
@@ -37,12 +38,13 @@ impl Response {
         res: hyper::Response<hyper::body::Incoming>,
         url: Url,
         accepts: Accepts,
-        timeout: Option<Pin<Box<Sleep>>>,
+        total_timeout: Option<Pin<Box<Sleep>>>,
+        read_timeout: Option<Duration>,
     ) -> Response {
         let (mut parts, body) = res.into_parts();
         let decoder = Decoder::detect(
             &mut parts.headers,
-            super::body::response(body, timeout),
+            super::body::response(body, total_timeout, read_timeout),
             accepts,
         );
         let res = hyper::Response::from_parts(parts, decoder);
