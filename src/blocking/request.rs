@@ -151,8 +151,16 @@ impl Request {
 }
 
 impl RequestBuilder {
-    pub(crate) fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
+    pub(crate) fn new(
+        client: Client,
+        request: crate::Result<Request>,
+        request_timeout: Option<Duration>,
+    ) -> RequestBuilder {
         let mut builder = RequestBuilder { client, request };
+
+        if let Ok(request) = &mut builder.request {
+            *request.timeout_mut() = request_timeout;
+        }
 
         let auth = builder
             .request

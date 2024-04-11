@@ -1003,7 +1003,7 @@ impl Client {
     /// This method fails whenever supplied `Url` cannot be parsed.
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
         let req = url.into_url().map(move |url| Request::new(method, url));
-        RequestBuilder::new(self.clone(), req)
+        RequestBuilder::new(self.clone(), req, self.inner.timeout.0)
     }
 
     /// Executes a `Request`.
@@ -1148,7 +1148,7 @@ impl ClientHandle {
         let (tx, rx) = oneshot::channel();
         let (req, body) = req.into_async();
         let url = req.url().clone();
-        let timeout = req.timeout().copied().or(self.timeout.0);
+        let timeout = req.timeout().copied();
 
         self.inner
             .tx
