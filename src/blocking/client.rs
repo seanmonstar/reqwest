@@ -600,7 +600,7 @@ impl ClientBuilder {
     /// If the feature is enabled, this value is `true` by default.
     #[cfg(feature = "rustls-tls-webpki-roots")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls-webpki-roots")))]
-    pub fn tls_built_in_webpki_certs(mut self, enabled: bool) -> ClientBuilder {
+    pub fn tls_built_in_webpki_certs(self, enabled: bool) -> ClientBuilder {
         self.with_inner(move |inner| inner.tls_built_in_webpki_certs(enabled))
     }
 
@@ -609,7 +609,7 @@ impl ClientBuilder {
     /// If the feature is enabled, this value is `true` by default.
     #[cfg(feature = "rustls-tls-native-roots")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls-native-roots")))]
-    pub fn tls_built_in_native_certs(mut self, enabled: bool) -> ClientBuilder {
+    pub fn tls_built_in_native_certs(self, enabled: bool) -> ClientBuilder {
         self.with_inner(move |inner| inner.tls_built_in_native_certs(enabled))
     }
 
