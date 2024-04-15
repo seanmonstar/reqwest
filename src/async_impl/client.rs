@@ -91,7 +91,7 @@ struct Config {
     // NOTE: When adding a new field, update `fmt::Debug for ClientBuilder`
     accepts: Accepts,
     headers: HeaderMap,
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__tls")]
     hostname_verification: bool,
     #[cfg(feature = "__tls")]
     certs_verification: bool,
@@ -188,7 +188,7 @@ impl ClientBuilder {
                 error: None,
                 accepts: Accepts::default(),
                 headers,
-                #[cfg(feature = "native-tls")]
+                #[cfg(feature = "__tls")]
                 hostname_verification: true,
                 #[cfg(feature = "__tls")]
                 certs_verification: true,
@@ -388,10 +388,7 @@ impl ClientBuilder {
                         }
                     }
 
-                    #[cfg(feature = "native-tls")]
-                    {
-                        tls.danger_accept_invalid_hostnames(!config.hostname_verification);
-                    }
+                    tls.danger_accept_invalid_hostnames(!config.hostname_verification);
 
                     tls.danger_accept_invalid_certs(!config.certs_verification);
 
@@ -500,7 +497,7 @@ impl ClientBuilder {
                 }
                 #[cfg(feature = "__rustls")]
                 TlsBackend::Rustls => {
-                    use crate::tls::NoVerifier;
+                    use crate::tls::{IgnoreHostname, NoVerifier};
 
                     // Set root certificates.
                     let mut root_cert_store = rustls::RootCertStore::empty();
@@ -578,10 +575,25 @@ impl ClientBuilder {
                         });
 
                     // Build TLS config
+                    let signature_algorithms = provider.signature_verification_algorithms;
                     let config_builder = rustls::ClientConfig::builder_with_provider(provider)
                         .with_protocol_versions(&versions)
-                        .map_err(|_| crate::error::builder("invalid TLS versions"))?
-                        .with_root_certificates(root_cert_store);
+                        .map_err(|_| crate::error::builder("invalid TLS versions"))?;
+
+                    let config_builder = if !config.certs_verification {
+                        config_builder
+                            .dangerous()
+                            .with_custom_certificate_verifier(Arc::new(NoVerifier))
+                    } else if !config.hostname_verification {
+                        config_builder
+                            .dangerous()
+                            .with_custom_certificate_verifier(Arc::new(IgnoreHostname::new(
+                                root_cert_store,
+                                signature_algorithms,
+                            )))
+                    } else {
+                        config_builder.with_root_certificates(root_cert_store)
+                    };
 
                     // Finalize TLS config
                     let mut tls = if let Some(id) = config.identity {
@@ -589,12 +601,6 @@ impl ClientBuilder {
                     } else {
                         config_builder.with_no_client_auth()
                     };
-
-                    // Certificate verifier
-                    if !config.certs_verification {
-                        tls.dangerous()
-                            .set_certificate_verifier(Arc::new(NoVerifier));
-                    }
 
                     tls.enable_sni = config.tls_sni;
 
@@ -1476,9 +1482,17 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `native-tls` feature to be enabled.
-    #[cfg(feature = "native-tls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "native-tls")))]
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
     pub fn danger_accept_invalid_hostnames(
         mut self,
         accept_invalid_hostname: bool,
@@ -2243,7 +2257,7 @@ impl Config {
             f.field("tcp_nodelay", &true);
         }
 
-        #[cfg(feature = "native-tls")]
+        #[cfg(feature = "__tls")]
         {
             if !self.hostname_verification {
                 f.field("danger_accept_invalid_hostnames", &true);
