@@ -197,6 +197,7 @@
 //! - **cookies**: Provides cookie session support.
 //! - **gzip**: Provides response body gzip decompression.
 //! - **brotli**: Provides response body brotli decompression.
+//! - **zstd**: Provides response body zstd decompression.
 //! - **deflate**: Provides response body deflate decompression.
 //! - **json**: Provides serialization and deserialization for JSON bodies.
 //! - **multipart**: Provides functionality for multipart forms.
