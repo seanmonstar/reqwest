@@ -2,11 +2,13 @@ use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 use bytes::Bytes;
 use http_body::Body as HttpBody;
 use http_body_util::combinators::BoxBody;
 //use sync_wrapper::SyncWrapper;
+use pin_project_lite::pin_project;
 #[cfg(feature = "stream")]
 use tokio::fs::File;
 use tokio::time::Sleep;
@@ -23,13 +25,26 @@ enum Inner {
     Streaming(BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>),
 }
 
-/// A body with a total timeout.
-///
-/// The timeout does not reset upon each chunk, but rather requires the whole
-/// body be streamed before the deadline is reached.
-pub(crate) struct TotalTimeoutBody<B> {
-    inner: B,
-    timeout: Pin<Box<Sleep>>,
+pin_project! {
+    /// A body with a total timeout.
+    ///
+    /// The timeout does not reset upon each chunk, but rather requires the whole
+    /// body be streamed before the deadline is reached.
+    pub(crate) struct TotalTimeoutBody<B> {
+        #[pin]
+        inner: B,
+        timeout: Pin<Box<Sleep>>,
+    }
+}
+
+pin_project! {
+    pub(crate) struct ReadTimeoutBody<B> {
+        #[pin]
+        inner: B,
+        #[pin]
+        sleep: Option<Sleep>,
+        timeout: Duration,
+    }
 }
 
 /// Converts any `impl Body` into a `impl Stream` of just its DATA frames.
@@ -289,25 +304,79 @@ pub(crate) fn total_timeout<B>(body: B, timeout: Pin<Box<Sleep>>) -> TotalTimeou
     }
 }
 
+pub(crate) fn with_read_timeout<B>(body: B, timeout: Duration) -> ReadTimeoutBody<B> {
+    ReadTimeoutBody {
+        inner: body,
+        sleep: None,
+        timeout,
+    }
+}
+
 impl<B> hyper::body::Body for TotalTimeoutBody<B>
 where
-    B: hyper::body::Body + Unpin,
+    B: hyper::body::Body,
     B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
     type Data = B::Data;
     type Error = crate::Error;
 
     fn poll_frame(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context,
     ) -> Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
-        if let Poll::Ready(()) = self.timeout.as_mut().poll(cx) {
+        let this = self.project();
+        if let Poll::Ready(()) = this.timeout.as_mut().poll(cx) {
             return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
         }
         Poll::Ready(
-            futures_core::ready!(Pin::new(&mut self.inner).poll_frame(cx))
+            futures_core::ready!(this.inner.poll_frame(cx))
                 .map(|opt_chunk| opt_chunk.map_err(crate::error::body)),
         )
+    }
+
+    #[inline]
+    fn size_hint(&self) -> http_body::SizeHint {
+        self.inner.size_hint()
+    }
+
+    #[inline]
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
+    }
+}
+
+impl<B> hyper::body::Body for ReadTimeoutBody<B>
+where
+    B: hyper::body::Body,
+    B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    type Data = B::Data;
+    type Error = crate::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context,
+    ) -> Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        let mut this = self.project();
+
+        // Start the `Sleep` if not active.
+        let sleep_pinned = if let Some(some) = this.sleep.as_mut().as_pin_mut() {
+            some
+        } else {
+            this.sleep.set(Some(tokio::time::sleep(*this.timeout)));
+            this.sleep.as_mut().as_pin_mut().unwrap()
+        };
+
+        // Error if the timeout has expired.
+        if let Poll::Ready(()) = sleep_pinned.poll(cx) {
+            return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
+        }
+
+        let item = futures_core::ready!(this.inner.poll_frame(cx))
+            .map(|opt_chunk| opt_chunk.map_err(crate::error::body));
+        // a ready frame means timeout is reset
+        this.sleep.set(None);
+        Poll::Ready(item)
     }
 
     #[inline]
@@ -326,15 +395,27 @@ pub(crate) type ResponseBody =
 
 pub(crate) fn response(
     body: hyper::body::Incoming,
-    timeout: Option<Pin<Box<Sleep>>>,
+    deadline: Option<Pin<Box<Sleep>>>,
+    read_timeout: Option<Duration>,
 ) -> ResponseBody {
     use http_body_util::BodyExt;
 
-    if let Some(timeout) = timeout {
-        total_timeout(body, timeout).map_err(Into::into).boxed()
-    } else {
-        body.map_err(Into::into).boxed()
+    match (deadline, read_timeout) {
+        (Some(total), Some(read)) => {
+            let body = with_read_timeout(body, read).map_err(box_err);
+            total_timeout(body, total).map_err(box_err).boxed()
+        }
+        (Some(total), None) => total_timeout(body, total).map_err(box_err).boxed(),
+        (None, Some(read)) => with_read_timeout(body, read).map_err(box_err).boxed(),
+        (None, None) => body.map_err(box_err).boxed(),
     }
+}
+
+fn box_err<E>(err: E) -> Box<dyn std::error::Error + Send + Sync>
+where
+    E: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    err.into()
 }
 
 // ===== impl DataStream =====
