@@ -91,7 +91,7 @@ struct Config {
     // NOTE: When adding a new field, update `fmt::Debug for ClientBuilder`
     accepts: Accepts,
     headers: HeaderMap,
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__tls")]
     hostname_verification: bool,
     #[cfg(feature = "__tls")]
     certs_verification: bool,
@@ -187,7 +187,7 @@ impl ClientBuilder {
                 error: None,
                 accepts: Accepts::default(),
                 headers,
-                #[cfg(feature = "native-tls")]
+                #[cfg(feature = "__tls")]
                 hostname_verification: true,
                 #[cfg(feature = "__tls")]
                 certs_verification: true,
@@ -498,7 +498,7 @@ impl ClientBuilder {
                 }
                 #[cfg(feature = "__rustls")]
                 TlsBackend::Rustls => {
-                    use crate::tls::NoVerifier;
+                    use crate::tls::{IgnoreHostname, NoVerifier};
 
                     // Set root certificates.
                     let mut root_cert_store = rustls::RootCertStore::empty();
@@ -565,8 +565,21 @@ impl ClientBuilder {
 
                     // Build TLS config
                     let config_builder =
-                        rustls::ClientConfig::builder_with_protocol_versions(&versions)
-                            .with_root_certificates(root_cert_store);
+                        rustls::ClientConfig::builder_with_protocol_versions(&versions);
+
+                    let config_builder = if !config.certs_verification {
+                        config_builder
+                            .dangerous()
+                            .with_custom_certificate_verifier(Arc::new(NoVerifier))
+                    } else if !config.hostname_verification {
+                        config_builder
+                            .dangerous()
+                            .with_custom_certificate_verifier(Arc::new(IgnoreHostname::new(
+                                root_cert_store,
+                            )))
+                    } else {
+                        config_builder.with_root_certificates(root_cert_store)
+                    };
 
                     // Finalize TLS config
                     let mut tls = if let Some(id) = config.identity {
@@ -574,12 +587,6 @@ impl ClientBuilder {
                     } else {
                         config_builder.with_no_client_auth()
                     };
-
-                    // Certificate verifier
-                    if !config.certs_verification {
-                        tls.dangerous()
-                            .set_certificate_verifier(Arc::new(NoVerifier));
-                    }
 
                     tls.enable_sni = config.tls_sni;
 
@@ -1405,8 +1412,8 @@ impl ClientBuilder {
     /// # Optional
     ///
     /// This requires the optional `native-tls` feature to be enabled.
-    #[cfg(feature = "native-tls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "native-tls")))]
+    #[cfg(any(feature = "native-tls", feature = "__rustls"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
     pub fn danger_accept_invalid_hostnames(
         mut self,
         accept_invalid_hostname: bool,

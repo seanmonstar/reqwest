@@ -1,6 +1,7 @@
 ## Unreleased
 
-- Update `rustls` to `0.22.3` for bug fix
+- Update `rustls` to `0.22.3` for bug fix.
+- Implement `danger_accept_invalid_hostnames` for `rustls`.
 
 ## v0.12.3
 
