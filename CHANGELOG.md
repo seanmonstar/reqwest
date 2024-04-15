@@ -1,3 +1,7 @@
+## Unreleased
+
+- Update `rustls` to `0.22.3` for bug fix
+
 ## v0.12.3
 
 - Add `FromStr` for `dns::Name`.
