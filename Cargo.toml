@@ -135,8 +135,8 @@ tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
 hyper-rustls = { version = "0.26.0", default-features = false, optional = true }
-rustls = { version = "0.22.2", optional = true }
-rustls-pki-types = { version = "1.1.0", features = ["alloc"] ,optional = true }
+rustls = { version = "0.22.3", optional = true }
+rustls-pki-types = { version = "1.1.0", features = ["alloc"], optional = true }
 tokio-rustls = { version = "0.25", optional = true }
 webpki-roots = { version = "0.26.0", optional = true }
 rustls-native-certs = { version = "0.7", optional = true }
