@@ -447,7 +447,7 @@ impl From<Response> for Body {
 }
 
 // I'm not sure this conversion is that useful... People should be encouraged
-// to use `http::Resposne`, not `reqwest::Response`.
+// to use `http::Response`, not `reqwest::Response`.
 impl<T: Into<Body>> From<http::Response<T>> for Response {
     fn from(r: http::Response<T>) -> Response {
         use crate::response::ResponseUrl;
