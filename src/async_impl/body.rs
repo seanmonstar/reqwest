@@ -137,8 +137,20 @@ impl Body {
         }
     }
 
-    // pub?
-    pub(crate) fn streaming<B>(inner: B) -> Body
+    /// Wrap a [`HttpBody`] in a box inside `Body`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use reqwest::Body;
+    /// # use futures_util;
+    /// # fn main() {
+    /// let content = "hello,world!".to_string();
+    ///
+    /// let body = Body::streaming(content);
+    /// # }
+    /// ```
+    pub fn streaming<B>(inner: B) -> Body
     where
         B: HttpBody + Send + Sync + 'static,
         B::Data: Into<Bytes>,
