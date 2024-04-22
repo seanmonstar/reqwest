@@ -1,6 +1,7 @@
 use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::time::Duration;
 
 use bytes::Bytes;
 use http_body_util::BodyExt;
@@ -37,12 +38,13 @@ impl Response {
         res: hyper::Response<hyper::body::Incoming>,
         url: Url,
         accepts: Accepts,
-        timeout: Option<Pin<Box<Sleep>>>,
+        total_timeout: Option<Pin<Box<Sleep>>>,
+        read_timeout: Option<Duration>,
     ) -> Response {
         let (mut parts, body) = res.into_parts();
         let decoder = Decoder::detect(
             &mut parts.headers,
-            super::body::response(body, timeout),
+            super::body::response(body, total_timeout, read_timeout),
             accepts,
         );
         let res = hyper::Response::from_parts(parts, decoder);
@@ -445,7 +447,7 @@ impl From<Response> for Body {
 }
 
 // I'm not sure this conversion is that useful... People should be encouraged
-// to use `http::Resposne`, not `reqwest::Response`.
+// to use `http::Response`, not `reqwest::Response`.
 impl<T: Into<Body>> From<http::Response<T>> for Response {
     fn from(r: http::Response<T>) -> Response {
         use crate::response::ResponseUrl;

@@ -240,6 +240,28 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.brotli(enable))
     }
 
+    /// Enable auto zstd decompression by checking the `Content-Encoding` response header.
+    ///
+    /// If auto zstd decompression is turned on:
+    ///
+    /// - When sending a request and if the request's headers do not already contain
+    ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `zstd`.
+    ///   The request body is **not** automatically compressed.
+    /// - When receiving a response, if its headers contain a `Content-Encoding` value of
+    ///   `zstd`, both `Content-Encoding` and `Content-Length` are removed from the
+    ///   headers' set. The response body is automatically decompressed.
+    ///
+    /// If the `zstd` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `zstd` feature to be enabled
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "zstd")))]
+    pub fn zstd(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.zstd(enable))
+    }
+
     /// Enable auto deflate decompression by checking the `Content-Encoding` response header.
     ///
     /// If auto deflate decompresson is turned on:
@@ -278,6 +300,15 @@ impl ClientBuilder {
     /// even if another dependency were to enable the optional `brotli` feature.
     pub fn no_brotli(self) -> ClientBuilder {
         self.with_inner(|inner| inner.no_brotli())
+    }
+
+    /// Disable auto response body zstd decompression.
+    ///
+    /// This method exists even if the optional `zstd` feature is not enabled.
+    /// This can be used to ensure a `Client` doesn't use zstd decompression
+    /// even if another dependency were to enable the optional `zstd` feature.
+    pub fn no_zstd(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.no_zstd())
     }
 
     /// Disable auto response body deflate decompression.
@@ -600,7 +631,7 @@ impl ClientBuilder {
     /// If the feature is enabled, this value is `true` by default.
     #[cfg(feature = "rustls-tls-webpki-roots")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls-webpki-roots")))]
-    pub fn tls_built_in_webpki_certs(mut self, enabled: bool) -> ClientBuilder {
+    pub fn tls_built_in_webpki_certs(self, enabled: bool) -> ClientBuilder {
         self.with_inner(move |inner| inner.tls_built_in_webpki_certs(enabled))
     }
 
@@ -609,7 +640,7 @@ impl ClientBuilder {
     /// If the feature is enabled, this value is `true` by default.
     #[cfg(feature = "rustls-tls-native-roots")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls-native-roots")))]
-    pub fn tls_built_in_native_certs(mut self, enabled: bool) -> ClientBuilder {
+    pub fn tls_built_in_native_certs(self, enabled: bool) -> ClientBuilder {
         self.with_inner(move |inner| inner.tls_built_in_native_certs(enabled))
     }
 

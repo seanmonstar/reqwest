@@ -21,22 +21,21 @@ fn test_response_text() {
 }
 
 #[test]
-fn donot_set_conent_length_0_if_have_no_body() {
+fn donot_set_content_length_0_if_have_no_body() {
     let server = server::http(move |req| async move {
         let headers = req.headers();
         assert_eq!(headers.get(CONTENT_LENGTH), None);
         assert!(headers.get(CONTENT_TYPE).is_none());
         assert!(headers.get(TRANSFER_ENCODING).is_none());
-        dbg!(&headers);
         http::Response::default()
     });
 
-    let url = format!("http://{}/conent-length", server.addr());
+    let url = format!("http://{}/content-length", server.addr());
     let res = reqwest::blocking::Client::builder()
         .no_proxy()
         .build()
         .expect("client builder")
-        .post(&url)
+        .get(&url)
         .send()
         .expect("request");
 

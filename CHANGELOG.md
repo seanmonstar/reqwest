@@ -1,3 +1,8 @@
+## v0.12.4
+
+- Add `zstd` support, enabled with `zstd` Cargo feature.
+- Add `ClientBuilder::read_timeout(Duration)`, which applies the duration for each read operation. The timeout resets after a successful read.
+
 ## v0.12.3
 
 - Add `FromStr` for `dns::Name`.
