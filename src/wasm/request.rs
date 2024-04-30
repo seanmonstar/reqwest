@@ -115,6 +115,14 @@ impl RequestBuilder {
         RequestBuilder { client, request }
     }
 
+    /// Assemble a builder starting from an existing `Client` and a `Request`.
+    pub fn from_parts(client: crate::Client, request: crate::Request) -> crate::RequestBuilder {
+        crate::RequestBuilder {
+            client,
+            request: crate::Result::Ok(request),
+        }
+    }
+
     /// Modify the query string of the URL.
     ///
     /// Modifies the URL of this request, adding the parameters provided.
