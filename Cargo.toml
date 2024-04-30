@@ -45,7 +45,7 @@ rustls-tls-manual-roots = ["__rustls"]
 rustls-tls-webpki-roots = ["dep:webpki-roots", "__rustls"]
 rustls-tls-native-roots = ["dep:rustls-native-certs", "__rustls"]
 
-blocking = ["futures-channel/sink", "futures-util/io", "futures-util/sink", "tokio/rt-multi-thread", "tokio/sync"]
+blocking = ["futures-channel/sink", "futures-util/io", "futures-util/sink", "tokio/rt-multi-thread", "tokio/sync", "tokio/macros"]
 
 charset = ["dep:encoding_rs"]
 
