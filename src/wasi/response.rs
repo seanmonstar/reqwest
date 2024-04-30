@@ -1,5 +1,6 @@
 use bytes::Bytes;
 use encoding_rs::{Encoding, UTF_8};
+use http::header::CONTENT_LENGTH;
 use http::{Extensions, HeaderMap, StatusCode, Version};
 use mime::Mime;
 #[cfg(feature = "json")]
@@ -10,12 +11,11 @@ use std::borrow::Cow;
 use std::io;
 use std::io::Read;
 use std::net::SocketAddr;
-use http::header::CONTENT_LENGTH;
 use url::Url;
 
 use crate::Body;
 
-use super::wasi::http::*;
+use crate::bindings::wasi::http::*;
 
 /// A Response to a submitted `Request`.
 #[derive(Debug)]
@@ -23,14 +23,23 @@ pub struct Response {
     status: StatusCode,
     headers: HeaderMap,
     body: Option<Body>,
-    #[allow(dead_code)] incoming_response: types::IncomingResponse,
-    #[allow(dead_code)] incoming_response_body: types::IncomingBody,
+    #[allow(dead_code)]
+    incoming_response: types::IncomingResponse,
+    #[allow(dead_code)]
+    incoming_response_body: types::IncomingBody,
     url: Url,
     extensions: Extensions,
 }
 
 impl Response {
-    pub(crate) fn new(status: StatusCode, headers: HeaderMap, body: Body, incoming_response: types::IncomingResponse, incoming_response_body: types::IncomingBody, url: Url) -> Response {
+    pub(crate) fn new(
+        status: StatusCode,
+        headers: HeaderMap,
+        body: Body,
+        incoming_response: types::IncomingResponse,
+        incoming_response_body: types::IncomingBody,
+        url: Url,
+    ) -> Response {
         Response {
             status,
             headers,
@@ -134,7 +143,7 @@ impl Response {
     /// This requires the optional `cookies` feature to be enabled.
     #[cfg(feature = "cookies")]
     #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
-    pub fn cookies<'a>(&'a self) -> impl Iterator<Item=cookie::Cookie<'a>> + 'a {
+    pub fn cookies<'a>(&'a self) -> impl Iterator<Item = cookie::Cookie<'a>> + 'a {
         cookie::extract_response_cookies(self.headers()).filter_map(Result::ok)
     }
 
@@ -193,8 +202,9 @@ impl Response {
     /// - The response is gzipped and automatically decoded (thus changing
     ///   the actual decoded length).
     pub fn content_length(&self) -> Option<u64> {
-        self.headers.get(CONTENT_LENGTH)
-            .and_then(|ct_len| { ct_len.to_str().ok() })
+        self.headers
+            .get(CONTENT_LENGTH)
+            .and_then(|ct_len| ct_len.to_str().ok())
             .and_then(|ct_len| ct_len.parse().ok())
     }
 
@@ -344,8 +354,8 @@ impl Response {
     /// # }
     /// ```
     pub fn copy_to<W: ?Sized>(&mut self, w: &mut W) -> crate::Result<u64>
-        where
-            W: io::Write,
+    where
+        W: io::Write,
     {
         io::copy(self, w).map_err(crate::error::decode_io)
     }
@@ -400,7 +410,6 @@ impl Response {
         }
     }
 }
-
 
 impl Read for Response {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {

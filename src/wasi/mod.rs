@@ -1,5 +1,3 @@
-wit_bindgen::generate!("http-client");
-
 mod body;
 mod client;
 mod request;

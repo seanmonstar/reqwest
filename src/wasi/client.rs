@@ -1,20 +1,18 @@
-use http::header::{
-    HeaderMap, HeaderValue, ACCEPT, USER_AGENT,
-};
+use http::header::{HeaderMap, HeaderValue, ACCEPT, USER_AGENT};
 use http::{HeaderName, Method, StatusCode};
-use std::convert::{TryInto, TryFrom};
+use std::convert::{TryFrom, TryInto};
 use std::io::ErrorKind;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::{Body, IntoUrl};
-use crate::error::Kind;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
+use crate::error::Kind;
+use crate::{Body, IntoUrl};
 
-use super::wasi::clocks::*;
-use super::wasi::http::*;
-use super::wasi::io::*;
+use crate::bindings::wasi::clocks::*;
+use crate::bindings::wasi::http::*;
+use crate::bindings::wasi::io::*;
 
 #[derive(Debug)]
 struct Config {
@@ -91,7 +89,6 @@ impl Client {
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }
-
 
     /// Convenience method to make a `GET` request to a URL.
     ///
@@ -172,10 +169,7 @@ impl Client {
     ///
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
-    pub fn execute(
-        &self,
-        request: Request,
-    ) -> Result<Response, crate::Error> {
+    pub fn execute(&self, request: Request) -> Result<Response, crate::Error> {
         let mut header_key_values: Vec<(String, Vec<u8>)> = vec![];
         for (name, value) in self.inner.headers.iter() {
             match value.to_str() {
@@ -195,23 +189,33 @@ impl Client {
         let scheme = match url.scheme() {
             "http" => types::Scheme::Http,
             "https" => types::Scheme::Https,
-            other => types::Scheme::Other(other.to_string())
+            other => types::Scheme::Other(other.to_string()),
         };
         let headers = types::Fields::from_list(&header_key_values)?;
         let request = types::OutgoingRequest::new(headers);
         let path_with_query = match url.query() {
             Some(query) => format!("{}?{}", url.path(), query),
-            None => url.path().to_string()
+            None => url.path().to_string(),
         };
-        request.set_method(&method.into()).map_err(|e| failure_point("set_method", e))?;
-        request.set_path_with_query(Some(&path_with_query)).map_err(|e| failure_point("set_path_with_query", e))?;
-        request.set_scheme(Some(&scheme)).map_err(|e| failure_point("set_scheme", e))?;
-        request.set_authority(Some(url.authority())).map_err(|e| failure_point("set_authority", e))?;
+        request
+            .set_method(&method.into())
+            .map_err(|e| failure_point("set_method", e))?;
+        request
+            .set_path_with_query(Some(&path_with_query))
+            .map_err(|e| failure_point("set_path_with_query", e))?;
+        request
+            .set_scheme(Some(&scheme))
+            .map_err(|e| failure_point("set_scheme", e))?;
+        request
+            .set_authority(Some(url.authority()))
+            .map_err(|e| failure_point("set_authority", e))?;
 
         match body {
             Some(body) => {
                 let request_body = request.body().map_err(|e| failure_point("body", e))?;
-                let request_body_stream = request_body.write().map_err(|e| failure_point("write", e))?;
+                let request_body_stream = request_body
+                    .write()
+                    .map_err(|e| failure_point("write", e))?;
                 body.write(|chunk| {
                     request_body_stream.write(chunk)?;
                     Ok(())
@@ -223,30 +227,64 @@ impl Client {
         }
 
         let options = types::RequestOptions::new();
-        options.set_connect_timeout(self.inner.connect_timeout.map(|d| d.as_nanos() as u64)).map_err(|e| failure_point("set_connect_timeout", e))?;
-        options.set_first_byte_timeout(timeout.or(self.inner.first_byte_timeout).map(|d| d.as_nanos() as u64)).map_err(|e| failure_point("set_first_byte_timeout", e))?;
-        options.set_between_bytes_timeout(timeout.or(self.inner.between_bytes_timeout).map(|d| d.as_nanos() as u64)).map_err(|e| failure_point("set_between_bytes_timeout", e))?;
+        options
+            .set_connect_timeout(self.inner.connect_timeout.map(|d| d.as_nanos() as u64))
+            .map_err(|e| failure_point("set_connect_timeout", e))?;
+        options
+            .set_first_byte_timeout(
+                timeout
+                    .or(self.inner.first_byte_timeout)
+                    .map(|d| d.as_nanos() as u64),
+            )
+            .map_err(|e| failure_point("set_first_byte_timeout", e))?;
+        options
+            .set_between_bytes_timeout(
+                timeout
+                    .or(self.inner.between_bytes_timeout)
+                    .map(|d| d.as_nanos() as u64),
+            )
+            .map_err(|e| failure_point("set_between_bytes_timeout", e))?;
 
         let future_incoming_response = outgoing_handler::handle(request, Some(options))?;
 
         let receive_timeout = timeout.or(self.inner.first_byte_timeout);
-        let incoming_response = Self::get_incoming_response(&future_incoming_response, receive_timeout)?;
+        let incoming_response =
+            Self::get_incoming_response(&future_incoming_response, receive_timeout)?;
 
         let status = incoming_response.status();
-        let status_code = StatusCode::from_u16(status).map_err(|e| crate::Error::new(crate::error::Kind::Decode, Some(e)))?;
+        let status_code = StatusCode::from_u16(status)
+            .map_err(|e| crate::Error::new(crate::error::Kind::Decode, Some(e)))?;
 
         let response_fields = incoming_response.headers();
         let response_headers = Self::fields_to_header_map(&response_fields);
 
-        let response_body = incoming_response.consume().map_err(|e| failure_point("consume", e))?;
-        let response_body_stream = response_body.stream().map_err(|e| failure_point("stream", e))?;
+        let response_body = incoming_response
+            .consume()
+            .map_err(|e| failure_point("consume", e))?;
+        let response_body_stream = response_body
+            .stream()
+            .map_err(|e| failure_point("stream", e))?;
         let body: Body = response_body_stream.into();
 
-        Ok(Response::new(status_code, response_headers, body, incoming_response, response_body, url))
+        Ok(Response::new(
+            status_code,
+            response_headers,
+            body,
+            incoming_response,
+            response_body,
+            url,
+        ))
     }
 
-    fn get_incoming_response(future_incoming_response: &types::FutureIncomingResponse, timeout: Option<Duration>) -> Result<types::IncomingResponse, crate::Error> {
-        let deadline_pollable = monotonic_clock::subscribe_duration(timeout.unwrap_or(Duration::from_secs(10000000000)).as_nanos() as u64);
+    fn get_incoming_response(
+        future_incoming_response: &types::FutureIncomingResponse,
+        timeout: Option<Duration>,
+    ) -> Result<types::IncomingResponse, crate::Error> {
+        let deadline_pollable = monotonic_clock::subscribe_duration(
+            timeout
+                .unwrap_or(Duration::from_secs(10000000000))
+                .as_nanos() as u64,
+        );
         loop {
             match future_incoming_response.get() {
                 Some(Ok(Ok(incoming_response))) => {
@@ -260,7 +298,10 @@ impl Client {
                     if timeout.is_none() || !bitmap.contains(&1) {
                         continue;
                     } else {
-                        return Err(crate::Error::new(Kind::Request, Some(crate::error::TimedOut)));
+                        return Err(crate::Error::new(
+                            Kind::Request,
+                            Some(crate::error::TimedOut),
+                        ));
                     }
                 }
             };
@@ -271,8 +312,10 @@ impl Client {
         let mut headers = HeaderMap::new();
         let entries = fields.entries();
         for (name, value) in entries {
-            headers.insert(HeaderName::try_from(&name).expect("Invalid header name"),
-                           HeaderValue::from_bytes(&value).expect("Invalid header value"));
+            headers.insert(
+                HeaderName::try_from(&name).expect("Invalid header name"),
+                HeaderValue::from_bytes(&value).expect("Invalid header value"),
+            );
         }
         headers
     }
@@ -298,7 +341,7 @@ impl ClientBuilder {
                 connect_timeout: None,
                 timeout: None,
                 error: None,
-            }
+            },
         }
     }
 
@@ -314,14 +357,12 @@ impl ClientBuilder {
         }
 
         Ok(Client {
-            inner: Arc::new(
-                ClientRef {
-                    headers: self.config.headers,
-                    connect_timeout: self.config.connect_timeout,
-                    first_byte_timeout: self.config.timeout,
-                    between_bytes_timeout: self.config.timeout,
-                }
-            )
+            inner: Arc::new(ClientRef {
+                headers: self.config.headers,
+                connect_timeout: self.config.connect_timeout,
+                first_byte_timeout: self.config.timeout,
+                between_bytes_timeout: self.config.timeout,
+            }),
         })
     }
 
@@ -346,9 +387,9 @@ impl ClientBuilder {
     /// # }
     /// ```
     pub fn user_agent<V>(mut self, value: V) -> ClientBuilder
-        where
-            V: TryInto<HeaderValue>,
-            V::Error: Into<http::Error>,
+    where
+        V: TryInto<HeaderValue>,
+        V::Error: Into<http::Error>,
     {
         match value.try_into() {
             Ok(value) => {
@@ -385,8 +426,8 @@ impl ClientBuilder {
     ///
     /// Pass `None` to disable timeout.
     pub fn timeout<T>(mut self, timeout: T) -> ClientBuilder
-        where
-            T: Into<Option<Duration>>,
+    where
+        T: Into<Option<Duration>>,
     {
         self.config.timeout = timeout.into();
         self
@@ -396,8 +437,8 @@ impl ClientBuilder {
     ///
     /// Default is `None`.
     pub fn connect_timeout<T>(mut self, timeout: T) -> ClientBuilder
-        where
-            T: Into<Option<Duration>>,
+    where
+        T: Into<Option<Duration>>,
     {
         self.config.connect_timeout = timeout.into();
         self
@@ -432,22 +473,43 @@ impl From<Method> for types::Method {
 
 impl From<types::ErrorCode> for crate::Error {
     fn from(value: types::ErrorCode) -> Self {
-        crate::Error::new(Kind::Request, Some(std::io::Error::new(ErrorKind::Other, format!("{:?}", value))))
+        crate::Error::new(
+            Kind::Request,
+            Some(std::io::Error::new(
+                ErrorKind::Other,
+                format!("{:?}", value),
+            )),
+        )
     }
 }
 
 impl From<streams::StreamError> for crate::Error {
     fn from(value: streams::StreamError) -> Self {
-        crate::Error::new(Kind::Request, Some(std::io::Error::new(ErrorKind::Other, format!("{:?}", value))))
+        crate::Error::new(
+            Kind::Request,
+            Some(std::io::Error::new(
+                ErrorKind::Other,
+                format!("{:?}", value),
+            )),
+        )
     }
 }
 
 impl From<types::HeaderError> for crate::Error {
     fn from(value: types::HeaderError) -> Self {
-        crate::Error::new(Kind::Request, Some(std::io::Error::new(ErrorKind::Other, format!("{:?}", value))))
+        crate::Error::new(
+            Kind::Request,
+            Some(std::io::Error::new(
+                ErrorKind::Other,
+                format!("{:?}", value),
+            )),
+        )
     }
 }
 
 pub(crate) fn failure_point(s: &str, _: ()) -> crate::Error {
-    crate::Error::new(Kind::Request, Some(std::io::Error::new(ErrorKind::Other, s)))
+    crate::Error::new(
+        Kind::Request,
+        Some(std::io::Error::new(ErrorKind::Other, s)),
+    )
 }

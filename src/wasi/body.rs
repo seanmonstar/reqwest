@@ -3,7 +3,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, Cursor, Read};
 
-use super::wasi::io::*;
+use crate::bindings::wasi::io::*;
 
 /// An asynchronous request body.
 #[derive(Debug)]
@@ -77,7 +77,7 @@ impl Body {
             Some(Kind::Reader(_, _)) => None,
             Some(Kind::Bytes(ref bytes)) => Some(bytes.as_ref()),
             Some(Kind::Incoming(_)) => None,
-            None => None
+            None => None,
         }
     }
 
@@ -117,7 +117,7 @@ impl Body {
                 self.kind = Some(Kind::Bytes(body.into()));
                 self.buffer()
             }
-            None => panic!("Body has already been extracted")
+            None => panic!("Body has already been extracted"),
         }
     }
 
@@ -126,15 +126,22 @@ impl Body {
             Some(Kind::Reader(r, _)) => Reader::Reader(r),
             Some(Kind::Bytes(b)) => Reader::Bytes(Cursor::new(b)),
             Some(Kind::Incoming(handle)) => Reader::Wasi(handle),
-            None => panic!("Body has already been extracted")
+            None => panic!("Body has already been extracted"),
         }
     }
 
     pub(crate) fn try_clone(&self) -> Option<Body> {
-        self.kind.as_ref().unwrap().try_clone().map(|kind| Body { kind: Some(kind) })
+        self.kind
+            .as_ref()
+            .unwrap()
+            .try_clone()
+            .map(|kind| Body { kind: Some(kind) })
     }
 
-    pub(crate) fn write(mut self, mut f: impl FnMut(&[u8]) -> Result<(), crate::Error>) -> Result<(), crate::Error> {
+    pub(crate) fn write(
+        mut self,
+        mut f: impl FnMut(&[u8]) -> Result<(), crate::Error>,
+    ) -> Result<(), crate::Error> {
         match self.kind.take().expect("Body has already been extracted") {
             Kind::Reader(mut reader, _) => {
                 let mut buf = [0; 8 * 1024];
@@ -178,7 +185,7 @@ impl Kind {
         match self {
             Kind::Reader(..) => None,
             Kind::Bytes(v) => Some(Kind::Bytes(v.clone())),
-            Kind::Incoming(..) => None
+            Kind::Incoming(..) => None,
         }
     }
 }
@@ -251,7 +258,7 @@ impl fmt::Debug for Kind {
                 .field("length", &DebugLength(v))
                 .finish(),
             Kind::Bytes(ref v) => fmt::Debug::fmt(v, f),
-            Kind::Incoming(_) => f.debug_struct("Incoming").finish()
+            Kind::Incoming(_) => f.debug_struct("Incoming").finish(),
         }
     }
 }
@@ -285,16 +292,13 @@ impl Read for Reader {
                         buf[..len].copy_from_slice(&body_chunk);
                         Ok(len)
                     }
-                    Err(streams::StreamError::Closed) => {
-                        Ok(0)
-                    }
+                    Err(streams::StreamError::Closed) => Ok(0),
                     Err(_err) => {
                         // TODO: include information from 'err'
                         Err(io::Error::new(io::ErrorKind::Other, "read chunk"))
-                    },
+                    }
                 }
             }
         }
     }
 }
-
