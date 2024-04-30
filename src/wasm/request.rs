@@ -349,6 +349,15 @@ impl RequestBuilder {
         self.request
     }
 
+    /// Build a `Request`, which can be inspected, modified and executed with
+    /// `Client::execute()`.
+    ///
+    /// This is similar to [`RequestBuilder::build()`], but also returns the
+    /// embedded `Client`.
+    pub fn build_split(self) -> (Client, crate::Result<Request>) {
+        (self.client, self.request)
+    }
+
     /// Constructs the Request and sends it to the target URL, returning a
     /// future Response.
     ///
