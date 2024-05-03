@@ -142,8 +142,8 @@ webpki-roots = { version = "0.26.0", optional = true }
 rustls-native-certs = { version = "0.7", optional = true }
 
 ## cookies
-cookie_crate = { version = "0.17.0", package = "cookie", optional = true }
-cookie_store = { version = "0.20.0", optional = true }
+cookie_crate = { version = "0.18.0", package = "cookie", optional = true }
+cookie_store = { version = "0.21.0", optional = true }
 
 ## compression
 async-compression = { version = "0.4.0", default-features = false, features = ["tokio"], optional = true }
