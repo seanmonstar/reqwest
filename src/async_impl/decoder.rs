@@ -484,9 +484,9 @@ impl Accepts {
             (true, true, true, false) => Some("gzip, br, zstd"),
             (true, true, false, false) => Some("gzip, br"),
             (true, false, true, true) => Some("gzip, zstd, deflate"),
-            (true, false, false, true) => Some("gzip, zstd, deflate"),
+            (true, false, false, true) => Some("gzip, deflate"),
             (false, true, true, true) => Some("br, zstd, deflate"),
-            (false, true, false, true) => Some("br, zstd, deflate"),
+            (false, true, false, true) => Some("br, deflate"),
             (true, false, true, false) => Some("gzip, zstd"),
             (true, false, false, false) => Some("gzip"),
             (false, true, true, false) => Some("br, zstd"),
@@ -558,6 +558,60 @@ impl Default for Accepts {
             zstd: true,
             #[cfg(feature = "deflate")]
             deflate: true,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_as_str() {
+        fn format_accept_encoding(accepts: &Accepts) -> String {
+            let mut encodings = vec![];
+            if accepts.is_gzip() {
+                encodings.push("gzip");
+            }
+            if accepts.is_brotli() {
+                encodings.push("br");
+            }
+            if accepts.is_zstd() {
+                encodings.push("zstd");
+            }
+            if accepts.is_deflate() {
+                encodings.push("deflate");
+            }
+            encodings.join(", ")
+        }
+
+        let state = [true, false];
+        let mut permutations = Vec::new();
+
+        #[allow(unused_variables)]
+        for gzip in state {
+            for brotli in state {
+                for zstd in state {
+                    for deflate in state {
+                        permutations.push(Accepts {
+                            #[cfg(feature = "gzip")]
+                            gzip,
+                            #[cfg(feature = "brotli")]
+                            brotli,
+                            #[cfg(feature = "zstd")]
+                            zstd,
+                            #[cfg(feature = "deflate")]
+                            deflate,
+                        });
+                    }
+                }
+            }
+        }
+
+        for accepts in permutations {
+            let expected = format_accept_encoding(&accepts);
+            let got = accepts.as_str().unwrap_or("");
+            assert_eq!(got, expected.as_str());
         }
     }
 }
