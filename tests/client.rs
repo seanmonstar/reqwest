@@ -60,7 +60,7 @@ async fn auto_headers() {
 }
 
 #[tokio::test]
-async fn donot_set_conent_length_0_if_have_no_body() {
+async fn donot_set_content_length_0_if_have_no_body() {
     let server = server::http(move |req| async move {
         let headers = req.headers();
         assert_eq!(headers.get(CONTENT_LENGTH), None);
@@ -70,7 +70,7 @@ async fn donot_set_conent_length_0_if_have_no_body() {
         http::Response::default()
     });
 
-    let url = format!("http://{}/conent-length", server.addr());
+    let url = format!("http://{}/content-length", server.addr());
     let res = reqwest::Client::builder()
         .no_proxy()
         .build()
@@ -466,7 +466,7 @@ async fn test_tls_info() {
     assert!(tls_info.is_none());
 }
 
-// NOTE: using the default "curernt_thread" runtime here would cause the test to
+// NOTE: using the default "current_thread" runtime here would cause the test to
 // fail, because the only thread would block until `panic_rx` receives a
 // notification while the client needs to be driven to get the graceful shutdown
 // done.
