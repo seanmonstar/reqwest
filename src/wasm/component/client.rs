@@ -1,0 +1,311 @@
+use http::header::USER_AGENT;
+use http::{HeaderMap, HeaderValue, Method};
+use std::convert::TryInto;
+use std::{fmt, future::Future, sync::Arc};
+
+use super::{Request, RequestBuilder, Response};
+use crate::{wasm::component::bindings::wasi, IntoUrl};
+
+/// dox
+#[derive(Clone)]
+pub struct Client {
+    config: Arc<Config>,
+}
+
+/// dox
+pub struct ClientBuilder {
+    config: Config,
+}
+
+impl Client {
+    /// Constructs a new `Client`.
+    pub fn new() -> Self {
+        Client::builder().build().expect("Client::new()")
+    }
+
+    /// dox
+    pub fn builder() -> ClientBuilder {
+        ClientBuilder::new()
+    }
+
+    /// Convenience method to make a `GET` request to a URL.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
+    pub fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        self.request(Method::GET, url)
+    }
+
+    /// Convenience method to make a `POST` request to a URL.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
+    pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        self.request(Method::POST, url)
+    }
+
+    /// Convenience method to make a `PUT` request to a URL.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
+    pub fn put<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        self.request(Method::PUT, url)
+    }
+
+    /// Convenience method to make a `PATCH` request to a URL.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
+    pub fn patch<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        self.request(Method::PATCH, url)
+    }
+
+    /// Convenience method to make a `DELETE` request to a URL.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
+    pub fn delete<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        self.request(Method::DELETE, url)
+    }
+
+    /// Convenience method to make a `HEAD` request to a URL.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
+    pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        self.request(Method::HEAD, url)
+    }
+
+    /// Start building a `Request` with the `Method` and `Url`.
+    ///
+    /// Returns a `RequestBuilder`, which will allow setting headers and
+    /// request body before sending.
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever supplied `Url` cannot be parsed.
+    pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
+        let req = url.into_url().map(move |url| Request::new(method, url));
+        RequestBuilder::new(self.clone(), req)
+    }
+
+    /// Executes a `Request`.
+    ///
+    /// A `Request` can be built manually with `Request::new()` or obtained
+    /// from a RequestBuilder with `RequestBuilder::build()`.
+    ///
+    /// You should prefer to use the `RequestBuilder` and
+    /// `RequestBuilder::send()`.
+    ///
+    /// # Errors
+    ///
+    /// This method fails if there was an error while sending request,
+    /// redirect loop was detected or redirect limit was exhausted.
+    pub fn execute(
+        &self,
+        request: Request,
+    ) -> impl Future<Output = Result<Response, crate::Error>> {
+        self.execute_request(request)
+    }
+
+    // merge request headers with Client default_headers, prior to external http fetch
+    fn merge_headers(&self, req: &mut Request) {
+        use http::header::Entry;
+        let headers: &mut HeaderMap = req.headers_mut();
+        // insert default headers in the request headers
+        // without overwriting already appended headers.
+        for (key, value) in self.config.headers.iter() {
+            if let Entry::Vacant(entry) = headers.entry(key) {
+                entry.insert(value.clone());
+            }
+        }
+    }
+
+    pub(super) fn execute_request(
+        &self,
+        mut req: Request,
+    ) -> impl Future<Output = crate::Result<Response>> {
+        self.merge_headers(&mut req);
+        fetch(req)
+    }
+}
+
+impl Default for Client {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl fmt::Debug for Client {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut builder = f.debug_struct("Client");
+        self.config.fmt_fields(&mut builder);
+        builder.finish()
+    }
+}
+
+impl fmt::Debug for ClientBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut builder = f.debug_struct("ClientBuilder");
+        self.config.fmt_fields(&mut builder);
+        builder.finish()
+    }
+}
+
+async fn fetch(req: Request) -> crate::Result<Response> {
+    let headers = wasi::http::types::Fields::new();
+    for (name, value) in req.headers() {
+        // TODO: see if we can avoid the extra allocation
+        headers
+            .append(&name.to_string(), &value.as_bytes().to_vec())
+            .map_err(crate::error::builder)?;
+    }
+
+    // Construct `OutgoingRequest`
+    let outgoing_request = wasi::http::types::OutgoingRequest::new(headers);
+    let url = req.url();
+    if url.has_authority() {
+        outgoing_request
+            .set_authority(Some(url.authority()))
+            .map_err(|_| crate::error::request("failed to set authority on request"))?;
+    }
+    outgoing_request
+        .set_path_with_query(Some(url.path()))
+        .map_err(|_| crate::error::request("failed to set path with query on request"))?;
+    match url.scheme() {
+        "http" => outgoing_request.set_scheme(Some(&wasi::http::types::Scheme::Http)),
+        "https" => outgoing_request.set_scheme(Some(&wasi::http::types::Scheme::Https)),
+        scheme => {
+            outgoing_request.set_scheme(Some(&wasi::http::types::Scheme::Other(scheme.to_string())))
+        }
+    }
+    .map_err(|_| crate::error::request("failed to set scheme on request"))?;
+
+    match req.method() {
+        &Method::GET => outgoing_request.set_method(&wasi::http::types::Method::Get),
+        &Method::POST => outgoing_request.set_method(&wasi::http::types::Method::Post),
+        &Method::PUT => outgoing_request.set_method(&wasi::http::types::Method::Put),
+        &Method::DELETE => outgoing_request.set_method(&wasi::http::types::Method::Delete),
+        &Method::HEAD => outgoing_request.set_method(&wasi::http::types::Method::Head),
+        &Method::OPTIONS => outgoing_request.set_method(&wasi::http::types::Method::Options),
+        &Method::CONNECT => outgoing_request.set_method(&wasi::http::types::Method::Connect),
+        &Method::PATCH => outgoing_request.set_method(&wasi::http::types::Method::Patch),
+        &Method::TRACE => outgoing_request.set_method(&wasi::http::types::Method::Trace),
+        // The only other methods are ExtensionInline and ExtensionAllocated, which are
+        // private first of all (can't match on it here) and don't have a strongly typed
+        // version in wasi-http, so we fall back to Other.
+        _ => {
+            outgoing_request.set_method(&wasi::http::types::Method::Other(req.method().to_string()))
+        }
+    }
+    .map_err(|_| {
+        crate::error::builder(format!(
+            "failed to set method, invalid method {}",
+            req.method().to_string()
+        ))
+    })?;
+
+    let response = match wasi::http::outgoing_handler::handle(outgoing_request, None) {
+        Ok(resp) => {
+            // NOTE(brooksmtownsend): This is technically blocking in an async context, however
+            // this is only ever called inside of a Wasm context which is single threaded. That
+            // being said, more investigation is needed to see if we can implement a poll function
+            // or if this entire fetch function should be sync blocking.
+            resp.subscribe().block();
+            let response = match resp.get() {
+                None => Err(crate::error::request("http request response missing")),
+                // Shouldn't occur
+                Some(Err(_)) => Err(crate::error::request(
+                    "http request response requested more than once",
+                )),
+                Some(Ok(response)) => response.map_err(crate::error::request),
+            }?;
+
+            Response::new(http::Response::new(response), url.clone())
+        }
+        Err(e) => return Err(crate::error::request(e)),
+    };
+
+    Ok(response)
+}
+
+// ===== impl ClientBuilder =====
+
+impl ClientBuilder {
+    /// Return a new `ClientBuilder`.
+    pub fn new() -> Self {
+        ClientBuilder {
+            config: Config::default(),
+        }
+    }
+
+    /// Returns a 'Client' that uses this ClientBuilder configuration
+    pub fn build(mut self) -> Result<Client, crate::Error> {
+        if let Some(err) = self.config.error {
+            return Err(err);
+        }
+
+        let config = std::mem::take(&mut self.config);
+        Ok(Client {
+            config: Arc::new(config),
+        })
+    }
+
+    /// Sets the `User-Agent` header to be used by this client.
+    pub fn user_agent<V>(mut self, value: V) -> ClientBuilder
+    where
+        V: TryInto<HeaderValue>,
+        V::Error: Into<http::Error>,
+    {
+        match value.try_into() {
+            Ok(value) => {
+                self.config.headers.insert(USER_AGENT, value);
+            }
+            Err(e) => {
+                self.config.error = Some(crate::error::builder(e.into()));
+            }
+        }
+        self
+    }
+
+    /// Sets the default headers for every request
+    pub fn default_headers(mut self, headers: HeaderMap) -> ClientBuilder {
+        for (key, value) in headers.iter() {
+            self.config.headers.insert(key, value.clone());
+        }
+        self
+    }
+}
+
+impl Default for ClientBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug)]
+struct Config {
+    headers: HeaderMap,
+    error: Option<crate::Error>,
+}
+
+impl Default for Config {
+    fn default() -> Config {
+        Config {
+            headers: HeaderMap::new(),
+            error: None,
+        }
+    }
+}
+
+impl Config {
+    fn fmt_fields(&self, f: &mut fmt::DebugStruct<'_, '_>) {
+        f.field("default_headers", &self.headers);
+    }
+}
