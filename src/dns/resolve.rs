@@ -41,6 +41,12 @@ impl Name {
     }
 }
 
+impl From<Name> for HyperName {
+    fn from(value: Name) -> Self {
+        value.0
+    }
+}
+
 impl FromStr for Name {
     type Err = sealed::InvalidNameError;
 
