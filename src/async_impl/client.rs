@@ -2781,9 +2781,6 @@ mod tests {
     /// https://github.com/seanmonstar/reqwest/issues/668
     #[tokio::test]
     async fn execute_request_rejects_invalid_hostname() {
-        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-        let _ = rustls::crypto::ring::default_provider().install_default();
-
         let url_str = "https://{{hostname}}/";
         let url = url::Url::parse(url_str).unwrap();
         let result = crate::get(url.clone()).await;
