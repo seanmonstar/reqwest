@@ -213,6 +213,9 @@ features = [
 wasm-bindgen = { version = "0.2.68", features = ["serde-serialize"] }
 wasm-bindgen-test = "0.3"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("http3"))', 'cfg(reqwest_unstable)'] }
+
 [[example]]
 name = "blocking"
 path = "examples/blocking.rs"
