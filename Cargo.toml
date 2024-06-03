@@ -86,7 +86,7 @@ __tls = ["dep:rustls-pemfile", "tokio/io-util"]
 
 # Enables common rustls code.
 # Equivalent to rustls-tls-manual-roots but shorter :)
-__rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls", "dep:rustls-pemfile", "rustls-pki-types"]
+__rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls", "dep:rustls-pemfile", "dep:rustls-pki-types"]
 
 # When enabled, disable using the cached SYS_PROXIES.
 __internal_proxy_sys_no_cache = []
@@ -134,10 +134,10 @@ native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls"
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
-hyper-rustls = { version = "0.26.0", default-features = false, optional = true }
-rustls = { version = "0.22.2", optional = true }
+hyper-rustls = { version = "0.27.0", default-features = false, optional = true, features = ["http1", "http2", "native-tokio", "ring", "tls12"] }
+rustls = { version = "0.23.4", optional = true, default-features = false, features = ["std", "ring", "tls12"] }
 rustls-pki-types = { version = "1.1.0", features = ["alloc"] ,optional = true }
-tokio-rustls = { version = "0.25", optional = true }
+tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["ring", "tls12"] }
 webpki-roots = { version = "0.26.0", optional = true }
 rustls-native-certs = { version = "0.7", optional = true }
 
