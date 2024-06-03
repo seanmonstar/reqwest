@@ -565,10 +565,17 @@ impl ClientBuilder {
                         return Err(crate::error::builder("empty supported tls versions"));
                     }
 
+                    // Allow user to have installed a runtime default.
+                    // If not, we use ring.
+                    let provider = rustls::crypto::CryptoProvider::get_default()
+                        .map(|arc| arc.clone())
+                        .unwrap_or_else(|| Arc::new(rustls::crypto::ring::default_provider()));
+
                     // Build TLS config
-                    let config_builder =
-                        rustls::ClientConfig::builder_with_protocol_versions(&versions)
-                            .with_root_certificates(root_cert_store);
+                    let config_builder = rustls::ClientConfig::builder_with_provider(provider)
+                        .with_protocol_versions(&versions)
+                        .map_err(|_| crate::error::builder("invalid TLS versions"))?
+                        .with_root_certificates(root_cert_store);
 
                     // Finalize TLS config
                     let mut tls = if let Some(id) = config.identity {
