@@ -6,6 +6,7 @@ use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::Uri;
 use hyper_util::client::legacy::connect::dns::Name;
+use quinn::crypto::rustls::QuicClientConfig;
 use quinn::{ClientConfig, Endpoint, TransportConfig};
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
@@ -29,7 +30,8 @@ impl H3Connector {
         local_addr: Option<IpAddr>,
         transport_config: TransportConfig,
     ) -> Result<H3Connector, BoxError> {
-        let mut config = ClientConfig::new(Arc::new(tls));
+        let quic_client_config = Arc::new(QuicClientConfig::try_from(tls)?);
+        let mut config = ClientConfig::new(quic_client_config);
         // FIXME: Replace this when there is a setter.
         config.transport_config(Arc::new(transport_config));
 
