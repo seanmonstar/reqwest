@@ -177,6 +177,7 @@ zstd_crate = { package = "zstd", version = "0.13" }
 doc-comment = "0.3"
 tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
 futures-util = { version = "0.3.0", default-features = false, features = ["std", "alloc"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52.0"

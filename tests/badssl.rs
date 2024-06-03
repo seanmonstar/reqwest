@@ -1,12 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
+#![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
 
-#[cfg(all(
-    feature = "__tls",
-    not(any(
-        feature = "rustls-tls-manual-roots",
-        feature = "rustls-tls-manual-roots-no-provider"
-    ))
-))]
+#[cfg(all(feature = "__tls", not(feature = "rustls-tls-manual-roots",)))]
 #[tokio::test]
 async fn test_badssl_modern() {
     let text = reqwest::Client::builder()
@@ -49,9 +44,6 @@ async fn test_rustls_badssl_modern() {
 #[cfg(feature = "__tls")]
 #[tokio::test]
 async fn test_badssl_self_signed() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let text = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .no_proxy()
@@ -71,9 +63,6 @@ async fn test_badssl_self_signed() {
 #[cfg(feature = "__tls")]
 #[tokio::test]
 async fn test_badssl_no_built_in_roots() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let result = reqwest::Client::builder()
         .tls_built_in_root_certs(false)
         .no_proxy()

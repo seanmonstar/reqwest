@@ -2764,11 +2764,10 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &dyn cookie::CookieS
 
 #[cfg(test)]
 mod tests {
+    #![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
+
     #[tokio::test]
     async fn execute_request_rejects_invalid_urls() {
-        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-        let _ = rustls::crypto::ring::default_provider().install_default();
-
         let url_str = "hxxps://www.rust-lang.org/";
         let url = url::Url::parse(url_str).unwrap();
         let result = crate::get(url.clone()).await;

@@ -1,4 +1,5 @@
 #![cfg(not(target_arch = "wasm32"))]
+#![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
 mod support;
 use http_body_util::BodyExt;
 use reqwest::Body;
@@ -6,9 +7,6 @@ use support::server;
 
 #[tokio::test]
 async fn test_redirect_301_and_302_and_303_changes_post_to_get() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let client = reqwest::Client::new();
     let codes = [301u16, 302, 303];
 
@@ -46,9 +44,6 @@ async fn test_redirect_301_and_302_and_303_changes_post_to_get() {
 
 #[tokio::test]
 async fn test_redirect_307_and_308_tries_to_get_again() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let client = reqwest::Client::new();
     let codes = [307u16, 308];
     for &code in &codes {
@@ -85,9 +80,6 @@ async fn test_redirect_307_and_308_tries_to_get_again() {
 
 #[tokio::test]
 async fn test_redirect_307_and_308_tries_to_post_again() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let _ = env_logger::try_init();
     let client = reqwest::Client::new();
     let codes = [307u16, 308];
@@ -177,9 +169,6 @@ fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
 
 #[tokio::test]
 async fn test_redirect_removes_sensitive_headers() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     use tokio::sync::watch;
 
     let (tx, rx) = watch::channel::<Option<std::net::SocketAddr>>(None);
@@ -227,9 +216,6 @@ async fn test_redirect_removes_sensitive_headers() {
 
 #[tokio::test]
 async fn test_redirect_policy_can_return_errors() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let server = server::http(move |req| async move {
         assert_eq!(req.uri(), "/loop");
         http::Response::builder()
@@ -246,9 +232,6 @@ async fn test_redirect_policy_can_return_errors() {
 
 #[tokio::test]
 async fn test_redirect_policy_can_stop_redirects_without_an_error() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let server = server::http(move |req| async move {
         assert_eq!(req.uri(), "/no-redirect");
         http::Response::builder()
@@ -275,9 +258,6 @@ async fn test_redirect_policy_can_stop_redirects_without_an_error() {
 
 #[tokio::test]
 async fn test_referer_is_not_set_if_disabled() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let server = server::http(move |req| async move {
         if req.uri() == "/no-refer" {
             http::Response::builder()
@@ -305,9 +285,6 @@ async fn test_referer_is_not_set_if_disabled() {
 
 #[tokio::test]
 async fn test_invalid_location_stops_redirect_gh484() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let server = server::http(move |_req| async move {
         http::Response::builder()
             .status(302)
@@ -326,9 +303,6 @@ async fn test_invalid_location_stops_redirect_gh484() {
 
 #[tokio::test]
 async fn test_invalid_scheme_is_rejected() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let server = server::http(move |_req| async move {
         http::Response::builder()
             .status(302)

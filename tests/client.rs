@@ -1,4 +1,5 @@
 #![cfg(not(target_arch = "wasm32"))]
+#![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
 mod support;
 
 use support::server;
@@ -11,9 +12,6 @@ use reqwest::Client;
 
 #[tokio::test]
 async fn auto_headers() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let server = server::http(move |req| async move {
         assert_eq!(req.method(), "GET");
 
@@ -439,13 +437,7 @@ fn update_json_content_type_if_set_manually() {
     assert_eq!("application/json", req.headers().get(CONTENT_TYPE).unwrap());
 }
 
-#[cfg(all(
-    feature = "__tls",
-    not(any(
-        feature = "rustls-tls-manual-roots",
-        feature = "rustls-tls-manual-roots-no-provider"
-    ))
-))]
+#[cfg(all(feature = "__tls", not(feature = "rustls-tls-manual-roots",)))]
 #[tokio::test]
 async fn test_tls_info() {
     let resp = reqwest::Client::builder()

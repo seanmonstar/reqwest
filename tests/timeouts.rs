@@ -1,4 +1,5 @@
 #![cfg(not(target_arch = "wasm32"))]
+#![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
 mod support;
 use support::server;
 
@@ -6,9 +7,6 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn client_timeout() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let _ = env_logger::try_init();
 
     let server = server::http(move |_req| {
@@ -36,9 +34,6 @@ async fn client_timeout() {
 
 #[tokio::test]
 async fn request_timeout() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let _ = env_logger::try_init();
 
     let server = server::http(move |_req| {
@@ -72,9 +67,6 @@ async fn request_timeout() {
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::test]
 async fn connect_timeout() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let _ = env_logger::try_init();
 
     let client = reqwest::Client::builder()
@@ -98,9 +90,6 @@ async fn connect_timeout() {
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::test]
 async fn connect_many_timeout_succeeds() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let _ = env_logger::try_init();
 
     let server = server::http(move |_req| async { http::Response::default() });
@@ -128,9 +117,6 @@ async fn connect_many_timeout_succeeds() {
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::test]
 async fn connect_many_timeout() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let _ = env_logger::try_init();
 
     let client = reqwest::Client::builder()
@@ -192,9 +178,6 @@ async fn response_timeout() {
 
 #[tokio::test]
 async fn read_timeout_applies_to_headers() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let _ = env_logger::try_init();
 
     let server = server::http(move |_req| {
@@ -423,9 +406,6 @@ fn write_timeout_large_body() {
 
 #[tokio::test]
 async fn response_body_timeout_forwards_size_hint() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let _ = env_logger::try_init();
 
     let server = server::http(move |_req| async { http::Response::new(b"hello".to_vec().into()) });
