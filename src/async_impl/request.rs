@@ -647,6 +647,7 @@ impl TryFrom<Request> for HttpRequest<Body> {
     }
 }
 
+#[cfg(not(feature = "rustls-tls-manual-roots"))] // Building a client fails without roots
 #[cfg(test)]
 mod tests {
     use super::{Client, HttpRequest, Request, RequestBuilder, Version};

@@ -40,7 +40,7 @@ async fn test_rustls_badssl_modern() {
     assert!(text.contains("<title>mozilla-modern.badssl.com</title>"));
 }
 
-#[cfg(feature = "__tls")]
+#[cfg(all(feature = "__tls", not(feature = "rustls-tls-manual-roots")))]
 #[tokio::test]
 async fn test_badssl_self_signed() {
     let text = reqwest::Client::builder()
@@ -59,14 +59,22 @@ async fn test_badssl_self_signed() {
     assert!(text.contains("<title>self-signed.badssl.com</title>"));
 }
 
-#[cfg(feature = "__tls")]
+// For the platform verifier, there is no concept of available roots
+#[cfg(all(feature = "__tls", not(feature = "rustls-tls-platform-verifier")))]
 #[tokio::test]
 async fn test_badssl_no_built_in_roots() {
     let result = reqwest::Client::builder()
         .tls_built_in_root_certs(false)
         .no_proxy()
-        .build()
-        .unwrap()
+        .build();
+
+    // Some configurations will fail to build a client without roots
+    let client = match result {
+        Ok(client) => client,
+        Err(_) => return,
+    };
+
+    let result = client
         .get("https://mozilla-modern.badssl.com/")
         .send()
         .await;

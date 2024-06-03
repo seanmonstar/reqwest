@@ -127,6 +127,8 @@ jobs:
             features: "--no-default-features"
           - name: "feat.: rustls-tls"
             features: "--no-default-features --features rustls-tls"
+          - name: "feat.: rustls-tls-platform-verifier"
+            features: "--no-default-features --features rustls-tls-platform-verifier"
           - name: "feat.: rustls-tls-manual-roots"
             features: "--no-default-features --features rustls-tls-manual-roots"
           - name: "feat.: rustls-tls-native-roots"
