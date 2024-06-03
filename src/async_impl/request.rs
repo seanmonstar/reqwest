@@ -657,6 +657,9 @@ mod tests {
 
     #[test]
     fn add_query_append() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let client = Client::new();
         let some_url = "https://google.com/";
         let r = client.get(some_url);
@@ -670,6 +673,9 @@ mod tests {
 
     #[test]
     fn add_query_append_same() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let client = Client::new();
         let some_url = "https://google.com/";
         let r = client.get(some_url);
@@ -682,6 +688,9 @@ mod tests {
 
     #[test]
     fn add_query_struct() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         #[derive(Serialize)]
         struct Params {
             foo: String,
@@ -705,6 +714,9 @@ mod tests {
 
     #[test]
     fn add_query_map() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let mut params = BTreeMap::new();
         params.insert("foo", "bar");
         params.insert("qux", "three");
@@ -721,6 +733,9 @@ mod tests {
 
     #[test]
     fn test_replace_headers() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         use http::HeaderMap;
 
         let mut headers = HeaderMap::new();
@@ -746,6 +761,9 @@ mod tests {
 
     #[test]
     fn normalize_empty_query() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let client = Client::new();
         let some_url = "https://google.com/";
         let empty_query: &[(&str, &str)] = &[];
@@ -762,6 +780,9 @@ mod tests {
 
     #[test]
     fn try_clone_reusable() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let client = Client::new();
         let builder = client
             .post("http://httpbin.org/post")
@@ -779,6 +800,9 @@ mod tests {
 
     #[test]
     fn try_clone_no_body() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let client = Client::new();
         let builder = client.get("http://httpbin.org/get");
         let req = builder
@@ -806,6 +830,9 @@ mod tests {
 
     #[test]
     fn convert_url_authority_into_basic_auth() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let client = Client::new();
         let some_url = "https://Aladdin:open sesame@localhost/";
 
@@ -820,6 +847,9 @@ mod tests {
 
     #[test]
     fn test_basic_auth_sensitive_header() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let client = Client::new();
         let some_url = "https://localhost/";
 
@@ -839,6 +869,9 @@ mod tests {
 
     #[test]
     fn test_bearer_auth_sensitive_header() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let client = Client::new();
         let some_url = "https://localhost/";
 
@@ -855,6 +888,9 @@ mod tests {
 
     #[test]
     fn test_explicit_sensitive_header() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let client = Client::new();
         let some_url = "https://localhost/";
 
@@ -912,6 +948,9 @@ mod tests {
 
     #[test]
     fn builder_split_reassemble() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let builder = {
             let client = Client::new();
             client.get("http://example.com")

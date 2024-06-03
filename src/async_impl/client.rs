@@ -1318,6 +1318,8 @@ impl ClientBuilder {
     /// # Example
     ///
     /// ```
+    /// # #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+    /// # let _ = rustls::crypto::ring::default_provider().install_default();
     /// use std::net::IpAddr;
     /// let local_addr = IpAddr::from([12, 4, 1, 8]);
     /// let client = reqwest::Client::builder()
@@ -1337,6 +1339,8 @@ impl ClientBuilder {
     /// # Example
     ///
     /// ```
+    /// # #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+    /// # let _ = rustls::crypto::ring::default_provider().install_default();
     /// let interface = "lo";
     /// let client = reqwest::Client::builder()
     ///     .interface(interface)
@@ -2762,6 +2766,9 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &dyn cookie::CookieS
 mod tests {
     #[tokio::test]
     async fn execute_request_rejects_invalid_urls() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let url_str = "hxxps://www.rust-lang.org/";
         let url = url::Url::parse(url_str).unwrap();
         let result = crate::get(url.clone()).await;
@@ -2775,6 +2782,9 @@ mod tests {
     /// https://github.com/seanmonstar/reqwest/issues/668
     #[tokio::test]
     async fn execute_request_rejects_invalid_hostname() {
+        #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let url_str = "https://{{hostname}}/";
         let url = url::Url::parse(url_str).unwrap();
         let result = crate::get(url.clone()).await;

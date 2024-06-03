@@ -6,6 +6,9 @@ use std::env;
 
 #[tokio::test]
 async fn http_proxy() {
+    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let url = "http://hyper.rs/prox";
     let server = server::http(move |req| {
         assert_eq!(req.method(), "GET");
@@ -32,6 +35,9 @@ async fn http_proxy() {
 
 #[tokio::test]
 async fn http_proxy_basic_auth() {
+    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let url = "http://hyper.rs/prox";
     let server = server::http(move |req| {
         assert_eq!(req.method(), "GET");
@@ -66,6 +72,9 @@ async fn http_proxy_basic_auth() {
 
 #[tokio::test]
 async fn http_proxy_basic_auth_parsed() {
+    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let url = "http://hyper.rs/prox";
     let server = server::http(move |req| {
         assert_eq!(req.method(), "GET");
@@ -96,6 +105,9 @@ async fn http_proxy_basic_auth_parsed() {
 
 #[tokio::test]
 async fn system_http_proxy_basic_auth_parsed() {
+    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let url = "http://hyper.rs/prox";
     let server = server::http(move |req| {
         assert_eq!(req.method(), "GET");
@@ -138,6 +150,9 @@ async fn system_http_proxy_basic_auth_parsed() {
 
 #[tokio::test]
 async fn test_no_proxy() {
+    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let server = server::http(move |req| {
         assert_eq!(req.method(), "GET");
         assert_eq!(req.uri(), "/4");
@@ -197,6 +212,9 @@ async fn test_using_system_proxy() {
 
 #[tokio::test]
 async fn http_over_http() {
+    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let url = "http://hyper.rs/prox";
 
     let server = server::http(move |req| {

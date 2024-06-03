@@ -5,6 +5,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::test]
 async fn http_upgrade() {
+    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let server = server::http(move |req| {
         assert_eq!(req.method(), "GET");
         assert_eq!(req.headers()["connection"], "upgrade");
