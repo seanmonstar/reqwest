@@ -9,9 +9,6 @@
 ))]
 #[tokio::test]
 async fn test_badssl_modern() {
-    #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     let text = reqwest::Client::builder()
         .no_proxy()
         .build()
