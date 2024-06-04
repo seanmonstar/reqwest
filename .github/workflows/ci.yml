@@ -219,7 +219,10 @@ jobs:
           toolchain: 'stable'
 
       - name: Check
-        run: RUSTFLAGS="--cfg reqwest_unstable" cargo check --features http3
+        run: cargo test --features http3
+        env:
+          RUSTFLAGS: --cfg reqwest_unstable
+          RUSTDOCFLAGS: --cfg reqwest_unstable
 
   docs:
     name: Docs
