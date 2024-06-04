@@ -47,7 +47,11 @@ impl H3Connector {
     }
 
     pub async fn connect(&mut self, dest: Uri) -> Result<H3Connection, BoxError> {
-        let host = dest.host().ok_or("destination must have a host")?;
+        let host = dest
+            .host()
+            .ok_or("destination must have a host")?
+            .trim_start_matches('[')
+            .trim_end_matches(']');
         let port = dest.port_u16().unwrap_or(443);
 
         let addrs = if let Some(addr) = IpAddr::from_str(host).ok() {
