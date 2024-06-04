@@ -569,7 +569,13 @@ impl ClientBuilder {
                     // If not, we use ring.
                     let provider = rustls::crypto::CryptoProvider::get_default()
                         .map(|arc| arc.clone())
-                        .unwrap_or_else(|| Arc::new(rustls::crypto::ring::default_provider()));
+                        .unwrap_or_else(|| {
+                            #[cfg(not(feature = "__rustls-ring"))]
+                            panic!("No provider set");
+
+                            #[cfg(feature = "__rustls-ring")]
+                            Arc::new(rustls::crypto::ring::default_provider())
+                        });
 
                     // Build TLS config
                     let config_builder = rustls::ClientConfig::builder_with_provider(provider)
@@ -1312,6 +1318,8 @@ impl ClientBuilder {
     /// # Example
     ///
     /// ```
+    /// # #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+    /// # let _ = rustls::crypto::ring::default_provider().install_default();
     /// use std::net::IpAddr;
     /// let local_addr = IpAddr::from([12, 4, 1, 8]);
     /// let client = reqwest::Client::builder()
@@ -1331,6 +1339,8 @@ impl ClientBuilder {
     /// # Example
     ///
     /// ```
+    /// # #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
+    /// # let _ = rustls::crypto::ring::default_provider().install_default();
     /// let interface = "lo";
     /// let client = reqwest::Client::builder()
     ///     .interface(interface)
@@ -2762,6 +2772,8 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &dyn cookie::CookieS
 
 #[cfg(test)]
 mod tests {
+    #![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
+
     #[tokio::test]
     async fn execute_request_rejects_invalid_urls() {
         let url_str = "hxxps://www.rust-lang.org/";
