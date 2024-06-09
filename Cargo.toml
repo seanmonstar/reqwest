@@ -44,8 +44,8 @@ rustls-tls = ["rustls-tls-webpki-roots"]
 rustls-tls-no-provider = ["rustls-tls-manual-roots-no-provider"]
 
 rustls-tls-manual-roots = ["__rustls", "__rustls-ring"]
-rustls-tls-webpki-roots = ["dep:webpki-roots", "__rustls", "__rustls-ring"]
-rustls-tls-native-roots = ["dep:rustls-native-certs", "__rustls", "__rustls-ring"]
+rustls-tls-webpki-roots = ["dep:webpki-roots", "hyper-rustls?/webpki-tokio", "__rustls", "__rustls-ring"]
+rustls-tls-native-roots = ["dep:rustls-native-certs", "hyper-rustls?/native-tokio", "__rustls", "__rustls-ring"]
 rustls-tls-manual-roots-no-provider = ["__rustls"]
 
 blocking = ["dep:futures-channel", "futures-channel?/sink", "futures-util/io", "futures-util/sink", "tokio/sync"]
@@ -138,7 +138,7 @@ native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls"
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
-hyper-rustls = { version = "0.27.0", default-features = false, optional = true, features = ["http1", "http2", "native-tokio", "tls12"] }
+hyper-rustls = { version = "0.27.0", default-features = false, optional = true, features = ["http1", "http2", "tls12"] }
 rustls = { version = "0.23.4", optional = true, default-features = false, features = ["std", "tls12"] }
 rustls-pki-types = { version = "1.1.0", features = ["alloc"] ,optional = true }
 tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["tls12"] }
