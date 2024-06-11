@@ -33,7 +33,7 @@ default = ["default-tls", "charset", "http2", "macos-system-configuration"]
 # functionality for it.
 default-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
 
-http2 = ["h2", "hyper/http2", "hyper-util/http2"]
+http2 = ["h2", "hyper/http2", "hyper-util/http2", "hyper-rustls?/http2"]
 
 # Enables native-tls specific functionality not available by default.
 native-tls = ["default-tls"]
@@ -138,7 +138,7 @@ native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls"
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
-hyper-rustls = { version = "0.27.0", default-features = false, optional = true, features = ["http1", "http2", "tls12"] }
+hyper-rustls = { version = "0.27.0", default-features = false, optional = true, features = ["http1", "tls12"] }
 rustls = { version = "0.23.4", optional = true, default-features = false, features = ["std", "tls12"] }
 rustls-pki-types = { version = "1.1.0", features = ["alloc"] ,optional = true }
 tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["tls12"] }
