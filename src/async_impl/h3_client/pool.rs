@@ -127,9 +127,18 @@ impl PoolClient {
         req: Request<Body>,
     ) -> Result<Response<ResponseBody>, BoxError> {
         use http_body_util::{BodyExt, Full};
+        use hyper::body::Body as _;
 
         let (head, req_body) = req.into_parts();
-        let req = Request::from_parts(head, ());
+        let mut req = Request::from_parts(head, ());
+
+        if let Some(n) = req_body.size_hint().exact() {
+            if n > 0 {
+                req.headers_mut()
+                    .insert(http::header::CONTENT_LENGTH, n.into());
+            }
+        }
+
         let mut stream = self.inner.send_request(req).await?;
 
         match req_body.as_bytes() {
