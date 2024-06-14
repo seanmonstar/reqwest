@@ -270,6 +270,52 @@ impl Response {
         serde_json::from_slice(&full).map_err(crate::error::decode)
     }
 
+    /// Try to deserialize the response body as MessagePack.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `msgpack` feature enabled.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate reqwest;
+    /// # extern crate serde;
+    /// #
+    /// # use reqwest::Error;
+    /// # use serde::Deserialize;
+    /// #
+    /// // This `derive` requires the `serde` dependency.
+    /// #[derive(Deserialize)]
+    /// struct Ip {
+    ///     origin: String,
+    /// }
+    ///
+    /// # async fn run() -> Result<(), Error> {
+    /// let ip = reqwest::get("http://httpbin.org/ip")
+    ///     .await?
+    ///     .msgpack::<Ip>()
+    ///     .await?;
+    ///
+    /// println!("ip: {}", ip.origin);
+    /// # Ok(())
+    /// # }
+    /// #
+    /// # fn main() { }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever the response body is not in MessagePack format
+    /// or it cannot be properly deserialized to target type `T`.
+    #[cfg(feature = "msgpack")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "msgpack")))]
+    pub async fn msgpack<T: DeserializeOwned>(self) -> crate::Result<T> {
+        let full = self.bytes().await?;
+
+        rmp_serde::from_slice(&full).map_err(crate::error::decode)
+    }
+
     /// Get the full response body as `Bytes`.
     ///
     /// # Example

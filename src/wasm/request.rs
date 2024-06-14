@@ -214,6 +214,27 @@ impl RequestBuilder {
         self
     }
 
+    #[cfg(feature = "msgpack")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "msgpack")))]
+    /// Set the request json
+    pub fn msgpack<T: Serialize + ?Sized>(mut self, msgpack: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
+            match rmp_serde::to_vec(msgpack) {
+                Ok(body) => {
+                    req.headers_mut()
+                      .insert(CONTENT_TYPE, HeaderValue::from_static("application/msgpack"));
+                    *req.body_mut() = Some(body.into());
+                }
+                Err(err) => error = Some(crate::error::builder(err)),
+            }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
+        }
+        self
+    }
+
     /// Enable HTTP basic authentication.
     pub fn basic_auth<U, P>(self, username: U, password: Option<P>) -> RequestBuilder
     where

@@ -244,6 +244,48 @@ impl Response {
         })
     }
 
+    /// Try and deserialize the response body as MessagePack using `serde`.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `msgpack` feature enabled.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # extern crate reqwest;
+    /// # extern crate serde;
+    /// #
+    /// # use reqwest::Error;
+    /// # use serde::Deserialize;
+    /// #
+    /// // This `derive` requires the `serde` dependency.
+    /// #[derive(Deserialize)]
+    /// struct Ip {
+    ///     origin: String,
+    /// }
+    ///
+    /// # fn run() -> Result<(), Error> {
+    /// let json: Ip = reqwest::blocking::get("http://httpbin.org/ip")?.json()?;
+    /// # Ok(())
+    /// # }
+    /// #
+    /// # fn main() { }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This method fails whenever the response body is not in MessagePack format
+    /// or it cannot be properly deserialized to target type `T`.
+    #[cfg(feature = "msgpack")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
+    pub fn msgpack<T: DeserializeOwned>(self) -> crate::Result<T> {
+        wait::timeout(self.inner.msgpack(), self.timeout).map_err(|e| match e {
+            wait::Waited::TimedOut(e) => crate::error::decode(e),
+            wait::Waited::Inner(e) => e,
+        })
+    }
+
     /// Get the full response body as `Bytes`.
     ///
     /// # Example
