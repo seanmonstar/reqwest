@@ -301,11 +301,12 @@ jobs:
           cargo update -p log --precise 0.4.18
           cargo update -p tokio --precise 1.29.1
           cargo update -p url --precise 2.5.0
+          cargo update -p time --precise 0.3.20
 
       - uses: Swatinem/rust-cache@v2
 
       - name: Check
-        run: cargo check
+        run: cargo check --features blocking,charset,cookies,gzip,brotli,zstd,deflate,json,multipart,rustls-tls,socks,stream,hickory-dns
 
   android:
     name: Android
