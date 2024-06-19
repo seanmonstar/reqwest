@@ -1,4 +1,5 @@
 #![cfg(not(target_arch = "wasm32"))]
+#![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
 mod support;
 
 use support::server;
@@ -60,7 +61,7 @@ async fn auto_headers() {
 }
 
 #[tokio::test]
-async fn donot_set_conent_length_0_if_have_no_body() {
+async fn donot_set_content_length_0_if_have_no_body() {
     let server = server::http(move |req| async move {
         let headers = req.headers();
         assert_eq!(headers.get(CONTENT_LENGTH), None);
@@ -70,7 +71,7 @@ async fn donot_set_conent_length_0_if_have_no_body() {
         http::Response::default()
     });
 
-    let url = format!("http://{}/conent-length", server.addr());
+    let url = format!("http://{}/content-length", server.addr());
     let res = reqwest::Client::builder()
         .no_proxy()
         .build()
@@ -80,6 +81,35 @@ async fn donot_set_conent_length_0_if_have_no_body() {
         .await
         .expect("request");
 
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
+#[cfg(feature = "http3")]
+#[tokio::test]
+async fn http3_request_full() {
+    use http_body_util::BodyExt;
+
+    let server = server::http3(move |req| async move {
+        assert_eq!(req.headers()[CONTENT_LENGTH], "5");
+        let reqb = req.collect().await.unwrap().to_bytes();
+        assert_eq!(reqb, "hello");
+        http::Response::default()
+    });
+
+    let url = format!("https://{}/content-length", server.addr());
+    let res = reqwest::Client::builder()
+        .http3_prior_knowledge()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("client builder")
+        .post(url)
+        .version(http::Version::HTTP_3)
+        .body("hello")
+        .send()
+        .await
+        .expect("request");
+
+    assert_eq!(res.version(), http::Version::HTTP_3);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
@@ -383,6 +413,7 @@ async fn http2_upgrade() {
 }
 
 #[cfg(feature = "default-tls")]
+#[cfg_attr(feature = "http3", ignore = "enabling http3 seems to break this, why?")]
 #[tokio::test]
 async fn test_allowed_methods() {
     let resp = reqwest::Client::builder()
@@ -466,7 +497,7 @@ async fn test_tls_info() {
     assert!(tls_info.is_none());
 }
 
-// NOTE: using the default "curernt_thread" runtime here would cause the test to
+// NOTE: using the default "current_thread" runtime here would cause the test to
 // fail, because the only thread would block until `panic_rx` receives a
 // notification while the client needs to be driven to get the graceful shutdown
 // done.

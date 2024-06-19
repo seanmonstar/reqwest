@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::Instant;
 
+use crate::async_impl::body::ResponseBody;
 use crate::error::{BoxError, Error, Kind};
 use crate::Body;
 use bytes::Buf;
@@ -13,7 +14,6 @@ use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::uri::{Authority, Scheme};
 use http::{Request, Response, Uri};
-use hyper::body as HyperBody;
 use log::trace;
 
 pub(super) type Key = (Scheme, Authority);
@@ -125,9 +125,20 @@ impl PoolClient {
     pub async fn send_request(
         &mut self,
         req: Request<Body>,
-    ) -> Result<Response<HyperBody>, BoxError> {
+    ) -> Result<Response<ResponseBody>, BoxError> {
+        use http_body_util::{BodyExt, Full};
+        use hyper::body::Body as _;
+
         let (head, req_body) = req.into_parts();
-        let req = Request::from_parts(head, ());
+        let mut req = Request::from_parts(head, ());
+
+        if let Some(n) = req_body.size_hint().exact() {
+            if n > 0 {
+                req.headers_mut()
+                    .insert(http::header::CONTENT_LENGTH, n.into());
+            }
+        }
+
         let mut stream = self.inner.send_request(req).await?;
 
         match req_body.as_bytes() {
@@ -146,7 +157,11 @@ impl PoolClient {
             resp_body.extend(chunk.chunk())
         }
 
-        Ok(resp.map(|_| HyperBody::from(resp_body)))
+        let resp_body = Full::new(resp_body.into())
+            .map_err(|never| match never {})
+            .boxed();
+
+        Ok(resp.map(|_| resp_body))
     }
 }
 

@@ -1,3 +1,12 @@
+## v0.12.5
+
+- Add `blocking::ClientBuilder::dns_resolver()` method to change DNS resolver in blocking client.
+- Add `http3` feature back, still requiring `reqwest_unstable`.
+- Add `rustls-tls-no-provider` Cargo feature to use rustls without a crypto provider.
+- Fix `Accept-Encoding` header combinations.
+- Fix http3 resolving IPv6 addresses.
+- Internal: upgrade to rustls 0.23.
+
 ## v0.12.4
 
 - Add `zstd` support, enabled with `zstd` Cargo feature.

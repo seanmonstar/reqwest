@@ -4,13 +4,13 @@ pub(crate) mod connect;
 pub(crate) mod dns;
 mod pool;
 
+use crate::async_impl::body::ResponseBody;
 use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
 use crate::error::{BoxError, Error, Kind};
 use crate::{error, Body};
 use connect::H3Connector;
 use futures_util::future;
 use http::{Request, Response};
-use hyper::Body as HyperBody;
 use log::trace;
 use std::future::Future;
 use std::pin::Pin;
@@ -49,7 +49,7 @@ impl H3Client {
         mut self,
         key: Key,
         req: Request<Body>,
-    ) -> Result<Response<HyperBody>, Error> {
+    ) -> Result<Response<ResponseBody>, Error> {
         let mut pooled = match self.get_pooled_client(key).await {
             Ok(client) => client,
             Err(e) => return Err(error::request(e)),
@@ -76,11 +76,11 @@ impl H3Client {
 }
 
 pub(crate) struct H3ResponseFuture {
-    inner: Pin<Box<dyn Future<Output = Result<Response<HyperBody>, Error>> + Send>>,
+    inner: Pin<Box<dyn Future<Output = Result<Response<ResponseBody>, Error>> + Send>>,
 }
 
 impl Future for H3ResponseFuture {
-    type Output = Result<Response<HyperBody>, Error>;
+    type Output = Result<Response<ResponseBody>, Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.inner.as_mut().poll(cx)

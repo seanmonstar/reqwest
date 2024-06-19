@@ -72,8 +72,10 @@ jobs:
           - "feat.: rustls-tls"
           - "feat.: rustls-tls-manual-roots"
           - "feat.: rustls-tls-native-roots"
+          - "feat.: rustls-tls-no-provider"
           - "feat.: native-tls"
           - "feat.: default-tls and rustls-tls"
+          - "feat.: rustls-tls and rustls-tls-no-provider"
           - "feat.: cookies"
           - "feat.: blocking"
           - "feat.: blocking only"
@@ -131,8 +133,12 @@ jobs:
             features: "--no-default-features --features rustls-tls-manual-roots"
           - name: "feat.: rustls-tls-native-roots"
             features: "--no-default-features --features rustls-tls-native-roots"
+          - name: "feat.: rustls-tls-no-provider"
+            features: "--no-default-features --features rustls-tls-no-provider"
           - name: "feat.: native-tls"
             features: "--features native-tls"
+          - name: "feat.: rustls-tls and rustls-tls-no-provider"
+            features: "--features rustls-tls,rustls-tls-no-provider"
           - name: "feat.: default-tls and rustls-tls"
             features: "--features rustls-tls"
           - name: "feat.: cookies"
@@ -212,8 +218,11 @@ jobs:
         with:
           toolchain: 'stable'
 
-      #- name: Check
-      #  run: RUSTFLAGS="--cfg reqwest_unstable" cargo check --features http3
+      - name: Check
+        run: cargo test --features http3
+        env:
+          RUSTFLAGS: --cfg reqwest_unstable
+          RUSTDOCFLAGS: --cfg reqwest_unstable
 
   docs:
     name: Docs
@@ -291,6 +300,7 @@ jobs:
           cargo update
           cargo update -p log --precise 0.4.18
           cargo update -p tokio --precise 1.29.1
+          cargo update -p url --precise 2.5.0
 
       - uses: Swatinem/rust-cache@v2
 

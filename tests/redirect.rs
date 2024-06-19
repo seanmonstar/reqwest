@@ -1,4 +1,5 @@
 #![cfg(not(target_arch = "wasm32"))]
+#![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
 mod support;
 use http_body_util::BodyExt;
 use reqwest::Body;

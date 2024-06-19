@@ -389,11 +389,25 @@ where
 pub(crate) type ResponseBody =
     http_body_util::combinators::BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>;
 
-pub(crate) fn response(
-    body: hyper::body::Incoming,
+pub(crate) fn boxed<B>(body: B) -> ResponseBody
+where
+    B: hyper::body::Body<Data = Bytes> + Send + Sync + 'static,
+    B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    use http_body_util::BodyExt;
+
+    body.map_err(box_err).boxed()
+}
+
+pub(crate) fn response<B>(
+    body: B,
     deadline: Option<Pin<Box<Sleep>>>,
     read_timeout: Option<Duration>,
-) -> ResponseBody {
+) -> ResponseBody
+where
+    B: hyper::body::Body<Data = Bytes> + Send + Sync + 'static,
+    B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
     use http_body_util::BodyExt;
 
     match (deadline, read_timeout) {

@@ -1,4 +1,5 @@
 #![cfg(not(target_arch = "wasm32"))]
+#![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
 
 #[cfg(all(feature = "__tls", not(feature = "rustls-tls-manual-roots")))]
 #[tokio::test]
