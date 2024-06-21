@@ -172,7 +172,7 @@ impl fmt::Debug for Error {
         builder.field("kind", &self.inner.kind);
 
         if let Some(ref url) = self.inner.url {
-            builder.field("url", url);
+            builder.field("url", &url.as_str());
         }
         if let Some(ref source) = self.inner.source {
             builder.field("source", source);
