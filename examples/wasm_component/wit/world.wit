@@ -1,0 +1,5 @@
+package example:http;
+
+world test {
+  export wasi:http/incoming-handler@0.2.0;
+}
