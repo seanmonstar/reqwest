@@ -193,18 +193,14 @@ impl Default for Body {
     }
 }
 
-/*
-impl From<hyper::Body> for Body {
+impl From<BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>> for Body {
     #[inline]
-    fn from(body: hyper::Body) -> Body {
+    fn from(body: BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>) -> Self {
         Self {
-            inner: Inner::Streaming {
-                body: Box::pin(WrapHyper(body)),
-            },
+            inner: Inner::Streaming(body),
         }
     }
 }
-*/
 
 impl From<Bytes> for Body {
     #[inline]
