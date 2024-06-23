@@ -403,6 +403,55 @@ impl RequestBuilder {
     ///
     /// This method fails if the passed value cannot be serialized into
     /// url encoded format
+    #[cfg(not(feature = "serde_qs"))]
+    pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
+            match serde_urlencoded::to_string(form) {
+                Ok(body) => {
+                    req.headers_mut().insert(
+                        CONTENT_TYPE,
+                        HeaderValue::from_static("application/x-www-form-urlencoded"),
+                    );
+                    *req.body_mut() = Some(body.into());
+                }
+                Err(err) => error = Some(crate::error::builder(err)),
+            }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
+        }
+        self
+    }
+
+    /// Send a form body.
+    ///
+    /// Sets the body to the url encoded serialization of the passed value,
+    /// and also sets the `Content-Type: application/x-www-form-urlencoded`
+    /// header. This uses serde_qs, which requires a sized argument.
+    ///
+    /// ```rust
+    /// # use reqwest::Error;
+    /// # use std::collections::HashMap;
+    /// #
+    /// # async fn run() -> Result<(), Error> {
+    /// let mut params = HashMap::new();
+    /// params.insert("lang", "rust");
+    ///
+    /// let client = reqwest::Client::new();
+    /// let res = client.post("http://httpbin.org")
+    ///     .form(&params)
+    ///     .send()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This method fails if the passed value cannot be serialized into
+    /// url encoded format
+    #[cfg(feature = "serde_qs")]
     pub fn form<T: Serialize>(mut self, form: &T) -> RequestBuilder {
         let mut error = None;
         if let Ok(ref mut req) = self.request {
@@ -653,8 +702,9 @@ mod tests {
 
     use super::{Client, HttpRequest, Request, RequestBuilder, Version};
     use crate::Method;
+    use http::header::CONTENT_TYPE;
     use serde::Serialize;
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, HashMap};
     use std::convert::TryFrom;
 
     #[test]
@@ -924,6 +974,50 @@ mod tests {
         builder.build().unwrap();
     }
 
+    #[test]
+    #[cfg(not(feature = "serde_qs"))]
+    fn add_form() {
+        let client = Client::new();
+        let some_url = "https://google.com/";
+        let r = client.post(some_url);
+
+        let mut form_data = HashMap::new();
+        form_data.insert("foo", "bar");
+
+        let r = r.form(&form_data).build().unwrap();
+
+        // Make sure the content type was set
+        assert_eq!(
+            r.headers().get(CONTENT_TYPE).unwrap(),
+            &"application/x-www-form-urlencoded"
+        );
+
+        let body_should_be = serde_urlencoded::to_string(&form_data).unwrap();
+        assert_eq!(r.body().unwrap().as_bytes(), Some(body_should_be.as_bytes()));
+    }
+
+    #[test]
+    #[cfg(feature = "serde_qs")]
+    fn add_form() {
+        let client = Client::new();
+        let some_url = "https://google.com/";
+        let r = client.post(some_url);
+
+        let mut form_data = HashMap::new();
+        form_data.insert("foo", vec!["bar"]);
+
+        let r = r.form(&form_data).build().unwrap();
+
+        // Make sure the content type was set
+        assert_eq!(
+            r.headers().get(CONTENT_TYPE).unwrap(),
+            &"application/x-www-form-urlencoded"
+        );
+
+        let body_should_be = serde_qs::to_string(&form_data).unwrap();
+        assert_eq!(r.body().unwrap().as_bytes(), Some(body_should_be.as_bytes()));
+    }
+
     /*
     use {body, Method};
     use super::Client;
@@ -1075,6 +1169,7 @@ mod tests {
 
         let mut form_data = HashMap::new();
         form_data.insert("foo", "bar");
+        form_data.insert("baz", vec!["qux", "quux"]);
 
         let r = r.form(&form_data).unwrap().build();
 

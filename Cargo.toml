@@ -50,6 +50,8 @@ rustls-tls-manual-roots-no-provider = ["__rustls"]
 
 blocking = ["dep:futures-channel", "futures-channel?/sink", "futures-util/io", "futures-util/sink", "tokio/sync"]
 
+serde_qs = ["dep:serde_qs"]
+
 charset = ["dep:encoding_rs"]
 
 cookies = ["dep:cookie_crate", "dep:cookie_store"]
@@ -101,7 +103,6 @@ http = "1"
 url = "2.4"
 bytes = "1.0"
 serde = "1.0"
-serde_qs = "0.13.0"
 serde_urlencoded = "0.7.1"
 tower-service = "0.3"
 futures-core = { version = "0.3.28", default-features = false }
@@ -109,6 +110,9 @@ futures-util = { version = "0.3.28", default-features = false }
 sync_wrapper = "1.0"
 
 # Optional deps...
+
+## serde_qs
+serde_qs = { version = "0.13.0", optional = true }
 
 ## json
 serde_json = { version = "1.0", optional = true }

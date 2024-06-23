@@ -6,7 +6,6 @@ use http::{request::Parts, Request as HttpRequest, Version};
 use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
-use serde_qs;
 
 use super::body::{self, Body};
 #[cfg(feature = "multipart")]
@@ -388,7 +387,7 @@ impl RequestBuilder {
     /// # Errors
     /// This method will fail if the object you provide cannot be serialized
     /// into a query string.
-    pub fn query<T: Serialize>(mut self, query: &T) -> RequestBuilder {
+    pub fn query<T: Serialize + ?Sized>(mut self, query: &T) -> RequestBuilder {
         let mut error = None;
         if let Ok(ref mut req) = self.request {
             let url = req.url_mut();
@@ -444,7 +443,56 @@ impl RequestBuilder {
     ///
     /// This method fails if the passed value cannot be serialized into
     /// url encoded format
+    #[cfg(not(feature = "serde_qs"))]
     pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
+            match serde_urlencoded::to_string(form) {
+                Ok(body) => {
+                    req.headers_mut().insert(
+                        CONTENT_TYPE,
+                        HeaderValue::from_static("application/x-www-form-urlencoded"),
+                    );
+                    *req.body_mut() = Some(body.into());
+                }
+                Err(err) => error = Some(crate::error::builder(err)),
+            }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
+        }
+        self
+    }
+
+    /// Send a form body.
+    ///
+    /// Sets the body to the url encoded serialization of the passed value,
+    /// and also sets the `Content-Type: application/x-www-form-urlencoded`
+    /// header. This uses serde_qs, which requires a sized argument.
+    ///
+    /// ```rust
+    /// # use reqwest::Error;
+    /// # use std::collections::HashMap;
+    /// #
+    /// # async fn run() -> Result<(), Error> {
+    /// let mut params = HashMap::new();
+    /// params.insert("lang", "rust");
+    ///
+    /// let client = reqwest::Client::new();
+    /// let res = client.post("http://httpbin.org")
+    ///     .form(&params)
+    ///     .send()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This method fails if the passed value cannot be serialized into
+    /// url encoded format
+    #[cfg(feature = "serde_qs")]
+    pub fn form<T: Serialize>(mut self, form: &T) -> RequestBuilder {
         let mut error = None;
         if let Ok(ref mut req) = self.request {
             match serde_qs::to_string(form) {
@@ -681,6 +729,7 @@ mod tests {
     use serde::Serialize;
     #[cfg(feature = "json")]
     use serde_json;
+    #[cfg(feature = "serde_qs")]
     use serde_qs;
     use std::collections::{BTreeMap, HashMap};
     use std::convert::TryFrom;
@@ -882,6 +931,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "serde_qs"))]
     fn add_form() {
         let client = Client::new();
         let some_url = "https://google.com/";
@@ -889,7 +939,30 @@ mod tests {
 
         let mut form_data = HashMap::new();
         form_data.insert("foo", "bar");
-        form_data.insert("baz", vec!["qux", "quux"]);
+
+        let mut r = r.form(&form_data).build().unwrap();
+
+        // Make sure the content type was set
+        assert_eq!(
+            r.headers().get(CONTENT_TYPE).unwrap(),
+            &"application/x-www-form-urlencoded"
+        );
+
+        let buf = body::read_to_string(r.body_mut().take().unwrap()).unwrap();
+
+        let body_should_be = serde_urlencoded::to_string(&form_data).unwrap();
+        assert_eq!(buf, body_should_be);
+    }
+
+    #[test]
+    #[cfg(feature = "serde_qs")]
+    fn add_form_serde_qs() {
+        let client = Client::new();
+        let some_url = "https://google.com/";
+        let r = client.post(some_url);
+
+        let mut form_data = HashMap::new();
+        form_data.insert("foo", vec!["bar", "baz"]);
 
         let mut r = r.form(&form_data).build().unwrap();
 

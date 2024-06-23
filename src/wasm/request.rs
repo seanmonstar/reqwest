@@ -173,6 +173,39 @@ impl RequestBuilder {
     ///
     /// This method fails if the passed value cannot be serialized into
     /// url encoded format
+    #[cfg(not(feature = "serde_qs"))]
+    pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
+            match serde_urlencoded::to_string(form) {
+                Ok(body) => {
+                    req.headers_mut().insert(
+                        CONTENT_TYPE,
+                        HeaderValue::from_static("application/x-www-form-urlencoded"),
+                    );
+                    *req.body_mut() = Some(body.into());
+                }
+                Err(err) => error = Some(crate::error::builder(err)),
+            }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
+        }
+        self
+    }
+
+    /// Send a form body.
+    ///
+    /// Sets the body to the url encoded serialization of the passed value,
+    /// and also sets the `Content-Type: application/x-www-form-urlencoded`
+    /// header. This uses serde_qs and requires a sized type to support 
+    /// nested form data
+    ///
+    /// # Errors
+    ///
+    /// This method fails if the passed value cannot be serialized into
+    /// url encoded format
+    #[cfg(not(feature = "serde_qs"))]
     pub fn form<T: Serialize>(mut self, form: &T) -> RequestBuilder {
         let mut error = None;
         if let Ok(ref mut req) = self.request {

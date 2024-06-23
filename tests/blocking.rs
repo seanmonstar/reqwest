@@ -130,6 +130,7 @@ fn test_post() {
 }
 
 #[test]
+#[cfg(not(feature = "serde_qs"))]
 fn test_post_form() {
     let server = server::http(move |req| async move {
         assert_eq!(req.method(), "POST");
@@ -151,6 +152,39 @@ fn test_post_form() {
     let res = reqwest::blocking::Client::new()
         .post(&url)
         .form(form)
+        .send()
+        .expect("request send");
+
+    assert_eq!(res.url().as_str(), &url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
+#[test]
+#[cfg(feature = "serde_qs")]
+fn test_post_form() {
+    use std::collections::HashMap;
+
+    let server = server::http(move |req| async move {
+        assert_eq!(req.method(), "POST");
+        assert_eq!(req.headers()["content-length"], "21");
+        assert_eq!(
+            req.headers()["content-type"],
+            "application/x-www-form-urlencoded"
+        );
+
+        let data = req.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&*data, b"foo[0]=bar&foo[1]=baz");
+
+        http::Response::default()
+    });
+
+    let mut form = HashMap::new();
+    form.insert("foo", vec!["bar", "baz"]);
+
+    let url = format!("http://{}/form", server.addr());
+    let res = reqwest::blocking::Client::new()
+        .post(&url)
+        .form(&form)
         .send()
         .expect("request send");
 
