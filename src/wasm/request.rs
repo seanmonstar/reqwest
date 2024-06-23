@@ -205,7 +205,7 @@ impl RequestBuilder {
     ///
     /// This method fails if the passed value cannot be serialized into
     /// url encoded format
-    #[cfg(not(feature = "serde_qs"))]
+    #[cfg(feature = "serde_qs")]
     pub fn form<T: Serialize>(mut self, form: &T) -> RequestBuilder {
         let mut error = None;
         if let Ok(ref mut req) = self.request {
