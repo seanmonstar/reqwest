@@ -403,10 +403,10 @@ impl RequestBuilder {
     ///
     /// This method fails if the passed value cannot be serialized into
     /// url encoded format
-    pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> RequestBuilder {
+    pub fn form<T: Serialize>(mut self, form: &T) -> RequestBuilder {
         let mut error = None;
         if let Ok(ref mut req) = self.request {
-            match serde_urlencoded::to_string(form) {
+            match serde_qs::to_string(form) {
                 Ok(body) => {
                     req.headers_mut().insert(
                         CONTENT_TYPE,
@@ -1084,7 +1084,7 @@ mod tests {
 
         let buf = body::read_to_string(r.body.unwrap()).unwrap();
 
-        let body_should_be = serde_urlencoded::to_string(&form_data).unwrap();
+        let body_should_be = serde_qs::to_string(&form_data).unwrap();
         assert_eq!(buf, body_should_be);
     }
 
