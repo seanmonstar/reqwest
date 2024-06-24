@@ -185,7 +185,7 @@ impl Certificate {
 
         Self::read_pem_certs(&mut reader)?
             .iter()
-            .map(|cert_vec| Certificate::from_der(&cert_vec))
+            .map(|cert_vec| Certificate::from_der(cert_vec))
             .collect::<crate::Result<Vec<Certificate>>>()
     }
 
@@ -500,6 +500,7 @@ impl fmt::Debug for TlsBackend {
     }
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for TlsBackend {
     fn default() -> TlsBackend {
         #[cfg(all(feature = "default-tls", not(feature = "http3")))]

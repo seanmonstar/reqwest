@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_arguments)]
 #[cfg(feature = "__tls")]
 use http::header::HeaderValue;
 use http::uri::{Authority, Scheme};
@@ -1210,29 +1211,28 @@ mod verbose {
     }
 
     struct Escape<'a>(&'a [u8]);
-
     impl fmt::Debug for Escape<'_> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "b\"")?;
             for &c in self.0 {
-                // https://doc.rust-lang.org/reference.html#byte-escapes
-                if c == b'\n' {
-                    write!(f, "\\n")?;
-                } else if c == b'\r' {
-                    write!(f, "\\r")?;
-                } else if c == b'\t' {
-                    write!(f, "\\t")?;
-                } else if c == b'\\' || c == b'"' {
-                    write!(f, "\\{}", c as char)?;
-                } else if c == b'\0' {
-                    write!(f, "\\0")?;
-                // ASCII printable
-                } else if c >= 0x20 && c < 0x7f {
-                    write!(f, "{}", c as char)?;
-                } else {
-                    write!(f, "\\x{c:02x}")?;
-                }
+                // See: https://doc.rust-lang.org/reference.html#byte-escapes
+
+                match c {
+                    b'\\' => write!(f, "\\\\"),
+                    b'\n' => write!(f, "\\n"),
+                    b'\r' => write!(f, "\\r"),
+                    b'\t' => write!(f, "\\t"),
+                    b'\0' => write!(f, "\\0"),
+                    b'"' => write!(f, "\\\""),
+
+                    // ASCII-printable range, no need to escape it if it's not anything above.
+                    0x20..=0x7f => write!(f, "{}", c as char),
+
+                    // Anything else should be a hex escape.
+                    _ => write!(f, "\\x{c:02x}"),
+                }?
             }
+
             write!(f, "\"")?;
             Ok(())
         }
