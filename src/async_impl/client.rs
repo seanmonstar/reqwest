@@ -3068,6 +3068,7 @@ impl Future for PendingRequest {
             let res = Response::new(
                 res,
                 self.url.clone(),
+                self.urls.clone(),
                 self.client.accepts,
                 self.total_timeout.take(),
                 self.read_timeout,

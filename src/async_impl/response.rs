@@ -31,12 +31,14 @@ pub struct Response {
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
+    history: Vec<Url>,
 }
 
 impl Response {
     pub(super) fn new(
         res: hyper::Response<ResponseBody>,
         url: Url,
+        history: Vec<Url>,
         accepts: Accepts,
         total_timeout: Option<Pin<Box<Sleep>>>,
         read_timeout: Option<Duration>,
@@ -52,6 +54,7 @@ impl Response {
         Response {
             res,
             url: Box::new(url),
+            history,
         }
     }
 
@@ -114,6 +117,21 @@ impl Response {
     #[inline]
     pub fn url(&self) -> &Url {
         &self.url
+    }
+
+    /// Get all the intermediate `Url`s traversed by redirects.
+    #[inline]
+    pub fn history(&self) -> &Vec<Url> {
+        &self.history
+    }
+
+    /// Get all the `Url`s, in sequential order, that were requested,
+    /// including any redirects and the final url.
+    #[inline]
+    pub fn all_urls(&self) -> impl Iterator<Item = &Url> {
+        self.history
+            .iter()
+            .chain(std::iter::once(self.url.as_ref()))
     }
 
     /// Get the remote address used to get this `Response`.
@@ -474,6 +492,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
         Response {
             res,
             url: Box::new(url),
+            history: vec![],
         }
     }
 }
