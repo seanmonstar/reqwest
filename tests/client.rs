@@ -57,6 +57,7 @@ async fn auto_headers() {
         .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
+    assert!(res.history().is_empty());
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.remote_addr(), Some(server.addr()));
 }

@@ -12,6 +12,7 @@ use serde::de::DeserializeOwned;
 #[cfg(feature = "json")]
 use serde_json;
 use tokio::time::Sleep;
+use tower_http::follow_redirect::extension::FollowedPolicy;
 use url::Url;
 
 use super::body::Body;
@@ -19,6 +20,7 @@ use super::decoder::{Accepts, Decoder};
 use crate::async_impl::body::ResponseBody;
 #[cfg(feature = "cookies")]
 use crate::cookie;
+use crate::redirect::TowerRedirectPolicy;
 
 #[cfg(feature = "charset")]
 use encoding_rs::{Encoding, UTF_8};
@@ -114,6 +116,23 @@ impl Response {
     #[inline]
     pub fn url(&self) -> &Url {
         &self.url
+    }
+
+    /// Get all the intermediate `Url`s traversed by redirects.
+    #[inline]
+    pub fn history(&self) -> &[Url] {
+        self.extensions()
+            .get::<FollowedPolicy<TowerRedirectPolicy>>()
+            .map_or(&[], |p| &p.0.urls)
+    }
+
+    /// Get all the `Url`s, in sequential order, that were requested,
+    /// including any redirects and the final url.
+    #[inline]
+    pub fn all_urls(&self) -> impl Iterator<Item = &Url> {
+        self.history()
+            .iter()
+            .chain(std::iter::once(self.url.as_ref()))
     }
 
     /// Get the remote address used to get this `Response`.
@@ -509,5 +528,7 @@ mod tests {
 
         assert_eq!(response.status(), 200);
         assert_eq!(*response.url(), url);
+        assert!(response.history().is_empty());
+        assert_eq!(response.all_urls().collect::<Vec<_>>(), vec![&url]);
     }
 }
