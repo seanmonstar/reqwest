@@ -163,6 +163,19 @@ impl Response {
         self.inner.url()
     }
 
+    /// Get all the intermediate `Url`s traversed by redirects.
+    #[inline]
+    pub fn history(&self) -> &Vec<Url> {
+        self.inner.history()
+    }
+
+    /// Get all the `Url`s, in sequential order, that were requested,
+    /// including any redirects and the final url.
+    #[inline]
+    pub fn all_urls(&self) -> impl Iterator<Item = &Url> {
+        self.inner.all_urls()
+    }
+
     /// Get the remote address used to get this `Response`.
     ///
     /// # Example
