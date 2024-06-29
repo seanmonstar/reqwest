@@ -107,8 +107,8 @@ async fn http3_request_full() {
         .body("hello")
         .send();
 
-    fn assert_sync<T: Sync>(_: &T) {}
-    assert_sync(&res_fut);
+    fn assert_send_sync<T: Send + Sync>(_: &T) {}
+    assert_send_sync(&res_fut);
 
     let res = res_fut.await.expect("request");
 
