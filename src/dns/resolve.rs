@@ -53,7 +53,7 @@ impl FromStr for Name {
 
 #[derive(Clone)]
 pub(crate) struct DynResolver {
-    pub(crate) resolver: Arc<dyn Resolve + Sync>,
+    pub(crate) resolver: Arc<dyn Resolve>,
 }
 
 impl DynResolver {
