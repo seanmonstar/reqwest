@@ -504,7 +504,7 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn send(self) -> impl Future<Output = Result<Response, crate::Error>> + Sync {
+    pub fn send(self) -> impl Future<Output = Result<Response, crate::Error>> + Send + Sync {
         match self.request {
             Ok(req) => self.client.execute_request(req),
             Err(err) => Pending::new_err(err),
