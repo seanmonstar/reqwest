@@ -1,7 +1,6 @@
 #![cfg(feature = "http3")]
 
 pub(crate) mod connect;
-pub(crate) mod dns;
 mod pool;
 
 use crate::async_impl::body::ResponseBody;
@@ -76,7 +75,7 @@ impl H3Client {
 }
 
 pub(crate) struct H3ResponseFuture {
-    inner: Pin<Box<dyn Future<Output = Result<Response<ResponseBody>, Error>> + Send>>,
+    inner: Pin<Box<dyn Future<Output = Result<Response<ResponseBody>, Error>> + Send + Sync>>,
 }
 
 impl Future for H3ResponseFuture {

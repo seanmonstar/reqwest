@@ -1,11 +1,9 @@
-use crate::async_impl::h3_client::dns::resolve;
-use crate::dns::DynResolver;
+use crate::dns::{resolve, DynResolver};
 use crate::error::BoxError;
 use bytes::Bytes;
 use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::Uri;
-use hyper_util::client::legacy::connect::dns::Name;
 use quinn::crypto::rustls::QuicClientConfig;
 use quinn::{ClientConfig, Endpoint, TransportConfig};
 use std::net::{IpAddr, SocketAddr};
@@ -58,7 +56,11 @@ impl H3Connector {
             // If the host is already an IP address, skip resolving.
             vec![SocketAddr::new(addr, port)]
         } else {
-            let addrs = resolve(&mut self.resolver, Name::from_str(host)?).await?;
+            let name = resolve::Name::from_str(host)?;
+            
+
+            let addrs = self.resolver.resolver.resolve(name).await?;
+
             let addrs = addrs.map(|mut addr| {
                 addr.set_port(port);
                 addr

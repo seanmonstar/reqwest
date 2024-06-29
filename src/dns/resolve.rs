@@ -12,10 +12,10 @@ use std::task::{Context, Poll};
 use crate::error::BoxError;
 
 /// Alias for an `Iterator` trait object over `SocketAddr`.
-pub type Addrs = Box<dyn Iterator<Item = SocketAddr> + Send>;
+pub type Addrs = Box<dyn Iterator<Item = SocketAddr> + Send + Sync>;
 
 /// Alias for the `Future` type returned by a DNS resolver.
-pub type Resolving = Pin<Box<dyn Future<Output = Result<Addrs, BoxError>> + Send>>;
+pub type Resolving = Pin<Box<dyn Future<Output = Result<Addrs, BoxError>> + Send + Sync>>;
 
 /// Trait for customizing DNS resolution in reqwest.
 pub trait Resolve: Send + Sync {
@@ -53,7 +53,7 @@ impl FromStr for Name {
 
 #[derive(Clone)]
 pub(crate) struct DynResolver {
-    resolver: Arc<dyn Resolve>,
+    pub(crate) resolver: Arc<dyn Resolve + Sync>,
 }
 
 impl DynResolver {
