@@ -107,7 +107,6 @@ async fn http3_request_full() {
         .body("hello")
         .send();
 
-    fn assert_send_sync<T: Send + Sync>(_: &T) {}
     assert_send_sync(&res_fut);
 
     let res = res_fut.await.expect("request");
@@ -115,6 +114,8 @@ async fn http3_request_full() {
     assert_eq!(res.version(), http::Version::HTTP_3);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
+
+fn assert_send_sync<T: Send + Sync>(_: &T) {}
 
 #[tokio::test]
 async fn user_agent() {
@@ -131,8 +132,7 @@ async fn user_agent() {
         .get(&url)
         .send();
 
-    fn assert_sync<T: Sync>(_: &T) {}
-    assert_sync(&res_fut);
+    assert_send_sync(&res_fut);
     let res = res_fut.await.expect("request");
 
     assert_eq!(res.status(), reqwest::StatusCode::OK);
