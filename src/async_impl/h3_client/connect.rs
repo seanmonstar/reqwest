@@ -57,7 +57,6 @@ impl H3Connector {
             vec![SocketAddr::new(addr, port)]
         } else {
             let name = resolve::Name::from_str(host)?;
-            
 
             let addrs = self.resolver.resolver.resolve(name).await?;
 
