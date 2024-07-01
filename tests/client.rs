@@ -97,7 +97,7 @@ async fn http3_request_full() {
     });
 
     let url = format!("https://{}/content-length", server.addr());
-    let res = reqwest::Client::builder()
+    let res_fut = reqwest::Client::builder()
         .http3_prior_knowledge()
         .danger_accept_invalid_certs(true)
         .build()
@@ -105,13 +105,17 @@ async fn http3_request_full() {
         .post(url)
         .version(http::Version::HTTP_3)
         .body("hello")
-        .send()
-        .await
-        .expect("request");
+        .send();
+
+    assert_send_sync(&res_fut);
+
+    let res = res_fut.await.expect("request");
 
     assert_eq!(res.version(), http::Version::HTTP_3);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
+
+fn assert_send_sync<T: Send + Sync>(_: &T) {}
 
 #[tokio::test]
 async fn user_agent() {
@@ -121,14 +125,15 @@ async fn user_agent() {
     });
 
     let url = format!("http://{}/ua", server.addr());
-    let res = reqwest::Client::builder()
+    let res_fut = reqwest::Client::builder()
         .user_agent("reqwest-test-agent")
         .build()
         .expect("client builder")
         .get(&url)
-        .send()
-        .await
-        .expect("request");
+        .send();
+
+    assert_send_sync(&res_fut);
+    let res = res_fut.await.expect("request");
 
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
