@@ -160,8 +160,8 @@ tokio-socks = { version = "0.5.1", optional = true }
 hickory-resolver = { version = "0.24", optional = true, features = ["tokio-runtime"] }
 
 # HTTP/3 experimental support
-h3 = { git = "https://github.com/Ruben2424/h3.git", branch = "reqwest-sync", optional = true}
-h3-quinn = {git = "https://github.com/Ruben2424/h3.git", branch = "reqwest-sync", optional = true}
+h3 = { version = "0.0.6", optional = true}
+h3-quinn = {version = "0.0.7", optional = true}
 quinn = { version = "0.11.1", default-features = false, features = ["rustls", "runtime-tokio"], optional = true }
 slab = { version = "0.4.9", optional = true } # just to get minimal versions working with quinn
 futures-channel = { version = "0.3", optional = true }
