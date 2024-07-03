@@ -246,6 +246,7 @@ async fn overridden_dns_resolution_with_gai() {
         server.addr().port()
     );
     let client = reqwest::Client::builder()
+        .no_proxy()
         .resolve(overridden_domain, server.addr())
         .build()
         .expect("client builder");
@@ -270,6 +271,7 @@ async fn overridden_dns_resolution_with_gai_multiple() {
     // the server runs on IPv4 localhost, so provide both IPv4 and IPv6 and let the happy eyeballs
     // algorithm decide which address to use.
     let client = reqwest::Client::builder()
+        .no_proxy()
         .resolve_to_addrs(
             overridden_domain,
             &[
@@ -302,6 +304,7 @@ async fn overridden_dns_resolution_with_hickory_dns() {
         server.addr().port()
     );
     let client = reqwest::Client::builder()
+        .no_proxy()
         .resolve(overridden_domain, server.addr())
         .hickory_dns(true)
         .build()
@@ -328,6 +331,7 @@ async fn overridden_dns_resolution_with_hickory_dns_multiple() {
     // the server runs on IPv4 localhost, so provide both IPv4 and IPv6 and let the happy eyeballs
     // algorithm decide which address to use.
     let client = reqwest::Client::builder()
+        .no_proxy()
         .resolve_to_addrs(
             overridden_domain,
             &[
