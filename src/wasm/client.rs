@@ -366,12 +366,20 @@ impl Default for ClientBuilder {
     }
 }
 
-#[derive(Debug)]
 struct Config {
+    // NOTE: When adding a new field, update `fmt_fields` in impl Config
     headers: HeaderMap,
     #[cfg(feature = "cookies")]
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     error: Option<crate::Error>,
+}
+
+impl fmt::Debug for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut builder = f.debug_struct("Config");
+        self.fmt_fields(&mut builder);
+        builder.finish()
+    }
 }
 
 impl Default for Config {
