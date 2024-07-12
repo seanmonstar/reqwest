@@ -1,3 +1,5 @@
+#[cfg(feature = "cookies")]
+use crate::cookie;
 use http::header::USER_AGENT;
 use http::{HeaderMap, HeaderValue, Method};
 use js_sys::{Promise, JSON};
@@ -149,6 +151,17 @@ impl Client {
                 entry.insert(value.clone());
             }
         }
+
+        // TODO Onè: We do not insert during polling like in non-wasm code. Test if this is covered by fetch.
+        // Add cookies from the cookie store.
+        #[cfg(feature = "cookies")]
+        {
+            if let Some(cookie_store) = self.inner.cookie_store.as_ref() {
+                if headers.get(crate::header::COOKIE).is_none() {
+                    add_cookie_header(&mut headers, &**cookie_store, &url);
+                }
+            }
+        }
     }
 
     pub(super) fn execute_request(
@@ -255,6 +268,16 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         resp = resp.header(&name, &value);
     }
 
+    #[cfg(feature = "cookies")]
+    {
+        if let Some(ref cookie_store) = self.client.cookie_store {
+            let mut cookies = cookie::extract_response_cookie_headers(&res.headers()).peekable();
+            if cookies.peek().is_some() {
+                cookie_store.set_cookies(&mut cookies, &self.url);
+            }
+        }
+    }
+
     resp.body(js_resp)
         .map(|resp| Response::new(resp, url, abort))
         .map_err(crate::error::request)
@@ -306,6 +329,29 @@ impl ClientBuilder {
         }
         self
     }
+
+    /// dox
+    #[cfg(feature = "cookies")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
+    pub fn cookie_store(mut self, enable: bool) -> ClientBuilder {
+        if enable {
+            self.cookie_provider(Arc::new(cookie::Jar::default()))
+        } else {
+            self.config.cookie_store = None;
+            self
+        }
+    }
+
+    /// dox
+    #[cfg(feature = "cookies")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
+    pub fn cookie_provider<C: cookie::CookieStore + 'static>(
+        mut self,
+        cookie_store: Arc<C>,
+    ) -> ClientBuilder {
+        self.config.cookie_store = Some(cookie_store as _);
+        self
+    }
 }
 
 impl Default for ClientBuilder {
@@ -317,6 +363,8 @@ impl Default for ClientBuilder {
 #[derive(Debug)]
 struct Config {
     headers: HeaderMap,
+    #[cfg(feature = "cookies")]
+    cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     error: Option<crate::Error>,
 }
 
@@ -324,6 +372,8 @@ impl Default for Config {
     fn default() -> Config {
         Config {
             headers: HeaderMap::new(),
+            #[cfg(feature = "cookies")]
+            cookie_store: None,
             error: None,
         }
     }
@@ -331,7 +381,21 @@ impl Default for Config {
 
 impl Config {
     fn fmt_fields(&self, f: &mut fmt::DebugStruct<'_, '_>) {
+        #[cfg(feature = "cookies")]
+        {
+            if let Some(_) = self.cookie_store {
+                f.field("cookie_store", &true);
+            }
+        }
+
         f.field("default_headers", &self.headers);
+    }
+}
+
+#[cfg(feature = "cookies")]
+fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &dyn cookie::CookieStore, url: &Url) {
+    if let Some(header) = cookie_store.cookies(url) {
+        headers.insert(crate::header::COOKIE, header);
     }
 }
 
