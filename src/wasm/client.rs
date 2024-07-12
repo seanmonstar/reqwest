@@ -156,7 +156,7 @@ impl Client {
         // Add cookies from the cookie store.
         #[cfg(feature = "cookies")]
         {
-            if let Some(cookie_store) = self.inner.cookie_store.as_ref() {
+            if let Some(cookie_store) = self.config.cookie_store.as_ref() {
                 if headers.get(crate::header::COOKIE).is_none() {
                     add_cookie_header(&mut headers, &**cookie_store, &url);
                 }
