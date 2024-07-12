@@ -169,7 +169,7 @@ impl Client {
         mut req: Request,
     ) -> impl Future<Output = crate::Result<Response>> {
         self.merge_headers(&mut req);
-        fetch(req)
+        fetch(req, self.clone())
     }
 }
 
@@ -195,7 +195,7 @@ impl fmt::Debug for ClientBuilder {
     }
 }
 
-async fn fetch(req: Request) -> crate::Result<Response> {
+async fn fetch(req: Request, client: Client) -> crate::Result<Response> {
     // Build the js Request
     let mut init = web_sys::RequestInit::new();
     init.method(req.method().as_str());
@@ -264,19 +264,25 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         resp = resp.header(&name, &value);
     }
 
+    let resp = resp
+        .body(js_resp)
+        .map(|resp| Response::new(resp, url, abort))
+        .map_err(crate::error::request);
+
     #[cfg(feature = "cookies")]
     {
-        if let Some(ref cookie_store) = self.client.cookie_store {
-            let mut cookies = cookie::extract_response_cookie_headers(&res.headers()).peekable();
-            if cookies.peek().is_some() {
-                cookie_store.set_cookies(&mut cookies, &self.url);
+        if let Some(ref cookie_store) = client.config.cookie_store {
+            if let Ok(resp) = resp.as_ref() {
+                let mut cookies =
+                    cookie::extract_response_cookie_headers(&resp.headers()).peekable();
+                if cookies.peek().is_some() {
+                    cookie_store.set_cookies(&mut cookies, resp.url());
+                }
             }
         }
     }
 
-    resp.body(js_resp)
-        .map(|resp| Response::new(resp, url, abort))
-        .map_err(crate::error::request)
+    resp
 }
 
 // ===== impl ClientBuilder =====
