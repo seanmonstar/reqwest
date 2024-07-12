@@ -151,17 +151,6 @@ impl Client {
                 entry.insert(value.clone());
             }
         }
-
-        // TODO Onè: We do not insert during polling like in non-wasm code. Test if this is covered by fetch.
-        // Add cookies from the cookie store.
-        #[cfg(feature = "cookies")]
-        {
-            if let Some(cookie_store) = self.config.cookie_store.as_ref() {
-                if headers.get(crate::header::COOKIE).is_none() {
-                    add_cookie_header(&mut headers, &**cookie_store, &url);
-                }
-            }
-        }
     }
 
     pub(super) fn execute_request(
@@ -169,6 +158,19 @@ impl Client {
         mut req: Request,
     ) -> impl Future<Output = crate::Result<Response>> {
         self.merge_headers(&mut req);
+
+        // TODO Onè: We do not insert during polling like in non-wasm code. Test if this is covered by fetch.
+        // Add cookies from the cookie store.
+        #[cfg(feature = "cookies")]
+        {
+            if let Some(cookie_store) = self.config.cookie_store.as_ref() {
+                if req.headers().get(crate::header::COOKIE).is_none() {
+                    let url = req.url().clone(); // TODO Onè: Revisit and determine if clone is needed
+                    add_cookie_header(req.headers_mut(), &**cookie_store, &url);
+                }
+            }
+        }
+
         fetch(req, self.clone())
     }
 }
