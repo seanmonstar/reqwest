@@ -1,3 +1,7 @@
+## Unreleased
+
+- Implement `danger_accept_invalid_hostnames` for `rustls`.
+
 ## v0.12.5
 
 - Add `blocking::ClientBuilder::dns_resolver()` method to change DNS resolver in blocking client.
