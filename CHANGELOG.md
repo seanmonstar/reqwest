@@ -1,6 +1,7 @@
 ## Unreleased
 
 - Implement `danger_accept_invalid_hostnames` for `rustls`.
+- Add `impl Service<http::Request<Body>>` for `Client` and `&'_ Client`.
 
 ## v0.12.5
 
