@@ -2,7 +2,6 @@ use bytes::Bytes;
 use std::fmt;
 use std::fs::File;
 use std::io::{self, Cursor, Read};
-
 use crate::bindings::wasi::io::*;
 
 /// An asynchronous request body.
@@ -104,14 +103,16 @@ impl Body {
                 let mut body = Vec::new();
                 let mut eof = false;
                 while !eof {
-                    match body_stream.read(u64::MAX) {
+                    match body_stream.blocking_read(u64::MAX) {
                         Ok(mut body_chunk) => {
                             body.append(&mut body_chunk);
                         }
                         Err(streams::StreamError::Closed) => {
                             eof = true;
                         }
-                        Err(err) => return Err(err.into()),
+                        Err(streams::StreamError::LastOperationFailed(err)) => {
+                            return Err(crate::Error::new(crate::error::Kind::Body, Some(err.to_debug_string())));
+                        }
                     }
                 }
                 self.kind = Some(Kind::Bytes(body.into()));
@@ -158,14 +159,16 @@ impl Body {
             Kind::Incoming(ref body_stream) => {
                 let mut eof = false;
                 while !eof {
-                    match body_stream.read(u64::MAX) {
+                    match body_stream.blocking_read(u64::MAX) {
                         Ok(body_chunk) => {
                             f(&body_chunk)?;
                         }
                         Err(streams::StreamError::Closed) => {
                             eof = true;
                         }
-                        Err(err) => return Err(err.into()),
+                        Err(streams::StreamError::LastOperationFailed(err)) => {
+                            return Err(crate::Error::new(crate::error::Kind::Body, Some(err.to_debug_string())));
+                        }
                     }
                 }
                 Ok(())
@@ -286,16 +289,15 @@ impl Read for Reader {
             Reader::Reader(ref mut rdr) => rdr.read(buf),
             Reader::Bytes(ref mut rdr) => rdr.read(buf),
             Reader::Wasi(ref mut body_stream) => {
-                match body_stream.read(buf.len() as u64) {
+                match body_stream.blocking_read(buf.len() as u64) {
                     Ok(body_chunk) => {
                         let len = body_chunk.len();
                         buf[..len].copy_from_slice(&body_chunk);
                         Ok(len)
                     }
                     Err(streams::StreamError::Closed) => Ok(0),
-                    Err(_err) => {
-                        // TODO: include information from 'err'
-                        Err(io::Error::new(io::ErrorKind::Other, "read chunk"))
+                    Err(streams::StreamError::LastOperationFailed(err)) => {
+                        Err(io::Error::new(io::ErrorKind::Other, err.to_debug_string()))
                     }
                 }
             }
