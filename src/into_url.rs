@@ -31,7 +31,7 @@ impl IntoUrlSealed for Url {
             return Ok(self);
         }
 
-        if self.has_host() {
+        if self.scheme() == "unix" || self.has_host() {
             Ok(self)
         } else {
             Err(crate::error::url_bad_scheme(self))

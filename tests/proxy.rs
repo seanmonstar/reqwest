@@ -4,6 +4,9 @@ mod support;
 use support::server;
 
 use std::env;
+#[cfg(unix)]
+use std::path::PathBuf;
+use crate::support::unix_server;
 
 #[tokio::test]
 async fn http_proxy() {
@@ -217,6 +220,67 @@ async fn http_over_http() {
         .get(url)
         .send()
         .await
+        .unwrap();
+
+    assert_eq!(res.url().as_str(), url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn http_over_unix() {
+    let proxy = tempfile::TempPath::from_path("/tmp/reqwest.socket");
+    let url = "http://hyper.rs/prox";
+
+    let _server = unix_server::http(PathBuf::from(&proxy), move |req| {
+        assert_eq!(req.method(), "GET");
+        assert_eq!(req.uri(), "/prox");
+        assert_eq!(req.headers()["host"], "hyper.rs");
+
+        async { http::Response::default() }
+    });
+
+
+    let proxy_url = format!("unix://{}", proxy.display());
+    let res = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::http(&proxy_url).unwrap())
+        .connection_verbose(true)
+        .build()
+        .unwrap()
+        .get(url)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.url().as_str(), url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
+
+#[cfg(unix)]
+#[test]
+#[cfg(feature = "blocking")]
+fn http_over_unix_blocking() {
+    let proxy = tempfile::TempPath::from_path("/tmp/reqwest_blocking.socket");
+    let url = "http://hyper.rs/prox";
+
+    let _server = unix_server::http(PathBuf::from(&proxy), move |req| {
+        assert_eq!(req.method(), "GET");
+        assert_eq!(req.uri(), "/prox");
+        assert_eq!(req.headers()["host"], "hyper.rs");
+
+        async { http::Response::default() }
+    });
+
+
+    let proxy_url = format!("unix://{}", proxy.display());
+    let res = reqwest::blocking::Client::builder()
+        .proxy(reqwest::Proxy::http(&proxy_url).unwrap())
+        .connection_verbose(true)
+        .build()
+        .unwrap()
+        .get(url)
+        .send()
         .unwrap();
 
     assert_eq!(res.url().as_str(), url);
