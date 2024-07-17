@@ -88,8 +88,8 @@ impl Body {
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     pub fn wrap_stream<S>(stream: S) -> Body
     where
-        S: futures_core::stream::TryStream + Send + Sync + 'static,
-        S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+        S: futures_core::stream::TryStream + Send + 'static,
+        S::Error: Into<Box<dyn std::error::Error + Send>>,
         Bytes: From<S::Ok>,
     {
         Body::stream(stream)
