@@ -377,8 +377,8 @@ impl HttpBody for Decoder {
 }
 
 fn empty() -> ResponseBody {
-    use http_body_util::{combinators::UnsyncBoxBody, BodyExt, Empty};
-    UnsyncBoxBody::new(Empty::new().map_err(|never| match never {}))
+    use http_body_util::{combinators::BoxBody, BodyExt, Empty};
+    BoxBody::new(Empty::new().map_err(|never| match never {}))
 }
 
 impl Future for Pending {
