@@ -88,7 +88,7 @@ impl Body {
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     pub fn wrap_stream<S>(stream: S) -> Body
     where
-        S: futures_core::stream::TryStream + Send + Sync + 'static,
+        S: futures_core::stream::TryStream + Send + 'static,
         S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
         Bytes: From<S::Ok>,
     {
@@ -98,7 +98,7 @@ impl Body {
     #[cfg(any(feature = "stream", feature = "multipart", feature = "blocking"))]
     pub(crate) fn stream<S>(stream: S) -> Body
     where
-        S: futures_core::stream::TryStream + Send + Sync + 'static,
+        S: futures_core::stream::TryStream + Send + 'static,
         S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
         Bytes: From<S::Ok>,
     {
@@ -106,11 +106,11 @@ impl Body {
         use http_body::Frame;
         use http_body_util::StreamBody;
 
-        let body = http_body_util::BodyExt::boxed(StreamBody::new(
+        let body = http_body_util::BodyExt::boxed(StreamBody::new(sync_wrapper::SyncStream::new(
             stream
                 .map_ok(|d| Frame::data(Bytes::from(d)))
                 .map_err(Into::into),
-        ));
+        )));
         Body {
             inner: Inner::Streaming(body),
         }

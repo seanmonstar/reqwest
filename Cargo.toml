@@ -105,7 +105,7 @@ serde_urlencoded = "0.7.1"
 tower-service = "0.3"
 futures-core = { version = "0.3.28", default-features = false }
 futures-util = { version = "0.3.28", default-features = false }
-sync_wrapper = "1.0"
+sync_wrapper = { version = "1.0", features = ["futures"] }
 
 # Optional deps...
 
