@@ -104,7 +104,7 @@ impl Form {
     ///
     /// ```no_run
     /// # fn run() -> std::io::Result<()> {
-    /// let files = reqwest::blocking::multipart::Form::new()
+    /// let form = reqwest::blocking::multipart::Form::new()
     ///     .file("key", "/path/to/file")?;
     /// # Ok(())
     /// # }
