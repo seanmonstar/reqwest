@@ -2,6 +2,8 @@
 name = "reqwest-error"
 version = "1.0.0"
 edition = "2021"
+license = { workspace = true }
+description = "reqwest Error type"
 
 [dependencies]
 http = { workspace = true }
