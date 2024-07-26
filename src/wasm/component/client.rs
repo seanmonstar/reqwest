@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use http::header::USER_AGENT;
 use http::{HeaderMap, HeaderValue, Method};
 use std::any::Any;
@@ -6,8 +8,12 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::{fmt, future::Future, sync::Arc};
 
-use super::bindings::wasi::http::types::{FutureIncomingResponse, Pollable};
+use super::bindings::wasi::http::outgoing_handler::{self, OutgoingRequest};
+use super::bindings::wasi::http::types::{
+    FutureIncomingResponse, OutgoingBody, OutputStream, Pollable,
+};
 use super::{Request, RequestBuilder, Response};
+use crate::Body;
 use crate::{wasm::component::bindings::wasi, IntoUrl};
 
 /// dox
@@ -209,31 +215,150 @@ fn fetch(req: Request) -> crate::Result<ResponseFuture> {
         ))
     })?;
 
-    match wasi::http::outgoing_handler::handle(outgoing_request, None) {
-        Ok(resp) => Ok(ResponseFuture {
-            future: resp,
-            url: url.clone(),
-        }),
-        Err(e) => return Err(crate::error::request(e)),
-    }
+    Ok(ResponseFuture {
+        request: req,
+        outgoing_request: Some(outgoing_request),
+        outgoing_body: None,
+        response_future: None,
+        bytes_written: 0,
+    })
 }
 
 #[derive(Debug)]
 pub struct ResponseFuture {
-    future: FutureIncomingResponse,
-    url: url::Url,
+    request: Request,
+    outgoing_request: Option<OutgoingRequest>,
+    outgoing_body: Option<(OutgoingBody, OutputStream)>,
+    response_future: Option<FutureIncomingResponse>,
+    bytes_written: u64,
 }
 
 impl Future for ResponseFuture {
     type Output = crate::Result<Response>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.future.subscribe().ready() {
+        let this = self.get_mut();
+
+        let future = match (
+            this.response_future.as_ref(),
+            this.request.body().and_then(|body| body.as_bytes()),
+            this.outgoing_body.take(),
+        ) {
+            (Some(future), _, _) => future,
+            (None, Some(body), None) => {
+                let outgoing_request = this.outgoing_request.take().expect("must be there now");
+
+                let Ok(resource) = outgoing_request.body() else {
+                    return Poll::Ready(Err(crate::error::request("outgoing body error")));
+                };
+
+                let Ok(write) = resource.write() else {
+                    return Poll::Ready(Err(crate::error::request("outgoing body write error")));
+                };
+
+                let Ok(max_bytes) = write.check_write() else {
+                    return Poll::Ready(Err(crate::error::request(
+                        "outgoing body write check write error",
+                    )));
+                };
+
+                let range = (this.bytes_written as usize)..(max_bytes as usize);
+
+                if let Err(_) = write.write(&body[range]) {
+                    return Poll::Ready(Err(crate::error::request(
+                        "outgoing body write bytes error",
+                    )));
+                };
+
+                let Ok(bytes_left) = write.check_write() else {
+                    return Poll::Ready(Err(crate::error::request(
+                        "outgoing body write check write error",
+                    )));
+                };
+
+                if bytes_left == 0 {
+                    drop(write);
+                    drop(resource);
+
+                    match wasi::http::outgoing_handler::handle(outgoing_request, None) {
+                        Ok(future) => {
+                            this.response_future = Some(future);
+                            this.response_future.as_ref().unwrap()
+                        }
+                        Err(e) => {
+                            return Poll::Ready(Err(crate::error::request("request error")));
+                        }
+                    }
+                } else {
+                    this.outgoing_request = Some(outgoing_request);
+                    this.outgoing_body = Some((resource, write));
+                    this.bytes_written = body.len() as u64 - bytes_left;
+
+                    cx.waker().wake_by_ref();
+
+                    return Poll::Pending;
+                }
+            }
+            (None, Some(body), Some((resource, write))) => {
+                let Ok(max_bytes) = write.check_write() else {
+                    return Poll::Ready(Err(crate::error::request(
+                        "outgoing body write check write error",
+                    )));
+                };
+
+                let Ok(max_bytes) = write.check_write() else {
+                    return Poll::Ready(Err(crate::error::request(
+                        "outgoing body write check write error",
+                    )));
+                };
+
+                let range = (this.bytes_written as usize)..(max_bytes as usize);
+
+                if let Err(_) = write.write(&body[range]) {
+                    return Poll::Ready(Err(crate::error::request(
+                        "outgoing body write bytes error",
+                    )));
+                };
+
+                let Ok(bytes_left) = write.check_write() else {
+                    return Poll::Ready(Err(crate::error::request(
+                        "outgoing body write check write error",
+                    )));
+                };
+
+                if bytes_left == 0 {
+                    drop(write);
+                    drop(resource);
+
+                    let outgoing_request = this.outgoing_request.take().expect("must be there");
+
+                    match wasi::http::outgoing_handler::handle(outgoing_request, None) {
+                        Ok(future) => {
+                            this.response_future = Some(future);
+                            this.response_future.as_ref().unwrap()
+                        }
+                        Err(e) => {
+                            return Poll::Ready(Err(crate::error::request("request error")));
+                        }
+                    }
+                } else {
+                    this.outgoing_body = Some((resource, write));
+                    this.bytes_written = body.len() as u64 - bytes_left;
+
+                    cx.waker().wake_by_ref();
+
+                    return Poll::Pending;
+                }
+            }
+            _ => unreachable!(),
+        };
+
+        if !future.subscribe().ready() {
             cx.waker().wake_by_ref();
             return Poll::Pending;
         }
 
-        let result = match self.future.get() {
+        let result = match future.get() {
             None => Err(crate::error::request("http request response missing")),
             // Shouldn't occur
             Some(Err(_)) => Err(crate::error::request(
@@ -245,7 +370,7 @@ impl Future for ResponseFuture {
         match result {
             Ok(response) => Poll::Ready(Ok(Response::new(
                 http::Response::new(response),
-                self.url.clone(),
+                this.request.url().clone(),
             ))),
             Err(e) => Poll::Ready(Err(e)),
         }
