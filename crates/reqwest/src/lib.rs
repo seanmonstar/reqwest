@@ -254,19 +254,19 @@ macro_rules! if_hyper {
     )*}
 }
 
-pub(crate) use reqwest_error::if_wasm;
 pub use http::header;
 pub use http::Method;
 pub use http::{StatusCode, Version};
+pub(crate) use reqwest_error::if_wasm;
 pub use url::Url;
 
 // universal mods
 mod into_url;
 mod response;
 
-pub use reqwest_error::{Error, Result};
 pub use self::into_url::IntoUrl;
 pub use self::response::ResponseBuilderExt;
+pub use reqwest_error::{Error, Result};
 
 /// Shortcut method to quickly make a `GET` request.
 ///
