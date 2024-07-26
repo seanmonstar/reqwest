@@ -189,7 +189,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
 
     // convert HeaderMap to Headers
     let js_headers = web_sys::Headers::new()
-        .map_err(reqwest_error::wasm)
+        .map_err(crate::wasm::wasm)
         .map_err(reqwest_error::builder)?;
 
     for (name, value) in req.headers() {
@@ -198,7 +198,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
                 name.as_str(),
                 value.to_str().map_err(reqwest_error::builder)?,
             )
-            .map_err(reqwest_error::wasm)
+            .map_err(crate::wasm::wasm)
             .map_err(reqwest_error::builder)?;
     }
     init.headers(&js_headers.into());
@@ -222,7 +222,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     init.signal(Some(&abort.signal()));
 
     let js_req = web_sys::Request::new_with_str_and_init(req.url().as_str(), &init)
-        .map_err(reqwest_error::wasm)
+        .map_err(crate::wasm::wasm)
         .map_err(reqwest_error::builder)?;
 
     // Await the fetch() promise

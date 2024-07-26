@@ -101,7 +101,7 @@ impl Response {
             .http
             .body()
             .text()
-            .map_err(reqwest_error::wasm)
+            .map_err(crate::wasm::wasm)
             .map_err(reqwest_error::decode)?;
         let js_val = super::promise::<wasm_bindgen::JsValue>(p)
             .await
@@ -119,7 +119,7 @@ impl Response {
             .http
             .body()
             .array_buffer()
-            .map_err(reqwest_error::wasm)
+            .map_err(crate::wasm::wasm)
             .map_err(reqwest_error::decode)?;
 
         let buf_js = super::promise::<wasm_bindgen::JsValue>(p)
@@ -146,7 +146,7 @@ impl Response {
             let _abort = &abort;
             let buffer = Uint8Array::new(
                 &buf_js
-                    .map_err(reqwest_error::wasm)
+                    .map_err(crate::wasm::wasm)
                     .map_err(reqwest_error::decode)?,
             );
             let mut bytes = vec![0; buffer.length() as usize];

@@ -104,7 +104,7 @@ mod tests {
         );
     }
 
-    reqwest_error::if_wasm! {
+    if_wasm! {
         use wasm_bindgen_test::*;
 
         #[wasm_bindgen_test]

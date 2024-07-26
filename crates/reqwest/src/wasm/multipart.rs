@@ -91,12 +91,12 @@ impl Form {
 
     pub(crate) fn to_form_data(&self) -> crate::Result<FormData> {
         let form = FormData::new()
-            .map_err(reqwest_error::wasm)
+            .map_err(crate::wasm::wasm)
             .map_err(reqwest_error::builder)?;
 
         for (name, part) in self.inner.fields.iter() {
             part.append_to_form(name, &form)
-                .map_err(reqwest_error::wasm)
+                .map_err(crate::wasm::wasm)
                 .map_err(reqwest_error::builder)?;
         }
         Ok(form)
@@ -233,7 +233,7 @@ impl Part {
         body_array.push(&js_value);
 
         Blob::new_with_u8_array_sequence_and_options(body_array.as_ref(), &properties)
-            .map_err(reqwest_error::wasm)
+            .map_err(crate::wasm::wasm)
             .map_err(reqwest_error::builder)
     }
 }

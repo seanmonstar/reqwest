@@ -6,16 +6,6 @@ use std::io;
 use http::StatusCode;
 use url::Url;
 
-/// For internal use only.
-#[doc(hidden)]
-#[macro_export]
-macro_rules! if_wasm {
-    ($($item:item)*) => {$(
-        #[cfg(target_arch = "wasm32")]
-        $item
-    )*}
-}
-
 /// A `Result` alias where the `Err` case is `reqwest::Error`.
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -302,12 +292,6 @@ pub fn url_bad_scheme(url: Url) -> Error {
 #[doc(hidden)]
 pub fn url_invalid_uri(url: Url) -> Error {
     Error::new(Kind::Builder, Some("Parsed Url is not a valid Uri")).with_url(url)
-}
-
-if_wasm! {
-    pub(crate) fn wasm(js_val: wasm_bindgen::JsValue) -> BoxError {
-        format!("{js_val:?}").into()
-    }
 }
 
 /// For internal use only.
