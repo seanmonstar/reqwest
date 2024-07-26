@@ -9,7 +9,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use crate::error::BoxError;
+use reqwest_error::BoxError;
 
 /// Alias for an `Iterator` trait object over `SocketAddr`.
 pub type Addrs = Box<dyn Iterator<Item = SocketAddr> + Send>;

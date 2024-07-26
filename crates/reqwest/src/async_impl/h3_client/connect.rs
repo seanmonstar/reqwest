@@ -1,6 +1,6 @@
 use crate::async_impl::h3_client::dns::resolve;
 use crate::dns::DynResolver;
-use crate::error::BoxError;
+use reqwest_error::BoxError;
 use bytes::Bytes;
 use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};

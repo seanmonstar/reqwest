@@ -24,7 +24,7 @@ use self::native_tls_conn::NativeTlsConn;
 #[cfg(feature = "__rustls")]
 use self::rustls_tls_conn::RustlsTlsConn;
 use crate::dns::DynResolver;
-use crate::error::BoxError;
+use reqwest_error::BoxError;
 use crate::proxy::{Proxy, ProxyScheme};
 
 pub(crate) type HttpConnector = hyper_util::client::legacy::connect::HttpConnector<DynResolver>;
@@ -100,7 +100,7 @@ impl Connector {
     where
         T: Into<Option<IpAddr>>,
     {
-        let tls = tls.build().map_err(crate::error::builder)?;
+        let tls = tls.build().map_err(reqwest_error::builder)?;
         Ok(Self::from_built_default_tls(
             http,
             tls,
@@ -475,7 +475,7 @@ where
 {
     if let Some(to) = timeout {
         match tokio::time::timeout(to, f).await {
-            Err(_elapsed) => Err(Box::new(crate::error::TimedOut) as BoxError),
+            Err(_elapsed) => Err(Box::new(reqwest_error::TimedOut) as BoxError),
             Ok(Ok(try_res)) => Ok(try_res),
             Ok(Err(e)) => Err(e),
         }

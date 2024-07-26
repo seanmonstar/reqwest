@@ -217,9 +217,9 @@ impl RequestBuilder {
                         }
                         req.headers_mut().append(key, value);
                     }
-                    Err(e) => error = Some(crate::error::builder(e.into())),
+                    Err(e) => error = Some(reqwest_error::builder(e.into())),
                 },
-                Err(e) => error = Some(crate::error::builder(e.into())),
+                Err(e) => error = Some(reqwest_error::builder(e.into())),
             };
         }
         if let Some(err) = error {
@@ -354,7 +354,7 @@ impl RequestBuilder {
             let serializer = serde_urlencoded::Serializer::new(&mut pairs);
 
             if let Err(err) = query.serialize(serializer) {
-                error = Some(crate::error::builder(err));
+                error = Some(reqwest_error::builder(err));
             }
         }
         if let Ok(ref mut req) = self.request {
@@ -414,7 +414,7 @@ impl RequestBuilder {
                     );
                     *req.body_mut() = Some(body.into());
                 }
-                Err(err) => error = Some(crate::error::builder(err)),
+                Err(err) => error = Some(reqwest_error::builder(err)),
             }
         }
         if let Some(err) = error {
@@ -446,7 +446,7 @@ impl RequestBuilder {
                     }
                     *req.body_mut() = Some(body.into());
                 }
-                Err(err) => error = Some(crate::error::builder(err)),
+                Err(err) => error = Some(reqwest_error::builder(err)),
             }
         }
         if let Some(err) = error {
@@ -610,7 +610,7 @@ where
             version,
             ..
         } = parts;
-        let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
+        let url = Url::parse(&uri.to_string()).map_err(reqwest_error::builder)?;
         Ok(Request {
             method,
             url,
@@ -640,7 +640,7 @@ impl TryFrom<Request> for HttpRequest<Body> {
             .method(method)
             .uri(url.as_str())
             .body(body.unwrap_or_else(Body::empty))
-            .map_err(crate::error::builder)?;
+            .map_err(reqwest_error::builder)?;
 
         *req.headers_mut() = headers;
         Ok(req)

@@ -134,7 +134,7 @@ impl Certificate {
     pub fn from_der(der: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             #[cfg(feature = "default-tls")]
-            native: native_tls_crate::Certificate::from_der(der).map_err(crate::error::builder)?,
+            native: native_tls_crate::Certificate::from_der(der).map_err(reqwest_error::builder)?,
             #[cfg(feature = "__rustls")]
             original: Cert::Der(der.to_owned()),
         })
@@ -159,7 +159,7 @@ impl Certificate {
     pub fn from_pem(pem: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             #[cfg(feature = "default-tls")]
-            native: native_tls_crate::Certificate::from_pem(pem).map_err(crate::error::builder)?,
+            native: native_tls_crate::Certificate::from_pem(pem).map_err(reqwest_error::builder)?,
             #[cfg(feature = "__rustls")]
             original: Cert::Pem(pem.to_owned()),
         })
@@ -206,14 +206,14 @@ impl Certificate {
         match self.original {
             Cert::Der(buf) => root_cert_store
                 .add(buf.into())
-                .map_err(crate::error::builder)?,
+                .map_err(reqwest_error::builder)?,
             Cert::Pem(buf) => {
                 let mut reader = Cursor::new(buf);
                 let certs = Self::read_pem_certs(&mut reader)?;
                 for c in certs {
                     root_cert_store
                         .add(c.into())
-                        .map_err(crate::error::builder)?;
+                        .map_err(reqwest_error::builder)?;
                 }
             }
         }
@@ -224,7 +224,7 @@ impl Certificate {
         rustls_pemfile::certs(reader)
             .map(|result| match result {
                 Ok(cert) => Ok(cert.as_ref().to_vec()),
-                Err(_) => Err(crate::error::builder("invalid certificate encoding")),
+                Err(_) => Err(reqwest_error::builder("invalid certificate encoding")),
             })
             .collect()
     }
@@ -267,7 +267,7 @@ impl Identity {
         Ok(Identity {
             inner: ClientCert::Pkcs12(
                 native_tls_crate::Identity::from_pkcs12(der, password)
-                    .map_err(crate::error::builder)?,
+                    .map_err(reqwest_error::builder)?,
             ),
         })
     }
@@ -300,7 +300,7 @@ impl Identity {
     pub fn from_pkcs8_pem(pem: &[u8], key: &[u8]) -> crate::Result<Identity> {
         Ok(Identity {
             inner: ClientCert::Pkcs8(
-                native_tls_crate::Identity::from_pkcs8(pem, key).map_err(crate::error::builder)?,
+                native_tls_crate::Identity::from_pkcs8(pem, key).map_err(reqwest_error::builder)?,
             ),
         })
     }
@@ -347,12 +347,12 @@ impl Identity {
                     Ok(Item::Pkcs8Key(key)) => sk.push(key.into()),
                     Ok(Item::Sec1Key(key)) => sk.push(key.into()),
                     Ok(_) => {
-                        return Err(crate::error::builder(TLSError::General(String::from(
+                        return Err(reqwest_error::builder(TLSError::General(String::from(
                             "No valid certificate was found",
                         ))))
                     }
                     Err(_) => {
-                        return Err(crate::error::builder(TLSError::General(String::from(
+                        return Err(reqwest_error::builder(TLSError::General(String::from(
                             "Invalid identity PEM file",
                         ))))
                     }
@@ -362,7 +362,7 @@ impl Identity {
             if let (Some(sk), false) = (sk.pop(), certs.is_empty()) {
                 (sk, certs)
             } else {
-                return Err(crate::error::builder(TLSError::General(String::from(
+                return Err(reqwest_error::builder(TLSError::General(String::from(
                     "private key or certificate not found",
                 ))));
             }
@@ -384,7 +384,7 @@ impl Identity {
                 Ok(())
             }
             #[cfg(feature = "__rustls")]
-            ClientCert::Pem { .. } => Err(crate::error::builder("incompatible TLS identity type")),
+            ClientCert::Pem { .. } => Err(reqwest_error::builder("incompatible TLS identity type")),
         }
     }
 
@@ -400,10 +400,10 @@ impl Identity {
         match self.inner {
             ClientCert::Pem { key, certs } => config_builder
                 .with_client_auth_cert(certs, key)
-                .map_err(crate::error::builder),
+                .map_err(reqwest_error::builder),
             #[cfg(feature = "native-tls")]
             ClientCert::Pkcs12(..) | ClientCert::Pkcs8(..) => {
-                Err(crate::error::builder("incompatible TLS identity type"))
+                Err(reqwest_error::builder("incompatible TLS identity type"))
             }
         }
     }

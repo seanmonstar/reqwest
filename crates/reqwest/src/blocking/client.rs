@@ -1131,7 +1131,7 @@ impl ClientHandle {
                 let rt = match runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
-                    .map_err(crate::error::builder)
+                    .map_err(reqwest_error::builder)
                 {
                     Err(e) => {
                         if let Err(e) = spawn_tx.send(Err(e)) {
@@ -1173,7 +1173,7 @@ impl ClientHandle {
                 drop(rt);
                 trace!("({:?}) finished", thread::current().id());
             })
-            .map_err(crate::error::builder)?;
+            .map_err(reqwest_error::builder)?;
 
         // Wait for the runtime thread to start up...
         match wait::timeout(spawn_rx, None) {
@@ -1225,7 +1225,7 @@ impl ClientHandle {
                 timeout,
                 KeepCoreThreadAlive(Some(self.inner.clone())),
             )),
-            Err(wait::Waited::TimedOut(e)) => Err(crate::error::request(e).with_url(url)),
+            Err(wait::Waited::TimedOut(e)) => Err(reqwest_error::request(e).with_url(url)),
             Err(wait::Waited::Inner(err)) => Err(err.with_url(url)),
         }
     }

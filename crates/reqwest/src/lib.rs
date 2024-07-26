@@ -247,13 +247,6 @@ compile_error!(
 "
 );
 
-macro_rules! if_wasm {
-    ($($item:item)*) => {$(
-        #[cfg(target_arch = "wasm32")]
-        $item
-    )*}
-}
-
 macro_rules! if_hyper {
     ($($item:item)*) => {$(
         #[cfg(not(target_arch = "wasm32"))]
@@ -261,18 +254,17 @@ macro_rules! if_hyper {
     )*}
 }
 
+pub(crate) use reqwest_error::if_wasm;
 pub use http::header;
 pub use http::Method;
 pub use http::{StatusCode, Version};
 pub use url::Url;
 
 // universal mods
-#[macro_use]
-mod error;
 mod into_url;
 mod response;
 
-pub use self::error::{Error, Result};
+pub use reqwest_error::{Error, Result};
 pub use self::into_url::IntoUrl;
 pub use self::response::ResponseBuilderExt;
 

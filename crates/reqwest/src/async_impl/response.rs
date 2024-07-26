@@ -267,7 +267,7 @@ impl Response {
     pub async fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
         let full = self.bytes().await?;
 
-        serde_json::from_slice(&full).map_err(crate::error::decode)
+        serde_json::from_slice(&full).map_err(reqwest_error::decode)
     }
 
     /// Get the full response body as `Bytes`.
@@ -380,7 +380,7 @@ impl Response {
     pub fn error_for_status(self) -> crate::Result<Self> {
         let status = self.status();
         if status.is_client_error() || status.is_server_error() {
-            Err(crate::error::status_code(*self.url, status))
+            Err(reqwest_error::status_code(*self.url, status))
         } else {
             Ok(self)
         }
@@ -410,7 +410,7 @@ impl Response {
     pub fn error_for_status_ref(&self) -> crate::Result<&Self> {
         let status = self.status();
         if status.is_client_error() || status.is_server_error() {
-            Err(crate::error::status_code(*self.url.clone(), status))
+            Err(reqwest_error::status_code(*self.url.clone(), status))
         } else {
             Ok(self)
         }

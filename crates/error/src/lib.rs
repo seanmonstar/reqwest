@@ -3,7 +3,18 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 
-use crate::{StatusCode, Url};
+use http::StatusCode;
+use url::Url;
+
+/// For internal use only.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! if_wasm {
+    ($($item:item)*) => {$(
+        #[cfg(target_arch = "wasm32")]
+        $item
+    )*}
+}
 
 /// A `Result` alias where the `Err` case is `reqwest::Error`.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -17,7 +28,9 @@ pub struct Error {
     inner: Box<Inner>,
 }
 
-pub(crate) type BoxError = Box<dyn StdError + Send + Sync>;
+/// For internal use only.
+#[doc(hidden)]
+pub type BoxError = Box<dyn StdError + Send + Sync>;
 
 struct Inner {
     kind: Kind,
@@ -217,14 +230,14 @@ impl StdError for Error {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl From<crate::error::Error> for wasm_bindgen::JsValue {
+impl From<Error> for wasm_bindgen::JsValue {
     fn from(err: Error) -> wasm_bindgen::JsValue {
         js_sys::Error::from(err).into()
     }
 }
 
 #[cfg(target_arch = "wasm32")]
-impl From<crate::error::Error> for js_sys::Error {
+impl From<Error> for js_sys::Error {
     fn from(err: Error) -> js_sys::Error {
         js_sys::Error::new(&format!("{err}"))
     }
@@ -243,35 +256,51 @@ pub(crate) enum Kind {
 
 // constructors
 
-pub(crate) fn builder<E: Into<BoxError>>(e: E) -> Error {
+/// For internal use only.
+#[doc(hidden)]
+pub fn builder<E: Into<BoxError>>(e: E) -> Error {
     Error::new(Kind::Builder, Some(e))
 }
 
-pub(crate) fn body<E: Into<BoxError>>(e: E) -> Error {
+/// For internal use only.
+#[doc(hidden)]
+pub fn body<E: Into<BoxError>>(e: E) -> Error {
     Error::new(Kind::Body, Some(e))
 }
 
-pub(crate) fn decode<E: Into<BoxError>>(e: E) -> Error {
+/// For internal use only.
+#[doc(hidden)]
+pub fn decode<E: Into<BoxError>>(e: E) -> Error {
     Error::new(Kind::Decode, Some(e))
 }
 
-pub(crate) fn request<E: Into<BoxError>>(e: E) -> Error {
+/// For internal use only.
+#[doc(hidden)]
+pub fn request<E: Into<BoxError>>(e: E) -> Error {
     Error::new(Kind::Request, Some(e))
 }
 
-pub(crate) fn redirect<E: Into<BoxError>>(e: E, url: Url) -> Error {
+/// For internal use only.
+#[doc(hidden)]
+pub fn redirect<E: Into<BoxError>>(e: E, url: Url) -> Error {
     Error::new(Kind::Redirect, Some(e)).with_url(url)
 }
 
-pub(crate) fn status_code(url: Url, status: StatusCode) -> Error {
+/// For internal use only.
+#[doc(hidden)]
+pub fn status_code(url: Url, status: StatusCode) -> Error {
     Error::new(Kind::Status(status), None::<Error>).with_url(url)
 }
 
-pub(crate) fn url_bad_scheme(url: Url) -> Error {
+/// For internal use only.
+#[doc(hidden)]
+pub fn url_bad_scheme(url: Url) -> Error {
     Error::new(Kind::Builder, Some(BadScheme)).with_url(url)
 }
 
-pub(crate) fn url_invalid_uri(url: Url) -> Error {
+/// For internal use only.
+#[doc(hidden)]
+pub fn url_invalid_uri(url: Url) -> Error {
     Error::new(Kind::Builder, Some("Parsed Url is not a valid Uri")).with_url(url)
 }
 
@@ -281,13 +310,17 @@ if_wasm! {
     }
 }
 
-pub(crate) fn upgrade<E: Into<BoxError>>(e: E) -> Error {
+/// For internal use only.
+#[doc(hidden)]
+pub fn upgrade<E: Into<BoxError>>(e: E) -> Error {
     Error::new(Kind::Upgrade, Some(e))
 }
 
 // io::Error helpers
 
-pub(crate) fn into_io(e: BoxError) -> io::Error {
+/// For internal use only.
+#[doc(hidden)]
+pub fn into_io(e: BoxError) -> io::Error {
     io::Error::new(io::ErrorKind::Other, e)
 }
 
@@ -305,8 +338,10 @@ pub(crate) fn decode_io(e: io::Error) -> Error {
 
 // internal Error "sources"
 
+/// For internal use only.
+#[doc(hidden)]
 #[derive(Debug)]
-pub(crate) struct TimedOut;
+pub struct TimedOut;
 
 impl fmt::Display for TimedOut {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -316,8 +351,10 @@ impl fmt::Display for TimedOut {
 
 impl StdError for TimedOut {}
 
+/// For internal use only.
+#[doc(hidden)]
 #[derive(Debug)]
-pub(crate) struct BadScheme;
+pub struct BadScheme;
 
 impl fmt::Display for BadScheme {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

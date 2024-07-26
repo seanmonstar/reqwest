@@ -38,7 +38,7 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 use tokio_util::io::StreamReader;
 
 use super::body::ResponseBody;
-use crate::error;
+use reqwest_error as error;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Accepts {
@@ -316,13 +316,13 @@ impl HttpBody for Decoder {
                     self.inner = inner;
                     self.poll_frame(cx)
                 }
-                Poll::Ready(Err(e)) => Poll::Ready(Some(Err(crate::error::decode_io(e)))),
+                Poll::Ready(Err(e)) => Poll::Ready(Some(Err(reqwest_error::decode_io(e)))),
                 Poll::Pending => Poll::Pending,
             },
             Inner::PlainText(ref mut body) => {
                 match futures_core::ready!(Pin::new(body).poll_frame(cx)) {
                     Some(Ok(frame)) => Poll::Ready(Some(Ok(frame))),
-                    Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode(err)))),
+                    Some(Err(err)) => Poll::Ready(Some(Err(reqwest_error::decode(err)))),
                     None => Poll::Ready(None),
                 }
             }
@@ -330,7 +330,7 @@ impl HttpBody for Decoder {
             Inner::Gzip(ref mut decoder) => {
                 match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes.freeze())))),
-                    Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
+                    Some(Err(err)) => Poll::Ready(Some(Err(reqwest_error::decode_io(err)))),
                     None => Poll::Ready(None),
                 }
             }
@@ -338,7 +338,7 @@ impl HttpBody for Decoder {
             Inner::Brotli(ref mut decoder) => {
                 match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes.freeze())))),
-                    Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
+                    Some(Err(err)) => Poll::Ready(Some(Err(reqwest_error::decode_io(err)))),
                     None => Poll::Ready(None),
                 }
             }
@@ -346,7 +346,7 @@ impl HttpBody for Decoder {
             Inner::Zstd(ref mut decoder) => {
                 match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes.freeze())))),
-                    Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
+                    Some(Err(err)) => Poll::Ready(Some(Err(reqwest_error::decode_io(err)))),
                     None => Poll::Ready(None),
                 }
             }
@@ -354,7 +354,7 @@ impl HttpBody for Decoder {
             Inner::Deflate(ref mut decoder) => {
                 match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes.freeze())))),
-                    Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
+                    Some(Err(err)) => Poll::Ready(Some(Err(reqwest_error::decode_io(err)))),
                     None => Poll::Ready(None),
                 }
             }

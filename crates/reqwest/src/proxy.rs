@@ -151,20 +151,20 @@ impl<S: IntoUrl> IntoProxyScheme for S {
                             }
                             _ => {}
                         }
-                    } else if let Some(_) = err.downcast_ref::<crate::error::BadScheme>() {
+                    } else if let Some(_) = err.downcast_ref::<reqwest_error::BadScheme>() {
                         presumed_to_have_scheme = false;
                         break;
                     }
                     source = err.source();
                 }
                 if presumed_to_have_scheme {
-                    return Err(crate::error::builder(e));
+                    return Err(reqwest_error::builder(e));
                 }
                 // the issue could have been caused by a missing scheme, so we try adding http://
                 let try_this = format!("http://{}", self.as_str());
                 try_this.into_url().map_err(|_| {
                     // return the original error
-                    crate::error::builder(e)
+                    reqwest_error::builder(e)
                 })?
             }
         };
@@ -569,7 +569,7 @@ impl ProxyScheme {
     fn http(host: &str) -> crate::Result<Self> {
         Ok(ProxyScheme::Http {
             auth: None,
-            host: host.parse().map_err(crate::error::builder)?,
+            host: host.parse().map_err(reqwest_error::builder)?,
         })
     }
 
@@ -577,7 +577,7 @@ impl ProxyScheme {
     fn https(host: &str) -> crate::Result<Self> {
         Ok(ProxyScheme::Https {
             auth: None,
-            host: host.parse().map_err(crate::error::builder)?,
+            host: host.parse().map_err(reqwest_error::builder)?,
         })
     }
 
@@ -687,11 +687,11 @@ impl ProxyScheme {
                     "socks5" | "socks5h" => Some(1080),
                     _ => None,
                 })
-                .map_err(crate::error::builder)?;
+                .map_err(reqwest_error::builder)?;
             addrs
                 .into_iter()
                 .next()
-                .ok_or_else(|| crate::error::builder("unknown proxy scheme"))
+                .ok_or_else(|| reqwest_error::builder("unknown proxy scheme"))
         };
 
         let mut scheme = match url.scheme() {
@@ -701,7 +701,7 @@ impl ProxyScheme {
             "socks5" => Self::socks5(to_addr()?)?,
             #[cfg(feature = "socks")]
             "socks5h" => Self::socks5h(to_addr()?)?,
-            _ => return Err(crate::error::builder("unknown proxy scheme")),
+            _ => return Err(reqwest_error::builder("unknown proxy scheme")),
         };
 
         if let Some(pwd) = url.password() {
@@ -1781,7 +1781,7 @@ mod test {
         use std::error::Error;
         use std::mem::discriminant;
 
-        fn includes(haystack: &crate::error::Error, needle: url::ParseError) -> bool {
+        fn includes(haystack: &reqwest_error::Error, needle: url::ParseError) -> bool {
             let mut source = haystack.source();
             while let Some(error) = source {
                 if let Some(parse_error) = error.downcast_ref::<url::ParseError>() {

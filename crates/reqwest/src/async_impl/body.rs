@@ -275,7 +275,7 @@ impl HttpBody for Body {
             }
             Inner::Streaming(ref mut body) => Poll::Ready(
                 futures_core::ready!(Pin::new(body).poll_frame(cx))
-                    .map(|opt_chunk| opt_chunk.map_err(crate::error::body)),
+                    .map(|opt_chunk| opt_chunk.map_err(reqwest_error::body)),
             ),
         }
     }
@@ -326,11 +326,11 @@ where
     ) -> Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
         let this = self.project();
         if let Poll::Ready(()) = this.timeout.as_mut().poll(cx) {
-            return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
+            return Poll::Ready(Some(Err(reqwest_error::body(reqwest_error::TimedOut))));
         }
         Poll::Ready(
             futures_core::ready!(this.inner.poll_frame(cx))
-                .map(|opt_chunk| opt_chunk.map_err(crate::error::body)),
+                .map(|opt_chunk| opt_chunk.map_err(reqwest_error::body)),
         )
     }
 
@@ -369,11 +369,11 @@ where
 
         // Error if the timeout has expired.
         if let Poll::Ready(()) = sleep_pinned.poll(cx) {
-            return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
+            return Poll::Ready(Some(Err(reqwest_error::body(reqwest_error::TimedOut))));
         }
 
         let item = futures_core::ready!(this.inner.poll_frame(cx))
-            .map(|opt_chunk| opt_chunk.map_err(crate::error::body));
+            .map(|opt_chunk| opt_chunk.map_err(reqwest_error::body));
         // a ready frame means timeout is reset
         this.sleep.set(None);
         Poll::Ready(item)

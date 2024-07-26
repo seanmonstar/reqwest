@@ -107,7 +107,7 @@ impl Body {
                 } else {
                     Vec::new()
                 };
-                io::copy(reader, &mut bytes).map_err(crate::error::builder)?;
+                io::copy(reader, &mut bytes).map_err(reqwest_error::builder)?;
                 self.kind = Kind::Bytes(bytes.into());
                 self.buffer()
             }
@@ -330,7 +330,7 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
                         .expect("tx only taken on error")
                         .clone()
                         .try_send(Err(Abort));
-                    return Err(crate::error::body(e));
+                    return Err(reqwest_error::body(e));
                 }
             }
         }
@@ -343,7 +343,7 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
             .expect("tx only taken on error")
             .send(Ok(buf.split().freeze()))
             .await
-            .map_err(crate::error::body)?;
+            .map_err(reqwest_error::body)?;
 
         written += buf_len;
     }

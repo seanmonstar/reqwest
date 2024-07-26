@@ -36,7 +36,7 @@ where
             let now = Instant::now();
             if now >= deadline {
                 log::trace!("wait timeout exceeded");
-                return Err(Waited::TimedOut(crate::error::TimedOut));
+                return Err(Waited::TimedOut(reqwest_error::TimedOut));
             }
 
             log::trace!(
@@ -54,7 +54,7 @@ where
 
 #[derive(Debug)]
 pub(crate) enum Waited<E> {
-    TimedOut(crate::error::TimedOut),
+    TimedOut(reqwest_error::TimedOut),
     Inner(E),
 }
 

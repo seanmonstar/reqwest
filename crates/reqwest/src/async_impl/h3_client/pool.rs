@@ -6,7 +6,7 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 use crate::async_impl::body::ResponseBody;
-use crate::error::{BoxError, Error, Kind};
+use reqwest_error::{BoxError, Error, Kind};
 use crate::Body;
 use bytes::Buf;
 use futures_util::future;

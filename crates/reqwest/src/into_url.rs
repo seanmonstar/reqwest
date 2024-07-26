@@ -34,7 +34,7 @@ impl IntoUrlSealed for Url {
         if self.has_host() {
             Ok(self)
         } else {
-            Err(crate::error::url_bad_scheme(self))
+            Err(reqwest_error::url_bad_scheme(self))
         }
     }
 
@@ -45,7 +45,7 @@ impl IntoUrlSealed for Url {
 
 impl<'a> IntoUrlSealed for &'a str {
     fn into_url(self) -> crate::Result<Url> {
-        Url::parse(self).map_err(crate::error::builder)?.into_url()
+        Url::parse(self).map_err(reqwest_error::builder)?.into_url()
     }
 
     fn as_str(&self) -> &str {
@@ -77,7 +77,7 @@ if_hyper! {
     pub(crate) fn try_uri(url: &Url) -> crate::Result<http::Uri> {
         url.as_str()
             .parse()
-            .map_err(|_| crate::error::url_invalid_uri(url.clone()))
+            .map_err(|_| reqwest_error::url_invalid_uri(url.clone()))
     }
 }
 
@@ -104,7 +104,7 @@ mod tests {
         );
     }
 
-    if_wasm! {
+    reqwest_error::if_wasm! {
         use wasm_bindgen_test::*;
 
         #[wasm_bindgen_test]

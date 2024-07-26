@@ -92,7 +92,7 @@ impl Response {
     pub async fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
         let full = self.bytes().await?;
 
-        serde_json::from_slice(&full).map_err(crate::error::decode)
+        serde_json::from_slice(&full).map_err(reqwest_error::decode)
     }
 
     /// Get the response text.
@@ -101,15 +101,15 @@ impl Response {
             .http
             .body()
             .text()
-            .map_err(crate::error::wasm)
-            .map_err(crate::error::decode)?;
+            .map_err(reqwest_error::wasm)
+            .map_err(reqwest_error::decode)?;
         let js_val = super::promise::<wasm_bindgen::JsValue>(p)
             .await
-            .map_err(crate::error::decode)?;
+            .map_err(reqwest_error::decode)?;
         if let Some(s) = js_val.as_string() {
             Ok(s)
         } else {
-            Err(crate::error::decode("response.text isn't string"))
+            Err(reqwest_error::decode("response.text isn't string"))
         }
     }
 
@@ -119,12 +119,12 @@ impl Response {
             .http
             .body()
             .array_buffer()
-            .map_err(crate::error::wasm)
-            .map_err(crate::error::decode)?;
+            .map_err(reqwest_error::wasm)
+            .map_err(reqwest_error::decode)?;
 
         let buf_js = super::promise::<wasm_bindgen::JsValue>(p)
             .await
-            .map_err(crate::error::decode)?;
+            .map_err(reqwest_error::decode)?;
 
         let buffer = Uint8Array::new(&buf_js);
         let mut bytes = vec![0; buffer.length() as usize];
@@ -146,8 +146,8 @@ impl Response {
             let _abort = &abort;
             let buffer = Uint8Array::new(
                 &buf_js
-                    .map_err(crate::error::wasm)
-                    .map_err(crate::error::decode)?,
+                    .map_err(reqwest_error::wasm)
+                    .map_err(reqwest_error::decode)?,
             );
             let mut bytes = vec![0; buffer.length() as usize];
             buffer.copy_to(&mut bytes);
@@ -161,7 +161,7 @@ impl Response {
     pub fn error_for_status(self) -> crate::Result<Self> {
         let status = self.status();
         if status.is_client_error() || status.is_server_error() {
-            Err(crate::error::status_code(*self.url, status))
+            Err(reqwest_error::status_code(*self.url, status))
         } else {
             Ok(self)
         }
@@ -171,7 +171,7 @@ impl Response {
     pub fn error_for_status_ref(&self) -> crate::Result<&Self> {
         let status = self.status();
         if status.is_client_error() || status.is_server_error() {
-            Err(crate::error::status_code(*self.url.clone(), status))
+            Err(reqwest_error::status_code(*self.url.clone(), status))
         } else {
             Ok(self)
         }

@@ -6,7 +6,7 @@ mod pool;
 
 use crate::async_impl::body::ResponseBody;
 use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
-use crate::error::{BoxError, Error, Kind};
+use reqwest_error::{BoxError, Error, Kind};
 use crate::{error, Body};
 use connect::H3Connector;
 use futures_util::future;

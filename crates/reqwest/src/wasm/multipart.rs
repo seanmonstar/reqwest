@@ -91,13 +91,13 @@ impl Form {
 
     pub(crate) fn to_form_data(&self) -> crate::Result<FormData> {
         let form = FormData::new()
-            .map_err(crate::error::wasm)
-            .map_err(crate::error::builder)?;
+            .map_err(reqwest_error::wasm)
+            .map_err(reqwest_error::builder)?;
 
         for (name, part) in self.inner.fields.iter() {
             part.append_to_form(name, &form)
-                .map_err(crate::error::wasm)
-                .map_err(crate::error::builder)?;
+                .map_err(reqwest_error::wasm)
+                .map_err(reqwest_error::builder)?;
         }
         Ok(form)
     }
@@ -150,7 +150,7 @@ impl Part {
 
     /// Tries to set the mime of this part.
     pub fn mime_str(self, mime: &str) -> crate::Result<Part> {
-        Ok(self.mime(mime.parse().map_err(crate::error::builder)?))
+        Ok(self.mime(mime.parse().map_err(reqwest_error::builder)?))
     }
 
     // Re-export when mime 0.4 is available, with split MediaType/MediaRange.
@@ -233,8 +233,8 @@ impl Part {
         body_array.push(&js_value);
 
         Blob::new_with_u8_array_sequence_and_options(body_array.as_ref(), &properties)
-            .map_err(crate::error::wasm)
-            .map_err(crate::error::builder)
+            .map_err(reqwest_error::wasm)
+            .map_err(reqwest_error::builder)
     }
 }
 

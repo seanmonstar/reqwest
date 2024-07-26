@@ -70,7 +70,7 @@ impl super::response::Response {
     pub async fn upgrade(self) -> crate::Result<Upgraded> {
         hyper::upgrade::on(self.res)
             .map_ok(Upgraded::from)
-            .map_err(crate::error::upgrade)
+            .map_err(reqwest_error::upgrade)
             .await
     }
 }

@@ -36,7 +36,7 @@ use crate::cookie;
 #[cfg(feature = "hickory-dns")]
 use crate::dns::hickory::HickoryDnsResolver;
 use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
-use crate::error;
+use reqwest_error as error;
 use crate::into_url::try_uri;
 use crate::redirect::{self, remove_sensitive_headers};
 #[cfg(feature = "__tls")]
@@ -410,7 +410,7 @@ impl ClientBuilder {
                     {
                         // Default backend + rustls Identity doesn't work.
                         if let Some(_id) = config.identity {
-                            return Err(crate::error::builder("incompatible TLS identity type"));
+                            return Err(reqwest_error::builder("incompatible TLS identity type"));
                         }
                     }
 
@@ -419,7 +419,7 @@ impl ClientBuilder {
                             // TLS v1.3. This would be entirely reasonable,
                             // native-tls just doesn't support it.
                             // https://github.com/sfackler/rust-native-tls/issues/140
-                            crate::error::builder("invalid minimum TLS version for backend")
+                            reqwest_error::builder("invalid minimum TLS version for backend")
                         })?;
                         tls.min_protocol_version(Some(protocol));
                     }
@@ -430,7 +430,7 @@ impl ClientBuilder {
                             // We could arguably do max_protocol_version(None), given
                             // that 1.4 does not exist yet, but that'd get messy in the
                             // future.
-                            crate::error::builder("invalid maximum TLS version for backend")
+                            reqwest_error::builder("invalid maximum TLS version for backend")
                         })?;
                         tls.max_protocol_version(Some(protocol));
                     }
@@ -515,7 +515,7 @@ impl ClientBuilder {
                         let mut valid_count = 0;
                         let mut invalid_count = 0;
                         for cert in rustls_native_certs::load_native_certs()
-                            .map_err(crate::error::builder)?
+                            .map_err(reqwest_error::builder)?
                         {
                             // Continue on parsing errors, as native stores often include ancient or syntactically
                             // invalid certificates, like root certificates without any X509 extensions.
@@ -529,7 +529,7 @@ impl ClientBuilder {
                             }
                         }
                         if valid_count == 0 && invalid_count > 0 {
-                            return Err(crate::error::builder(
+                            return Err(reqwest_error::builder(
                                 "zero valid certificates found in native root store",
                             ));
                         }
@@ -559,7 +559,7 @@ impl ClientBuilder {
                     }
 
                     if versions.is_empty() {
-                        return Err(crate::error::builder("empty supported tls versions"));
+                        return Err(reqwest_error::builder("empty supported tls versions"));
                     }
 
                     // Allow user to have installed a runtime default.
@@ -578,7 +578,7 @@ impl ClientBuilder {
                     let signature_algorithms = provider.signature_verification_algorithms;
                     let config_builder = rustls::ClientConfig::builder_with_provider(provider)
                         .with_protocol_versions(&versions)
-                        .map_err(|_| crate::error::builder("invalid TLS versions"))?;
+                        .map_err(|_| reqwest_error::builder("invalid TLS versions"))?;
 
                     let config_builder = if !config.certs_verification {
                         config_builder
@@ -660,7 +660,7 @@ impl ClientBuilder {
                 }
                 #[cfg(any(feature = "native-tls", feature = "__rustls",))]
                 TlsBackend::UnknownPreconfigured => {
-                    return Err(crate::error::builder(
+                    return Err(reqwest_error::builder(
                         "Unknown TLS backend passed to `use_preconfigured_tls`",
                     ));
                 }
@@ -801,7 +801,7 @@ impl ClientBuilder {
                 self.config.headers.insert(USER_AGENT, value);
             }
             Err(e) => {
-                self.config.error = Some(crate::error::builder(e.into()));
+                self.config.error = Some(reqwest_error::builder(e.into()));
             }
         };
         self
@@ -2548,7 +2548,7 @@ impl Future for PendingRequest {
         if let Some(delay) = self.as_mut().total_timeout().as_mut().as_pin_mut() {
             if let Poll::Ready(()) = delay.poll(cx) {
                 return Poll::Ready(Err(
-                    crate::error::request(crate::error::TimedOut).with_url(self.url.clone())
+                    reqwest_error::request(reqwest_error::TimedOut).with_url(self.url.clone())
                 ));
             }
         }
@@ -2556,7 +2556,7 @@ impl Future for PendingRequest {
         if let Some(delay) = self.as_mut().read_timeout().as_mut().as_pin_mut() {
             if let Poll::Ready(()) = delay.poll(cx) {
                 return Poll::Ready(Err(
-                    crate::error::request(crate::error::TimedOut).with_url(self.url.clone())
+                    reqwest_error::request(reqwest_error::TimedOut).with_url(self.url.clone())
                 ));
             }
         }
@@ -2570,7 +2570,7 @@ impl Future for PendingRequest {
                             continue;
                         }
                         return Poll::Ready(Err(
-                            crate::error::request(e).with_url(self.url.clone())
+                            reqwest_error::request(e).with_url(self.url.clone())
                         ));
                     }
                     Poll::Ready(Ok(res)) => res.map(super::body::boxed),
@@ -2583,7 +2583,7 @@ impl Future for PendingRequest {
                             continue;
                         }
                         return Poll::Ready(Err(
-                            crate::error::request(e).with_url(self.url.clone())
+                            reqwest_error::request(e).with_url(self.url.clone())
                         ));
                     }
                     Poll::Ready(Ok(res)) => res,
@@ -2735,7 +2735,7 @@ impl Future for PendingRequest {
                             debug!("redirect policy disallowed redirection to '{loc}'");
                         }
                         redirect::ActionKind::Error(err) => {
-                            return Poll::Ready(Err(crate::error::redirect(err, self.url.clone())));
+                            return Poll::Ready(Err(reqwest_error::redirect(err, self.url.clone())));
                         }
                     }
                 }

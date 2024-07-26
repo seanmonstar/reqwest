@@ -1,0 +1,18 @@
+[package]
+name = "reqwest-error"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+http = { workspace = true }
+url = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+hyper-util = { workspace = true, features = ["client-legacy"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+
+[dev-dependencies]
+reqwest = { workspace = true }

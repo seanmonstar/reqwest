@@ -189,17 +189,17 @@ async fn fetch(req: Request) -> crate::Result<Response> {
 
     // convert HeaderMap to Headers
     let js_headers = web_sys::Headers::new()
-        .map_err(crate::error::wasm)
-        .map_err(crate::error::builder)?;
+        .map_err(reqwest_error::wasm)
+        .map_err(reqwest_error::builder)?;
 
     for (name, value) in req.headers() {
         js_headers
             .append(
                 name.as_str(),
-                value.to_str().map_err(crate::error::builder)?,
+                value.to_str().map_err(reqwest_error::builder)?,
             )
-            .map_err(crate::error::wasm)
-            .map_err(crate::error::builder)?;
+            .map_err(reqwest_error::wasm)
+            .map_err(reqwest_error::builder)?;
     }
     init.headers(&js_headers.into());
 
@@ -222,14 +222,14 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     init.signal(Some(&abort.signal()));
 
     let js_req = web_sys::Request::new_with_str_and_init(req.url().as_str(), &init)
-        .map_err(crate::error::wasm)
-        .map_err(crate::error::builder)?;
+        .map_err(reqwest_error::wasm)
+        .map_err(reqwest_error::builder)?;
 
     // Await the fetch() promise
     let p = js_fetch(&js_req);
     let js_resp = super::promise::<web_sys::Response>(p)
         .await
-        .map_err(crate::error::request)?;
+        .map_err(reqwest_error::request)?;
 
     // Convert from the js Response
     let mut resp = http::Response::builder().status(js_resp.status());
@@ -253,7 +253,7 @@ async fn fetch(req: Request) -> crate::Result<Response> {
 
     resp.body(js_resp)
         .map(|resp| Response::new(resp, url, abort))
-        .map_err(crate::error::request)
+        .map_err(reqwest_error::request)
 }
 
 // ===== impl ClientBuilder =====
@@ -289,7 +289,7 @@ impl ClientBuilder {
                 self.config.headers.insert(USER_AGENT, value);
             }
             Err(e) => {
-                self.config.error = Some(crate::error::builder(e.into()));
+                self.config.error = Some(reqwest_error::builder(e.into()));
             }
         }
         self

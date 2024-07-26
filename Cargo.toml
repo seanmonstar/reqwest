@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/*"]
+resolver = "2"
 
 [workspace.package]
 repository = "https://github.com/seanmonstar/reqwest"
@@ -7,3 +8,12 @@ authors = ["Sean McArthur <sean@seanmonstar.com>"]
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 edition = "2021"
+
+[workspace.dependencies]
+http = "1"
+hyper-util = { version = "0.1.3" }
+js-sys = "0.3.45"
+reqwest-error = { path = "crates/error", version = "1.0.0" }
+reqwest = { path = "crates/reqwest" }
+url = "2.4"
+wasm-bindgen = "0.2.68"
