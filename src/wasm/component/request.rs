@@ -388,7 +388,7 @@ impl RequestBuilder {
     /// ```
     pub async fn send(self) -> crate::Result<Response> {
         let req = self.request?;
-        self.client.execute_request(req).await
+        self.client.execute_request(req)?.await
     }
 
     /// Attempt to clone the RequestBuilder.

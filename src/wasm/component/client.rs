@@ -1,8 +1,12 @@
 use http::header::USER_AGENT;
 use http::{HeaderMap, HeaderValue, Method};
+use std::any::Any;
 use std::convert::TryInto;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::{fmt, future::Future, sync::Arc};
 
+use super::bindings::wasi::http::types::{FutureIncomingResponse, Pollable};
 use super::{Request, RequestBuilder, Response};
 use crate::{wasm::component::bindings::wasi, IntoUrl};
 
@@ -107,10 +111,7 @@ impl Client {
     ///
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
-    pub fn execute(
-        &self,
-        request: Request,
-    ) -> impl Future<Output = Result<Response, crate::Error>> {
+    pub fn execute(&self, request: Request) -> crate::Result<ResponseFuture> {
         self.execute_request(request)
     }
 
@@ -127,10 +128,7 @@ impl Client {
         }
     }
 
-    pub(super) fn execute_request(
-        &self,
-        mut req: Request,
-    ) -> impl Future<Output = crate::Result<Response>> {
+    pub(super) fn execute_request(&self, mut req: Request) -> crate::Result<ResponseFuture> {
         self.merge_headers(&mut req);
         fetch(req)
     }
@@ -158,7 +156,7 @@ impl fmt::Debug for ClientBuilder {
     }
 }
 
-async fn fetch(req: Request) -> crate::Result<Response> {
+fn fetch(req: Request) -> crate::Result<ResponseFuture> {
     let headers = wasi::http::types::Fields::new();
     for (name, value) in req.headers() {
         // TODO: see if we can avoid the extra allocation
@@ -211,28 +209,47 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         ))
     })?;
 
-    let response = match wasi::http::outgoing_handler::handle(outgoing_request, None) {
-        Ok(resp) => {
-            // NOTE(brooksmtownsend): This is technically blocking in an async context, however
-            // this is only ever called inside of a Wasm context which is single threaded. That
-            // being said, more investigation is needed to see if we can implement a poll function
-            // or if this entire fetch function should be sync blocking.
-            resp.subscribe().block();
-            let response = match resp.get() {
-                None => Err(crate::error::request("http request response missing")),
-                // Shouldn't occur
-                Some(Err(_)) => Err(crate::error::request(
-                    "http request response requested more than once",
-                )),
-                Some(Ok(response)) => response.map_err(crate::error::request),
-            }?;
-
-            Response::new(http::Response::new(response), url.clone())
-        }
+    match wasi::http::outgoing_handler::handle(outgoing_request, None) {
+        Ok(resp) => Ok(ResponseFuture {
+            future: resp,
+            url: url.clone(),
+        }),
         Err(e) => return Err(crate::error::request(e)),
-    };
+    }
+}
 
-    Ok(response)
+#[derive(Debug)]
+pub struct ResponseFuture {
+    future: FutureIncomingResponse,
+    url: url::Url,
+}
+
+impl Future for ResponseFuture {
+    type Output = crate::Result<Response>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.future.subscribe().ready() {
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
+
+        let result = match self.future.get() {
+            None => Err(crate::error::request("http request response missing")),
+            // Shouldn't occur
+            Some(Err(_)) => Err(crate::error::request(
+                "http request response requested more than once",
+            )),
+            Some(Ok(response)) => response.map_err(crate::error::request),
+        };
+
+        match result {
+            Ok(response) => Poll::Ready(Ok(Response::new(
+                http::Response::new(response),
+                self.url.clone(),
+            ))),
+            Err(e) => Poll::Ready(Err(e)),
+        }
+    }
 }
 
 // ===== impl ClientBuilder =====
