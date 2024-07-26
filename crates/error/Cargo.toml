@@ -8,7 +8,7 @@ http = { workspace = true }
 url = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-hyper-util = { workspace = true, features = ["client-legacy"] }
+hyper-util = { workspace = true, features = ["client-legacy", "http1"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = { workspace = true }
