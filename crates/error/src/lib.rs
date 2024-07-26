@@ -29,7 +29,9 @@ struct Inner {
 }
 
 impl Error {
-    pub(crate) fn new<E>(kind: Kind, source: Option<E>) -> Error
+    /// For internal use only.
+    #[doc(hidden)]
+    pub fn new<E>(kind: Kind, source: Option<E>) -> Error
     where
         E: Into<BoxError>,
     {
@@ -160,10 +162,9 @@ impl Error {
         }
     }
 
-    // private
-
-    #[allow(unused)]
-    pub(crate) fn into_io(self) -> io::Error {
+    /// For internal use only.
+    #[doc(hidden)]
+    pub fn into_io(self) -> io::Error {
         io::Error::new(io::ErrorKind::Other, self)
     }
 }
@@ -233,8 +234,10 @@ impl From<Error> for js_sys::Error {
     }
 }
 
+/// For internal use only.
+#[doc(hidden)]
 #[derive(Debug)]
-pub(crate) enum Kind {
+pub enum Kind {
     Builder,
     Request,
     Redirect,
@@ -308,8 +311,9 @@ pub fn into_io(e: BoxError) -> io::Error {
     io::Error::new(io::ErrorKind::Other, e)
 }
 
-#[allow(unused)]
-pub(crate) fn decode_io(e: io::Error) -> Error {
+/// For internal use only.
+#[doc(hidden)]
+pub fn decode_io(e: io::Error) -> Error {
     if e.get_ref().map(|r| r.is::<Error>()).unwrap_or(false) {
         *e.into_inner()
             .expect("io::Error::get_ref was Some(_)")

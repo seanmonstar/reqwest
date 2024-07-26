@@ -7,7 +7,7 @@ mod pool;
 use crate::async_impl::body::ResponseBody;
 use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
 use reqwest_error::{BoxError, Error, Kind};
-use crate::{error, Body};
+use crate::Body;
 use connect::H3Connector;
 use futures_util::future;
 use http::{Request, Response};
@@ -52,7 +52,7 @@ impl H3Client {
     ) -> Result<Response<ResponseBody>, Error> {
         let mut pooled = match self.get_pooled_client(key).await {
             Ok(client) => client,
-            Err(e) => return Err(error::request(e)),
+            Err(e) => return Err(reqwest_error::request(e)),
         };
         pooled
             .send_request(req)
