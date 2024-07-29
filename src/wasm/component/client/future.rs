@@ -125,33 +125,38 @@ impl Future for RequestWriteState {
 
         // stream is ready when all data is flushed, and if we wrote all the bytes we
         // are ready to continue.
-        if stream.subscribe().ready() && this.bytes_written == bytes.len() as u64 {
-            // will trap if not dropped before body
-            drop(stream);
+        if this.bytes_written == bytes.len() as u64 {
+            if stream.subscribe().ready() {
+                // will trap if not dropped before body
+                drop(stream);
 
-            let outgoing_request = this.outgoing_request.take().expect("state error");
-            let outgoing_body = this.outgoing_body.take().expect("state error");
+                let outgoing_request = this.outgoing_request.take().expect("state error");
+                let outgoing_body = this.outgoing_body.take().expect("state error");
 
-            if OutgoingBody::finish(outgoing_body, None).is_err() {
-                return Poll::Ready(Err(crate::error::request("request error")));
-            }
-
-            match wasi::http::outgoing_handler::handle(outgoing_request, None) {
-                Ok(future) => {
-                    return Poll::Ready(Ok(future));
-                }
-                Err(e) => {
+                if OutgoingBody::finish(outgoing_body, None).is_err() {
                     return Poll::Ready(Err(crate::error::request("request error")));
                 }
-            }
-        } else if !stream.subscribe().ready() && this.bytes_written == bytes.len() as u64 {
-            this.stream.insert(stream);
-            cx.waker().wake_by_ref();
 
-            return Poll::Pending;
+                match wasi::http::outgoing_handler::handle(outgoing_request, None) {
+                    Ok(future) => {
+                        return Poll::Ready(Ok(future));
+                    }
+                    Err(e) => {
+                        return Poll::Ready(Err(crate::error::request("request error")));
+                    }
+                }
+            } else {
+                this.stream.insert(stream);
+                cx.waker().wake_by_ref();
+
+                return Poll::Pending;
+            }
         }
 
-        let Ok(bytes_to_write) = stream.check_write().map(|len| len.min(bytes.len() as u64)) else {
+        let Ok(bytes_to_write) = stream
+            .check_write()
+            .map(|len| len.min(bytes.len() as u64 - this.bytes_written))
+        else {
             return Poll::Ready(Err(crate::error::request(
                 "outgoing body write check write error",
             )));
@@ -175,9 +180,7 @@ impl Future for RequestWriteState {
         this.bytes_written += bytes_to_write;
         this.stream.insert(stream);
 
-        let bytes_left = bytes.len() as u64 - this.bytes_written;
-
-        if bytes_left != bytes.len() as u64 {
+        if this.bytes_written != bytes.len() as u64 {
             cx.waker().wake_by_ref();
             return Poll::Pending;
         } else {
