@@ -34,13 +34,16 @@ impl ResponseFuture {
                     return Err(crate::error::request("outgoing body write error"));
                 };
 
-                RequestState::Write(RequestWriteState {
-                    outgoing_request: Some(outgoing_request),
-                    outgoing_body: Some(outgoing_body),
-                    stream: Some(stream),
-                    body,
-                    bytes_written: 0,
-                })
+                match wasi::http::outgoing_handler::handle(outgoing_request, None) {
+                    Ok(future) => RequestState::Write(RequestWriteState {
+                        response_future: Some(future),
+                        outgoing_body: Some(outgoing_body),
+                        stream: Some(stream),
+                        body,
+                        bytes_written: 0,
+                    }),
+                    Err(e) => return Err(crate::error::request("request error")),
+                }
             }
             None => match wasi::http::outgoing_handler::handle(outgoing_request, None) {
                 Ok(future) => RequestState::Response(future),
@@ -101,7 +104,7 @@ enum RequestState {
 
 #[derive(Debug)]
 struct RequestWriteState {
-    outgoing_request: Option<OutgoingRequest>,
+    response_future: Option<FutureIncomingResponse>,
     outgoing_body: Option<OutgoingBody>,
     stream: Option<OutputStream>,
     body: Body,
@@ -126,31 +129,35 @@ impl Future for RequestWriteState {
         // stream is ready when all data is flushed, and if we wrote all the bytes we
         // are ready to continue.
         if this.bytes_written == bytes.len() as u64 {
+            if stream.flush().is_err() {
+                return Poll::Ready(Err(crate::error::request(
+                    "outgoing body write flush error",
+                )));
+            }
+
             if stream.subscribe().ready() {
                 // will trap if not dropped before body
                 drop(stream);
 
-                let outgoing_request = this.outgoing_request.take().expect("state error");
+                let future = this.response_future.take().expect("state error");
                 let outgoing_body = this.outgoing_body.take().expect("state error");
 
                 if OutgoingBody::finish(outgoing_body, None).is_err() {
                     return Poll::Ready(Err(crate::error::request("request error")));
                 }
 
-                match wasi::http::outgoing_handler::handle(outgoing_request, None) {
-                    Ok(future) => {
-                        return Poll::Ready(Ok(future));
-                    }
-                    Err(e) => {
-                        return Poll::Ready(Err(crate::error::request("request error")));
-                    }
-                }
+                return Poll::Ready(Ok(future));
             } else {
                 this.stream.insert(stream);
                 cx.waker().wake_by_ref();
 
                 return Poll::Pending;
             }
+        } else if !stream.subscribe().ready() {
+            this.stream.insert(stream);
+            cx.waker().wake_by_ref();
+
+            return Poll::Pending;
         }
 
         let Ok(bytes_to_write) = stream
@@ -170,12 +177,6 @@ impl Future for RequestWriteState {
                 "outgoing body write bytes error",
             )));
         };
-
-        if stream.flush().is_err() {
-            return Poll::Ready(Err(crate::error::request(
-                "outgoing body write flush error",
-            )));
-        }
 
         this.bytes_written += bytes_to_write;
         this.stream.insert(stream);

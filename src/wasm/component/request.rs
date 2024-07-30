@@ -10,7 +10,7 @@ use url::Url;
 use web_sys::RequestCredentials;
 
 use super::{Body, Client, Response};
-use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
+use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {

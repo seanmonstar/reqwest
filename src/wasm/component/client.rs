@@ -1,6 +1,6 @@
 #![allow(warnings)]
 
-use http::header::USER_AGENT;
+use http::header::{CONTENT_LENGTH, USER_AGENT};
 use http::{HeaderMap, HeaderValue, Method};
 use std::any::Any;
 use std::convert::TryInto;
@@ -175,17 +175,29 @@ fn fetch(req: Request) -> crate::Result<ResponseFuture> {
             .map_err(crate::error::builder)?;
     }
 
+    if let Some(body) = req.body().and_then(|b| b.as_bytes()) {
+        headers
+            .append(
+                &CONTENT_LENGTH.to_string(),
+                &format!("{}", body.len()).as_bytes().to_vec(),
+            )
+            .map_err(crate::error::builder)?;
+    }
+
     // Construct `OutgoingRequest`
     let outgoing_request = wasi::http::types::OutgoingRequest::new(headers);
     let url = req.url();
+
     if url.has_authority() {
         outgoing_request
             .set_authority(Some(url.authority()))
             .map_err(|_| crate::error::request("failed to set authority on request"))?;
     }
+
     outgoing_request
         .set_path_with_query(Some(url.path()))
         .map_err(|_| crate::error::request("failed to set path with query on request"))?;
+
     match url.scheme() {
         "http" => outgoing_request.set_scheme(Some(&wasi::http::types::Scheme::Http)),
         "https" => outgoing_request.set_scheme(Some(&wasi::http::types::Scheme::Https)),
