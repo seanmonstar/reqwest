@@ -470,12 +470,10 @@ impl Version {
     }
 }
 
-#[derive(Default)]
 pub(crate) enum TlsBackend {
     // This is the default and HTTP/3 feature does not use it so suppress it.
     #[allow(dead_code)]
     #[cfg(feature = "default-tls")]
-    #[default]
     Default,
     #[cfg(feature = "native-tls")]
     BuiltNativeTls(native_tls_crate::TlsConnector),
@@ -500,6 +498,24 @@ impl fmt::Debug for TlsBackend {
             TlsBackend::BuiltRustls(_) => write!(f, "BuiltRustls"),
             #[cfg(any(feature = "native-tls", feature = "__rustls",))]
             TlsBackend::UnknownPreconfigured => write!(f, "UnknownPreconfigured"),
+        }
+    }
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for TlsBackend {
+    fn default() -> TlsBackend {
+        #[cfg(all(feature = "default-tls", not(feature = "http3")))]
+        {
+            TlsBackend::Default
+        }
+
+        #[cfg(any(
+            all(feature = "__rustls", not(feature = "default-tls")),
+            feature = "http3"
+        ))]
+        {
+            TlsBackend::Rustls
         }
     }
 }
