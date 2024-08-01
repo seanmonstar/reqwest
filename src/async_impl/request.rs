@@ -647,10 +647,9 @@ impl TryFrom<Request> for HttpRequest<Body> {
     }
 }
 
+#[cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
 #[cfg(test)]
 mod tests {
-    #![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
-
     use super::{Client, HttpRequest, Request, RequestBuilder, Version};
     use crate::Method;
     use serde::Serialize;

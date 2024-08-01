@@ -197,7 +197,7 @@ impl ClientBuilder {
                 connect_timeout: None,
                 connection_verbose: false,
                 pool_idle_timeout: Some(Duration::from_secs(90)),
-                pool_max_idle_per_host: std::usize::MAX,
+                pool_max_idle_per_host: usize::MAX,
                 // TODO: Re-enable default duration once hyper's HttpConnector is fixed
                 // to no longer error when an option fails.
                 tcp_keepalive: None, //Some(Duration::from_secs(60)),
@@ -2785,10 +2785,9 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &dyn cookie::CookieS
     }
 }
 
+#[cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
 #[cfg(test)]
 mod tests {
-    #![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
-
     #[tokio::test]
     async fn execute_request_rejects_invalid_urls() {
         let url_str = "hxxps://www.rust-lang.org/";

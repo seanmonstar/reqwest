@@ -144,14 +144,11 @@ impl<S: IntoUrl> IntoProxyScheme for S {
                 let mut source = e.source();
                 while let Some(err) = source {
                     if let Some(parse_error) = err.downcast_ref::<url::ParseError>() {
-                        match parse_error {
-                            url::ParseError::RelativeUrlWithoutBase => {
-                                presumed_to_have_scheme = false;
-                                break;
-                            }
-                            _ => {}
+                        if parse_error == &url::ParseError::RelativeUrlWithoutBase {
+                            presumed_to_have_scheme = false;
+                            break;
                         }
-                    } else if let Some(_) = err.downcast_ref::<crate::error::BadScheme>() {
+                    } else if err.downcast_ref::<crate::error::BadScheme>().is_some() {
                         presumed_to_have_scheme = false;
                         break;
                     }
@@ -463,10 +460,10 @@ impl NoProxy {
     /// * If neither environment variable is set, `None` is returned
     /// * Entries are expected to be comma-separated (whitespace between entries is ignored)
     /// * IP addresses (both IPv4 and IPv6) are allowed, as are optional subnet masks (by adding /size,
-    /// for example "`192.168.1.0/24`").
+    ///   for example "`192.168.1.0/24`").
     /// * An entry "`*`" matches all hostnames (this is the only wildcard allowed)
     /// * Any other entry is considered a domain name (and may contain a leading dot, for example `google.com`
-    /// and `.google.com` are equivalent) and would match both that domain AND all subdomains.
+    ///   and `.google.com` are equivalent) and would match both that domain AND all subdomains.
     ///
     /// For example, if `"NO_PROXY=google.com, 192.168.1.0/24"` was set, all of the following would match
     /// (and therefore would bypass the proxy):
@@ -790,11 +787,13 @@ impl Intercept {
     }
 }
 
+type Func = Arc<dyn Fn(&Url) -> Option<crate::Result<ProxyScheme>> + Send + Sync + 'static>;
+
 #[derive(Clone)]
 struct Custom {
     // This auth only applies if the returned ProxyScheme doesn't have an auth...
     auth: Option<HeaderValue>,
-    func: Arc<dyn Fn(&Url) -> Option<crate::Result<ProxyScheme>> + Send + Sync + 'static>,
+    func: Func,
 }
 
 impl Custom {
@@ -1043,7 +1042,7 @@ fn parse_platform_values_impl(platform_values: String) -> SystemProxyMap {
                 [protocol, address] => {
                     // If address doesn't specify an explicit protocol as protocol://address
                     // then default to HTTP
-                    let address = if extract_type_prefix(*address).is_some() {
+                    let address = if extract_type_prefix(address).is_some() {
                         String::from(*address)
                     } else {
                         format!("http://{address}")
@@ -1059,15 +1058,13 @@ fn parse_platform_values_impl(platform_values: String) -> SystemProxyMap {
                 }
             }
         }
+    } else if let Some(scheme) = extract_type_prefix(&platform_values) {
+        // Explicit protocol has been specified
+        insert_proxy(&mut proxies, scheme, platform_values.to_owned());
     } else {
-        if let Some(scheme) = extract_type_prefix(&platform_values) {
-            // Explicit protocol has been specified
-            insert_proxy(&mut proxies, scheme, platform_values.to_owned());
-        } else {
-            // No explicit protocol has been specified, default to HTTP
-            insert_proxy(&mut proxies, "http", format!("http://{platform_values}"));
-            insert_proxy(&mut proxies, "https", format!("http://{platform_values}"));
-        }
+        // No explicit protocol has been specified, default to HTTP
+        insert_proxy(&mut proxies, "http", format!("http://{platform_values}"));
+        insert_proxy(&mut proxies, "https", format!("http://{platform_values}"));
     }
     proxies
 }
@@ -1333,7 +1330,7 @@ mod tests {
         // Let other threads run now
         drop(_lock);
 
-        assert_eq!(baseline_proxies.contains_key("http"), false);
+        assert!(!baseline_proxies.contains_key("http"));
 
         let p = &valid_proxies["http"];
         assert_eq!(p.scheme(), "http");
