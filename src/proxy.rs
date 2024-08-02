@@ -897,6 +897,13 @@ fn insert_proxy(proxies: &mut SystemProxyMap, scheme: impl Into<String>, addr: S
 fn get_from_environment() -> SystemProxyMap {
     let mut proxies = HashMap::new();
 
+    if !(insert_from_env(&mut proxies, "http", "ALL_PROXY")
+        && insert_from_env(&mut proxies, "https", "ALL_PROXY"))
+    {
+        insert_from_env(&mut proxies, "http", "all_proxy");
+        insert_from_env(&mut proxies, "https", "all_proxy");
+    }
+
     if is_cgi() {
         if log::log_enabled!(log::Level::Warn) && env::var_os("HTTP_PROXY").is_some() {
             log::warn!("HTTP_PROXY environment variable ignored in CGI");
@@ -907,13 +914,6 @@ fn get_from_environment() -> SystemProxyMap {
 
     if !insert_from_env(&mut proxies, "https", "HTTPS_PROXY") {
         insert_from_env(&mut proxies, "https", "https_proxy");
-    }
-
-    if !(insert_from_env(&mut proxies, "http", "ALL_PROXY")
-        && insert_from_env(&mut proxies, "https", "ALL_PROXY"))
-    {
-        insert_from_env(&mut proxies, "http", "all_proxy");
-        insert_from_env(&mut proxies, "https", "all_proxy");
     }
 
     proxies
@@ -1300,7 +1300,10 @@ mod tests {
         assert_eq!(p.host(), "127.0.0.1");
 
         assert_eq!(all_proxies.len(), 2);
-        assert!(all_proxies.values().all(|p| p.host() == "127.0.0.2"));
+        // Set by ALL_PROXY
+        assert_eq!(all_proxies["https"].host(), "127.0.0.2");
+        // Overwritten by the more specific HTTP_PROXY
+        assert_eq!(all_proxies["http"].host(), "127.0.0.1");
     }
 
     #[cfg(any(target_os = "windows", target_os = "macos"))]
