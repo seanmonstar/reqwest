@@ -1,4 +1,10 @@
 use std::fmt;
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate"
+))]
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -15,9 +21,16 @@ use async_compression::tokio::bufread::ZstdDecoder;
 #[cfg(feature = "deflate")]
 use async_compression::tokio::bufread::ZlibDecoder;
 
-use bytes::Bytes;
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate",
+    feature = "blocking",
+))]
 use futures_core::Stream;
-use futures_util::stream::Peekable;
+
+use bytes::Bytes;
 use http::HeaderMap;
 use hyper::body::Body as HttpBody;
 use hyper::body::Frame;
@@ -38,7 +51,6 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 use tokio_util::io::StreamReader;
 
 use super::body::ResponseBody;
-use crate::error;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Accepts {
@@ -74,7 +86,13 @@ pub(crate) struct Decoder {
     inner: Inner,
 }
 
-type PeekableIoStream = Peekable<IoStream>;
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate"
+))]
+type PeekableIoStream = futures_util::stream::Peekable<IoStream>;
 
 #[cfg(any(
     feature = "gzip",
@@ -114,11 +132,30 @@ enum Inner {
     Pending(Pin<Box<Pending>>),
 }
 
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate"
+))]
 /// A future attempt to poll the response body for EOF so we know whether to use gzip or not.
 struct Pending(PeekableIoStream, DecoderType);
 
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate",
+    feature = "blocking",
+))]
 pub(crate) struct IoStream<B = ResponseBody>(B);
 
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate"
+))]
 enum DecoderType {
     #[cfg(feature = "gzip")]
     Gzip,
@@ -376,11 +413,24 @@ impl HttpBody for Decoder {
     }
 }
 
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate",
+    feature = "blocking",
+))]
 fn empty() -> ResponseBody {
     use http_body_util::{combinators::BoxBody, BodyExt, Empty};
     BoxBody::new(Empty::new().map_err(|never| match never {}))
 }
 
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate"
+))]
 impl Future for Pending {
     type Output = Result<Inner, std::io::Error>;
 
@@ -429,6 +479,13 @@ impl Future for Pending {
     }
 }
 
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate",
+    feature = "blocking",
+))]
 impl<B> Stream for IoStream<B>
 where
     B: HttpBody<Data = Bytes> + Unpin,
@@ -447,7 +504,7 @@ where
                         continue;
                     }
                 }
-                Some(Err(err)) => Poll::Ready(Some(Err(error::into_io(err.into())))),
+                Some(Err(err)) => Poll::Ready(Some(Err(crate::error::into_io(err.into())))),
                 None => Poll::Ready(None),
             };
         }

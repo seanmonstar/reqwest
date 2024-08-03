@@ -287,6 +287,13 @@ pub(crate) fn upgrade<E: Into<BoxError>>(e: E) -> Error {
 
 // io::Error helpers
 
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate",
+    feature = "blocking",
+))]
 pub(crate) fn into_io(e: BoxError) -> io::Error {
     io::Error::new(io::ErrorKind::Other, e)
 }
