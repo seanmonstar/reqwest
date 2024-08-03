@@ -48,6 +48,7 @@ pin_project! {
 }
 
 /// Converts any `impl Body` into a `impl Stream` of just its DATA frames.
+#[cfg(any(feature = "stream", feature = "multipart",))]
 pub(crate) struct DataStream<B>(pub(crate) B);
 
 impl Body {
@@ -434,6 +435,7 @@ where
 
 // ===== impl DataStream =====
 
+#[cfg(any(feature = "stream", feature = "multipart",))]
 impl<B> futures_core::Stream for DataStream<B>
 where
     B: HttpBody<Data = Bytes> + Unpin,
