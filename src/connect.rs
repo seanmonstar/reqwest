@@ -773,10 +773,23 @@ where
                 return Err("proxy headers too long for tunnel".into());
             }
         // else read more
-        } else if recvd.starts_with(b"HTTP/1.1 407") {
-            return Err("proxy authentication required".into());
-        } else {
-            return Err("unsuccessful tunnel".into());
+        }  else {
+            return if let Some(line_end) = recvd.windows(2).position(|w| w == b"\r\n") {
+                let line = &buf[..line_end];
+                let line = std::str::from_utf8(line)?;
+                let mut splits = line.splitn(3, ' ');
+                splits.next().unwrap_or("");
+                splits.next().unwrap_or("");
+                let status_text = splits.next().unwrap_or("");
+
+                return if !status_text.is_empty() {
+                    Err(status_text.into())
+                } else {
+                    Err("unsuccessful tunnel".into())
+                }
+            } else {
+                Err("unsuccessful tunnel".into())
+            }
         }
     }
 }
@@ -1351,7 +1364,8 @@ mod tests {
             tunnel(tcp, host, port, ua(), None).await
         };
 
-        rt.block_on(f).unwrap_err();
+        let error = rt.block_on(f).unwrap_err();
+        assert_eq!(error.to_string(), "unexpected eof while tunneling");
     }
 
     #[test]
@@ -1369,7 +1383,8 @@ mod tests {
             tunnel(tcp, host, port, ua(), None).await
         };
 
-        rt.block_on(f).unwrap_err();
+        let error = rt.block_on(f).unwrap_err();
+        assert_eq!(error.to_string(), "unsuccessful tunnel");
     }
 
     #[test]
@@ -1394,7 +1409,56 @@ mod tests {
         };
 
         let error = rt.block_on(f).unwrap_err();
-        assert_eq!(error.to_string(), "proxy authentication required");
+        assert_eq!(error.to_string(), "Proxy Authentication Required");
+    }
+
+    #[test]
+    fn test_tunnel_service_unavailable() {
+        let addr = mock_tunnel!(
+            b"\
+            HTTP/1.1 503 Service Unavailable\r\n\
+            Retry-After: 3600\r\n\
+            \r\n\
+        "
+        );
+
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
+        let f = async move {
+            let tcp = TokioIo::new(TcpStream::connect(&addr).await?);
+            let host = addr.ip().to_string();
+            let port = addr.port();
+            tunnel(tcp, host, port, ua(), None).await
+        };
+
+        let error = rt.block_on(f).unwrap_err();
+        assert_eq!(error.to_string(), "Service Unavailable");
+    }
+
+    #[test]
+    fn test_tunnel_bad_gateway() {
+        let addr = mock_tunnel!(
+            b"\
+            HTTP/1.1 502 Bad Gateway\r\n\
+            \r\n\
+        "
+        );
+
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
+        let f = async move {
+            let tcp = TokioIo::new(TcpStream::connect(&addr).await?);
+            let host = addr.ip().to_string();
+            let port = addr.port();
+            tunnel(tcp, host, port, ua(), None).await
+        };
+
+        let error = rt.block_on(f).unwrap_err();
+        assert_eq!(error.to_string(), "Bad Gateway");
     }
 
     #[test]
