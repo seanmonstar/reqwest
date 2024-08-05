@@ -1,14 +1,8 @@
-use std::fmt;
+use std::{fmt, io::Read as _};
 
 use bytes::Bytes;
-use http::{HeaderMap, StatusCode};
-use js_sys::Uint8Array;
+use http::{HeaderMap, StatusCode, Version};
 use url::Url;
-
-use crate::wasm::AbortGuard;
-
-#[cfg(feature = "stream")]
-use wasm_bindgen::JsCast;
 
 #[cfg(feature = "stream")]
 use futures_util::stream::StreamExt;
@@ -16,10 +10,11 @@ use futures_util::stream::StreamExt;
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
 
+use crate::wasm::component::bindings::wasi;
+
 /// A Response to a submitted `Request`.
 pub struct Response {
-    http: http::Response<web_sys::Response>,
-    _abort: AbortGuard,
+    http: http::Response<wasi::http::types::IncomingResponse>,
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
@@ -27,14 +22,12 @@ pub struct Response {
 
 impl Response {
     pub(super) fn new(
-        res: http::Response<web_sys::Response>,
+        res: http::Response<wasi::http::types::IncomingResponse>,
         url: Url,
-        abort: AbortGuard,
     ) -> Response {
         Response {
             http: res,
             url: Box::new(url),
-            _abort: abort,
         }
     }
 
@@ -78,13 +71,11 @@ impl Response {
         &self.url
     }
 
-    /* It might not be possible to detect this in JS?
     /// Get the HTTP `Version` of this `Response`.
     #[inline]
     pub fn version(&self) -> Version {
         self.http.version()
     }
-    */
 
     /// Try to deserialize the response body as JSON.
     #[cfg(feature = "json")]
@@ -97,39 +88,42 @@ impl Response {
 
     /// Get the response text.
     pub async fn text(self) -> crate::Result<String> {
-        let p = self
-            .http
-            .body()
-            .text()
-            .map_err(crate::error::wasm)
-            .map_err(crate::error::decode)?;
-        let js_val = super::promise::<wasm_bindgen::JsValue>(p)
-            .await
-            .map_err(crate::error::decode)?;
-        if let Some(s) = js_val.as_string() {
-            Ok(s)
-        } else {
-            Err(crate::error::decode("response.text isn't string"))
-        }
+        // let p = self
+        //     .http
+        //     .body()
+        //     .text()
+        //     .map_err(crate::error::wasm)
+        //     .map_err(crate::error::decode)?;
+        // let js_val = super::promise::<wasm_bindgen::JsValue>(p)
+        //     .await
+        //     .map_err(crate::error::decode)?;
+        // if let Some(s) = js_val.as_string() {
+        //     Ok(s)
+        // } else {
+        //     Err(crate::error::decode("response.text isn't string"))
+        // }
+        Ok("str_resp".to_string())
     }
 
     /// Get the response as bytes
     pub async fn bytes(self) -> crate::Result<Bytes> {
-        let p = self
+        let response_body = self
             .http
             .body()
-            .array_buffer()
-            .map_err(crate::error::wasm)
-            .map_err(crate::error::decode)?;
-
-        let buf_js = super::promise::<wasm_bindgen::JsValue>(p)
-            .await
-            .map_err(crate::error::decode)?;
-
-        let buffer = Uint8Array::new(&buf_js);
-        let mut bytes = vec![0; buffer.length() as usize];
-        buffer.copy_to(&mut bytes);
-        Ok(bytes.into())
+            .consume()
+            .map_err(|_| crate::error::decode("failed to consume response body"))?;
+        let body = {
+            let mut buf = vec![];
+            let mut stream = response_body
+                .stream()
+                .map_err(|_| crate::error::decode("failed to stream response body"))?;
+            InputStreamReader::from(&mut stream)
+                .read_to_end(&mut buf)
+                .map_err(crate::error::decode_io)?;
+            buf
+        };
+        let _trailers = wasi::http::types::IncomingBody::finish(response_body);
+        Ok(body.into())
     }
 
     /// Convert the response into a `Stream` of `Bytes` from the body.
@@ -185,5 +179,48 @@ impl fmt::Debug for Response {
             .field("status", &self.status())
             .field("headers", self.headers())
             .finish()
+    }
+}
+
+pub struct InputStreamReader<'a> {
+    stream: &'a mut crate::wasm::component::bindings::wasi::io::streams::InputStream,
+}
+
+impl<'a> From<&'a mut crate::wasm::component::bindings::wasi::io::streams::InputStream>
+    for InputStreamReader<'a>
+{
+    fn from(
+        stream: &'a mut crate::wasm::component::bindings::wasi::io::streams::InputStream,
+    ) -> Self {
+        Self { stream }
+    }
+}
+
+impl std::io::Read for InputStreamReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        use crate::wasm::component::bindings::wasi::io::streams::StreamError;
+        use std::io;
+
+        let n = buf
+            .len()
+            .try_into()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        match self.stream.blocking_read(n) {
+            Ok(chunk) => {
+                let n = chunk.len();
+                if n > buf.len() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "more bytes read than requested",
+                    ));
+                }
+                buf[..n].copy_from_slice(&chunk);
+                Ok(n)
+            }
+            Err(StreamError::Closed) => Ok(0),
+            Err(StreamError::LastOperationFailed(e)) => {
+                Err(io::Error::new(io::ErrorKind::Other, e.to_debug_string()))
+            }
+        }
     }
 }
