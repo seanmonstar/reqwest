@@ -29,10 +29,6 @@ use system_configuration::{
     sys::schema_definitions::kSCPropNetProxiesHTTPSPort,
     sys::schema_definitions::kSCPropNetProxiesHTTPSProxy,
 };
-#[cfg(target_os = "windows")]
-use winreg::enums::HKEY_CURRENT_USER;
-#[cfg(target_os = "windows")]
-use winreg::RegKey;
 
 /// Configuration of a proxy that a `Client` should pass requests to.
 ///
@@ -937,12 +933,11 @@ fn is_cgi() -> bool {
 
 #[cfg(target_os = "windows")]
 fn get_from_platform_impl() -> Result<Option<String>, Box<dyn Error>> {
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let internet_setting: RegKey =
-        hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")?;
+    let internet_setting = windows_registry::CURRENT_USER
+        .open("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")?;
     // ensure the proxy is enable, if the value doesn't exist, an error will returned.
-    let proxy_enable: u32 = internet_setting.get_value("ProxyEnable")?;
-    let proxy_server: String = internet_setting.get_value("ProxyServer")?;
+    let proxy_enable = internet_setting.get_u32("ProxyEnable")?;
+    let proxy_server = internet_setting.get_string("ProxyServer")?;
 
     Ok((proxy_enable == 1).then_some(proxy_server))
 }

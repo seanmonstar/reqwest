@@ -181,7 +181,7 @@ futures-util = { version = "0.3.28", default-features = false, features = ["std"
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 [target.'cfg(windows)'.dependencies]
-winreg = "0.52.0"
+windows-registry = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 system-configuration = { version = "0.5.1", optional = true }
