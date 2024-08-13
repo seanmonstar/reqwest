@@ -296,7 +296,7 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
         //
         // We need to know whether there is any data to send before
         // we check the transmission channel (with poll_ready below)
-        // because somestimes the receiver disappears as soon as is
+        // because sometimes the receiver disappears as soon as is
         // considers the data is completely transmitted, which may
         // be true.
         //

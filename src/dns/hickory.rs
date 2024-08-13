@@ -49,7 +49,7 @@ impl Iterator for SocketAddrs {
 
 /// Create a new resolver with the default configuration,
 /// which reads from `/etc/resolve.conf`. The options are
-/// overriden to look up for both IPv4 and IPv6 addresses
+/// overridden to look up for both IPv4 and IPv6 addresses
 /// to work with "happy eyeballs" algorithm.
 fn new_resolver() -> io::Result<TokioAsyncResolver> {
     let (config, mut opts) = system_conf::read_system_conf().map_err(|e| {
