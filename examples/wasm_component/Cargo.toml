@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 [dependencies]
 futures = "0.3.30"
 reqwest = { version = "0.12.4", path = "../../", features = ["stream"] }
-wasi = "0.13.2"
+wasi = "=0.13.1" # For compatibility, pin to wasi@0.2.0 bindings
 
 [profile.release]
 # Optimize for small code size

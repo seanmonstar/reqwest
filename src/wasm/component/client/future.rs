@@ -5,11 +5,11 @@ use std::{
 
 use futures_core::Future;
 use wasi::{
-        self,
-        http::{
-            outgoing_handler::{FutureIncomingResponse, OutgoingRequest},
-            types::{OutgoingBody, OutputStream},
-        },
+    self,
+    http::{
+        outgoing_handler::{FutureIncomingResponse, OutgoingRequest},
+        types::{OutgoingBody, OutputStream},
+    },
 };
 
 use crate::{Body, Request, Response};
@@ -69,6 +69,10 @@ impl Future for ResponseFuture {
             },
             RequestState::Response(future) => {
                 if !future.subscribe().ready() {
+                    // NOTE(brooksmtownsend): We shouldn't be waking here since we don't know that
+                    // the future is ready to be polled again. Sleeping for a nanosecond appears to
+                    // allow the future to be polled again without causing a busy loop.
+                    std::thread::sleep(std::time::Duration::from_nanos(1));
                     cx.waker().wake_by_ref();
                     return Poll::Pending;
                 }
