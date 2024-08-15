@@ -1720,14 +1720,7 @@ impl ClientBuilder {
         self
     }
 
-    /// Enables the [hickory-dns](hickory_resolver) async resolver instead of a default threadpool
-    /// using `getaddrinfo`.
-    ///
-    /// If the `hickory-dns` feature is turned on, the default option is enabled.
-    ///
-    /// # Optional
-    ///
-    /// This requires the optional `hickory-dns` feature to be enabled
+    #[doc(hidden)]
     #[cfg(feature = "hickory-dns")]
     #[cfg_attr(docsrs, doc(cfg(feature = "hickory-dns")))]
     #[deprecated(note = "use `hickory_dns` instead")]
@@ -1744,6 +1737,11 @@ impl ClientBuilder {
     /// # Optional
     ///
     /// This requires the optional `hickory-dns` feature to be enabled
+    ///
+    /// # Warning
+    ///
+    /// The hickory resolver does not work exactly the same, or on all the platforms
+    /// that the default resolver does
     #[cfg(feature = "hickory-dns")]
     #[cfg_attr(docsrs, doc(cfg(feature = "hickory-dns")))]
     pub fn hickory_dns(mut self, enable: bool) -> ClientBuilder {
@@ -1751,22 +1749,10 @@ impl ClientBuilder {
         self
     }
 
-    /// Disables the hickory-dns async resolver.
-    ///
-    /// This method exists even if the optional `hickory-dns` feature is not enabled.
-    /// This can be used to ensure a `Client` doesn't use the hickory-dns async resolver
-    /// even if another dependency were to enable the optional `hickory-dns` feature.
+    #[doc(hidden)]
     #[deprecated(note = "use `no_hickory_dns` instead")]
     pub fn no_trust_dns(self) -> ClientBuilder {
-        #[cfg(feature = "hickory-dns")]
-        {
-            self.hickory_dns(false)
-        }
-
-        #[cfg(not(feature = "hickory-dns"))]
-        {
-            self
-        }
+        self.no_hickory_dns()
     }
 
     /// Disables the hickory-dns async resolver.
