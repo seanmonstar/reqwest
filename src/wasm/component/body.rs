@@ -2,9 +2,7 @@
 use super::multipart::Form;
 /// dox
 use bytes::Bytes;
-use js_sys::Uint8Array;
 use std::{borrow::Cow, fmt};
-use wasm_bindgen::JsValue;
 
 /// The body of a `Request`.
 ///
@@ -38,19 +36,6 @@ impl Single {
         }
     }
 
-    #[allow(unused)]
-    pub(crate) fn to_js_value(&self) -> JsValue {
-        match self {
-            Single::Bytes(bytes) => {
-                let body_bytes: &[u8] = bytes.as_ref();
-                let body_uint8_array: Uint8Array = body_bytes.into();
-                let js_value: &JsValue = body_uint8_array.as_ref();
-                js_value.to_owned()
-            }
-            Single::Text(text) => JsValue::from_str(text),
-        }
-    }
-
     fn is_empty(&self) -> bool {
         match self {
             Single::Bytes(bytes) => bytes.is_empty(),
@@ -69,19 +54,6 @@ impl Body {
             Inner::Single(single) => Some(single.as_bytes()),
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(_) => None,
-        }
-    }
-
-    #[allow(unused)]
-    pub(crate) fn to_js_value(&self) -> crate::Result<JsValue> {
-        match &self.inner {
-            Inner::Single(single) => Ok(single.to_js_value()),
-            #[cfg(feature = "multipart")]
-            Inner::MultipartForm(form) => {
-                let form_data = form.to_form_data()?;
-                let js_value: &JsValue = form_data.as_ref();
-                Ok(js_value.to_owned())
-            }
         }
     }
 

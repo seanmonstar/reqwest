@@ -77,10 +77,6 @@ socks = ["dep:tokio-socks"]
 # Use the system's proxy configuration.
 macos-system-configuration = ["dep:system-configuration"]
 
-# Wasm features
-# Build Wasm as a wasi-p2 component with wasi-http bindings.
-wasm-component = ["dep:wit-bindgen"]
-
 # Experimental HTTP/3 client.
 http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "dep:slab", "dep:futures-channel"]
 
@@ -198,7 +194,9 @@ serde_json = "1.0"
 wasm-bindgen = "0.2.68"
 wasm-bindgen-futures = "0.4.18"
 wasm-streams = { version = "0.4", optional = true }
-wit-bindgen = { version = "0.24.0", optional = true }
+
+[target.'cfg(all(target_os = "wasi", target_env = "p2"))'.dependencies]
+wasi = { version = "0.13.0" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3.28"

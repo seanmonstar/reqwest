@@ -1,5 +1,0 @@
-package reqwest:http;
-
-world impl {
-    import wasi:http/outgoing-handler@0.2.0;
-}

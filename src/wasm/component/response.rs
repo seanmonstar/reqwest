@@ -4,13 +4,8 @@ use bytes::Bytes;
 use http::{HeaderMap, StatusCode, Version};
 use url::Url;
 
-#[cfg(feature = "stream")]
-use futures_util::stream::StreamExt;
-
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
-
-use crate::wasm::component::bindings::wasi;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -182,24 +177,21 @@ impl fmt::Debug for Response {
     }
 }
 
+/// Implements `std::io::Read` for a `wasi::io::streams::InputStream`.
 pub struct InputStreamReader<'a> {
-    stream: &'a mut crate::wasm::component::bindings::wasi::io::streams::InputStream,
+    stream: &'a mut wasi::io::streams::InputStream,
 }
 
-impl<'a> From<&'a mut crate::wasm::component::bindings::wasi::io::streams::InputStream>
-    for InputStreamReader<'a>
-{
-    fn from(
-        stream: &'a mut crate::wasm::component::bindings::wasi::io::streams::InputStream,
-    ) -> Self {
+impl<'a> From<&'a mut wasi::io::streams::InputStream> for InputStreamReader<'a> {
+    fn from(stream: &'a mut wasi::io::streams::InputStream) -> Self {
         Self { stream }
     }
 }
 
 impl std::io::Read for InputStreamReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        use crate::wasm::component::bindings::wasi::io::streams::StreamError;
         use std::io;
+        use wasi::io::streams::StreamError;
 
         let n = buf
             .len()

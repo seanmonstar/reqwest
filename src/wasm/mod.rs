@@ -1,8 +1,9 @@
-#[cfg(feature = "wasm-component")]
+#[cfg(all(target_os = "wasi", target_env = "p2"))]
 pub mod component;
-#[cfg(feature = "wasm-component")]
+#[cfg(all(target_os = "wasi", target_env = "p2"))]
 pub use component::*;
-#[cfg(not(feature = "wasm-component"))]
+
+#[cfg(not(all(target_os = "wasi", target_env = "p2")))]
 pub mod js;
-#[cfg(not(feature = "wasm-component"))]
+#[cfg(not(all(target_os = "wasi", target_env = "p2")))]
 pub use js::*;

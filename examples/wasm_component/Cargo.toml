@@ -10,5 +10,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 futures = "0.3.30"
-reqwest = { version = "0.12.4", path = "../../", features = [ "wasm-component" ] }
-wit-bindgen = { version = "0.24", features = ["default"] }
+reqwest = { version = "0.12.4", path = "../../", features = ["stream"] }
+wasi = "0.13.2"
+
+[profile.release]
+# Optimize for small code size
+lto = true
+opt-level = "s"
+strip = true

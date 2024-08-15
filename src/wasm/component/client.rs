@@ -10,13 +10,11 @@ use std::{fmt, future::Future, sync::Arc};
 
 use self::future::ResponseFuture;
 
-use super::bindings::wasi::http::outgoing_handler::{self, OutgoingRequest};
-use super::bindings::wasi::http::types::{
-    FutureIncomingResponse, OutgoingBody, OutputStream, Pollable,
-};
 use super::{Request, RequestBuilder, Response};
 use crate::Body;
-use crate::{wasm::component::bindings::wasi, IntoUrl};
+use crate::IntoUrl;
+use wasi::http::outgoing_handler::{self, OutgoingRequest};
+use wasi::http::types::{FutureIncomingResponse, OutgoingBody, OutputStream, Pollable};
 
 mod future;
 

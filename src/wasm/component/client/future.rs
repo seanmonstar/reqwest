@@ -4,17 +4,15 @@ use std::{
 };
 
 use futures_core::Future;
-
-use crate::{
-    wasm::component::bindings::wasi::{
+use wasi::{
         self,
         http::{
             outgoing_handler::{FutureIncomingResponse, OutgoingRequest},
             types::{OutgoingBody, OutputStream},
         },
-    },
-    Body, Request, Response,
 };
+
+use crate::{Body, Request, Response};
 
 #[derive(Debug)]
 pub struct ResponseFuture {
