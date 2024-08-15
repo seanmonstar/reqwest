@@ -1,6 +1,6 @@
 #![allow(warnings)]
 
-use http::header::{CONTENT_LENGTH, USER_AGENT};
+use http::header::{Entry, CONTENT_LENGTH, USER_AGENT};
 use http::{HeaderMap, HeaderValue, Method};
 use std::any::Any;
 use std::convert::TryInto;
@@ -8,34 +8,33 @@ use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 use std::{fmt, future::Future, sync::Arc};
 
-use self::future::ResponseFuture;
-
-use super::{Request, RequestBuilder, Response};
-use crate::Body;
-use crate::IntoUrl;
-use wasi::http::outgoing_handler::{self, OutgoingRequest};
+use crate::wasm::component::{Request, RequestBuilder, Response};
+use crate::{Body, IntoUrl};
+use wasi::http::outgoing_handler::OutgoingRequest;
 use wasi::http::types::{FutureIncomingResponse, OutgoingBody, OutputStream, Pollable};
 
 mod future;
+use future::ResponseFuture;
 
-/// dox
-#[derive(Clone)]
+/// A client for making HTTP requests.
+#[derive(Default, Debug, Clone)]
 pub struct Client {
     config: Arc<Config>,
 }
 
-/// dox
+/// A builder to configure a [`Client`].
+#[derive(Default, Debug)]
 pub struct ClientBuilder {
     config: Config,
 }
 
 impl Client {
-    /// Constructs a new `Client`.
+    /// Constructs a new [`Client`].
     pub fn new() -> Self {
         Client::builder().build().expect("Client::new()")
     }
 
-    /// dox
+    /// Constructs a new [`ClientBuilder`].
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }
@@ -123,12 +122,10 @@ impl Client {
         self.execute_request(request)
     }
 
-    // merge request headers with Client default_headers, prior to external http fetch
-    fn merge_headers(&self, req: &mut Request) {
-        use http::header::Entry;
+    /// Merge [`Request`] headers with default headers set in [`Config`]
+    fn merge_default_headers(&self, req: &mut Request) {
         let headers: &mut HeaderMap = req.headers_mut();
-        // insert default headers in the request headers
-        // without overwriting already appended headers.
+        // Insert without overwriting existing headers
         for (key, value) in self.config.headers.iter() {
             if let Entry::Vacant(entry) = headers.entry(key) {
                 entry.insert(value.clone());
@@ -137,37 +134,14 @@ impl Client {
     }
 
     pub(super) fn execute_request(&self, mut req: Request) -> crate::Result<ResponseFuture> {
-        self.merge_headers(&mut req);
+        self.merge_default_headers(&mut req);
         fetch(req)
-    }
-}
-
-impl Default for Client {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl fmt::Debug for Client {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut builder = f.debug_struct("Client");
-        self.config.fmt_fields(&mut builder);
-        builder.finish()
-    }
-}
-
-impl fmt::Debug for ClientBuilder {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut builder = f.debug_struct("ClientBuilder");
-        self.config.fmt_fields(&mut builder);
-        builder.finish()
     }
 }
 
 fn fetch(req: Request) -> crate::Result<ResponseFuture> {
     let headers = wasi::http::types::Fields::new();
     for (name, value) in req.headers() {
-        // TODO: see if we can avoid the extra allocation
         headers
             .append(&name.to_string(), &value.as_bytes().to_vec())
             .map_err(crate::error::builder)?;
@@ -232,8 +206,6 @@ fn fetch(req: Request) -> crate::Result<ResponseFuture> {
     ResponseFuture::new(req, outgoing_request)
 }
 
-// ===== impl ClientBuilder =====
-
 impl ClientBuilder {
     /// Return a new `ClientBuilder`.
     pub fn new() -> Self {
@@ -280,25 +252,10 @@ impl ClientBuilder {
     }
 }
 
-impl Default for ClientBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Debug)]
+#[derive(Default, Debug)]
 struct Config {
     headers: HeaderMap,
     error: Option<crate::Error>,
-}
-
-impl Default for Config {
-    fn default() -> Config {
-        Config {
-            headers: HeaderMap::new(),
-            error: None,
-        }
-    }
 }
 
 impl Config {

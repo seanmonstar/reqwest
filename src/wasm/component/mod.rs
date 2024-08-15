@@ -1,7 +1,5 @@
 mod body;
 mod client;
-#[cfg(feature = "multipart")]
-pub mod multipart;
 mod request;
 mod response;
 

@@ -2,10 +2,9 @@ use std::{fmt, io::Read as _};
 
 use bytes::Bytes;
 use http::{HeaderMap, StatusCode, Version};
-use url::Url;
-
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
+use url::Url;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -53,7 +52,7 @@ impl Response {
     ///
     /// - The server didn't send a `content-length` header.
     /// - The response is compressed and automatically decoded (thus changing
-    ///  the actual decoded length).
+    ///   the actual decoded length).
     pub fn content_length(&self) -> Option<u64> {
         self.headers()
             .get(http::header::CONTENT_LENGTH)?
@@ -84,11 +83,11 @@ impl Response {
         serde_json::from_slice(&full).map_err(crate::error::decode)
     }
 
-    /// Get the response text.
+    /// Get the response as text
     pub async fn text(self) -> crate::Result<String> {
         self.bytes()
             .await
-            .map(|s| String::from_utf8(s.to_vec()).map_err(crate::error::decode))?
+            .map(|s| String::from_utf8_lossy(&s).to_string())
     }
 
     /// Get the response as bytes
@@ -116,19 +115,19 @@ impl Response {
     /// then be used to stream the body.
     #[cfg(feature = "stream")]
     pub fn bytes_stream(&mut self) -> crate::Result<wasi::io::streams::InputStream> {
-        let body = self
+        let response_body = self
             .http
             .body()
             .consume()
             .map_err(|_| crate::error::decode("failed to consume response body"))?;
-        let stream = body
+        let stream = response_body
             .stream()
             .map_err(|_| crate::error::decode("failed to stream response body"));
-        self.incoming_body = Some(body);
+        // Dropping the incoming body when the stream is present will trap as the
+        // stream is a child resource of the incoming body.
+        self.incoming_body = Some(response_body);
         stream
     }
-
-    // util methods
 
     /// Turn a response into an error if the server returned an error.
     pub fn error_for_status(self) -> crate::Result<Self> {
@@ -154,7 +153,7 @@ impl Response {
 impl fmt::Debug for Response {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Response")
-            //.field("url", self.url())
+            .field("url", self.url())
             .field("status", &self.status())
             .field("headers", self.headers())
             .finish()

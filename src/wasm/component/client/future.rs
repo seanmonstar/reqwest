@@ -4,16 +4,15 @@ use std::{
 };
 
 use futures_core::Future;
-use wasi::{
-    self,
-    http::{
-        outgoing_handler::{FutureIncomingResponse, OutgoingRequest},
-        types::{OutgoingBody, OutputStream},
-    },
+use wasi::http::{
+    outgoing_handler::{FutureIncomingResponse, OutgoingRequest},
+    types::{OutgoingBody, OutputStream},
 };
 
 use crate::{Body, Request, Response};
 
+/// A [`Future`] implementation for a [`Response`] that uses the [`wasi::io::poll`]
+/// primitives to poll receipt of the HTTP response.
 #[derive(Debug)]
 pub struct ResponseFuture {
     request: Request,

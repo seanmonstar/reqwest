@@ -7,10 +7,10 @@ use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
 use url::Url;
-use web_sys::RequestCredentials;
 
-use super::{Body, Client, Response};
+use super::{Client, Response};
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
+use crate::Body;
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -18,8 +18,6 @@ pub struct Request {
     url: Url,
     headers: HeaderMap,
     body: Option<Body>,
-    pub(super) cors: bool,
-    pub(super) credentials: Option<RequestCredentials>,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -37,8 +35,6 @@ impl Request {
             url,
             headers: HeaderMap::new(),
             body: None,
-            cors: true,
-            credentials: None,
         }
     }
 
@@ -104,8 +100,6 @@ impl Request {
             url: self.url.clone(),
             headers: self.headers.clone(),
             body,
-            cors: self.cors,
-            credentials: self.credentials,
         })
     }
 }
@@ -241,16 +235,6 @@ impl RequestBuilder {
         self
     }
 
-    /// TODO
-    #[cfg(feature = "multipart")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "multipart")))]
-    pub fn multipart(mut self, multipart: super::multipart::Form) -> RequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            *req.body_mut() = Some(Body::from_form(multipart))
-        }
-        self
-    }
-
     /// Add a `Header` to this Request.
     pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
     where
@@ -283,70 +267,6 @@ impl RequestBuilder {
     pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             crate::util::replace_headers(req.headers_mut(), headers);
-        }
-        self
-    }
-
-    /// Disable CORS on fetching the request.
-    ///
-    /// # WASM
-    ///
-    /// This option is only effective with WebAssembly target.
-    ///
-    /// The [request mode][mdn] will be set to 'no-cors'.
-    ///
-    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/mode
-    pub fn fetch_mode_no_cors(mut self) -> RequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            req.cors = false;
-        }
-        self
-    }
-
-    /// Set fetch credentials to 'same-origin'
-    ///
-    /// # WASM
-    ///
-    /// This option is only effective with WebAssembly target.
-    ///
-    /// The [request credentials][mdn] will be set to 'same-origin'.
-    ///
-    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials
-    pub fn fetch_credentials_same_origin(mut self) -> RequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            req.credentials = Some(RequestCredentials::SameOrigin);
-        }
-        self
-    }
-
-    /// Set fetch credentials to 'include'
-    ///
-    /// # WASM
-    ///
-    /// This option is only effective with WebAssembly target.
-    ///
-    /// The [request credentials][mdn] will be set to 'include'.
-    ///
-    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials
-    pub fn fetch_credentials_include(mut self) -> RequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            req.credentials = Some(RequestCredentials::Include);
-        }
-        self
-    }
-
-    /// Set fetch credentials to 'omit'
-    ///
-    /// # WASM
-    ///
-    /// This option is only effective with WebAssembly target.
-    ///
-    /// The [request credentials][mdn] will be set to 'omit'.
-    ///
-    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials
-    pub fn fetch_credentials_omit(mut self) -> RequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            req.credentials = Some(RequestCredentials::Omit);
         }
         self
     }
@@ -466,8 +386,6 @@ where
             url,
             headers,
             body: Some(body.into()),
-            cors: true,
-            credentials: None,
         })
     }
 }
