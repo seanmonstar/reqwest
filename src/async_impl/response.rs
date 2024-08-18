@@ -1,7 +1,7 @@
 use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
 use http_body_util::BodyExt;
@@ -11,7 +11,7 @@ use hyper_util::client::legacy::connect::HttpInfo;
 use serde::de::DeserializeOwned;
 #[cfg(feature = "json")]
 use serde_json;
-use tokio::time::Sleep;
+use tokio::time::{Sleep, Instant};
 use url::Url;
 
 use super::body::Body;
@@ -127,6 +127,37 @@ impl Response {
     /// Returns a mutable reference to the associated extensions.
     pub fn extensions_mut(&mut self) -> &mut http::Extensions {
         self.res.extensions_mut()
+    }
+
+    /// Get the retry time from the "Retry-After" header, if present.
+    ///
+    /// This method returns `Option<tokio::time::Instant>` representing when the client
+    /// should retry the request.
+    ///
+    /// The "Retry-After" header can be in two formats:
+    /// 1. A positive integer representing the number of seconds to wait.
+    /// 2. An HTTP-date indicating when to retry.
+    ///
+    /// If the header is not present or cannot be parsed, this method returns `None`.
+    pub fn retry_after(&self) -> Option<Instant> {
+        let retry_after = self.headers().get(hyper::header::RETRY_AFTER)?;
+        let retry_after = retry_after.to_str().ok()?;
+
+        // Try to parse as a number of seconds
+        if let Ok(seconds) = retry_after.parse::<u64>() {
+            return Some(Instant::now() + Duration::from_secs(seconds));
+        }
+
+        // Try to parse as an HTTP-date
+        if let Ok(date_time) = httpdate::parse_http_date(retry_after) {
+            let duration = date_time.duration_since(UNIX_EPOCH).ok()?;
+            let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?;
+            if duration > now {
+                return Some(Instant::now() + (duration - now));
+            }
+        }
+
+        None
     }
 
     // body methods
@@ -501,5 +532,56 @@ mod tests {
 
         assert_eq!(response.status(), 200);
         assert_eq!(*response.url(), url);
+    }
+
+    use crate::header;
+    use std::time::Duration;
+    use tokio::time::Instant;
+    use http::response::Builder as ResponseBuilder;
+    use bytes::Bytes;
+    use std::time::SystemTime;
+
+    #[tokio::test]
+    async fn test_retry_after_seconds() {
+        let response = create_mock_response(Some("120"));
+        let retry_after = response.retry_after();
+        assert!(retry_after.is_some());
+        let duration = retry_after.unwrap() - Instant::now();
+        assert!(duration.as_secs() >= 119 && duration.as_secs() <= 120);
+    }
+
+    #[tokio::test]
+    async fn test_retry_after_http_date() {
+        let future_time = SystemTime::now() + Duration::from_secs(300);
+        let http_date = httpdate::fmt_http_date(future_time);
+        let response = create_mock_response(Some(&http_date));
+        let retry_after = response.retry_after();
+        assert!(retry_after.is_some());
+        let duration = retry_after.unwrap() - Instant::now();
+        assert!(duration.as_secs() >= 299 && duration.as_secs() <= 300);
+    }
+
+    #[tokio::test]
+    async fn test_retry_after_invalid() {
+        let response = create_mock_response(Some("invalid"));
+        let retry_after = response.retry_after();
+        assert!(retry_after.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_retry_after_missing() {
+        let response = create_mock_response(None);
+        let retry_after = response.retry_after();
+        assert!(retry_after.is_none());
+    }
+
+    fn create_mock_response(retry_after: Option<&str>) -> Response {
+        let mut builder = ResponseBuilder::new();
+        if let Some(value) = retry_after {
+            builder = builder.header(header::RETRY_AFTER, value);
+        }
+        let http_response = builder.body(Bytes::new()).unwrap();
+        
+        Response::from(http_response)
     }
 }

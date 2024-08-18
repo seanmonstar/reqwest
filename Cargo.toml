@@ -113,6 +113,7 @@ sync_wrapper = { version = "1.0", features = ["futures"] }
 serde_json = { version = "1.0", optional = true }
 ## multipart
 mime_guess = { version = "2.0", default-features = false, optional = true }
+httpdate = "1.0.3"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 encoding_rs = { version = "0.8", optional = true }
