@@ -1,7 +1,11 @@
-## Unreleased
+## v0.12.6
 
-- Implement `danger_accept_invalid_hostnames` for `rustls`.
+- Add support for `danger_accept_invalid_hostnames` for `rustls`.
 - Add `impl Service<http::Request<Body>>` for `Client` and `&'_ Client`.
+- Add support for `!Sync` bodies in `Body::wrap_stream()`.
+- Enable happy eyeballs when `hickory-dns` is used.
+- Fix `Proxy` so that `HTTP(S)_PROXY` values take precendence over `ALL_PROXY`.
+- Fix `blocking::RequestBuilder::header()` from unsetting `sensitive` on passed header values.
 
 ## v0.12.5
 
