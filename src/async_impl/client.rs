@@ -2161,62 +2161,6 @@ impl tower_service::Service<Request> for &'_ Client {
     }
 }
 
-impl tower_service::Service<http::Request<crate::Body>> for Client {
-    type Response = http::Response<crate::Body>;
-    type Error = crate::Error;
-    type Future = MappedPending;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: http::Request<crate::Body>) -> Self::Future {
-        match req.try_into() {
-            Ok(req) => MappedPending::new(self.execute_request(req)),
-            Err(err) => MappedPending::new(Pending::new_err(err)),
-        }
-    }
-}
-
-impl tower_service::Service<http::Request<crate::Body>> for &'_ Client {
-    type Response = http::Response<crate::Body>;
-    type Error = crate::Error;
-    type Future = MappedPending;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: http::Request<crate::Body>) -> Self::Future {
-        match req.try_into() {
-            Ok(req) => MappedPending::new(self.execute_request(req)),
-            Err(err) => MappedPending::new(Pending::new_err(err)),
-        }
-    }
-}
-
-pin_project! {
-    pub struct MappedPending {
-        #[pin]
-        inner: Pending,
-    }
-}
-
-impl MappedPending {
-    fn new(inner: Pending) -> MappedPending {
-        Self { inner }
-    }
-}
-
-impl Future for MappedPending {
-    type Output = Result<http::Response<crate::Body>, crate::Error>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let inner = self.project().inner;
-        inner.poll(cx).map_ok(Into::into)
-    }
-}
-
 impl fmt::Debug for ClientBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut builder = f.debug_struct("ClientBuilder");
