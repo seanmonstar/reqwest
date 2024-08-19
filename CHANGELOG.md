@@ -1,3 +1,7 @@
+## v0.12.7
+
+- Revert adding `impl Service<http::Request<_>>` for `Client`.
+
 ## v0.12.6
 
 - Add support for `danger_accept_invalid_hostnames` for `rustls`.
