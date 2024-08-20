@@ -201,6 +201,7 @@ impl fmt::Debug for ClientBuilder {
 // > `init.method(m)` to `init.set_method(m)`
 // For now, ignore their deprecation.
 #[allow(deprecated)]
+#[cfg_attr(not(feature = "cookies"), allow(unused_variables))] // client only used if cookies are enabled
 async fn fetch(req: Request, client: Client) -> crate::Result<Response> {
     // Build the js Request
     let mut init = web_sys::RequestInit::new();
