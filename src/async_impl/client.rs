@@ -256,6 +256,7 @@ struct Config {
     h3_send_grease: Option<bool>,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
     dns_resolver: Option<Arc<dyn Resolve>>,
+    base_url: Option<Url>,
 }
 
 impl Default for ClientBuilder {
@@ -378,6 +379,7 @@ impl ClientBuilder {
                 #[cfg(feature = "http3")]
                 h3_send_grease: None,
                 dns_resolver: None,
+                base_url: None,
             },
         }
     }
@@ -1027,6 +1029,7 @@ impl ClientBuilder {
                 proxies_maybe_http_custom_headers,
                 https_only: config.https_only,
                 redirect_policy_desc,
+                base_url: config.base_url,
             }),
         })
     }
@@ -2418,7 +2421,27 @@ impl Client {
     ///
     /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
-        let req = url.into_url().map(move |url| Request::new(method, url));
+        let mut maybe_url = url.into_url();
+
+        if let Some(base_url) = &self.inner.base_url {
+            if let Err(url_parse_error) = &maybe_url {
+                if url_parse_error.is_builder() {
+                    if let Some(url) = url_parse_error.url() {
+                        if !url.has_host() {
+                            let mut replacement_url = base_url.clone();
+
+                            replacement_url.set_path(url.path());
+                            replacement_url.set_query(url.query());
+                            replacement_url.set_fragment(url.fragment());
+
+                            maybe_url = Ok(replacement_url);
+                        }
+                    }
+                }
+            }
+        }
+
+        let req = maybe_url.map(move |url| Request::new(method, url));
         RequestBuilder::new(self.clone(), req)
     }
 
@@ -2771,6 +2794,7 @@ struct ClientRef {
     proxies_maybe_http_custom_headers: bool,
     https_only: bool,
     redirect_policy_desc: Option<String>,
+    base_url: Option<Url>,
 }
 
 impl ClientRef {
