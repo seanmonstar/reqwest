@@ -400,7 +400,7 @@ impl Config {
     fn fmt_fields(&self, f: &mut fmt::DebugStruct<'_, '_>) {
         #[cfg(feature = "cookies")]
         {
-            if let Some(_) = self.cookie_store {
+            if self.cookie_store.is_some() {
                 f.field("cookie_store", &true);
             }
         }
