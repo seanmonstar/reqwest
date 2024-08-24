@@ -1116,6 +1116,26 @@ impl ClientBuilder {
         };
         self
     }
+
+    /// Sets a base url to be used on all requests with a relative URL.
+    ///
+    /// By default relative URLs are rejected, but will be allowed if a
+    /// base url has been set.
+    pub fn base_url<U>(mut self, base_url: U) -> ClientBuilder
+    where
+        U: IntoUrl
+    {
+        match base_url.into_url() {
+            Ok(base_url) => {
+                self.config.base_url = Some(base_url);
+            }
+            Err(e) => {
+                self.config.error = Some(e);
+            }
+        }
+        self
+    }
+
     /// Sets the default headers for every request.
     ///
     /// # Example
