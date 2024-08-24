@@ -33,11 +33,11 @@ use crate::cookie::service::CookieService;
 use crate::dns::hickory::HickoryDnsResolver;
 use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
 use crate::error::{self, BoxError};
-use crate::into_url::try_uri;
 use crate::proxy::Matcher as ProxyMatcher;
 use crate::redirect::{self, TowerRedirectPolicy};
 #[cfg(feature = "__rustls")]
 use crate::tls::CertificateRevocationList;
+use crate::into_url::{try_uri, IntoUrlSealed};
 #[cfg(feature = "__tls")]
 use crate::tls::{self, TlsBackend};
 #[cfg(feature = "__tls")]
@@ -1123,7 +1123,7 @@ impl ClientBuilder {
     /// base url has been set.
     pub fn base_url<U>(mut self, base_url: U) -> ClientBuilder
     where
-        U: IntoUrl
+        U: IntoUrl,
     {
         match base_url.into_url() {
             Ok(base_url) => {
@@ -2553,25 +2553,14 @@ impl Client {
     ///
     /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
-        let mut maybe_url = url.into_url();
-
-        if let Some(base_url) = &self.inner.base_url {
-            if let Err(url_parse_error) = &maybe_url {
-                if url_parse_error.is_builder() {
-                    if let Some(url) = url_parse_error.url() {
-                        if !url.has_host() {
-                            let mut replacement_url = base_url.clone();
-
-                            replacement_url.set_path(url.path());
-                            replacement_url.set_query(url.query());
-                            replacement_url.set_fragment(url.fragment());
-
-                            maybe_url = Ok(replacement_url);
-                        }
-                    }
-                }
-            }
-        }
+        let maybe_url = match &self.inner.base_url {
+            Some(ref base_url) => Url::options()
+                .base_url(Some(base_url))
+                .parse(url.as_str())
+                .map_err(crate::error::builder)
+                .and_then(IntoUrlSealed::into_url),
+            None => url.into_url(),
+        };
 
         let req = maybe_url.map(move |url| Request::new(method, url));
         RequestBuilder::new(self.clone(), req)
