@@ -16,6 +16,7 @@ use tokio::sync::{mpsc, oneshot};
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::wait;
+use crate::dns::Resolve;
 #[cfg(feature = "__tls")]
 use crate::tls;
 #[cfg(feature = "__tls")]
@@ -157,26 +158,6 @@ impl ClientBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    ///
-    /// Override the default headers:
-    ///
-    /// ```rust
-    /// use reqwest::header;
-    /// # fn build_client() -> Result<(), reqwest::Error> {
-    /// let mut headers = header::HeaderMap::new();
-    /// headers.insert("X-MY-HEADER", header::HeaderValue::from_static("value"));
-    ///
-    /// // get a client builder
-    /// let client = reqwest::blocking::Client::builder()
-    ///     .default_headers(headers)
-    ///     .build()?;
-    /// let res = client
-    ///     .get("https://www.rust-lang.org")
-    ///     .header("X-MY-HEADER", "new_value")
-    ///     .send()?;
-    /// # Ok(())
-    /// # }
-    /// ```
     pub fn default_headers(self, headers: header::HeaderMap) -> ClientBuilder {
         self.with_inner(move |inner| inner.default_headers(headers))
     }
@@ -260,6 +241,28 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.brotli(enable))
     }
 
+    /// Enable auto zstd decompression by checking the `Content-Encoding` response header.
+    ///
+    /// If auto zstd decompression is turned on:
+    ///
+    /// - When sending a request and if the request's headers do not already contain
+    ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `zstd`.
+    ///   The request body is **not** automatically compressed.
+    /// - When receiving a response, if its headers contain a `Content-Encoding` value of
+    ///   `zstd`, both `Content-Encoding` and `Content-Length` are removed from the
+    ///   headers' set. The response body is automatically decompressed.
+    ///
+    /// If the `zstd` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `zstd` feature to be enabled
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "zstd")))]
+    pub fn zstd(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.zstd(enable))
+    }
+
     /// Enable auto deflate decompression by checking the `Content-Encoding` response header.
     ///
     /// If auto deflate decompresson is turned on:
@@ -298,6 +301,15 @@ impl ClientBuilder {
     /// even if another dependency were to enable the optional `brotli` feature.
     pub fn no_brotli(self) -> ClientBuilder {
         self.with_inner(|inner| inner.no_brotli())
+    }
+
+    /// Disable auto response body zstd decompression.
+    ///
+    /// This method exists even if the optional `zstd` feature is not enabled.
+    /// This can be used to ensure a `Client` doesn't use zstd decompression
+    /// even if another dependency were to enable the optional `zstd` feature.
+    pub fn no_zstd(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.no_zstd())
     }
 
     /// Disable auto response body deflate decompression.
@@ -445,6 +457,8 @@ impl ClientBuilder {
     }
 
     /// Only use HTTP/2.
+    #[cfg(feature = "http2")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
     pub fn http2_prior_knowledge(self) -> ClientBuilder {
         self.with_inner(|inner| inner.http2_prior_knowledge())
     }
@@ -452,6 +466,8 @@ impl ClientBuilder {
     /// Sets the `SETTINGS_INITIAL_WINDOW_SIZE` option for HTTP2 stream-level flow control.
     ///
     /// Default is currently 65,535 but may change internally to optimize for common uses.
+    #[cfg(feature = "http2")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
     pub fn http2_initial_stream_window_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
         self.with_inner(|inner| inner.http2_initial_stream_window_size(sz))
     }
@@ -459,6 +475,8 @@ impl ClientBuilder {
     /// Sets the max connection-level flow control for HTTP2
     ///
     /// Default is currently 65,535 but may change internally to optimize for common uses.
+    #[cfg(feature = "http2")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
     pub fn http2_initial_connection_window_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
         self.with_inner(|inner| inner.http2_initial_connection_window_size(sz))
     }
@@ -467,6 +485,8 @@ impl ClientBuilder {
     ///
     /// Enabling this will override the limits set in `http2_initial_stream_window_size` and
     /// `http2_initial_connection_window_size`.
+    #[cfg(feature = "http2")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
     pub fn http2_adaptive_window(self, enabled: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.http2_adaptive_window(enabled))
     }
@@ -474,6 +494,8 @@ impl ClientBuilder {
     /// Sets the maximum frame size to use for HTTP2.
     ///
     /// Default is currently 16,384 but may change internally to optimize for common uses.
+    #[cfg(feature = "http2")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
     pub fn http2_max_frame_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
         self.with_inner(|inner| inner.http2_max_frame_size(sz))
     }
@@ -511,6 +533,21 @@ impl ClientBuilder {
         T: Into<Option<IpAddr>>,
     {
         self.with_inner(move |inner| inner.local_address(addr))
+    }
+
+    /// Bind to an interface by `SO_BINDTODEVICE`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let interface = "lo";
+    /// let client = reqwest::blocking::Client::builder()
+    ///     .interface(interface)
+    ///     .build().unwrap();
+    /// ```
+    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+    pub fn interface(self, interface: &str) -> ClientBuilder {
+        self.with_inner(move |inner| inner.interface(interface))
     }
 
     /// Set that all sockets have `SO_KEEPALIVE` set with the supplied duration.
@@ -590,6 +627,24 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.tls_built_in_root_certs(tls_built_in_root_certs))
     }
 
+    /// Sets whether to load webpki root certs with rustls.
+    ///
+    /// If the feature is enabled, this value is `true` by default.
+    #[cfg(feature = "rustls-tls-webpki-roots")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls-webpki-roots")))]
+    pub fn tls_built_in_webpki_certs(self, enabled: bool) -> ClientBuilder {
+        self.with_inner(move |inner| inner.tls_built_in_webpki_certs(enabled))
+    }
+
+    /// Sets whether to load native root certs with rustls.
+    ///
+    /// If the feature is enabled, this value is `true` by default.
+    #[cfg(feature = "rustls-tls-native-roots")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls-native-roots")))]
+    pub fn tls_built_in_native_certs(self, enabled: bool) -> ClientBuilder {
+        self.with_inner(move |inner| inner.tls_built_in_native_certs(enabled))
+    }
+
     /// Sets the identity to be used for client certificate authentication.
     ///
     /// # Optional
@@ -615,9 +670,17 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `native-tls` feature to be enabled.
-    #[cfg(feature = "native-tls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "native-tls")))]
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(
+            feature = "default-tls",
+            feature = "native-tls",
+            feature = "rustls-tls"
+        )))
+    )]
     pub fn danger_accept_invalid_hostnames(self, accept_invalid_hostname: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.danger_accept_invalid_hostnames(accept_invalid_hostname))
     }
@@ -789,26 +852,50 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.use_preconfigured_tls(tls))
     }
 
-    /// Enables the [trust-dns](trust_dns_resolver) async resolver instead of a default threadpool using `getaddrinfo`.
+    /// Enables the [hickory-dns](hickory_resolver) async resolver instead of a default threadpool using `getaddrinfo`.
     ///
-    /// If the `trust-dns` feature is turned on, the default option is enabled.
+    /// If the `hickory-dns` feature is turned on, the default option is enabled.
     ///
     /// # Optional
     ///
-    /// This requires the optional `trust-dns` feature to be enabled
-    #[cfg(feature = "trust-dns")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "trust-dns")))]
+    /// This requires the optional `hickory-dns` feature to be enabled
+    #[cfg(feature = "hickory-dns")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "hickory-dns")))]
+    #[deprecated(note = "use `hickory_dns` instead", since = "0.12.0")]
     pub fn trust_dns(self, enable: bool) -> ClientBuilder {
-        self.with_inner(|inner| inner.trust_dns(enable))
+        self.with_inner(|inner| inner.hickory_dns(enable))
     }
 
-    /// Disables the trust-dns async resolver.
+    /// Enables the [hickory-dns](hickory_resolver) async resolver instead of a default threadpool using `getaddrinfo`.
     ///
-    /// This method exists even if the optional `trust-dns` feature is not enabled.
-    /// This can be used to ensure a `Client` doesn't use the trust-dns async resolver
-    /// even if another dependency were to enable the optional `trust-dns` feature.
+    /// If the `hickory-dns` feature is turned on, the default option is enabled.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `hickory-dns` feature to be enabled
+    #[cfg(feature = "hickory-dns")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "hickory-dns")))]
+    pub fn hickory_dns(self, enable: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.hickory_dns(enable))
+    }
+
+    /// Disables the hickory-dns async resolver.
+    ///
+    /// This method exists even if the optional `hickory-dns` feature is not enabled.
+    /// This can be used to ensure a `Client` doesn't use the hickory-dns async resolver
+    /// even if another dependency were to enable the optional `hickory-dns` feature.
+    #[deprecated(note = "use `no_hickory_dns` instead", since = "0.12.0")]
     pub fn no_trust_dns(self) -> ClientBuilder {
-        self.with_inner(|inner| inner.no_trust_dns())
+        self.with_inner(|inner| inner.no_hickory_dns())
+    }
+
+    /// Disables the hickory-dns async resolver.
+    ///
+    /// This method exists even if the optional `hickory-dns` feature is not enabled.
+    /// This can be used to ensure a `Client` doesn't use the hickory-dns async resolver
+    /// even if another dependency were to enable the optional `hickory-dns` feature.
+    pub fn no_hickory_dns(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.no_hickory_dns())
     }
 
     /// Restrict the Client to be used with HTTPS only requests.
@@ -840,6 +927,15 @@ impl ClientBuilder {
     /// to the conventional port for the given scheme (e.g. 80 for http).
     pub fn resolve_to_addrs(self, domain: &str, addrs: &[SocketAddr]) -> ClientBuilder {
         self.with_inner(|inner| inner.resolve_to_addrs(domain, addrs))
+    }
+
+    /// Override the DNS resolver implementation.
+    ///
+    /// Pass an `Arc` wrapping a trait object implementing `Resolve`.
+    /// Overrides for specific names passed to `resolve` and `resolve_to_addrs` will
+    /// still be applied on top of this resolver.
+    pub fn dns_resolver<R: Resolve + 'static>(self, resolver: Arc<R>) -> ClientBuilder {
+        self.with_inner(|inner| inner.dns_resolver(resolver))
     }
 
     // private
@@ -1172,7 +1268,7 @@ impl Default for Timeout {
     }
 }
 
-pub(crate) struct KeepCoreThreadAlive(Option<Arc<InnerClientHandle>>);
+pub(crate) struct KeepCoreThreadAlive(#[allow(dead_code)] Option<Arc<InnerClientHandle>>);
 
 impl KeepCoreThreadAlive {
     pub(crate) fn empty() -> KeepCoreThreadAlive {

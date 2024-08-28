@@ -71,10 +71,14 @@ jobs:
           - "feat.: default-tls disabled"
           - "feat.: rustls-tls"
           - "feat.: rustls-tls-manual-roots"
+          - "feat.: rustls-tls-native-roots"
+          - "feat.: rustls-tls-no-provider"
           - "feat.: native-tls"
           - "feat.: default-tls and rustls-tls"
+          - "feat.: rustls-tls and rustls-tls-no-provider"
           - "feat.: cookies"
           - "feat.: blocking"
+          - "feat.: blocking only"
           - "feat.: gzip"
           - "feat.: brotli"
           - "feat.: deflate"
@@ -83,7 +87,7 @@ jobs:
           - "feat.: stream"
           - "feat.: socks/default-tls"
           - "feat.: socks/rustls-tls"
-          - "feat.: trust-dns"
+          - "feat.: hickory-dns"
 
         include:
           - name: linux / stable
@@ -101,23 +105,23 @@ jobs:
           - name: windows / stable-x86_64-msvc
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            features: "--features blocking,gzip,brotli,deflate,json,multipart"
+            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart,stream"
           - name: windows / stable-i686-msvc
             os: windows-latest
             target: i686-pc-windows-msvc
-            features: "--features blocking,gzip,brotli,deflate,json,multipart"
+            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart,stream"
           - name: windows / stable-x86_64-gnu
             os: windows-latest
             rust: stable-x86_64-pc-windows-gnu
             target: x86_64-pc-windows-gnu
-            features: "--features blocking,gzip,brotli,deflate,json,multipart"
+            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart,stream"
             package_name: mingw-w64-x86_64-gcc
             mingw64_path: "C:\\msys64\\mingw64\\bin"
           - name: windows / stable-i686-gnu
             os: windows-latest
             rust: stable-i686-pc-windows-gnu
             target: i686-pc-windows-gnu
-            features: "--features blocking,gzip,brotli,deflate,json,multipart"
+            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart,stream"
             package_name: mingw-w64-i686-gcc
             mingw64_path: "C:\\msys64\\mingw32\\bin"
 
@@ -127,20 +131,30 @@ jobs:
             features: "--no-default-features --features rustls-tls"
           - name: "feat.: rustls-tls-manual-roots"
             features: "--no-default-features --features rustls-tls-manual-roots"
+          - name: "feat.: rustls-tls-native-roots"
+            features: "--no-default-features --features rustls-tls-native-roots"
+          - name: "feat.: rustls-tls-no-provider"
+            features: "--no-default-features --features rustls-tls-no-provider"
           - name: "feat.: native-tls"
             features: "--features native-tls"
+          - name: "feat.: rustls-tls and rustls-tls-no-provider"
+            features: "--features rustls-tls,rustls-tls-no-provider"
           - name: "feat.: default-tls and rustls-tls"
             features: "--features rustls-tls"
           - name: "feat.: cookies"
             features: "--features cookies"
           - name: "feat.: blocking"
             features: "--features blocking"
+          - name: "feat.: blocking only"
+            features: "--no-default-features --features blocking"
           - name: "feat.: gzip"
-            features: "--features gzip"
+            features: "--features gzip,stream"
           - name: "feat.: brotli"
-            features: "--features brotli"
+            features: "--features brotli,stream"
+          - name: "feat.: zstd"
+            features: "--features zstd,stream"
           - name: "feat.: deflate"
-            features: "--features deflate"
+            features: "--features deflate,stream"
           - name: "feat.: json"
             features: "--features json"
           - name: "feat.: multipart"
@@ -151,8 +165,8 @@ jobs:
             features: "--features socks"
           - name: "feat.: socks/rustls-tls"
             features: "--features socks,rustls-tls"
-          - name: "feat.: trust-dns"
-            features: "--features trust-dns"
+          - name: "feat.: hickory-dns"
+            features: "--features hickory-dns"
 
     steps:
       - name: Checkout
@@ -205,10 +219,14 @@ jobs:
           toolchain: 'stable'
 
       - name: Check
-        run: RUSTFLAGS="--cfg reqwest_unstable" cargo check --features http3
+        run: cargo test --features http3
+        env:
+          RUSTFLAGS: --cfg reqwest_unstable
+          RUSTDOCFLAGS: --cfg reqwest_unstable
 
   docs:
     name: Docs
+    needs: [test]
     runs-on: ubuntu-latest
 
     steps:
@@ -254,7 +272,7 @@ jobs:
         run: |
           cargo clean
           cargo update -Z minimal-versions
-          cargo update -p proc-macro2 --precise 1.0.60
+          cargo update -p proc-macro2 --precise 1.0.62
           cargo check
           cargo check --all-features
 
@@ -282,6 +300,7 @@ jobs:
           cargo update
           cargo update -p log --precise 0.4.18
           cargo update -p tokio --precise 1.29.1
+          cargo update -p url --precise 2.5.0
 
       - uses: Swatinem/rust-cache@v2
 

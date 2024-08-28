@@ -95,15 +95,9 @@ impl Form {
             .map_err(crate::error::builder)?;
 
         for (name, part) in self.inner.fields.iter() {
-            let blob = part.blob()?;
-
-            if let Some(file_name) = &part.metadata().file_name {
-                form.append_with_blob_and_filename(name, &blob, &file_name)
-            } else {
-                form.append_with_blob(name, &blob)
-            }
-            .map_err(crate::error::wasm)
-            .map_err(crate::error::builder)?;
+            part.append_to_form(name, &form)
+                .map_err(crate::error::wasm)
+                .map_err(crate::error::builder)?;
         }
         Ok(form)
     }
@@ -187,18 +181,58 @@ impl Part {
         }
     }
 
-    fn blob(&self) -> crate::Result<web_sys::Blob> {
+    fn append_to_form(
+        &self,
+        name: &str,
+        form: &web_sys::FormData,
+    ) -> Result<(), wasm_bindgen::JsValue> {
+        let single = self
+            .value
+            .as_single()
+            .expect("A part's body can't be multipart itself");
+
+        let mut mime_type = self.metadata().mime.as_ref();
+
+        // The JS fetch API doesn't support file names and mime types for strings. So we do our best
+        // effort to use `append_with_str` and fallback to `append_with_blob_*` if that's not
+        // possible.
+        if let super::body::Single::Text(text) = single {
+            if mime_type.is_none() || mime_type == Some(&mime_guess::mime::TEXT_PLAIN) {
+                if self.metadata().file_name.is_none() {
+                    return form.append_with_str(name, text);
+                }
+            } else {
+                mime_type = Some(&mime_guess::mime::TEXT_PLAIN);
+            }
+        }
+
+        let blob = self.blob(mime_type)?;
+
+        if let Some(file_name) = &self.metadata().file_name {
+            form.append_with_blob_and_filename(name, &blob, file_name)
+        } else {
+            form.append_with_blob(name, &blob)
+        }
+    }
+
+    fn blob(&self, mime_type: Option<&Mime>) -> crate::Result<web_sys::Blob> {
         use web_sys::Blob;
         use web_sys::BlobPropertyBag;
         let mut properties = BlobPropertyBag::new();
-        if let Some(mime) = &self.meta.mime {
+        if let Some(mime) = mime_type {
             properties.type_(mime.as_ref());
         }
 
-        // BUG: the return value of to_js_value() is not valid if
-        // it is a MultipartForm variant.
-        let js_value = self.value.to_js_value()?;
-        Blob::new_with_u8_array_sequence_and_options(&js_value, &properties)
+        let js_value = self
+            .value
+            .as_single()
+            .expect("A part's body can't be set to a multipart body")
+            .to_js_value();
+
+        let body_array = js_sys::Array::new();
+        body_array.push(&js_value);
+
+        Blob::new_with_u8_array_sequence_and_options(body_array.as_ref(), &properties)
             .map_err(crate::error::wasm)
             .map_err(crate::error::builder)
     }
@@ -319,11 +353,16 @@ mod tests {
             .mime_str(binary_file_type)
             .expect("invalid mime type");
 
+        let string_name = "string";
+        let string_content = "CONTENT";
+        let string_part = Part::text(string_content);
+
         let text_name = "text part";
         let binary_name = "binary part";
         let form = Form::new()
             .part(text_name, text_part)
-            .part(binary_name, binary_part);
+            .part(binary_name, binary_part)
+            .part(string_name, string_part);
 
         let mut init = web_sys::RequestInit::new();
         init.method("POST");
@@ -360,6 +399,13 @@ mod tests {
         let binary_file = File::from(form_data.get(binary_name));
         assert_eq!(binary_file.name(), binary_file_name);
         assert_eq!(binary_file.type_(), binary_file_type);
+
+        // check string part
+        let string = form_data
+            .get(string_name)
+            .as_string()
+            .expect("content is not a string");
+        assert_eq!(string, string_content);
 
         let binary_array_buffer_promise = binary_file.array_buffer();
         let array_buffer = crate::wasm::promise::<JsValue>(binary_array_buffer_promise)

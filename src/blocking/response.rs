@@ -270,6 +270,11 @@ impl Response {
     /// Encoding is determined from the `charset` parameter of `Content-Type` header,
     /// and defaults to `utf-8` if not presented.
     ///
+    /// # Note
+    ///
+    /// If the `charset` feature is disabled the method will only attempt to decode the
+    /// response as UTF-8, regardless of the given `Content-Type`
+    ///
     /// # Example
     ///
     /// ```rust
@@ -280,7 +285,10 @@ impl Response {
     /// # }
     /// ```
     pub fn text(self) -> crate::Result<String> {
-        self.text_with_charset("utf-8")
+        wait::timeout(self.inner.text(), self.timeout).map_err(|e| match e {
+            wait::Waited::TimedOut(e) => crate::error::decode(e),
+            wait::Waited::Inner(e) => e,
+        })
     }
 
     /// Get the response text given a specific encoding.
@@ -293,6 +301,10 @@ impl Response {
     ///
     /// [`encoding_rs`]: https://docs.rs/encoding_rs/0.8/encoding_rs/#relationship-with-windows-code-pages
     ///
+    /// # Optional
+    ///
+    /// This requires the optional `charset` feature enabled.
+    ///
     /// # Example
     ///
     /// ```rust
@@ -303,6 +315,8 @@ impl Response {
     /// # Ok(())
     /// # }
     /// ```
+    #[cfg(feature = "charset")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "charset")))]
     pub fn text_with_charset(self, default_encoding: &str) -> crate::Result<String> {
         wait::timeout(self.inner.text_with_charset(default_encoding), self.timeout).map_err(|e| {
             match e {
@@ -397,7 +411,7 @@ impl Response {
         if self.body.is_none() {
             let body = mem::replace(self.inner.body_mut(), async_impl::Decoder::empty());
 
-            let body = body.map_err(crate::error::into_io).into_async_read();
+            let body = body.into_stream().into_async_read();
 
             self.body = Some(Box::pin(body));
         }

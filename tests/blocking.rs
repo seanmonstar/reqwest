@@ -1,7 +1,8 @@
 mod support;
 
-use http::header::CONTENT_TYPE;
-use http::HeaderValue;
+use http::header::{CONTENT_LENGTH, CONTENT_TYPE, TRANSFER_ENCODING};
+use http_body_util::BodyExt;
+#[cfg(feature = "json")]
 use std::collections::HashMap;
 use support::server;
 
@@ -20,6 +21,29 @@ fn test_response_text() {
 }
 
 #[test]
+fn donot_set_content_length_0_if_have_no_body() {
+    let server = server::http(move |req| async move {
+        let headers = req.headers();
+        assert_eq!(headers.get(CONTENT_LENGTH), None);
+        assert!(headers.get(CONTENT_TYPE).is_none());
+        assert!(headers.get(TRANSFER_ENCODING).is_none());
+        http::Response::default()
+    });
+
+    let url = format!("http://{}/content-length", server.addr());
+    let res = reqwest::blocking::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client builder")
+        .get(&url)
+        .send()
+        .expect("request");
+
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
+#[test]
+#[cfg(feature = "charset")]
 fn test_response_non_utf_8_text() {
     let server = server::http(move |_req| async {
         http::Response::builder()
@@ -88,7 +112,7 @@ fn test_post() {
         assert_eq!(req.method(), "POST");
         assert_eq!(req.headers()["content-length"], "5");
 
-        let data = hyper::body::to_bytes(req.into_body()).await.unwrap();
+        let data = req.into_body().collect().await.unwrap().to_bytes();
         assert_eq!(&*data, b"Hello");
 
         http::Response::default()
@@ -115,7 +139,7 @@ fn test_post_form() {
             "application/x-www-form-urlencoded"
         );
 
-        let data = hyper::body::to_bytes(req.into_body()).await.unwrap();
+        let data = req.into_body().collect().await.unwrap().to_bytes();
         assert_eq!(&*data, b"hello=world&sean=monstar");
 
         http::Response::default()
@@ -336,6 +360,8 @@ fn test_body_from_bytes() {
 #[test]
 #[cfg(feature = "json")]
 fn blocking_add_json_default_content_type_if_not_set_manually() {
+    use http::header::HeaderValue;
+
     let mut map = HashMap::new();
     map.insert("body", "json");
     let content_type = HeaderValue::from_static("application/vnd.api+json");
@@ -364,6 +390,7 @@ fn blocking_update_json_content_type_if_set_manually() {
 }
 
 #[test]
+#[cfg(feature = "__tls")]
 fn test_response_no_tls_info_for_http() {
     let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
 

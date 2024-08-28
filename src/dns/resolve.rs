@@ -1,10 +1,11 @@
-use hyper::client::connect::dns::Name;
-use hyper::service::Service;
+use hyper_util::client::legacy::connect::dns::Name as HyperName;
+use tower_service::Service;
 
 use std::collections::HashMap;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
@@ -29,6 +30,27 @@ pub trait Resolve: Send + Sync {
     fn resolve(&self, name: Name) -> Resolving;
 }
 
+/// A name that must be resolved to addresses.
+#[derive(Debug)]
+pub struct Name(pub(super) HyperName);
+
+impl Name {
+    /// View the name as a string.
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl FromStr for Name {
+    type Err = sealed::InvalidNameError;
+
+    fn from_str(host: &str) -> Result<Self, Self::Err> {
+        HyperName::from_str(host.into())
+            .map(Name)
+            .map_err(|_| sealed::InvalidNameError { _ext: () })
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct DynResolver {
     resolver: Arc<dyn Resolve>,
@@ -40,7 +62,7 @@ impl DynResolver {
     }
 }
 
-impl Service<Name> for DynResolver {
+impl Service<HyperName> for DynResolver {
     type Response = Addrs;
     type Error = BoxError;
     type Future = Resolving;
@@ -49,8 +71,8 @@ impl Service<Name> for DynResolver {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, name: Name) -> Self::Future {
-        self.resolver.resolve(name)
+    fn call(&mut self, name: HyperName) -> Self::Future {
+        self.resolver.resolve(Name(name))
     }
 }
 
@@ -81,4 +103,21 @@ impl Resolve for DnsResolverWithOverrides {
             None => self.dns_resolver.resolve(name),
         }
     }
+}
+
+mod sealed {
+    use std::fmt;
+
+    #[derive(Debug)]
+    pub struct InvalidNameError {
+        pub(super) _ext: (),
+    }
+
+    impl fmt::Display for InvalidNameError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("invalid DNS name")
+        }
+    }
+
+    impl std::error::Error for InvalidNameError {}
 }
