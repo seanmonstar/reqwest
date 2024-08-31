@@ -202,7 +202,7 @@ async fn async_impl_file_part() {
 
     let ct = format!("multipart/form-data; boundary={}", form.boundary());
 
-    let server = server::http(move |mut req| {
+    let server = server::http(move |req| {
         let ct = ct.clone();
         let expected_body = expected_body.clone();
         async move {
@@ -210,10 +210,7 @@ async fn async_impl_file_part() {
             assert_eq!(req.headers()["content-type"], ct);
             assert_eq!(req.headers()["transfer-encoding"], "chunked");
 
-            let mut full: Vec<u8> = Vec::new();
-            while let Some(item) = req.body_mut().next().await {
-                full.extend(&*item.unwrap());
-            }
+            let full = req.collect().await.unwrap().to_bytes();
 
             assert_eq!(full, expected_body.as_bytes());
 
