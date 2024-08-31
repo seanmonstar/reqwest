@@ -96,9 +96,9 @@ impl Form {
     /// # Examples
     ///
     /// ```no_run
-    /// # fn run() -> std::io::Result<()> {
+    /// # async fn run() -> std::io::Result<()> {
     /// let form = reqwest::multipart::Form::new()
-    ///     .file("key", "/path/to/file")?;
+    ///     .file("key", "/path/to/file").await?;
     /// # Ok(())
     /// # }
     /// ```
