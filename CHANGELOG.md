@@ -1,3 +1,25 @@
+## v0.12.7
+
+- Revert adding `impl Service<http::Request<_>>` for `Client`.
+
+## v0.12.6
+
+- Add support for `danger_accept_invalid_hostnames` for `rustls`.
+- Add `impl Service<http::Request<Body>>` for `Client` and `&'_ Client`.
+- Add support for `!Sync` bodies in `Body::wrap_stream()`.
+- Enable happy eyeballs when `hickory-dns` is used.
+- Fix `Proxy` so that `HTTP(S)_PROXY` values take precendence over `ALL_PROXY`.
+- Fix `blocking::RequestBuilder::header()` from unsetting `sensitive` on passed header values.
+
+## v0.12.5
+
+- Add `blocking::ClientBuilder::dns_resolver()` method to change DNS resolver in blocking client.
+- Add `http3` feature back, still requiring `reqwest_unstable`.
+- Add `rustls-tls-no-provider` Cargo feature to use rustls without a crypto provider.
+- Fix `Accept-Encoding` header combinations.
+- Fix http3 resolving IPv6 addresses.
+- Internal: upgrade to rustls 0.23.
+
 ## v0.12.4
 
 - Add `zstd` support, enabled with `zstd` Cargo feature.

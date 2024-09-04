@@ -48,6 +48,7 @@ pin_project! {
 }
 
 /// Converts any `impl Body` into a `impl Stream` of just its DATA frames.
+#[cfg(any(feature = "stream", feature = "multipart",))]
 pub(crate) struct DataStream<B>(pub(crate) B);
 
 impl Body {
@@ -88,7 +89,7 @@ impl Body {
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     pub fn wrap_stream<S>(stream: S) -> Body
     where
-        S: futures_core::stream::TryStream + Send + Sync + 'static,
+        S: futures_core::stream::TryStream + Send + 'static,
         S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
         Bytes: From<S::Ok>,
     {
@@ -98,7 +99,7 @@ impl Body {
     #[cfg(any(feature = "stream", feature = "multipart", feature = "blocking"))]
     pub(crate) fn stream<S>(stream: S) -> Body
     where
-        S: futures_core::stream::TryStream + Send + Sync + 'static,
+        S: futures_core::stream::TryStream + Send + 'static,
         S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
         Bytes: From<S::Ok>,
     {
@@ -106,11 +107,11 @@ impl Body {
         use http_body::Frame;
         use http_body_util::StreamBody;
 
-        let body = http_body_util::BodyExt::boxed(StreamBody::new(
+        let body = http_body_util::BodyExt::boxed(StreamBody::new(sync_wrapper::SyncStream::new(
             stream
                 .map_ok(|d| Frame::data(Bytes::from(d)))
                 .map_err(Into::into),
-        ));
+        )));
         Body {
             inner: Inner::Streaming(body),
         }
@@ -394,11 +395,25 @@ where
 pub(crate) type ResponseBody =
     http_body_util::combinators::BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>;
 
-pub(crate) fn response(
-    body: hyper::body::Incoming,
+pub(crate) fn boxed<B>(body: B) -> ResponseBody
+where
+    B: hyper::body::Body<Data = Bytes> + Send + Sync + 'static,
+    B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    use http_body_util::BodyExt;
+
+    body.map_err(box_err).boxed()
+}
+
+pub(crate) fn response<B>(
+    body: B,
     deadline: Option<Pin<Box<Sleep>>>,
     read_timeout: Option<Duration>,
-) -> ResponseBody {
+) -> ResponseBody
+where
+    B: hyper::body::Body<Data = Bytes> + Send + Sync + 'static,
+    B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
     use http_body_util::BodyExt;
 
     match (deadline, read_timeout) {
@@ -421,6 +436,7 @@ where
 
 // ===== impl DataStream =====
 
+#[cfg(any(feature = "stream", feature = "multipart",))]
 impl<B> futures_core::Stream for DataStream<B>
 where
     B: HttpBody<Data = Bytes> + Unpin,

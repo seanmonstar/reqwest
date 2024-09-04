@@ -1,4 +1,10 @@
 use std::fmt;
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate"
+))]
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -15,9 +21,16 @@ use async_compression::tokio::bufread::ZstdDecoder;
 #[cfg(feature = "deflate")]
 use async_compression::tokio::bufread::ZlibDecoder;
 
-use bytes::Bytes;
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate",
+    feature = "blocking",
+))]
 use futures_core::Stream;
-use futures_util::stream::Peekable;
+
+use bytes::Bytes;
 use http::HeaderMap;
 use hyper::body::Body as HttpBody;
 use hyper::body::Frame;
@@ -38,7 +51,6 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 use tokio_util::io::StreamReader;
 
 use super::body::ResponseBody;
-use crate::error;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Accepts {
@@ -74,7 +86,13 @@ pub(crate) struct Decoder {
     inner: Inner,
 }
 
-type PeekableIoStream = Peekable<IoStream>;
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate"
+))]
+type PeekableIoStream = futures_util::stream::Peekable<IoStream>;
 
 #[cfg(any(
     feature = "gzip",
@@ -114,11 +132,30 @@ enum Inner {
     Pending(Pin<Box<Pending>>),
 }
 
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate"
+))]
 /// A future attempt to poll the response body for EOF so we know whether to use gzip or not.
 struct Pending(PeekableIoStream, DecoderType);
 
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate",
+    feature = "blocking",
+))]
 pub(crate) struct IoStream<B = ResponseBody>(B);
 
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate"
+))]
 enum DecoderType {
     #[cfg(feature = "gzip")]
     Gzip,
@@ -376,11 +413,24 @@ impl HttpBody for Decoder {
     }
 }
 
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate",
+    feature = "blocking",
+))]
 fn empty() -> ResponseBody {
     use http_body_util::{combinators::BoxBody, BodyExt, Empty};
     BoxBody::new(Empty::new().map_err(|never| match never {}))
 }
 
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate"
+))]
 impl Future for Pending {
     type Output = Result<Inner, std::io::Error>;
 
@@ -429,6 +479,13 @@ impl Future for Pending {
     }
 }
 
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate",
+    feature = "blocking",
+))]
 impl<B> Stream for IoStream<B>
 where
     B: HttpBody<Data = Bytes> + Unpin,
@@ -447,7 +504,7 @@ where
                         continue;
                     }
                 }
-                Some(Err(err)) => Poll::Ready(Some(Err(error::into_io(err.into())))),
+                Some(Err(err)) => Poll::Ready(Some(Err(crate::error::into_io(err.into())))),
                 None => Poll::Ready(None),
             };
         }
@@ -484,9 +541,9 @@ impl Accepts {
             (true, true, true, false) => Some("gzip, br, zstd"),
             (true, true, false, false) => Some("gzip, br"),
             (true, false, true, true) => Some("gzip, zstd, deflate"),
-            (true, false, false, true) => Some("gzip, zstd, deflate"),
+            (true, false, false, true) => Some("gzip, deflate"),
             (false, true, true, true) => Some("br, zstd, deflate"),
-            (false, true, false, true) => Some("br, zstd, deflate"),
+            (false, true, false, true) => Some("br, deflate"),
             (true, false, true, false) => Some("gzip, zstd"),
             (true, false, false, false) => Some("gzip"),
             (false, true, true, false) => Some("br, zstd"),
@@ -558,6 +615,60 @@ impl Default for Accepts {
             zstd: true,
             #[cfg(feature = "deflate")]
             deflate: true,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_as_str() {
+        fn format_accept_encoding(accepts: &Accepts) -> String {
+            let mut encodings = vec![];
+            if accepts.is_gzip() {
+                encodings.push("gzip");
+            }
+            if accepts.is_brotli() {
+                encodings.push("br");
+            }
+            if accepts.is_zstd() {
+                encodings.push("zstd");
+            }
+            if accepts.is_deflate() {
+                encodings.push("deflate");
+            }
+            encodings.join(", ")
+        }
+
+        let state = [true, false];
+        let mut permutations = Vec::new();
+
+        #[allow(unused_variables)]
+        for gzip in state {
+            for brotli in state {
+                for zstd in state {
+                    for deflate in state {
+                        permutations.push(Accepts {
+                            #[cfg(feature = "gzip")]
+                            gzip,
+                            #[cfg(feature = "brotli")]
+                            brotli,
+                            #[cfg(feature = "zstd")]
+                            zstd,
+                            #[cfg(feature = "deflate")]
+                            deflate,
+                        });
+                    }
+                }
+            }
+        }
+
+        for accepts in permutations {
+            let expected = format_accept_encoding(&accepts);
+            let got = accepts.as_str().unwrap_or("");
+            assert_eq!(got, expected.as_str());
         }
     }
 }

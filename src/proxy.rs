@@ -29,10 +29,6 @@ use system_configuration::{
     sys::schema_definitions::kSCPropNetProxiesHTTPSPort,
     sys::schema_definitions::kSCPropNetProxiesHTTPSProxy,
 };
-#[cfg(target_os = "windows")]
-use winreg::enums::HKEY_CURRENT_USER;
-#[cfg(target_os = "windows")]
-use winreg::RegKey;
 
 /// Configuration of a proxy that a `Client` should pass requests to.
 ///
@@ -897,6 +893,13 @@ fn insert_proxy(proxies: &mut SystemProxyMap, scheme: impl Into<String>, addr: S
 fn get_from_environment() -> SystemProxyMap {
     let mut proxies = HashMap::new();
 
+    if !(insert_from_env(&mut proxies, "http", "ALL_PROXY")
+        && insert_from_env(&mut proxies, "https", "ALL_PROXY"))
+    {
+        insert_from_env(&mut proxies, "http", "all_proxy");
+        insert_from_env(&mut proxies, "https", "all_proxy");
+    }
+
     if is_cgi() {
         if log::log_enabled!(log::Level::Warn) && env::var_os("HTTP_PROXY").is_some() {
             log::warn!("HTTP_PROXY environment variable ignored in CGI");
@@ -907,13 +910,6 @@ fn get_from_environment() -> SystemProxyMap {
 
     if !insert_from_env(&mut proxies, "https", "HTTPS_PROXY") {
         insert_from_env(&mut proxies, "https", "https_proxy");
-    }
-
-    if !(insert_from_env(&mut proxies, "http", "ALL_PROXY")
-        && insert_from_env(&mut proxies, "https", "ALL_PROXY"))
-    {
-        insert_from_env(&mut proxies, "http", "all_proxy");
-        insert_from_env(&mut proxies, "https", "all_proxy");
     }
 
     proxies
@@ -937,12 +933,11 @@ fn is_cgi() -> bool {
 
 #[cfg(target_os = "windows")]
 fn get_from_platform_impl() -> Result<Option<String>, Box<dyn Error>> {
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let internet_setting: RegKey =
-        hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")?;
+    let internet_setting = windows_registry::CURRENT_USER
+        .open("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")?;
     // ensure the proxy is enable, if the value doesn't exist, an error will returned.
-    let proxy_enable: u32 = internet_setting.get_value("ProxyEnable")?;
-    let proxy_server: String = internet_setting.get_value("ProxyServer")?;
+    let proxy_enable = internet_setting.get_u32("ProxyEnable")?;
+    let proxy_server = internet_setting.get_string("ProxyServer")?;
 
     Ok((proxy_enable == 1).then_some(proxy_server))
 }
@@ -1300,7 +1295,10 @@ mod tests {
         assert_eq!(p.host(), "127.0.0.1");
 
         assert_eq!(all_proxies.len(), 2);
-        assert!(all_proxies.values().all(|p| p.host() == "127.0.0.2"));
+        // Set by ALL_PROXY
+        assert_eq!(all_proxies["https"].host(), "127.0.0.2");
+        // Overwritten by the more specific HTTP_PROXY
+        assert_eq!(all_proxies["http"].host(), "127.0.0.1");
     }
 
     #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -1983,11 +1981,6 @@ mod test {
                         "http://[56FE::2159:5BBC::6594]",
                         url::ParseError::InvalidIpv6Address,
                     );
-                }
-
-                #[test]
-                fn invalid_domain_character() {
-                    check_parse_error("http://abc 123/", url::ParseError::InvalidDomainCharacter);
                 }
             }
         }

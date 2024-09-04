@@ -1,9 +1,12 @@
 //! DNS resolution via the [hickory-resolver](https://github.com/hickory-dns/hickory-dns) crate
 
-use hickory_resolver::{lookup_ip::LookupIpIntoIter, system_conf, TokioAsyncResolver};
+use hickory_resolver::{
+    config::LookupIpStrategy, error::ResolveError, lookup_ip::LookupIpIntoIter, system_conf,
+    TokioAsyncResolver,
+};
 use once_cell::sync::OnceCell;
 
-use std::io;
+use std::fmt;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -21,6 +24,9 @@ pub(crate) struct HickoryDnsResolver {
 struct SocketAddrs {
     iter: LookupIpIntoIter,
 }
+
+#[derive(Debug)]
+struct HickoryDnsSystemConfError(ResolveError);
 
 impl Resolve for HickoryDnsResolver {
     fn resolve(&self, name: Name) -> Resolving {
@@ -46,13 +52,23 @@ impl Iterator for SocketAddrs {
 }
 
 /// Create a new resolver with the default configuration,
-/// which reads from `/etc/resolve.conf`.
-fn new_resolver() -> io::Result<TokioAsyncResolver> {
-    let (config, opts) = system_conf::read_system_conf().map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!("error reading DNS system conf: {e}"),
-        )
-    })?;
+/// which reads from `/etc/resolve.conf`. The options are
+/// overridden to look up for both IPv4 and IPv6 addresses
+/// to work with "happy eyeballs" algorithm.
+fn new_resolver() -> Result<TokioAsyncResolver, HickoryDnsSystemConfError> {
+    let (config, mut opts) = system_conf::read_system_conf().map_err(HickoryDnsSystemConfError)?;
+    opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
     Ok(TokioAsyncResolver::tokio(config, opts))
+}
+
+impl fmt::Display for HickoryDnsSystemConfError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("error reading DNS system conf for hickory-dns")
+    }
+}
+
+impl std::error::Error for HickoryDnsSystemConfError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.0)
+    }
 }

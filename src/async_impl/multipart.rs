@@ -3,9 +3,16 @@ use std::borrow::Cow;
 use std::fmt;
 use std::pin::Pin;
 
+#[cfg(feature = "stream")]
+use std::io;
+#[cfg(feature = "stream")]
+use std::path::Path;
+
 use bytes::Bytes;
 use mime_guess::Mime;
 use percent_encoding::{self, AsciiSet, NON_ALPHANUMERIC};
+#[cfg(feature = "stream")]
+use tokio::fs::File;
 
 use futures_core::Stream;
 use futures_util::{future, stream, StreamExt};
@@ -80,6 +87,33 @@ impl Form {
         U: Into<Cow<'static, str>>,
     {
         self.part(name, Part::text(value))
+    }
+
+    /// Adds a file field.
+    ///
+    /// The path will be used to try to guess the filename and mime.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() -> std::io::Result<()> {
+    /// let form = reqwest::multipart::Form::new()
+    ///     .file("key", "/path/to/file").await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Errors when the file cannot be opened.
+    #[cfg(feature = "stream")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
+    pub async fn file<T, U>(self, name: T, path: U) -> io::Result<Form>
+    where
+        T: Into<Cow<'static, str>>,
+        U: AsRef<Path>,
+    {
+        Ok(self.part(name, Part::file(path).await?))
     }
 
     /// Adds a customized Part.
@@ -216,6 +250,30 @@ impl Part {
     /// length beforehand.
     pub fn stream_with_length<T: Into<Body>>(value: T, length: u64) -> Part {
         Part::new(value.into(), Some(length))
+    }
+
+    /// Makes a file parameter.
+    ///
+    /// # Errors
+    ///
+    /// Errors when the file cannot be opened.
+    #[cfg(feature = "stream")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
+    pub async fn file<T: AsRef<Path>>(path: T) -> io::Result<Part> {
+        let path = path.as_ref();
+        let file_name = path
+            .file_name()
+            .map(|filename| filename.to_string_lossy().into_owned());
+        let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+        let mime = mime_guess::from_ext(ext).first_or_octet_stream();
+        let file = File::open(path).await?;
+        let field = Part::stream(file).mime(mime);
+
+        Ok(if let Some(file_name) = file_name {
+            field.file_name(file_name)
+        } else {
+            field
+        })
     }
 
     fn new(value: Body, body_length: Option<u64>) -> Part {
