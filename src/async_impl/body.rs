@@ -484,7 +484,7 @@ mod tests {
         assert!(!bytes_body.is_end_stream());
         assert_eq!(bytes_body.size_hint().exact(), Some(3));
 
-        let stream_body = Body::streaming(bytes_body);
+        let stream_body = Body::wrap(bytes_body);
         assert!(!stream_body.is_end_stream());
         assert_eq!(stream_body.size_hint().exact(), None);
     }
