@@ -117,17 +117,6 @@ impl Body {
         }
     }
 
-    /*
-    #[cfg(feature = "blocking")]
-    pub(crate) fn wrap(body: hyper::Body) -> Body {
-        Body {
-            inner: Inner::Streaming {
-                body: Box::pin(WrapHyper(body)),
-            },
-        }
-    }
-    */
-
     pub(crate) fn empty() -> Body {
         Body::reusable(Bytes::new())
     }
@@ -138,8 +127,20 @@ impl Body {
         }
     }
 
-    // pub?
-    pub(crate) fn streaming<B>(inner: B) -> Body
+    /// Wrap a [`HttpBody`] in a box inside `Body`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use reqwest::Body;
+    /// # use futures_util;
+    /// # fn main() {
+    /// let content = "hello,world!".to_string();
+    ///
+    /// let body = Body::wrap(content);
+    /// # }
+    /// ```
+    pub fn wrap<B>(inner: B) -> Body
     where
         B: HttpBody + Send + Sync + 'static,
         B::Data: Into<Bytes>,
@@ -483,7 +484,7 @@ mod tests {
         assert!(!bytes_body.is_end_stream());
         assert_eq!(bytes_body.size_hint().exact(), Some(3));
 
-        let stream_body = Body::streaming(bytes_body);
+        let stream_body = Body::wrap(bytes_body);
         assert!(!stream_body.is_end_stream());
         assert_eq!(stream_body.size_hint().exact(), None);
     }
