@@ -116,17 +116,6 @@ impl Body {
         }
     }
 
-    /*
-    #[cfg(feature = "blocking")]
-    pub(crate) fn wrap(body: hyper::Body) -> Body {
-        Body {
-            inner: Inner::Streaming {
-                body: Box::pin(WrapHyper(body)),
-            },
-        }
-    }
-    */
-
     pub(crate) fn empty() -> Body {
         Body::reusable(Bytes::new())
     }
@@ -147,10 +136,10 @@ impl Body {
     /// # fn main() {
     /// let content = "hello,world!".to_string();
     ///
-    /// let body = Body::streaming(content);
+    /// let body = Body::wrap(content);
     /// # }
     /// ```
-    pub fn streaming<B>(inner: B) -> Body
+    pub fn wrap<B>(inner: B) -> Body
     where
         B: HttpBody + Send + Sync + 'static,
         B::Data: Into<Bytes>,
