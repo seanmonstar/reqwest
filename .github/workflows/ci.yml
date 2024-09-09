@@ -300,6 +300,7 @@ jobs:
           cargo update
           cargo update -p log --precise 0.4.18
           cargo update -p tokio --precise 1.29.1
+          cargo update -p tokio-util --precise 0.7.11
           cargo update -p url --precise 2.5.0
 
       - uses: Swatinem/rust-cache@v2
