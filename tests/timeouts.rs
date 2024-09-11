@@ -76,7 +76,7 @@ async fn connect_timeout() {
         .build()
         .unwrap();
 
-    let url = "http://10.255.255.1:81/slow";
+    let url = "http://192.0.2.1:81/slow";
 
     let res = client
         .get(url)
@@ -100,7 +100,7 @@ async fn connect_many_timeout_succeeds() {
     let client = reqwest::Client::builder()
         .resolve_to_addrs(
             "many_addrs",
-            &["10.255.255.1:81".parse().unwrap(), server.addr()],
+            &["192.0.2.1:81".parse().unwrap(), server.addr()],
         )
         .connect_timeout(Duration::from_millis(100))
         .no_proxy()
@@ -126,8 +126,8 @@ async fn connect_many_timeout() {
         .resolve_to_addrs(
             "many_addrs",
             &[
-                "10.255.255.1:81".parse().unwrap(),
-                "10.255.255.2:81".parse().unwrap(),
+                "192.0.2.1:81".parse().unwrap(),
+                "192.0.2.2:81".parse().unwrap(),
             ],
         )
         .connect_timeout(Duration::from_millis(100))
