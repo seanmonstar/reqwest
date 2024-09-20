@@ -514,9 +514,9 @@ impl ClientBuilder {
                     if config.tls_built_in_certs_native {
                         let mut valid_count = 0;
                         let mut invalid_count = 0;
-                        for cert in rustls_native_certs::load_native_certs()
-                            .map_err(crate::error::builder)?
-                        {
+
+                        let load_results = rustls_native_certs::load_native_certs();
+                        for cert in load_results.certs {
                             // Continue on parsing errors, as native stores often include ancient or syntactically
                             // invalid certificates, like root certificates without any X509 extensions.
                             // Inspiration: https://github.com/rustls/rustls/blob/633bf4ba9d9521a95f68766d04c22e2b01e68318/rustls/src/anchors.rs#L105-L112
@@ -529,9 +529,21 @@ impl ClientBuilder {
                             }
                         }
                         if valid_count == 0 && invalid_count > 0 {
-                            return Err(crate::error::builder(
-                                "zero valid certificates found in native root store",
-                            ));
+                            let err = if load_results.errors.is_empty() {
+                                crate::error::builder(
+                                    "zero valid certificates found in native root store",
+                                )
+                            } else {
+                                use std::fmt::Write as _;
+                                let mut acc = String::new();
+                                for err in load_results.errors {
+                                    let _ = writeln!(&mut acc, "{err}");
+                                }
+
+                                crate::error::builder(acc)
+                            };
+
+                            return Err(err);
                         }
                     }
 
