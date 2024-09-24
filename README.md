@@ -93,6 +93,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+In this example, a new `Client` is created, and a POST request is sent to the `httpbin.org` service with a JSON body containing a key-value pair. The server response is printed. This demonstrates how to use the `json` method to serialize a Rust data structure into JSON and include it in the request body.
+
 ### Handling Custom Headers
 ```rust,no_run
 use reqwest::header;
@@ -110,6 +112,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+In this example, a `USER_AGENT` header is added to a GET request sent to `httpbin.org/headers`. The response, which includes all headers sent by the client, is printed. This demonstrates how to use the `header` method on the client to add custom headers to a request.
+
 ### Managing Timeouts
 ```rust,no_run
 use std::time::Duration;
@@ -130,6 +134,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+In this example, a client is created with a timeout of 10 seconds. A GET request is sent to an endpoint that delays the response by 5 seconds, and the response is printed at the end. This demonstrates how to set a timeout for all requests made with the client using the `timeout` method, which ensures any request taking longer than the specified duration will be aborted.
 
 ## Commercial Support
 
