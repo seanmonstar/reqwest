@@ -37,7 +37,7 @@ use crate::cookie;
 use crate::dns::hickory::HickoryDnsResolver;
 use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
 use crate::error;
-use crate::into_url::try_uri;
+use crate::into_url::{try_uri, IntoUrlSealed};
 use crate::redirect::{self, remove_sensitive_headers};
 #[cfg(feature = "__tls")]
 use crate::tls::{self, TlsBackend};
@@ -167,6 +167,7 @@ struct Config {
     quic_send_window: Option<u64>,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
     dns_resolver: Option<Arc<dyn Resolve>>,
+    base_url: Option<Url>,
 }
 
 impl Default for ClientBuilder {
@@ -265,6 +266,7 @@ impl ClientBuilder {
                 #[cfg(feature = "http3")]
                 quic_send_window: None,
                 dns_resolver: None,
+                base_url: None,
             },
         }
     }
@@ -777,6 +779,7 @@ impl ClientBuilder {
                 proxies,
                 proxies_maybe_http_auth,
                 https_only: config.https_only,
+                base_url: config.base_url,
             }),
         })
     }
@@ -818,6 +821,26 @@ impl ClientBuilder {
         };
         self
     }
+
+    /// Sets a base url to be used on all requests with a relative URL.
+    ///
+    /// By default relative URLs are rejected, but will be allowed if a
+    /// base url has been set.
+    pub fn base_url<U>(mut self, base_url: U) -> ClientBuilder
+    where
+        U: IntoUrl,
+    {
+        match base_url.into_url() {
+            Ok(base_url) => {
+                self.config.base_url = Some(base_url);
+            }
+            Err(e) => {
+                self.config.error = Some(e);
+            }
+        }
+        self
+    }
+
     /// Sets the default headers for every request.
     ///
     /// # Example
@@ -1983,7 +2006,16 @@ impl Client {
     ///
     /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
-        let req = url.into_url().map(move |url| Request::new(method, url));
+        let maybe_url = match &self.inner.base_url {
+            Some(ref base_url) => Url::options()
+                .base_url(Some(base_url))
+                .parse(url.as_str())
+                .map_err(crate::error::builder)
+                .and_then(IntoUrlSealed::into_url),
+            None => url.into_url(),
+        };
+
+        let req = maybe_url.map(move |url| Request::new(method, url));
         RequestBuilder::new(self.clone(), req)
     }
 
@@ -2314,6 +2346,7 @@ struct ClientRef {
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
     https_only: bool,
+    base_url: Option<Url>,
 }
 
 impl ClientRef {
