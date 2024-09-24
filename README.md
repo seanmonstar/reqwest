@@ -5,7 +5,22 @@
 [![MIT/Apache-2 licensed](https://img.shields.io/crates/l/reqwest.svg)](./LICENSE-APACHE)
 [![CI](https://github.com/seanmonstar/reqwest/workflows/CI/badge.svg)](https://github.com/seanmonstar/reqwest/actions?query=workflow%3ACI)
 
-An ergonomic, batteries-included HTTP Client for Rust.
+## Table of Contents
+- [Introduction](#introduction)
+- [Installation](#installation)
+- [Example](#example)
+- [Usage](#usage)
+  - [Sending a POST Request with JSON](#sending-a-post-request-with-json)
+  - [Handling Custom Headers](#handling-custom-headers)
+  - [Managing Timeouts](#managing-timeouts)
+- [Commercial Support](#commercial-support)
+- [Requirements](#requirements)
+- [License](#license)
+- [Contribution](#contribution)
+- [Sponsors](#sponsors)
+
+## Introduction
+An ergonomic, batteries-included HTTP Client for Rust. It provides a rich set of features, including:
 
 - Async and blocking `Client`s
 - Plain bodies, JSON, urlencoded, multipart
@@ -15,6 +30,21 @@ An ergonomic, batteries-included HTTP Client for Rust.
 - Cookie Store
 - WASM
 
+## Installation
+To use `reqwest` in your Rust project, add the following to your `Cargo.toml` file:
+
+```toml
+[dependencies]
+reqwest = "0.12"
+```
+
+For additional features like JSON and cookie session support, you can include:
+```toml
+[dependencies]
+reqwest = { version = "0.12", features = ["json", "cookies"] }
+```
+
+Then run `cargo build` to install the library and its dependencies.
 
 ## Example
 
@@ -39,6 +69,64 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .json::<HashMap<String, String>>()
         .await?;
     println!("{resp:#?}");
+    Ok(())
+}
+```
+
+## Usage
+### Sending a POST Request with JSON
+```rust,no_run
+use std::collections::HashMap;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = reqwest::Client::new();
+    let mut map = HashMap::new();
+    map.insert("key", "value");
+
+    let response = client.post("https://httpbin.org/post")
+        .json(&map)
+        .send()
+        .await?;
+
+    println!("Response: {:?}", response.text().await?);
+    Ok(())
+}
+```
+### Handling Custom Headers
+```rust,no_run
+use reqwest::header;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = reqwest::Client::new();
+    let response = client.get("https://httpbin.org/headers")
+        .header(header::USER_AGENT, "reqwest")
+        .send()
+        .await?
+        .text()
+        .await?;
+    println!("{response}");
+    Ok(())
+}
+```
+### Managing Timeouts
+```rust,no_run
+use std::time::Duration;
+use reqwest::Client;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()?;
+
+    let response = client.get("https://httpbin.org/delay/5")
+        .send()
+        .await?
+        .text()
+        .await?;
+    println!("{response}");
     Ok(())
 }
 ```
