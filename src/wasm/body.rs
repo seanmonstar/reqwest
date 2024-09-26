@@ -131,6 +131,14 @@ impl Body {
     }
 }
 
+/// Converts unit to a zero-length body.
+impl From<()> for Body {
+    #[inline]
+    fn from(_: ()) -> Body {
+        Body::default()
+    }
+}
+
 impl From<Bytes> for Body {
     #[inline]
     fn from(bytes: Bytes) -> Body {
@@ -209,6 +217,26 @@ mod tests {
         // `log(..)`
         #[wasm_bindgen(js_namespace = console)]
         fn log(s: String);
+    }
+
+    #[wasm_bindgen_test]
+    async fn test_body_from_unit() {
+        let body = Body::from(());
+        assert_eq!(body.as_bytes(), Some(&[] as &[u8]));
+        assert!(body.is_empty());
+    }
+
+    #[wasm_bindgen_test]
+    async fn test_request_from_unit_body() {
+        let http_request = http::Request::builder()
+            .uri("http://localhost/")
+            .body(())
+            .unwrap();
+        let request = crate::Request::try_from(http_request).unwrap();
+        assert_eq!(request.body().unwrap().as_bytes(), Some(&[] as &[u8]));
+        assert_eq!(request.method(), http::Method::GET);
+        assert_eq!(request.url().as_str(), "http://localhost/");
+        assert!(request.headers().is_empty());
     }
 
     #[wasm_bindgen_test]
