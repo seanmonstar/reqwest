@@ -21,6 +21,8 @@ use crate::dns::Resolve;
 use crate::tls;
 #[cfg(feature = "__tls")]
 use crate::Certificate;
+#[cfg(feature = "__rustls")]
+use crate::Crl;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
 use crate::{async_impl, header, redirect, IntoUrl, Method, Proxy};
@@ -604,6 +606,30 @@ impl ClientBuilder {
     )]
     pub fn add_root_certificate(self, cert: Certificate) -> ClientBuilder {
         self.with_inner(move |inner| inner.add_root_certificate(cert))
+    }
+
+    /// Add a certificate revocation list.
+    ///
+    ///
+    /// # Optional
+    ///
+    /// This requires the `rustls-tls(-...)` Cargo feature enabled.
+    #[cfg(feature = "__rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    pub fn add_crl(mut self, crl: Crl) -> ClientBuilder {
+        self.with_inner(move |inner| inner.add_crl(crl))
+    }
+
+    /// Add multiple certificate revocation lists.
+    ///
+    ///
+    /// # Optional
+    ///
+    /// This requires the `rustls-tls(-...)` Cargo feature enabled.
+    #[cfg(feature = "__rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    pub fn add_crls(mut self, mut crls: Vec<Crl>) -> ClientBuilder {
+        self.with_inner(move |inner| inner.add_crls(crls))
     }
 
     /// Controls the use of built-in system certificates during certificate validation.

@@ -349,6 +349,8 @@ if_hyper! {
     #[cfg(feature = "__tls")]
     // Re-exports, to be removed in a future release
     pub use tls::{Certificate, Identity};
+    #[cfg(feature = "__rustls")]
+    pub use tls::Crl;
     #[cfg(feature = "multipart")]
     pub use self::async_impl::multipart;
 

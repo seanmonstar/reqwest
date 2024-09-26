@@ -43,6 +43,8 @@ use crate::redirect::{self, remove_sensitive_headers};
 use crate::tls::{self, TlsBackend};
 #[cfg(feature = "__tls")]
 use crate::Certificate;
+#[cfg(feature = "__rustls")]
+use crate::Crl;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
@@ -118,6 +120,8 @@ struct Config {
     tls_built_in_certs_webpki: bool,
     #[cfg(feature = "rustls-tls-native-roots")]
     tls_built_in_certs_native: bool,
+    #[cfg(feature = "__rustls")]
+    crls: Vec<Crl>,
     #[cfg(feature = "__tls")]
     min_tls_version: Option<tls::Version>,
     #[cfg(feature = "__tls")]
@@ -217,6 +221,8 @@ impl ClientBuilder {
                 tls_built_in_certs_native: true,
                 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
                 identity: None,
+                #[cfg(feature = "__rustls")]
+                crls: vec![],
                 #[cfg(feature = "__tls")]
                 min_tls_version: None,
                 #[cfg(feature = "__tls")]
@@ -588,9 +594,10 @@ impl ClientBuilder {
 
                     // Build TLS config
                     let signature_algorithms = provider.signature_verification_algorithms;
-                    let config_builder = rustls::ClientConfig::builder_with_provider(provider)
-                        .with_protocol_versions(&versions)
-                        .map_err(|_| crate::error::builder("invalid TLS versions"))?;
+                    let config_builder =
+                        rustls::ClientConfig::builder_with_provider(provider.clone())
+                            .with_protocol_versions(&versions)
+                            .map_err(|_| crate::error::builder("invalid TLS versions"))?;
 
                     let config_builder = if !config.certs_verification {
                         config_builder
@@ -604,7 +611,26 @@ impl ClientBuilder {
                                 signature_algorithms,
                             )))
                     } else {
-                        config_builder.with_root_certificates(root_cert_store)
+                        if config.crls.is_empty() {
+                            config_builder.with_root_certificates(root_cert_store)
+                        } else {
+                            let crls = config
+                                .crls
+                                .iter()
+                                .map(|e| e.as_rustls_crl())
+                                .collect::<Vec<_>>();
+                            let verifier =
+                                rustls::client::WebPkiServerVerifier::builder_with_provider(
+                                    Arc::new(root_cert_store),
+                                    provider,
+                                )
+                                .with_crls(crls)
+                                .build()
+                                .map_err(|_| {
+                                    crate::error::builder("invalid TLS verification settings")
+                                })?;
+                            config_builder.with_webpki_verifier(verifier)
+                        }
                     };
 
                     // Finalize TLS config
@@ -1403,6 +1429,32 @@ impl ClientBuilder {
     )]
     pub fn add_root_certificate(mut self, cert: Certificate) -> ClientBuilder {
         self.config.root_certs.push(cert);
+        self
+    }
+
+    /// Add a certificate revocation list.
+    ///
+    ///
+    /// # Optional
+    ///
+    /// This requires the `rustls-tls(-...)` Cargo feature enabled.
+    #[cfg(feature = "__rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    pub fn add_crl(mut self, crl: Crl) -> ClientBuilder {
+        self.config.crls.push(crl);
+        self
+    }
+
+    /// Add multiple certificate revocation lists.
+    ///
+    ///
+    /// # Optional
+    ///
+    /// This requires the `rustls-tls(-...)` Cargo feature enabled.
+    #[cfg(feature = "__rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    pub fn add_crls(mut self, mut crls: Vec<Crl>) -> ClientBuilder {
+        self.config.crls.append(&mut crls);
         self
     }
 
