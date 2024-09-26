@@ -208,6 +208,13 @@ impl From<hyper::Body> for Body {
 }
 */
 
+impl From<()> for Body {
+    #[inline]
+    fn from(_: ()) -> Body {
+        Body::empty()
+    }
+}
+
 impl From<Bytes> for Body {
     #[inline]
     fn from(bytes: Bytes) -> Body {
@@ -466,6 +473,22 @@ mod tests {
     use http_body::Body as _;
 
     use super::Body;
+
+    #[test]
+    fn empty() {
+        let body = Body::empty();
+        assert_eq!(body.as_bytes(), Some(&[] as &[u8]));
+        assert_eq!(body.size_hint().exact(), Some(0));
+        assert!(body.is_end_stream());
+    }
+
+    #[test]
+    fn from_unit() {
+        let body = Body::from(());
+        assert_eq!(body.as_bytes(), Some(&[] as &[u8]));
+        assert_eq!(body.size_hint().exact(), Some(0));
+        assert!(body.is_end_stream());
+    }
 
     #[test]
     fn test_as_bytes() {
