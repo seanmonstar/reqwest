@@ -12,12 +12,26 @@ use tokio::sync::oneshot;
 pub struct Server {
     addr: net::SocketAddr,
     panic_rx: std_mpsc::Receiver<()>,
+    events_rx: std_mpsc::Receiver<Event>,
     shutdown_tx: Option<oneshot::Sender<()>>,
+}
+
+#[non_exhaustive]
+pub enum Event {
+    ConnectionClosed,
 }
 
 impl Server {
     pub fn addr(&self) -> net::SocketAddr {
         self.addr
+    }
+
+    pub fn events(&mut self) -> Vec<Event> {
+        let mut events = Vec::new();
+        while let Ok(event) = self.events_rx.try_recv() {
+            events.push(event);
+        }
+        events
     }
 }
 
@@ -67,6 +81,7 @@ where
 
         let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
         let (panic_tx, panic_rx) = std_mpsc::channel();
+        let (events_tx, events_rx) = std_mpsc::channel();
         let tname = format!(
             "test({})-support-server",
             test_name,
@@ -92,8 +107,10 @@ where
                                     async move { Ok::<_, Infallible>(fut.await) }
                                 });
                                 let builder = builder.clone();
+                                let events_tx = events_tx.clone();
                                 tokio::spawn(async move {
                                     let _ = builder.serve_connection_with_upgrades(hyper_util::rt::TokioIo::new(io), svc).await;
+                                    let _ = events_tx.send(Event::ConnectionClosed);
                                 });
                             }
                         }
@@ -105,6 +122,7 @@ where
         Server {
             addr,
             panic_rx,
+            events_rx,
             shutdown_tx: Some(shutdown_tx),
         }
     })
@@ -152,6 +170,7 @@ where
 
         let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
         let (panic_tx, panic_rx) = std_mpsc::channel();
+        let (events_tx, events_rx) = std_mpsc::channel();
         let tname = format!(
             "test({})-support-server",
             test_name,
@@ -169,9 +188,11 @@ where
                             Some(accepted) = endpoint.accept() => {
                                 let conn = accepted.await.expect("accepted");
                                 let mut h3_conn = h3::server::Connection::new(h3_quinn::Connection::new(conn)).await.unwrap();
+                                let events_tx = events_tx.clone();
                                 let func = func.clone();
                                 tokio::spawn(async move {
                                     while let Ok(Some((req, stream))) = h3_conn.accept().await {
+                                        let events_tx = events_tx.clone();
                                         let func = func.clone();
                                         tokio::spawn(async move {
                                             let (mut tx, rx) = stream.split();
@@ -198,6 +219,7 @@ where
                                                 }
                                             }
                                             tx.finish().await.unwrap();
+                                            events_tx.send(Event::ConnectionClosed).unwrap();
                                         });
                                     }
                                 });
@@ -211,6 +233,7 @@ where
         Server {
             addr,
             panic_rx,
+            events_rx,
             shutdown_tx: Some(shutdown_tx),
         }
     })

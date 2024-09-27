@@ -572,3 +572,24 @@ async fn highly_concurrent_requests_to_slow_http2_server_with_low_max_concurrent
 
     server.shutdown().await;
 }
+
+#[tokio::test]
+async fn close_connection_after_idle_timeout() {
+    let mut server = server::http(move |_| async move { http::Response::default() });
+
+    let client = reqwest::Client::builder()
+        .pool_idle_timeout(std::time::Duration::from_secs(1))
+        .build()
+        .unwrap();
+
+    let url = format!("http://{}", server.addr());
+
+    client.get(&url).send().await.unwrap();
+
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+    assert!(server
+        .events()
+        .iter()
+        .any(|e| matches!(e, server::Event::ConnectionClosed)));
+}
