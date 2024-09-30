@@ -1,6 +1,7 @@
 use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
@@ -16,6 +17,7 @@ use url::Url;
 
 use super::body::Body;
 use super::decoder::{Accepts, Decoder};
+use super::hooks::ResponseBodyHook;
 use crate::async_impl::body::ResponseBody;
 #[cfg(feature = "cookies")]
 use crate::cookie;
@@ -31,6 +33,7 @@ pub struct Response {
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
+    response_body_hook: Option<Arc<dyn ResponseBodyHook>>,
 }
 
 impl Response {
@@ -40,6 +43,7 @@ impl Response {
         accepts: Accepts,
         total_timeout: Option<Pin<Box<Sleep>>>,
         read_timeout: Option<Duration>,
+        response_body_hook: Option<Arc<dyn ResponseBodyHook>>,
     ) -> Response {
         let (mut parts, body) = res.into_parts();
         let decoder = Decoder::detect(
@@ -52,6 +56,7 @@ impl Response {
         Response {
             res,
             url: Box::new(url),
+            response_body_hook,
         }
     }
 
@@ -218,6 +223,7 @@ impl Response {
         let full = self.bytes().await?;
 
         let (text, _, _) = encoding.decode(&full);
+
         Ok(text.into_owned())
     }
 
@@ -288,9 +294,18 @@ impl Response {
     pub async fn bytes(self) -> crate::Result<Bytes> {
         use http_body_util::BodyExt;
 
-        BodyExt::collect(self.res.into_body())
+        let bytes = BodyExt::collect(self.res.into_body())
             .await
-            .map(|buf| buf.to_bytes())
+            .map(|buf| buf.to_bytes())?;
+
+        let res_body_hook = self.response_body_hook.clone();
+        let bytes = if let Some(res_body_hook) = res_body_hook.as_ref() {
+            res_body_hook.intercept(bytes)
+        } else {
+            bytes
+        };
+
+        Ok(bytes)
     }
 
     /// Stream a chunk of the response body.
@@ -468,6 +483,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
         Response {
             res,
             url: Box::new(url),
+            response_body_hook: None,
         }
     }
 }

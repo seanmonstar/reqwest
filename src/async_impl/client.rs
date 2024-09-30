@@ -23,6 +23,7 @@ use std::task::{Context, Poll};
 use tokio::time::Sleep;
 
 use super::decoder::Accepts;
+use super::hooks::{RequestHook, ResponseBodyHook, ResponseHook};
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
@@ -167,6 +168,9 @@ struct Config {
     quic_send_window: Option<u64>,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
     dns_resolver: Option<Arc<dyn Resolve>>,
+    request_hook: Option<Arc<dyn RequestHook>>,
+    response_hook: Option<Arc<dyn ResponseHook>>,
+    response_body_hook: Option<Arc<dyn ResponseBodyHook>>,
 }
 
 impl Default for ClientBuilder {
@@ -265,6 +269,9 @@ impl ClientBuilder {
                 #[cfg(feature = "http3")]
                 quic_send_window: None,
                 dns_resolver: None,
+                request_hook: None,
+                response_hook: None,
+                response_body_hook: None,
             },
         }
     }
@@ -777,6 +784,9 @@ impl ClientBuilder {
                 proxies,
                 proxies_maybe_http_auth,
                 https_only: config.https_only,
+                request_hook: config.request_hook,
+                response_hook: config.response_hook,
+                response_body_hook: config.response_body_hook,
             }),
         })
     }
@@ -1889,6 +1899,24 @@ impl ClientBuilder {
         self.config.quic_send_window = Some(value);
         self
     }
+
+    /// Set request hook
+    pub fn request_hook(mut self, hook: Arc<dyn RequestHook>) -> ClientBuilder {
+        self.config.request_hook = Some(hook);
+        self
+    }
+
+    /// Set response hook
+    pub fn response_hook(mut self, hook: Arc<dyn ResponseHook>) -> ClientBuilder {
+        self.config.response_hook = Some(hook);
+        self
+    }
+
+    /// Set response body hook
+    pub fn response_body_hook(mut self, hook: Arc<dyn ResponseBodyHook>) -> ClientBuilder {
+        self.config.response_body_hook = Some(hook);
+        self
+    }
 }
 
 type HyperClient = hyper_util::client::legacy::Client<Connector, super::Body>;
@@ -2007,6 +2035,11 @@ impl Client {
     }
 
     pub(super) fn execute_request(&self, req: Request) -> Pending {
+        let req = if let Some(req_hook) = self.inner.request_hook.as_ref() {
+            req_hook.intercept(req)
+        } else {
+            req
+        };
         let (method, url, mut headers, body, timeout, version) = req.pieces();
         if url.scheme() != "http" && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
@@ -2105,6 +2138,8 @@ impl Client {
                 total_timeout,
                 read_timeout_fut,
                 read_timeout: self.inner.read_timeout,
+                response_hook: self.inner.response_hook.clone(),
+                response_body_hook: self.inner.response_body_hook.clone(),
             }),
         }
     }
@@ -2314,6 +2349,9 @@ struct ClientRef {
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
     https_only: bool,
+    request_hook: Option<Arc<dyn RequestHook>>,
+    response_hook: Option<Arc<dyn ResponseHook>>,
+    response_body_hook: Option<Arc<dyn ResponseBodyHook>>,
 }
 
 impl ClientRef {
@@ -2378,6 +2416,9 @@ pin_project! {
         retry_count: usize,
 
         client: Arc<ClientRef>,
+
+        response_hook: Option<Arc<dyn ResponseHook>>,
+        response_body_hook: Option<Arc<dyn ResponseBodyHook>>,
 
         #[pin]
         in_flight: ResponseFuture,
@@ -2745,7 +2786,13 @@ impl Future for PendingRequest {
                 self.client.accepts,
                 self.total_timeout.take(),
                 self.read_timeout,
+                self.response_body_hook.clone(),
             );
+            let res = if let Some(res_hook) = self.response_hook.as_ref() {
+                res_hook.intercept(res)
+            } else {
+                res
+            };
             return Poll::Ready(Ok(res));
         }
     }
