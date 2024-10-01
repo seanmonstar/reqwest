@@ -2007,7 +2007,7 @@ impl Client {
     }
 
     pub(super) fn execute_request(&self, req: Request) -> Pending {
-        let (method, url, mut headers, body, timeout, version) = req.pieces();
+        let (method, url, mut headers, body, timeout, redirect_policy, version) = req.pieces();
         if url.scheme() != "http" && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
         }
@@ -2098,6 +2098,7 @@ impl Client {
                 urls: Vec::new(),
 
                 retry_count: 0,
+                redirect_policy,
 
                 client: self.inner.clone(),
 
@@ -2376,6 +2377,7 @@ pin_project! {
         urls: Vec<Url>,
 
         retry_count: usize,
+        redirect_policy: Option<redirect::Policy>,
 
         client: Arc<ClientRef>,
 
@@ -2660,9 +2662,11 @@ impl Future for PendingRequest {
                     }
                     let url = self.url.clone();
                     self.as_mut().urls().push(url);
+                    // This request's redirect policy overrides the client's redirect policy
                     let action = self
-                        .client
                         .redirect_policy
+                        .as_ref()
+                        .unwrap_or(&self.client.redirect_policy)
                         .check(res.status(), &loc, &self.urls);
 
                     match action {
