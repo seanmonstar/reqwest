@@ -307,7 +307,7 @@ impl RequestBuilder {
     }
 
     /// Overrides the client's redirect policy for this request
-    pub fn redirect(mut self, policy: redirect::Policy) -> RequestBuilder {
+    pub fn redirect_policy(mut self, policy: redirect::Policy) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             *req.redirect_policy_mut() = Some(policy)
         }

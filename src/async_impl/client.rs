@@ -1061,7 +1061,7 @@ impl ClientBuilder {
     /// Set a `RedirectPolicy` for this client.
     ///
     /// Default will follow redirects up to a maximum of 10.
-    pub fn redirect(mut self, policy: redirect::Policy) -> ClientBuilder {
+    pub fn redirect_policy(mut self, policy: redirect::Policy) -> ClientBuilder {
         self.config.redirect_policy = policy;
         self
     }

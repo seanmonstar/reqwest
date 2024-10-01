@@ -244,7 +244,7 @@ async fn test_redirect_policy_can_stop_redirects_without_an_error() {
     let url = format!("http://{}/no-redirect", server.addr());
 
     let res = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
+        .redirect_policy(reqwest::redirect::Policy::none())
         .build()
         .unwrap()
         .get(&url)
@@ -377,7 +377,6 @@ async fn test_redirect_https_only_enforced_gh1312() {
     assert!(err.is_redirect());
 }
 
-// Code taken from: https://github.com/seanmonstar/reqwest/pull/1204
 #[tokio::test]
 async fn test_request_redirect() {
     let code = 301u16;
@@ -420,7 +419,7 @@ async fn test_request_redirect() {
     );
 
     let no_redirect_client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
+        .redirect_policy(reqwest::redirect::Policy::none())
         .build()
         .unwrap();
 
