@@ -60,7 +60,7 @@ use std::{
 
 /// Represents a X509 certificate revocation list.
 #[cfg(feature = "__rustls")]
-pub struct Crl {
+pub struct CertificateRevocationList {
     #[cfg(feature = "__rustls")]
     inner: rustls_pki_types::CertificateRevocationListDer<'static>,
 }
@@ -417,7 +417,7 @@ impl Identity {
 }
 
 #[cfg(feature = "__rustls")]
-impl Crl {
+impl CertificateRevocationList {
     /// Parses a PEM encoded CRL.
     ///
     /// # Examples
@@ -429,7 +429,7 @@ impl Crl {
     /// let mut buf = Vec::new();
     /// File::open("my_crl.pem")?
     ///     .read_to_end(&mut buf)?;
-    /// let crl = reqwest::Crl::from_pem(&buf)?;
+    /// let crl = reqwest::tls::CertificateRevocationList::from_pem(&buf)?;
     /// # drop(crl);
     /// # Ok(())
     /// # }
@@ -439,14 +439,14 @@ impl Crl {
     ///
     /// This requires the `rustls-tls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
-    pub fn from_pem(pem: &[u8]) -> crate::Result<Crl> {
-        Ok(Crl {
+    pub fn from_pem(pem: &[u8]) -> crate::Result<CertificateRevocationList> {
+        Ok(CertificateRevocationList {
             #[cfg(feature = "__rustls")]
             inner: rustls_pki_types::CertificateRevocationListDer::from(pem.to_vec()),
         })
     }
 
-    /// Creates a collection of `Crl`s from a PEM encoded CRL bundle.
+    /// Creates a collection of `CertificateRevocationList`s from a PEM encoded CRL bundle.
     /// Example byte sources may be `.crl` or `.pem` files.
     ///
     /// # Examples
@@ -458,7 +458,7 @@ impl Crl {
     /// let mut buf = Vec::new();
     /// File::open("crl-bundle.crl")?
     ///     .read_to_end(&mut buf)?;
-    /// let crls = reqwest::Crl::from_pem_bundle(&buf)?;
+    /// let crls = reqwest::tls::CertificateRevocationList::from_pem_bundle(&buf)?;
     /// # drop(crls);
     /// # Ok(())
     /// # }
@@ -468,15 +468,15 @@ impl Crl {
     ///
     /// This requires the `rustls-tls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
-    pub fn from_pem_bundle(pem_bundle: &[u8]) -> crate::Result<Vec<Crl>> {
+    pub fn from_pem_bundle(pem_bundle: &[u8]) -> crate::Result<Vec<CertificateRevocationList>> {
         let mut reader = BufReader::new(pem_bundle);
 
         rustls_pemfile::crls(&mut reader)
             .map(|result| match result {
-                Ok(crl) => Ok(Crl { inner: crl }),
+                Ok(crl) => Ok(CertificateRevocationList { inner: crl }),
                 Err(_) => Err(crate::error::builder("invalid crl encoding")),
             })
-            .collect::<crate::Result<Vec<Crl>>>()
+            .collect::<crate::Result<Vec<CertificateRevocationList>>>()
     }
 
     #[cfg(feature = "__rustls")]
@@ -498,9 +498,9 @@ impl fmt::Debug for Identity {
 }
 
 #[cfg(feature = "__rustls")]
-impl fmt::Debug for Crl {
+impl fmt::Debug for CertificateRevocationList {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Crl").finish()
+        f.debug_struct("CertificateRevocationList").finish()
     }
 }
 
@@ -825,7 +825,7 @@ mod tests {
     fn crl_from_pem() {
         let pem = b"-----BEGIN X509 CRL-----\n-----END X509 CRL-----\n";
 
-        Crl::from_pem(pem).unwrap();
+        CertificateRevocationList::from_pem(pem).unwrap();
     }
 
     #[cfg(feature = "__rustls")]
@@ -833,7 +833,7 @@ mod tests {
     fn crl_from_pem_bundle() {
         let pem_bundle = std::fs::read("tests/support/crl.pem").unwrap();
 
-        let result = Crl::from_pem_bundle(&pem_bundle);
+        let result = CertificateRevocationList::from_pem_bundle(&pem_bundle);
 
         assert!(result.is_ok());
         let result = result.unwrap();

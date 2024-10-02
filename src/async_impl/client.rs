@@ -39,12 +39,12 @@ use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolv
 use crate::error;
 use crate::into_url::try_uri;
 use crate::redirect::{self, remove_sensitive_headers};
+#[cfg(feature = "__rustls")]
+use crate::tls::CertificateRevocationList;
 #[cfg(feature = "__tls")]
 use crate::tls::{self, TlsBackend};
 #[cfg(feature = "__tls")]
 use crate::Certificate;
-#[cfg(feature = "__rustls")]
-use crate::Crl;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
@@ -121,7 +121,7 @@ struct Config {
     #[cfg(feature = "rustls-tls-native-roots")]
     tls_built_in_certs_native: bool,
     #[cfg(feature = "__rustls")]
-    crls: Vec<Crl>,
+    crls: Vec<CertificateRevocationList>,
     #[cfg(feature = "__tls")]
     min_tls_version: Option<tls::Version>,
     #[cfg(feature = "__tls")]
@@ -1440,7 +1440,7 @@ impl ClientBuilder {
     /// This requires the `rustls-tls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
-    pub fn add_crl(mut self, crl: Crl) -> ClientBuilder {
+    pub fn add_crl(mut self, crl: CertificateRevocationList) -> ClientBuilder {
         self.config.crls.push(crl);
         self
     }
@@ -1453,8 +1453,11 @@ impl ClientBuilder {
     /// This requires the `rustls-tls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
-    pub fn add_crls(mut self, mut crls: Vec<Crl>) -> ClientBuilder {
-        self.config.crls.append(&mut crls);
+    pub fn add_crls(
+        mut self,
+        crls: impl IntoIterator<Item = CertificateRevocationList>,
+    ) -> ClientBuilder {
+        self.config.crls.extend(crls);
         self
     }
 

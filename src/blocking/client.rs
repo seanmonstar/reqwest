@@ -19,10 +19,10 @@ use super::wait;
 use crate::dns::Resolve;
 #[cfg(feature = "__tls")]
 use crate::tls;
+#[cfg(feature = "__rustls")]
+use crate::tls::CertificateRevocationList;
 #[cfg(feature = "__tls")]
 use crate::Certificate;
-#[cfg(feature = "__rustls")]
-use crate::Crl;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
 use crate::{async_impl, header, redirect, IntoUrl, Method, Proxy};
@@ -616,7 +616,7 @@ impl ClientBuilder {
     /// This requires the `rustls-tls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
-    pub fn add_crl(mut self, crl: Crl) -> ClientBuilder {
+    pub fn add_crl(mut self, crl: CertificateRevocationList) -> ClientBuilder {
         self.with_inner(move |inner| inner.add_crl(crl))
     }
 
@@ -628,7 +628,10 @@ impl ClientBuilder {
     /// This requires the `rustls-tls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
-    pub fn add_crls(mut self, mut crls: Vec<Crl>) -> ClientBuilder {
+    pub fn add_crls(
+        mut self,
+        crls: impl IntoIterator<Item = CertificateRevocationList>,
+    ) -> ClientBuilder {
         self.with_inner(move |inner| inner.add_crls(crls))
     }
 
