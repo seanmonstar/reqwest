@@ -604,6 +604,7 @@ impl Accepts {
     }
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for Accepts {
     fn default() -> Accepts {
         Accepts {
