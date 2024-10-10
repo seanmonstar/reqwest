@@ -1,16 +1,17 @@
 use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use bytes::Bytes;
+use futures_core::Stream;
+use futures_util::StreamExt;
 use http_body_util::BodyExt;
 use hyper::{HeaderMap, StatusCode, Version};
 use hyper_util::client::legacy::connect::HttpInfo;
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
-#[cfg(feature = "json")]
-use serde_json;
 use tokio::time::Sleep;
 use url::Url;
 
@@ -24,6 +25,24 @@ use crate::cookie;
 use encoding_rs::{Encoding, UTF_8};
 #[cfg(feature = "charset")]
 use mime::Mime;
+
+/// Return type of [`Response::bytes_stream`]
+#[cfg(feature = "stream")]
+#[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
+#[expect(missing_debug_implementations)]
+pub struct BytesStream(super::body::DataStream<Decoder>);
+
+impl Stream for BytesStream {
+    type Item = crate::Result<Bytes>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.0.poll_next_unpin(cx)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+}
 
 /// A Response to a submitted `Request`.
 pub struct Response {
@@ -350,8 +369,8 @@ impl Response {
     /// This requires the optional `stream` feature to be enabled.
     #[cfg(feature = "stream")]
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
-    pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
-        super::body::DataStream(self.res.into_body())
+    pub fn bytes_stream(self) -> BytesStream {
+        BytesStream(super::body::DataStream(self.res.into_body()))
     }
 
     // util methods
