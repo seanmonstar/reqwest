@@ -91,16 +91,12 @@ jobs:
 
         include:
           - name: linux / stable
-            test-features: "--features __internal_proxy_sys_no_cache"
           - name: linux / beta
             rust: beta
-            test-features: "--features __internal_proxy_sys_no_cache"
           # - name: linux / nightly
           #   rust: nightly
-          #   test-features: "--features __internal_proxy_sys_no_cache"
           - name: macOS / stable
             os: macOS-latest
-            test-features: "--features __internal_proxy_sys_no_cache"
 
           - name: windows / stable-x86_64-msvc
             os: windows-latest
@@ -272,7 +268,7 @@ jobs:
         run: |
           cargo clean
           cargo update -Z minimal-versions
-          cargo update -p proc-macro2 --precise 1.0.62
+          cargo update -p proc-macro2 --precise 1.0.87
           cargo check
           cargo check --all-features
 
