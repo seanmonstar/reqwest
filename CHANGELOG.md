@@ -1,3 +1,11 @@
+## v0.12.8
+
+- Add support for SOCKS4 proxies.
+- Add `multipart::Form::file()` method for adding files easily.
+- Add `Body::wrap()` to wrap any `http_body::Body` type.
+- Fix the pool configuration to use a timer to remove expired connections.
+
+
 ## v0.12.7
 
 - Revert adding `impl Service<http::Request<_>>` for `Client`.
