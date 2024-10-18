@@ -1,5 +1,6 @@
 use std::convert::TryFrom;
 use std::fmt;
+use std::time::Duration;
 
 use bytes::Bytes;
 use http::{request::Parts, Method, Request as HttpRequest};
@@ -18,6 +19,7 @@ pub struct Request {
     url: Url,
     headers: HeaderMap,
     body: Option<Body>,
+    timeout: Option<Duration>,
     pub(super) cors: bool,
     pub(super) credentials: Option<RequestCredentials>,
 }
@@ -37,6 +39,7 @@ impl Request {
             url,
             headers: HeaderMap::new(),
             body: None,
+            timeout: None,
             cors: true,
             credentials: None,
         }
@@ -90,6 +93,18 @@ impl Request {
         &mut self.body
     }
 
+    /// Get the timeout.
+    #[inline]
+    pub fn timeout(&self) -> Option<&Duration> {
+        self.timeout.as_ref()
+    }
+
+    /// Get a mutable reference to the timeout.
+    #[inline]
+    pub fn timeout_mut(&mut self) -> &mut Option<Duration> {
+        &mut self.timeout
+    }
+
     /// Attempts to clone the `Request`.
     ///
     /// None is returned if a body is which can not be cloned.
@@ -104,6 +119,7 @@ impl Request {
             url: self.url.clone(),
             headers: self.headers.clone(),
             body,
+            timeout: self.timeout.clone(),
             cors: self.cors,
             credentials: self.credentials,
         })
@@ -237,6 +253,14 @@ impl RequestBuilder {
     pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.body = Some(body.into());
+        }
+        self
+    }
+
+    /// Enables a request timeout.
+    pub fn timeout(mut self, timeout: Duration) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *req.timeout_mut() = Some(timeout);
         }
         self
     }
@@ -466,6 +490,7 @@ where
             url,
             headers,
             body: Some(body.into()),
+            timeout: None,
             cors: true,
             credentials: None,
         })
