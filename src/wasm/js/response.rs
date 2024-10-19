@@ -5,7 +5,7 @@ use http::{HeaderMap, StatusCode};
 use js_sys::Uint8Array;
 use url::Url;
 
-use crate::wasm::AbortGuard;
+use crate::wasm::js::AbortGuard;
 
 #[cfg(feature = "stream")]
 use wasm_bindgen::JsCast;

@@ -372,6 +372,6 @@ if_wasm! {
     mod util;
 
     pub use self::wasm::{Body, Client, ClientBuilder, Request, RequestBuilder, Response};
-    #[cfg(feature = "multipart")]
+    #[cfg(all(not(all(target_os = "wasi", target_env = "p2")), feature = "multipart"))]
     pub use self::wasm::multipart;
 }
