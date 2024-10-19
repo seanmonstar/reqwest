@@ -43,10 +43,13 @@ native-tls-vendored = ["native-tls", "native-tls-crate?/vendored"]
 rustls-tls = ["rustls-tls-webpki-roots"]
 rustls-tls-no-provider = ["rustls-tls-manual-roots-no-provider"]
 
-rustls-tls-manual-roots = ["__rustls", "__rustls-ring"]
-rustls-tls-webpki-roots = ["dep:webpki-roots", "hyper-rustls?/webpki-tokio", "__rustls", "__rustls-ring"]
-rustls-tls-native-roots = ["dep:rustls-native-certs", "hyper-rustls?/native-tokio", "__rustls", "__rustls-ring"]
 rustls-tls-manual-roots-no-provider = ["__rustls"]
+rustls-tls-webpki-roots-no-provider = ["dep:webpki-roots", "hyper-rustls?/webpki-tokio", "__rustls"]
+rustls-tls-native-roots-no-provider = ["dep:rustls-native-certs", "hyper-rustls?/native-tokio", "__rustls"]
+
+rustls-tls-manual-roots = ["rustls-tls-manual-roots-no-provider", "__rustls-ring"]
+rustls-tls-webpki-roots = ["rustls-tls-webpki-roots-no-provider", "__rustls-ring"]
+rustls-tls-native-roots = ["rustls-tls-native-roots-no-provider", "__rustls-ring"]
 
 blocking = ["dep:futures-channel", "futures-channel?/sink", "futures-util/io", "futures-util/sink", "tokio/sync"]
 
