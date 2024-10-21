@@ -1,6 +1,23 @@
-## Unreleased
+## v0.12.8
 
-- Implement `danger_accept_invalid_hostnames` for `rustls`.
+- Add support for SOCKS4 proxies.
+- Add `multipart::Form::file()` method for adding files easily.
+- Add `Body::wrap()` to wrap any `http_body::Body` type.
+- Fix the pool configuration to use a timer to remove expired connections.
+
+
+## v0.12.7
+
+- Revert adding `impl Service<http::Request<_>>` for `Client`.
+
+## v0.12.6
+
+- Add support for `danger_accept_invalid_hostnames` for `rustls`.
+- Add `impl Service<http::Request<Body>>` for `Client` and `&'_ Client`.
+- Add support for `!Sync` bodies in `Body::wrap_stream()`.
+- Enable happy eyeballs when `hickory-dns` is used.
+- Fix `Proxy` so that `HTTP(S)_PROXY` values take precendence over `ALL_PROXY`.
+- Fix `blocking::RequestBuilder::header()` from unsetting `sensitive` on passed header values.
 
 ## v0.12.5
 

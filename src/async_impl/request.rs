@@ -309,6 +309,9 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// In additional the request's body, the Content-Type and Content-Length fields are
+    /// appropriately set.
     #[cfg(feature = "multipart")]
     #[cfg_attr(docsrs, doc(cfg(feature = "multipart")))]
     pub fn multipart(self, mut multipart: multipart::Form) -> RequestBuilder {

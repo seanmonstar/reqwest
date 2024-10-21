@@ -19,6 +19,7 @@ async fn client_timeout() {
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_millis(100))
+        .no_proxy()
         .build()
         .unwrap();
 
@@ -44,7 +45,7 @@ async fn request_timeout() {
         }
     });
 
-    let client = reqwest::Client::builder().build().unwrap();
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
 
     let url = format!("http://{}/slow", server.addr());
 
@@ -71,10 +72,11 @@ async fn connect_timeout() {
 
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(100))
+        .no_proxy()
         .build()
         .unwrap();
 
-    let url = "http://10.255.255.1:81/slow";
+    let url = "http://192.0.2.1:81/slow";
 
     let res = client
         .get(url)
@@ -98,9 +100,10 @@ async fn connect_many_timeout_succeeds() {
     let client = reqwest::Client::builder()
         .resolve_to_addrs(
             "many_addrs",
-            &["10.255.255.1:81".parse().unwrap(), server.addr()],
+            &["192.0.2.1:81".parse().unwrap(), server.addr()],
         )
         .connect_timeout(Duration::from_millis(100))
+        .no_proxy()
         .build()
         .unwrap();
 
@@ -123,11 +126,12 @@ async fn connect_many_timeout() {
         .resolve_to_addrs(
             "many_addrs",
             &[
-                "10.255.255.1:81".parse().unwrap(),
-                "10.255.255.2:81".parse().unwrap(),
+                "192.0.2.1:81".parse().unwrap(),
+                "192.0.2.2:81".parse().unwrap(),
             ],
         )
         .connect_timeout(Duration::from_millis(100))
+        .no_proxy()
         .build()
         .unwrap();
 
@@ -190,6 +194,7 @@ async fn read_timeout_applies_to_headers() {
 
     let client = reqwest::Client::builder()
         .read_timeout(Duration::from_millis(100))
+        .no_proxy()
         .build()
         .unwrap();
 
@@ -410,7 +415,7 @@ async fn response_body_timeout_forwards_size_hint() {
 
     let server = server::http(move |_req| async { http::Response::new(b"hello".to_vec().into()) });
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
 
     let url = format!("http://{}/slow", server.addr());
 

@@ -91,16 +91,12 @@ jobs:
 
         include:
           - name: linux / stable
-            test-features: "--features __internal_proxy_sys_no_cache"
           - name: linux / beta
             rust: beta
-            test-features: "--features __internal_proxy_sys_no_cache"
           # - name: linux / nightly
           #   rust: nightly
-          #   test-features: "--features __internal_proxy_sys_no_cache"
           - name: macOS / stable
             os: macOS-latest
-            test-features: "--features __internal_proxy_sys_no_cache"
 
           - name: windows / stable-x86_64-msvc
             os: windows-latest
@@ -272,7 +268,7 @@ jobs:
         run: |
           cargo clean
           cargo update -Z minimal-versions
-          cargo update -p proc-macro2 --precise 1.0.60
+          cargo update -p proc-macro2 --precise 1.0.87
           cargo check
           cargo check --all-features
 
@@ -300,6 +296,7 @@ jobs:
           cargo update
           cargo update -p log --precise 0.4.21
           cargo update -p tokio --precise 1.29.1
+          cargo update -p tokio-util --precise 0.7.11
           cargo update -p url --precise 2.5.0
 
       - uses: Swatinem/rust-cache@v2

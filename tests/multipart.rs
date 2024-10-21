@@ -175,3 +175,58 @@ fn blocking_file_part() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
+
+#[cfg(feature = "stream")]
+#[tokio::test]
+async fn async_impl_file_part() {
+    let _ = env_logger::try_init();
+
+    let form = reqwest::multipart::Form::new()
+        .file("foo", "Cargo.lock")
+        .await
+        .unwrap();
+
+    let fcontents = std::fs::read_to_string("Cargo.lock").unwrap();
+
+    let expected_body = format!(
+        "\
+         --{0}\r\n\
+         Content-Disposition: form-data; name=\"foo\"; filename=\"Cargo.lock\"\r\n\
+         Content-Type: application/octet-stream\r\n\r\n\
+         {1}\r\n\
+         --{0}--\r\n\
+         ",
+        form.boundary(),
+        fcontents
+    );
+
+    let ct = format!("multipart/form-data; boundary={}", form.boundary());
+
+    let server = server::http(move |req| {
+        let ct = ct.clone();
+        let expected_body = expected_body.clone();
+        async move {
+            assert_eq!(req.method(), "POST");
+            assert_eq!(req.headers()["content-type"], ct);
+            assert_eq!(req.headers()["transfer-encoding"], "chunked");
+
+            let full = req.collect().await.unwrap().to_bytes();
+
+            assert_eq!(full, expected_body.as_bytes());
+
+            http::Response::default()
+        }
+    });
+
+    let url = format!("http://{}/multipart/3", server.addr());
+
+    let res = reqwest::Client::new()
+        .post(&url)
+        .multipart(form)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.url().as_str(), &url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}

@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.12.5"
+version = "0.12.8"
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -143,7 +143,7 @@ rustls = { version = "0.23.4", optional = true, default-features = false, featur
 rustls-pki-types = { version = "1.1.0", features = ["alloc"] ,optional = true }
 tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["tls12"] }
 webpki-roots = { version = "0.26.0", optional = true }
-rustls-native-certs = { version = "0.7", optional = true }
+rustls-native-certs = { version = "0.8.0", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.18.0", package = "cookie", optional = true }
@@ -154,7 +154,7 @@ async-compression = { version = "0.4.0", default-features = false, features = ["
 tokio-util = { version = "0.7.9", default-features = false, features = ["codec", "io"], optional = true }
 
 ## socks
-tokio-socks = { version = "0.5.1", optional = true }
+tokio-socks = { version = "0.5.2", optional = true }
 
 ## hickory-dns
 hickory-resolver = { version = "0.24", optional = true, features = ["tokio-runtime"] }
@@ -172,7 +172,7 @@ env_logger = "0.11"
 hyper = { version = "1.1.0", default-features = false, features = ["http1", "http2", "client", "server"] }
 hyper-util = { version = "0.1.3", features = ["http1", "http2", "client", "client-legacy", "server-auto", "tokio"] }
 serde = { version = "1.0", features = ["derive"] }
-libflate = "1.0"
+libflate = "2.1"
 brotli_crate = { package = "brotli", version = "6.0.0" }
 zstd_crate = { package = "zstd", version = "0.13" }
 doc-comment = "0.3"
@@ -184,14 +184,14 @@ rustls = { version = "0.23", default-features = false, features = ["ring"] }
 windows-registry = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-system-configuration = { version = "0.5.1", optional = true }
+system-configuration = { version = "0.6.0", optional = true }
 
 # wasm
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3.45"
 serde_json = "1.0"
-wasm-bindgen = "0.2.68"
+wasm-bindgen = "0.2.89"
 wasm-bindgen-futures = "0.4.18"
 wasm-streams = { version = "0.4", optional = true }
 
@@ -216,7 +216,7 @@ features = [
 ]
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-wasm-bindgen = { version = "0.2.68", features = ["serde-serialize"] }
+wasm-bindgen = { version = "0.2.89", features = ["serde-serialize"] }
 wasm-bindgen-test = "0.3"
 
 [lints.rust]
