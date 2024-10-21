@@ -1,0 +1,20 @@
+[package]
+name = "http-reqwest"
+edition = "2021"
+version = "0.1.0"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+futures = "0.3.30"
+reqwest = { version = "0.12.8", path = "../../", features = ["stream"] }
+wasi = "=0.13.3" # For compatibility, pin to wasi@0.2.2 bindings
+
+[profile.release]
+# Optimize for small code size
+lto = true
+opt-level = "s"
+strip = true
