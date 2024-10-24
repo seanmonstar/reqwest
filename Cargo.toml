@@ -81,6 +81,9 @@ macos-system-configuration = ["dep:system-configuration"]
 http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "dep:slab", "dep:futures-channel"]
 
 
+# Only works on Rust version > 1.64
+into_future = []
+
 # Internal (PRIVATE!) features used to aid testing.
 # Don't rely on these whatsoever. They may disappear at any time.
 
