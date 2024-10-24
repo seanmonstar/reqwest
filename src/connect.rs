@@ -1140,14 +1140,21 @@ mod verbose {
         fn poll_read(
             mut self: Pin<&mut Self>,
             cx: &mut Context,
-            buf: ReadBufCursor<'_>,
+            mut buf: ReadBufCursor<'_>,
         ) -> Poll<std::io::Result<()>> {
-            match Pin::new(&mut self.inner).poll_read(cx, buf) {
+            // TODO: This _does_ forget the `init` len, so it could result in
+            // re-initializing twice. Needs upstream support, perhaps.
+            // SAFETY: Passing to a ReadBuf will never de-initialize any bytes.
+            let mut vbuf = hyper::rt::ReadBuf::uninit(unsafe { buf.as_mut() });
+            match Pin::new(&mut self.inner).poll_read(cx, vbuf.unfilled()) {
                 Poll::Ready(Ok(())) => {
-                    /*
-                    log::trace!("{:08x} read: {:?}", self.id, Escape(buf.filled()));
-                    */
-                    log::trace!("TODO: verbose poll_read");
+                    log::trace!("{:08x} read: {:?}", self.id, Escape(vbuf.filled()));
+                    let len = vbuf.filled().len();
+                    // SAFETY: The two cursors were for the same buffer. What was
+                    // filled in one is safe in the other.
+                    unsafe {
+                        buf.advance(len);
+                    }
                     Poll::Ready(Ok(()))
                 }
                 Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
