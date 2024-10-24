@@ -195,6 +195,9 @@ wasm-bindgen = "0.2.89"
 wasm-bindgen-futures = "0.4.18"
 wasm-streams = { version = "0.4", optional = true }
 
+[target.'cfg(all(target_os = "wasi", target_env = "p2"))'.dependencies]
+wasi = "=0.13.3" # For compatibility, pin to wasi@0.2.2 bindings
+
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3.28"
 features = [
@@ -284,3 +287,8 @@ required-features = ["deflate", "stream"]
 name = "multipart"
 path = "tests/multipart.rs"
 required-features = ["multipart"]
+
+# https://github.com/servo/rust-url/pull/983
+[patch.crates-io]
+url = { git = "https://github.com/servo/rust-url", rev = "fc447cce1d2c06ef0bec3dbadce56b83e46ca1ff"}
+form_urlencoded = { git = "https://github.com/servo/rust-url", rev = "fc447cce1d2c06ef0bec3dbadce56b83e46ca1ff"}

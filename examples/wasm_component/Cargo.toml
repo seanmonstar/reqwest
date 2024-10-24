@@ -1,0 +1,25 @@
+[package]
+name = "http-reqwest"
+edition = "2021"
+version = "0.1.0"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+futures = "0.3.30"
+reqwest = { version = "0.12.5", path = "../../", features = ["stream"] }
+wasi = "=0.13.3" # For compatibility, pin to wasi@0.2.2 bindings
+
+# https://github.com/servo/rust-url/pull/983
+[patch.crates-io]
+url = { git = "https://github.com/servo/rust-url", rev = "fc447cce1d2c06ef0bec3dbadce56b83e46ca1ff"}
+form_urlencoded = { git = "https://github.com/servo/rust-url", rev = "fc447cce1d2c06ef0bec3dbadce56b83e46ca1ff"}
+
+[profile.release]
+# Optimize for small code size
+lto = true
+opt-level = "s"
+strip = true
