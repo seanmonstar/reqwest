@@ -267,7 +267,11 @@ impl Part {
         let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
         let mime = mime_guess::from_ext(ext).first_or_octet_stream();
         let file = File::open(path).await?;
-        let field = Part::stream(file).mime(mime);
+        let len = file.metadata().await.map(|m| m.len()).ok();
+        let field = match len {
+            Some(len) => Part::stream_with_length(file, len),
+            None => Part::stream(file)
+        }.mime(mime);
 
         Ok(if let Some(file_name) = file_name {
             field.file_name(file_name)
