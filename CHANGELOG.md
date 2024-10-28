@@ -1,3 +1,11 @@
+## v0.12.9
+
+- Add `tls::CertificateRevocationLists` support.
+- Add crate features to enable webpki roots without selecting a rustls provider.
+- Fix `connection_verbose()` to output read logs.
+- Fix `multipart::Part::file()` to automatically include content-length.
+- Fix proxy to internally no longer cache system proxy settings.
+
 ## v0.12.8
 
 - Add support for SOCKS4 proxies.
