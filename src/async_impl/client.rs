@@ -745,8 +745,8 @@ impl ClientBuilder {
             if let Some(http2_max_frame_size) = config.http2_max_frame_size {
                 builder.http2_max_frame_size(http2_max_frame_size);
             }
-            if let Some(http2_max_header_list_size_kib) = config.http2_max_header_list_size {
-                builder.http2_max_header_list_size(http2_max_header_list_size_kib);
+            if let Some(http2_max_header_list_size) = config.http2_max_header_list_size {
+                builder.http2_max_header_list_size(http2_max_header_list_size);
             }
             if let Some(http2_keep_alive_interval) = config.http2_keep_alive_interval {
                 builder.http2_keep_alive_interval(http2_keep_alive_interval);
