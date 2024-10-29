@@ -502,6 +502,15 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.http2_max_frame_size(sz))
     }
 
+    /// Sets the maximum size of received header frames for HTTP2.
+    ///
+    /// Default is currently 16KB, but can change.
+    #[cfg(feature = "http2")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
+    pub fn http2_max_header_list_size(self, max_header_size_bytes: u32) -> ClientBuilder {
+        self.with_inner(|inner| inner.http2_max_header_list_size(max_header_size_bytes))
+    }
+
     /// This requires the optional `http3` feature to be
     /// enabled.
     #[cfg(feature = "http3")]
