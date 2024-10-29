@@ -270,8 +270,9 @@ impl Part {
         let len = file.metadata().await.map(|m| m.len()).ok();
         let field = match len {
             Some(len) => Part::stream_with_length(file, len),
-            None => Part::stream(file)
-        }.mime(mime);
+            None => Part::stream(file),
+        }
+        .mime(mime);
 
         Ok(if let Some(file_name) = file_name {
             field.file_name(file_name)
