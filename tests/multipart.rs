@@ -208,8 +208,11 @@ async fn async_impl_file_part() {
         async move {
             assert_eq!(req.method(), "POST");
             assert_eq!(req.headers()["content-type"], ct);
-            assert_eq!(req.headers()["transfer-encoding"], "chunked");
-
+            // files know their exact size
+            assert_eq!(
+                req.headers()["content-length"],
+                expected_body.len().to_string()
+            );
             let full = req.collect().await.unwrap().to_bytes();
 
             assert_eq!(full, expected_body.as_bytes());
