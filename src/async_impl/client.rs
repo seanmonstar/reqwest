@@ -145,6 +145,8 @@ struct Config {
     #[cfg(feature = "http2")]
     http2_max_frame_size: Option<u32>,
     #[cfg(feature = "http2")]
+    http2_max_header_list_size: Option<u32>,
+    #[cfg(feature = "http2")]
     http2_keep_alive_interval: Option<Duration>,
     #[cfg(feature = "http2")]
     http2_keep_alive_timeout: Option<Duration>,
@@ -245,6 +247,8 @@ impl ClientBuilder {
                 http2_adaptive_window: false,
                 #[cfg(feature = "http2")]
                 http2_max_frame_size: None,
+                #[cfg(feature = "http2")]
+                http2_max_header_list_size: None,
                 #[cfg(feature = "http2")]
                 http2_keep_alive_interval: None,
                 #[cfg(feature = "http2")]
@@ -740,6 +744,9 @@ impl ClientBuilder {
             }
             if let Some(http2_max_frame_size) = config.http2_max_frame_size {
                 builder.http2_max_frame_size(http2_max_frame_size);
+            }
+            if let Some(http2_max_header_list_size_kib) = config.http2_max_header_list_size {
+                builder.http2_max_header_list_size(http2_max_header_list_size_kib);
             }
             if let Some(http2_keep_alive_interval) = config.http2_keep_alive_interval {
                 builder.http2_keep_alive_interval(http2_keep_alive_interval);
@@ -1305,6 +1312,16 @@ impl ClientBuilder {
     #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
     pub fn http2_max_frame_size(mut self, sz: impl Into<Option<u32>>) -> ClientBuilder {
         self.config.http2_max_frame_size = sz.into();
+        self
+    }
+
+    /// Sets the maximum size of received header frames for HTTP2.
+    ///
+    /// Default is currently 16KB, but can change.
+    #[cfg(feature = "http2")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
+    pub fn http2_max_header_list_size(mut self, max_header_size_bytes: u32) -> ClientBuilder {
+        self.config.http2_max_header_list_size = Some(max_header_size_bytes);
         self
     }
 
