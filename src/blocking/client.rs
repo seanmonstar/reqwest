@@ -625,7 +625,7 @@ impl ClientBuilder {
     /// This requires the `rustls-tls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
-    pub fn add_crl(mut self, crl: CertificateRevocationList) -> ClientBuilder {
+    pub fn add_crl(self, crl: CertificateRevocationList) -> ClientBuilder {
         self.with_inner(move |inner| inner.add_crl(crl))
     }
 
@@ -638,7 +638,7 @@ impl ClientBuilder {
     #[cfg(feature = "__rustls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
     pub fn add_crls(
-        mut self,
+        self,
         crls: impl IntoIterator<Item = CertificateRevocationList>,
     ) -> ClientBuilder {
         self.with_inner(move |inner| inner.add_crls(crls))
