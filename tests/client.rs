@@ -4,7 +4,7 @@ mod support;
 
 use support::server;
 
-use http::header::{CONTENT_LENGTH, CONTENT_TYPE, TRANSFER_ENCODING};
+use http::{header::{CONTENT_LENGTH, CONTENT_TYPE, TRANSFER_ENCODING}, StatusCode};
 #[cfg(feature = "json")]
 use std::collections::HashMap;
 
@@ -191,11 +191,7 @@ async fn global_error_for_status() {
         .await
         .expect_err("request should fail");
 
-    if let Some(status) = res.status() {
-        assert_eq!(status.as_u16(), 404_u16);
-    } else {
-        panic!("request should fail, because of an invalid status code");
-    }
+    assert_eq!(res.status(), Some(StatusCode::NOT_FOUND));
 
     // the `error_for_status` flag is disabled:
     let client = Client::builder()

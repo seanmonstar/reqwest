@@ -885,7 +885,9 @@ impl ClientBuilder {
         self
     }
 
-    /// Apply [`Response::error_for_status`] on every `Response` returned by the client.
+    /// Turns every response returned by the client into an error if the server returned an error. 
+    ///
+    /// Calls [`Response::error_for_status_ref`] on every `Response` returned by the client.
     pub fn error_for_status(mut self, enable: bool) -> ClientBuilder {
         self.config.error_for_status = enable;
         self
