@@ -614,7 +614,7 @@ impl RequestBuilder {
     /// # }
     /// ```
     ///
-    /// With a non-clonable body
+    /// With a non-cloneable body
     ///
     /// ```rust
     /// # fn run() -> Result<(), Box<dyn std::error::Error>> {

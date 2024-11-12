@@ -244,7 +244,7 @@ jobs:
     needs: [style]
 
     # Use Ubuntu 20.04 here, because latest (22.04) uses OpenSSL v3.
-    # Currently OpenSSL v3 causes compile issues with openssl-sys
+    # Currently, OpenSSL v3 causes compile issues with openssl-sys
     runs-on: ubuntu-20.04
 
     steps:

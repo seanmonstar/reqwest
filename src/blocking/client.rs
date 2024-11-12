@@ -201,7 +201,7 @@ impl ClientBuilder {
 
     /// Enable auto gzip decompression by checking the `Content-Encoding` response header.
     ///
-    /// If auto gzip decompresson is turned on:
+    /// If auto gzip decompression is turned on:
     ///
     /// - When sending a request and if the request's headers do not already contain
     ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `gzip`.
@@ -267,7 +267,7 @@ impl ClientBuilder {
 
     /// Enable auto deflate decompression by checking the `Content-Encoding` response header.
     ///
-    /// If auto deflate decompresson is turned on:
+    /// If auto deflate decompression is turned on:
     ///
     /// - When sending a request and if the request's headers do not already contain
     ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `deflate`.
@@ -353,7 +353,7 @@ impl ClientBuilder {
     /// Clear all `Proxies`, so `Client` will use no proxy anymore.
     ///
     /// # Note
-    /// To add a proxy exclusion list, use [crate::proxy::Proxy::no_proxy()]
+    /// To add a proxy exclusion list, use [Proxy::no_proxy()]
     /// on all desired proxies instead.
     ///
     /// This also disables the automatic usage of the "system" proxy.
@@ -765,7 +765,7 @@ impl ClientBuilder {
 
     /// Set the minimum required TLS version for connections.
     ///
-    /// By default the TLS backend's own default is used.
+    /// By default, the TLS backend's own default is used.
     ///
     /// # Errors
     ///
@@ -793,7 +793,7 @@ impl ClientBuilder {
 
     /// Set the maximum allowed TLS version for connections.
     ///
-    /// By default there's no maximum.
+    /// By default, there's no maximum.
     ///
     /// # Errors
     ///
