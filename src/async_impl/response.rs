@@ -9,8 +9,6 @@ use hyper::{HeaderMap, StatusCode, Version};
 use hyper_util::client::legacy::connect::HttpInfo;
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
-#[cfg(feature = "json")]
-use serde_json;
 use tokio::time::Sleep;
 use url::Url;
 

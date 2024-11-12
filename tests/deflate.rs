@@ -87,10 +87,7 @@ async fn test_accept_encoding_header_is_not_changed_if_set() {
 async fn deflate_case(response_size: usize, chunk_size: usize) {
     use futures_util::stream::StreamExt;
 
-    let content: String = (0..response_size)
-        .into_iter()
-        .map(|i| format!("test {i}"))
-        .collect();
+    let content: String = (0..response_size).map(|i| format!("test {i}")).collect();
     let mut encoder = libflate::zlib::Encoder::new(Vec::new()).unwrap();
     match encoder.write(content.as_bytes()) {
         Ok(n) => assert!(n > 0, "Failed to write to encoder."),
