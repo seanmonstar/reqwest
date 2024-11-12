@@ -346,7 +346,7 @@ mod tests {
         let root = Error::new(Kind::Request, None::<Error>);
         assert!(root.source().is_none());
 
-        let link = super::body(root);
+        let link = body(root);
         assert!(link.source().is_some());
         assert_send::<Error>();
         assert_sync::<Error>();
@@ -360,11 +360,11 @@ mod tests {
 
     #[test]
     fn roundtrip_io_error() {
-        let orig = super::request("orig");
+        let orig = request("orig");
         // Convert reqwest::Error into an io::Error...
         let io = orig.into_io();
         // Convert that io::Error back into a reqwest::Error...
-        let err = super::decode_io(io);
+        let err = decode_io(io);
         // It should have pulled out the original, not nested it...
         match err.inner.kind {
             Kind::Request => (),
@@ -375,7 +375,7 @@ mod tests {
     #[test]
     fn from_unknown_io_error() {
         let orig = io::Error::new(io::ErrorKind::Other, "orly");
-        let err = super::decode_io(orig);
+        let err = decode_io(orig);
         match err.inner.kind {
             Kind::Decode => (),
             _ => panic!("{err:?}"),
@@ -384,11 +384,11 @@ mod tests {
 
     #[test]
     fn is_timeout() {
-        let err = super::request(super::TimedOut);
+        let err = request(TimedOut);
         assert!(err.is_timeout());
 
         let io = io::Error::new(io::ErrorKind::Other, err);
-        let nested = super::request(io);
+        let nested = request(io);
         assert!(nested.is_timeout());
     }
 }

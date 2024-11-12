@@ -39,7 +39,7 @@ impl Pool {
         if !inner.connecting.insert(key.clone()) {
             return Err(format!("HTTP/3 connecting already in progress for {key:?}").into());
         }
-        return Ok(());
+        Ok(())
     }
 
     pub fn try_pool(&self, key: &Key) -> Option<PoolClient> {

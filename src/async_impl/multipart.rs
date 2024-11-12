@@ -703,7 +703,7 @@ mod tests {
         let stream_len = stream_data.len();
         let stream_data = stream_data
             .chunks(3)
-            .map(|c| Ok::<_, std::io::Error>(Bytes::from(c)));
+            .map(|c| Ok::<_, io::Error>(Bytes::from(c)));
         let the_stream = futures_util::stream::iter(stream_data);
 
         let bytes_data = b"some bytes data".to_vec();

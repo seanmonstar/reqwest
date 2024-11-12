@@ -51,7 +51,7 @@ jobs:
 
   test:
     name: ${{ matrix.name }}
-    needs: [style]
+    needs: [ style ]
 
     runs-on: ${{ matrix.os || 'ubuntu-latest' }}
 
@@ -203,7 +203,7 @@ jobs:
 
   unstable:
     name: "unstable features"
-    needs: [style]
+    needs: [ style ]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -222,7 +222,7 @@ jobs:
 
   docs:
     name: Docs
-    needs: [test]
+    needs: [ test ]
     runs-on: ubuntu-latest
 
     steps:
@@ -241,7 +241,7 @@ jobs:
   # job level. See `jobs.build.strategy.matrix`.
   nightly:
     name: linux / nightly
-    needs: [style]
+    needs: [ style ]
 
     # Use Ubuntu 20.04 here, because latest (22.04) uses OpenSSL v3.
     # Currently OpenSSL v3 causes compile issues with openssl-sys
@@ -274,7 +274,7 @@ jobs:
 
   msrv:
     name: MSRV
-    needs: [style]
+    needs: [ style ]
 
     runs-on: ubuntu-latest
 
@@ -306,7 +306,7 @@ jobs:
 
   android:
     name: Android
-    needs: [style]
+    needs: [ style ]
 
     runs-on: ubuntu-latest
 
@@ -325,7 +325,7 @@ jobs:
 
   wasm:
     name: WASM
-    needs: [style]
+    needs: [ style ]
 
     runs-on: ubuntu-latest
 

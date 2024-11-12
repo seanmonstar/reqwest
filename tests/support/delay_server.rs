@@ -44,8 +44,7 @@ impl Server {
         let addr = tcp_listener.local_addr().unwrap();
 
         tokio::spawn(async move {
-            let mut builder =
-                hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
+            let mut builder = Builder::new(hyper_util::rt::TokioExecutor::new());
             apply_config(&mut builder);
 
             tokio::spawn(async move {

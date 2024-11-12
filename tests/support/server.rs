@@ -91,7 +91,7 @@ where
             .spawn(move || {
                 rt.block_on(async move {
                     let mut builder =
-                        hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
+                        Builder::new(hyper_util::rt::TokioExecutor::new());
                     apply_config(&mut builder);
 
                     loop {
