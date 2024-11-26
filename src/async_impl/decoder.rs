@@ -365,10 +365,19 @@ impl HttpBody for Decoder {
             }
             #[cfg(feature = "gzip")]
             Inner::Gzip(ref mut decoder) => {
-                match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
+                match futures_core::ready!(Pin::new(&mut *decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes.freeze())))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
-                    None => Poll::Ready(None),
+                    None => { // poll inner connection until EOF after gzip stream is finished
+                        let gzip_decoder = decoder.get_mut();
+                        let stream_reader = gzip_decoder.get_mut();
+                        let peekable_io_stream = stream_reader.get_mut();
+                        match futures_core::ready!(Pin::new(peekable_io_stream).poll_next(cx)) {
+                            Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes)))),
+                            Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
+                            None => Poll::Ready(None),
+                        }
+                    }
                 }
             }
             #[cfg(feature = "brotli")]
