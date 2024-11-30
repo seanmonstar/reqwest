@@ -373,7 +373,7 @@ impl HttpBody for Decoder {
                         let stream_reader = gzip_decoder.get_mut();
                         let peekable_io_stream = stream_reader.get_mut();
                         match futures_core::ready!(Pin::new(peekable_io_stream).poll_next(cx)) {
-                            Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes)))),
+                            Some(Ok(bytes)) => Poll::Ready(Some(Err(crate::error::decode("there are extra bytes after body has been decompressed")))),
                             Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                             None => Poll::Ready(None),
                         }
