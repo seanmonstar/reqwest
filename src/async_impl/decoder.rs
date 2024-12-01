@@ -124,7 +124,7 @@ enum Inner {
 
     /// A `Zstd` decoder will uncompress the zstd compressed response content before returning it.
     #[cfg(feature = "zstd")]
-    Zstd(Pin<Box<FramedRead<ZstdDecoder<PeekableIoStreamReader>, BytesCodec>>>),
+    Zstd(Pin<Box<Fuse<FramedRead<ZstdDecoder<PeekableIoStreamReader>, BytesCodec>>>>),
 
     /// A `Deflate` decoder will uncompress the deflated response content before returning it.
     #[cfg(feature = "deflate")]
@@ -417,10 +417,20 @@ impl HttpBody for Decoder {
             }
             #[cfg(feature = "zstd")]
             Inner::Zstd(ref mut decoder) => {
-                match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
+                match futures_core::ready!(Pin::new(&mut *decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes.freeze())))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
-                    None => Poll::Ready(None),
+                    None => {
+                        // poll inner connection until EOF after zstd stream is finished
+                        let inner_stream = decoder.get_mut().get_mut().get_mut().get_mut();
+                        match futures_core::ready!(Pin::new(inner_stream).poll_next(cx)) {
+                            Some(Ok(_)) => Poll::Ready(Some(Err(crate::error::decode(
+                                "there are extra bytes after body has been decompressed",
+                            )))),
+                            Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
+                            None => Poll::Ready(None),
+                        }
+                    },
                 }
             }
             #[cfg(feature = "deflate")]
@@ -500,10 +510,13 @@ impl Future for Pending {
                 .fuse(),
             )))),
             #[cfg(feature = "zstd")]
-            DecoderType::Zstd => Poll::Ready(Ok(Inner::Zstd(Box::pin(FramedRead::new(
-                ZstdDecoder::new(StreamReader::new(_body)),
-                BytesCodec::new(),
-            ))))),
+            DecoderType::Zstd => Poll::Ready(Ok(Inner::Zstd(Box::pin(
+                FramedRead::new(
+                    ZstdDecoder::new(StreamReader::new(_body)),
+                    BytesCodec::new(),
+                )
+                .fuse(),
+            )))),
             #[cfg(feature = "gzip")]
             DecoderType::Gzip => Poll::Ready(Ok(Inner::Gzip(Box::pin(
                 FramedRead::new(
