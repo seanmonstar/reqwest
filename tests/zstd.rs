@@ -257,7 +257,7 @@ async fn test_chunked_fragmented_response_2() {
                 )
                 .as_bytes(),
                 &zstded_content,
-                b"\r\n"
+                b"\r\n",
             ]
             .concat();
             let response_second_part = b"0\r\n\r\n";

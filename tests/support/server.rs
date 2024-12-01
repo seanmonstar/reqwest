@@ -243,9 +243,12 @@ where
     .unwrap()
 }
 
-pub fn low_level_with_response<F>(do_response: F) -> Server 
-where 
-    for <'c> F: Fn(&'c [u8], &'c mut TcpStream) -> Box<dyn Future<Output = ()> + Send + 'c> + Clone + Send + 'static,
+pub fn low_level_with_response<F>(do_response: F) -> Server
+where
+    for<'c> F: Fn(&'c [u8], &'c mut TcpStream) -> Box<dyn Future<Output = ()> + Send + 'c>
+        + Clone
+        + Send
+        + 'static,
 {
     // Spawn new runtime in thread to prevent reactor execution context conflict
     let test_name = thread::current().name().unwrap_or("<unknown>").to_string();
@@ -264,10 +267,7 @@ where
         let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
         let (panic_tx, panic_rx) = std_mpsc::channel();
         let (events_tx, events_rx) = std_mpsc::channel();
-        let tname = format!(
-            "test({})-support-server",
-            test_name,
-        );
+        let tname = format!("test({})-support-server", test_name,);
         thread::Builder::new()
             .name(tname)
             .spawn(move || {
@@ -305,13 +305,14 @@ where
 
 async fn low_level_server_client<F>(mut client_socket: TcpStream, do_response: F)
 where
-    for<'c> F: Fn(&'c [u8], &'c mut TcpStream) -> Box<dyn Future<Output = ()> + Send + 'c>
+    for<'c> F: Fn(&'c [u8], &'c mut TcpStream) -> Box<dyn Future<Output = ()> + Send + 'c>,
 {
     loop {
         let request = low_level_read_http_request(&mut client_socket)
             .await
             .expect("read_http_request failed");
-        if request.is_empty() { // connection closed by client
+        if request.is_empty() {
+            // connection closed by client
             break;
         }
 
