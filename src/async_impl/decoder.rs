@@ -128,7 +128,7 @@ enum Inner {
 
     /// A `Deflate` decoder will uncompress the deflated response content before returning it.
     #[cfg(feature = "deflate")]
-    Deflate(Pin<Box<FramedRead<ZlibDecoder<PeekableIoStreamReader>, BytesCodec>>>),
+    Deflate(Pin<Box<Fuse<FramedRead<ZlibDecoder<PeekableIoStreamReader>, BytesCodec>>>>),
 
     // #[cfg(any(
     //     feature = "brotli",
@@ -430,15 +430,25 @@ impl HttpBody for Decoder {
                             Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                             None => Poll::Ready(None),
                         }
-                    },
+                    }
                 }
             }
             #[cfg(feature = "deflate")]
             Inner::Deflate(ref mut decoder) => {
-                match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
+                match futures_core::ready!(Pin::new(&mut *decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes.freeze())))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
-                    None => Poll::Ready(None),
+                    None => {
+                        // poll inner connection until EOF after deflate stream is finished
+                        let inner_stream = decoder.get_mut().get_mut().get_mut().get_mut();
+                        match futures_core::ready!(Pin::new(inner_stream).poll_next(cx)) {
+                            Some(Ok(_)) => Poll::Ready(Some(Err(crate::error::decode(
+                                "there are extra bytes after body has been decompressed",
+                            )))),
+                            Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
+                            None => Poll::Ready(None),                        
+                        }
+                    },
                 }
             }
         }
@@ -526,10 +536,13 @@ impl Future for Pending {
                 .fuse(),
             )))),
             #[cfg(feature = "deflate")]
-            DecoderType::Deflate => Poll::Ready(Ok(Inner::Deflate(Box::pin(FramedRead::new(
-                ZlibDecoder::new(StreamReader::new(_body)),
-                BytesCodec::new(),
-            ))))),
+            DecoderType::Deflate => Poll::Ready(Ok(Inner::Deflate(Box::pin(
+                FramedRead::new(
+                    ZlibDecoder::new(StreamReader::new(_body)),
+                    BytesCodec::new(),
+                )
+                .fuse(),
+            )))),
         }
     }
 }
