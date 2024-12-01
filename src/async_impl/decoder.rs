@@ -11,9 +11,9 @@ use std::task::{Context, Poll};
 
 #[cfg(any(
     feature = "gzip",
-    // feature = "zstd",
-    // feature = "brotli",
-    // feature = "deflate"
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate"
 ))]
 use futures_util::stream::Fuse;
 
@@ -130,12 +130,6 @@ enum Inner {
     #[cfg(feature = "deflate")]
     Deflate(Pin<Box<Fuse<FramedRead<ZlibDecoder<PeekableIoStreamReader>, BytesCodec>>>>),
 
-    // #[cfg(any(
-    //     feature = "brotli",
-    //     feature = "zstd",
-    //     feature = "gzip",
-    //     feature = "deflate"
-    // ))]
     /// A decoder that doesn't have a value yet.
     #[cfg(any(
         feature = "brotli",
@@ -384,10 +378,8 @@ impl HttpBody for Decoder {
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                     None => {
                         // poll inner connection until EOF after gzip stream is finished
-                        let gzip_decoder = decoder.get_mut().get_mut();
-                        let stream_reader = gzip_decoder.get_mut();
-                        let peekable_io_stream = stream_reader.get_mut();
-                        match futures_core::ready!(Pin::new(peekable_io_stream).poll_next(cx)) {
+                        let inner_stream = decoder.get_mut().get_mut().get_mut().get_mut();
+                        match futures_core::ready!(Pin::new(inner_stream).poll_next(cx)) {
                             Some(Ok(_)) => Poll::Ready(Some(Err(crate::error::decode(
                                 "there are extra bytes after body has been decompressed",
                             )))),
