@@ -440,7 +440,7 @@ impl HttpBody for Decoder {
                             Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                             None => Poll::Ready(None),                        
                         }
-                    },
+                    }
                 }
             }
         }
