@@ -6,10 +6,11 @@ use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
 use std::{fmt, str};
 
+use base64::encode;
 use bytes::Bytes;
 use http::header::{
     Entry, HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_LENGTH,
-    CONTENT_TYPE, LOCATION, PROXY_AUTHORIZATION, RANGE, REFERER, TRANSFER_ENCODING, USER_AGENT,
+    CONTENT_TYPE, LOCATION, PROXY_AUTHORIZATION, RANGE, REFERER, TRANSFER_ENCODING, USER_AGENT, AUTHORIZATION,
 };
 use http::uri::Scheme;
 use http::Uri;
@@ -878,6 +879,62 @@ impl ClientBuilder {
         for (key, value) in headers.iter() {
             self.config.headers.insert(key, value.clone());
         }
+        self
+    }
+
+    /// Enable HTTP basic authentication.
+    ///
+    /// ```rust
+    /// # use reqwest::Error;
+    /// # async fn run() -> Result<(), Error> {
+    /// let client = reqwest::ClientBuilder::new()
+    ///     .basic_auth("admin", Some("good password"))
+    ///     .build()?;
+    /// let resp = client.delete("http://httpbin.org/delete")
+    ///     .send()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn basic_auth<U, P>(mut self, username: U, password: Option<P>) -> ClientBuilder
+    where
+        U: fmt::Display,
+        P: fmt::Display,
+    {
+        let auth = match password {
+            Some(password) => format!("{}:{}", username, password),
+            None => format!("{}:", username),
+        };
+        let header_value = format!("Basic {}", encode(&auth));
+
+        match header_value.try_into() {
+            Ok(header_value) => {
+                self.config.headers.insert(AUTHORIZATION, header_value);
+            }
+            Err(e) => {
+                self.config.error = Some(crate::error::builder::<http::Error>(e.into()));
+            }
+        };
+
+        self
+    }
+
+    /// Enable HTTP bearer authentication.
+    pub fn bearer_auth<T>(mut self, token: T) -> ClientBuilder
+    where
+        T: fmt::Display,
+    {
+        let header_value = format!("Bearer {}", token);
+
+        match header_value.try_into() {
+            Ok(header_value) => {
+                self.config.headers.insert(AUTHORIZATION, header_value);
+            }
+            Err(e) => {
+                self.config.error = Some(crate::error::builder::<http::Error>(e.into()));
+            }
+        };
+
         self
     }
 
