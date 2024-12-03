@@ -8,6 +8,7 @@ use std::error::Error as StdError;
 use std::fmt;
 
 use crate::header::{HeaderMap, AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, WWW_AUTHENTICATE};
+use crate::Method;
 use hyper::StatusCode;
 
 use crate::Url;
@@ -30,7 +31,9 @@ pub struct Policy {
 #[derive(Debug)]
 pub struct Attempt<'a> {
     status: StatusCode,
+    next_method: &'a Method,
     next: &'a Url,
+    previous_method: &'a Method,
     previous: &'a [Url],
 }
 
@@ -138,10 +141,19 @@ impl Policy {
         }
     }
 
-    pub(crate) fn check(&self, status: StatusCode, next: &Url, previous: &[Url]) -> ActionKind {
+    pub(crate) fn check(
+        &self,
+        status: StatusCode,
+        next_method: &Method,
+        next: &Url,
+        previous_method: &Method,
+        previous: &[Url],
+    ) -> ActionKind {
         self.redirect(Attempt {
             status,
+            next_method,
             next,
+            previous_method,
             previous,
         })
         .inner
@@ -165,15 +177,26 @@ impl<'a> Attempt<'a> {
         self.status
     }
 
+    /// Get the method for the next request, after applying redirection logic.
+    pub fn next_method(&self) -> &Method {
+        self.next_method
+    }
+
     /// Get the next URL to redirect to.
     pub fn url(&self) -> &Url {
         self.next
+    }
+
+    /// Get the method for the previous request, before redirection.
+    pub fn previous_method(&self) -> &Method {
+        self.previous_method
     }
 
     /// Get the list of previous URLs that have already been requested in this chain.
     pub fn previous(&self) -> &[Url] {
         self.previous
     }
+
     /// Returns an action meaning reqwest should follow the next URL.
     pub fn follow(self) -> Action {
         Action {
@@ -264,14 +287,26 @@ fn test_redirect_policy_limit() {
         .map(|i| Url::parse(&format!("http://a.b/c/{i}")).unwrap())
         .collect::<Vec<_>>();
 
-    match policy.check(StatusCode::FOUND, &next, &previous) {
+    match policy.check(
+        StatusCode::FOUND,
+        &Method::GET,
+        &next,
+        &Method::GET,
+        &previous,
+    ) {
         ActionKind::Follow => (),
         other => panic!("unexpected {other:?}"),
     }
 
     previous.push(Url::parse("http://a.b.d/e/33").unwrap());
 
-    match policy.check(StatusCode::FOUND, &next, &previous) {
+    match policy.check(
+        StatusCode::FOUND,
+        &Method::GET,
+        &next,
+        &Method::GET,
+        &previous,
+    ) {
         ActionKind::Error(err) if err.is::<TooManyRedirects>() => (),
         other => panic!("unexpected {other:?}"),
     }
@@ -283,7 +318,13 @@ fn test_redirect_policy_limit_to_0() {
     let next = Url::parse("http://x.y/z").unwrap();
     let previous = vec![Url::parse("http://a.b/c").unwrap()];
 
-    match policy.check(StatusCode::FOUND, &next, &previous) {
+    match policy.check(
+        StatusCode::FOUND,
+        &Method::GET,
+        &next,
+        &Method::GET,
+        &previous,
+    ) {
         ActionKind::Error(err) if err.is::<TooManyRedirects>() => (),
         other => panic!("unexpected {other:?}"),
     }
@@ -300,13 +341,13 @@ fn test_redirect_policy_custom() {
     });
 
     let next = Url::parse("http://bar/baz").unwrap();
-    match policy.check(StatusCode::FOUND, &next, &[]) {
+    match policy.check(StatusCode::FOUND, &Method::GET, &next, &Method::GET, &[]) {
         ActionKind::Follow => (),
         other => panic!("unexpected {other:?}"),
     }
 
     let next = Url::parse("http://foo/baz").unwrap();
-    match policy.check(StatusCode::FOUND, &next, &[]) {
+    match policy.check(StatusCode::FOUND, &Method::GET, &next, &Method::GET, &[]) {
         ActionKind::Stop => (),
         other => panic!("unexpected {other:?}"),
     }
@@ -334,4 +375,23 @@ fn test_remove_sensitive_headers() {
 
     remove_sensitive_headers(&mut headers, &next, &prev);
     assert_eq!(headers, filtered_headers);
+}
+
+#[test]
+fn test_redirect_custom_policy_methods() {
+    let policy = Policy::custom(|attempt| {
+        let next = attempt.next_method();
+        if next != Method::HEAD {
+            panic!("unexpected next method {:?}", next);
+        }
+        let prev = attempt.previous_method();
+        if prev != Method::PUT {
+            panic!("unexpected previous method {:?}", prev);
+        }
+        attempt.stop()
+    });
+
+    let next = Url::parse("http://bar/baz").unwrap();
+    let res = policy.check(StatusCode::FOUND, &Method::HEAD, &next, &Method::PUT, &[]);
+    assert!(matches!(res, ActionKind::Stop));
 }
