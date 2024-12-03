@@ -2,3 +2,4 @@ target
 Cargo.lock
 *.swp
 .idea
+.vscode
