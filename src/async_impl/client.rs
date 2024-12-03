@@ -2173,9 +2173,9 @@ impl Client {
         }
     }
 
-    /// Returns default headers on client
-    pub fn default_headers(&self) -> HeaderMap {
-        self.inner.headers.clone()
+    /// Returns a reference to default headers on the client
+    pub fn default_headers(&self) -> &HeaderMap {
+        &self.inner.headers
     }
 
     fn proxy_auth(&self, dst: &Uri, headers: &mut HeaderMap) {
