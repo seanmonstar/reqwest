@@ -2847,10 +2847,8 @@ fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &dyn cookie::CookieS
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "rustls-tls-manual-roots-no-provider")))]
 mod tests {
-    #![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
-
     #[tokio::test]
     async fn execute_request_rejects_invalid_urls() {
         let url_str = "hxxps://www.rust-lang.org/";

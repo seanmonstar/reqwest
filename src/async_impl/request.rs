@@ -4,8 +4,6 @@ use std::future::Future;
 use std::time::Duration;
 
 use serde::Serialize;
-#[cfg(feature = "json")]
-use serde_json;
 
 use super::body::Body;
 use super::client::{Client, Pending};
@@ -650,10 +648,8 @@ impl TryFrom<Request> for HttpRequest<Body> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "rustls-tls-manual-roots-no-provider")))]
 mod tests {
-    #![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
-
     use super::{Client, HttpRequest, Request, RequestBuilder, Version};
     use crate::Method;
     use serde::Serialize;
