@@ -392,8 +392,7 @@ where
     }
 }
 
-pub(crate) type ResponseBody =
-    http_body_util::combinators::BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>;
+pub(crate) type ResponseBody = BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>;
 
 pub(crate) fn boxed<B>(body: B) -> ResponseBody
 where

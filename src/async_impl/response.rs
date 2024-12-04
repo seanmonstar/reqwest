@@ -453,7 +453,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
         use crate::response::ResponseUrl;
 
         let (mut parts, body) = r.into_parts();
-        let body: crate::async_impl::body::Body = body.into();
+        let body: Body = body.into();
         let decoder = Decoder::detect(
             &mut parts.headers,
             ResponseBody::new(body.map_err(Into::into)),
