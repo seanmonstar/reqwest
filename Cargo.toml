@@ -51,6 +51,8 @@ rustls-tls-manual-roots = ["rustls-tls-manual-roots-no-provider", "__rustls-ring
 rustls-tls-webpki-roots = ["rustls-tls-webpki-roots-no-provider", "__rustls-ring"]
 rustls-tls-native-roots = ["rustls-tls-native-roots-no-provider", "__rustls-ring"]
 
+rustls-fips = ["hyper-rustls?/fips", "tokio-rustls?/fips", "rustls?/fips", "__tls", "dep:rustls-pemfile", "dep:rustls-pki-types"]
+
 blocking = ["dep:futures-channel", "futures-channel?/sink", "futures-util/io", "futures-util/sink", "tokio/sync"]
 
 charset = ["dep:encoding_rs"]
