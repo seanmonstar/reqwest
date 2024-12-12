@@ -10,13 +10,20 @@ use std::thread;
 use std::time::Duration;
 
 use http::header::HeaderValue;
+use http::Uri;
 use log::{error, trace};
 use tokio::sync::{mpsc, oneshot};
+use tower::layer::util::Stack;
+use tower::Layer;
+use tower::Service;
 
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::wait;
+use crate::connect::Conn;
+use crate::connect::ConnectorService;
 use crate::dns::Resolve;
+use crate::error::BoxError;
 #[cfg(feature = "__tls")]
 use crate::tls;
 #[cfg(feature = "__rustls")]
@@ -69,28 +76,36 @@ pub struct Client {
 /// # }
 /// ```
 #[must_use]
-pub struct ClientBuilder {
-    inner: async_impl::ClientBuilder,
+pub struct ClientBuilder<ConnectorLayers> {
+    inner: async_impl::ClientBuilder<ConnectorLayers>,
     timeout: Timeout,
 }
 
-impl Default for ClientBuilder {
+impl Default for ClientBuilder<tower::layer::util::Identity> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ClientBuilder {
+impl ClientBuilder<tower::layer::util::Identity> {
     /// Constructs a new `ClientBuilder`.
     ///
     /// This is the same as `Client::builder()`.
-    pub fn new() -> ClientBuilder {
+    pub fn new() -> Self {
         ClientBuilder {
             inner: async_impl::ClientBuilder::new(),
             timeout: Timeout::default(),
         }
     }
+}
 
+impl<ConnectorLayers> ClientBuilder<ConnectorLayers>
+where
+    ConnectorLayers: Layer<ConnectorService> + Send + Sync + 'static,
+    ConnectorLayers::Service:
+        Service<Uri, Response = Conn, Error = BoxError> + Clone + Send + Sync + 'static,
+    <<ConnectorLayers as Layer<ConnectorService>>::Service as Service<Uri>>::Future: Send + 'static,
+{
     /// Returns a `Client` that uses this `ClientBuilder` configuration.
     ///
     /// # Errors
@@ -128,7 +143,7 @@ impl ClientBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn user_agent<V>(self, value: V) -> ClientBuilder
+    pub fn user_agent<V>(self, value: V) -> ClientBuilder<ConnectorLayers>
     where
         V: TryInto<HeaderValue>,
         V::Error: Into<http::Error>,
@@ -160,7 +175,7 @@ impl ClientBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn default_headers(self, headers: header::HeaderMap) -> ClientBuilder {
+    pub fn default_headers(self, headers: header::HeaderMap) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.default_headers(headers))
     }
 
@@ -176,7 +191,7 @@ impl ClientBuilder {
     /// This requires the optional `cookies` feature to be enabled.
     #[cfg(feature = "cookies")]
     #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
-    pub fn cookie_store(self, enable: bool) -> ClientBuilder {
+    pub fn cookie_store(self, enable: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.cookie_store(enable))
     }
 
@@ -195,7 +210,7 @@ impl ClientBuilder {
     pub fn cookie_provider<C: crate::cookie::CookieStore + 'static>(
         self,
         cookie_store: Arc<C>,
-    ) -> ClientBuilder {
+    ) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.cookie_provider(cookie_store))
     }
 
@@ -217,7 +232,7 @@ impl ClientBuilder {
     /// This requires the optional `gzip` feature to be enabled
     #[cfg(feature = "gzip")]
     #[cfg_attr(docsrs, doc(cfg(feature = "gzip")))]
-    pub fn gzip(self, enable: bool) -> ClientBuilder {
+    pub fn gzip(self, enable: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.gzip(enable))
     }
 
@@ -239,7 +254,7 @@ impl ClientBuilder {
     /// This requires the optional `brotli` feature to be enabled
     #[cfg(feature = "brotli")]
     #[cfg_attr(docsrs, doc(cfg(feature = "brotli")))]
-    pub fn brotli(self, enable: bool) -> ClientBuilder {
+    pub fn brotli(self, enable: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.brotli(enable))
     }
 
@@ -261,7 +276,7 @@ impl ClientBuilder {
     /// This requires the optional `zstd` feature to be enabled
     #[cfg(feature = "zstd")]
     #[cfg_attr(docsrs, doc(cfg(feature = "zstd")))]
-    pub fn zstd(self, enable: bool) -> ClientBuilder {
+    pub fn zstd(self, enable: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.zstd(enable))
     }
 
@@ -283,7 +298,7 @@ impl ClientBuilder {
     /// This requires the optional `deflate` feature to be enabled
     #[cfg(feature = "deflate")]
     #[cfg_attr(docsrs, doc(cfg(feature = "deflate")))]
-    pub fn deflate(self, enable: bool) -> ClientBuilder {
+    pub fn deflate(self, enable: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.deflate(enable))
     }
 
@@ -292,7 +307,7 @@ impl ClientBuilder {
     /// This method exists even if the optional `gzip` feature is not enabled.
     /// This can be used to ensure a `Client` doesn't use gzip decompression
     /// even if another dependency were to enable the optional `gzip` feature.
-    pub fn no_gzip(self) -> ClientBuilder {
+    pub fn no_gzip(self) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.no_gzip())
     }
 
@@ -301,7 +316,7 @@ impl ClientBuilder {
     /// This method exists even if the optional `brotli` feature is not enabled.
     /// This can be used to ensure a `Client` doesn't use brotli decompression
     /// even if another dependency were to enable the optional `brotli` feature.
-    pub fn no_brotli(self) -> ClientBuilder {
+    pub fn no_brotli(self) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.no_brotli())
     }
 
@@ -310,7 +325,7 @@ impl ClientBuilder {
     /// This method exists even if the optional `zstd` feature is not enabled.
     /// This can be used to ensure a `Client` doesn't use zstd decompression
     /// even if another dependency were to enable the optional `zstd` feature.
-    pub fn no_zstd(self) -> ClientBuilder {
+    pub fn no_zstd(self) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.no_zstd())
     }
 
@@ -319,7 +334,7 @@ impl ClientBuilder {
     /// This method exists even if the optional `deflate` feature is not enabled.
     /// This can be used to ensure a `Client` doesn't use deflate decompression
     /// even if another dependency were to enable the optional `deflate` feature.
-    pub fn no_deflate(self) -> ClientBuilder {
+    pub fn no_deflate(self) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.no_deflate())
     }
 
@@ -328,14 +343,14 @@ impl ClientBuilder {
     /// Set a `redirect::Policy` for this client.
     ///
     /// Default will follow redirects up to a maximum of 10.
-    pub fn redirect(self, policy: redirect::Policy) -> ClientBuilder {
+    pub fn redirect(self, policy: redirect::Policy) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.redirect(policy))
     }
 
     /// Enable or disable automatic setting of the `Referer` header.
     ///
     /// Default is `true`.
-    pub fn referer(self, enable: bool) -> ClientBuilder {
+    pub fn referer(self, enable: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.referer(enable))
     }
 
@@ -346,7 +361,7 @@ impl ClientBuilder {
     /// # Note
     ///
     /// Adding a proxy will disable the automatic usage of the "system" proxy.
-    pub fn proxy(self, proxy: Proxy) -> ClientBuilder {
+    pub fn proxy(self, proxy: Proxy) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.proxy(proxy))
     }
 
@@ -357,7 +372,7 @@ impl ClientBuilder {
     /// on all desired proxies instead.
     ///
     /// This also disables the automatic usage of the "system" proxy.
-    pub fn no_proxy(self) -> ClientBuilder {
+    pub fn no_proxy(self) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.no_proxy())
     }
 
@@ -368,7 +383,7 @@ impl ClientBuilder {
     /// Default is 30 seconds.
     ///
     /// Pass `None` to disable timeout.
-    pub fn timeout<T>(mut self, timeout: T) -> ClientBuilder
+    pub fn timeout<T>(mut self, timeout: T) -> ClientBuilder<ConnectorLayers>
     where
         T: Into<Option<Duration>>,
     {
@@ -379,7 +394,7 @@ impl ClientBuilder {
     /// Set a timeout for only the connect phase of a `Client`.
     ///
     /// Default is `None`.
-    pub fn connect_timeout<T>(self, timeout: T) -> ClientBuilder
+    pub fn connect_timeout<T>(self, timeout: T) -> ClientBuilder<ConnectorLayers>
     where
         T: Into<Option<Duration>>,
     {
@@ -397,7 +412,7 @@ impl ClientBuilder {
     /// for read and write operations on connections.
     ///
     /// [log]: https://crates.io/crates/log
-    pub fn connection_verbose(self, verbose: bool) -> ClientBuilder {
+    pub fn connection_verbose(self, verbose: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.connection_verbose(verbose))
     }
 
@@ -408,7 +423,7 @@ impl ClientBuilder {
     /// Pass `None` to disable timeout.
     ///
     /// Default is 90 seconds.
-    pub fn pool_idle_timeout<D>(self, val: D) -> ClientBuilder
+    pub fn pool_idle_timeout<D>(self, val: D) -> ClientBuilder<ConnectorLayers>
     where
         D: Into<Option<Duration>>,
     {
@@ -416,12 +431,12 @@ impl ClientBuilder {
     }
 
     /// Sets the maximum idle connection per host allowed in the pool.
-    pub fn pool_max_idle_per_host(self, max: usize) -> ClientBuilder {
+    pub fn pool_max_idle_per_host(self, max: usize) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.pool_max_idle_per_host(max))
     }
 
     /// Send headers as title case instead of lowercase.
-    pub fn http1_title_case_headers(self) -> ClientBuilder {
+    pub fn http1_title_case_headers(self) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.http1_title_case_headers())
     }
 
@@ -430,12 +445,18 @@ impl ClientBuilder {
     ///
     /// Newline codepoints (`\r` and `\n`) will be transformed to spaces when
     /// parsing.
-    pub fn http1_allow_obsolete_multiline_headers_in_responses(self, value: bool) -> ClientBuilder {
+    pub fn http1_allow_obsolete_multiline_headers_in_responses(
+        self,
+        value: bool,
+    ) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.http1_allow_obsolete_multiline_headers_in_responses(value))
     }
 
     /// Sets whether invalid header lines should be silently ignored in HTTP/1 responses.
-    pub fn http1_ignore_invalid_headers_in_responses(self, value: bool) -> ClientBuilder {
+    pub fn http1_ignore_invalid_headers_in_responses(
+        self,
+        value: bool,
+    ) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.http1_ignore_invalid_headers_in_responses(value))
     }
 
@@ -444,24 +465,27 @@ impl ClientBuilder {
     ///
     /// Newline codepoints (\r and \n) will be transformed to spaces when
     /// parsing.
-    pub fn http1_allow_spaces_after_header_name_in_responses(self, value: bool) -> ClientBuilder {
+    pub fn http1_allow_spaces_after_header_name_in_responses(
+        self,
+        value: bool,
+    ) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.http1_allow_spaces_after_header_name_in_responses(value))
     }
 
     /// Only use HTTP/1.
-    pub fn http1_only(self) -> ClientBuilder {
+    pub fn http1_only(self) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.http1_only())
     }
 
     /// Allow HTTP/0.9 responses
-    pub fn http09_responses(self) -> ClientBuilder {
+    pub fn http09_responses(self) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.http09_responses())
     }
 
     /// Only use HTTP/2.
     #[cfg(feature = "http2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
-    pub fn http2_prior_knowledge(self) -> ClientBuilder {
+    pub fn http2_prior_knowledge(self) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.http2_prior_knowledge())
     }
 
@@ -470,7 +494,10 @@ impl ClientBuilder {
     /// Default is currently 65,535 but may change internally to optimize for common uses.
     #[cfg(feature = "http2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
-    pub fn http2_initial_stream_window_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+    pub fn http2_initial_stream_window_size(
+        self,
+        sz: impl Into<Option<u32>>,
+    ) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.http2_initial_stream_window_size(sz))
     }
 
@@ -479,7 +506,10 @@ impl ClientBuilder {
     /// Default is currently 65,535 but may change internally to optimize for common uses.
     #[cfg(feature = "http2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
-    pub fn http2_initial_connection_window_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+    pub fn http2_initial_connection_window_size(
+        self,
+        sz: impl Into<Option<u32>>,
+    ) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.http2_initial_connection_window_size(sz))
     }
 
@@ -489,7 +519,7 @@ impl ClientBuilder {
     /// `http2_initial_connection_window_size`.
     #[cfg(feature = "http2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
-    pub fn http2_adaptive_window(self, enabled: bool) -> ClientBuilder {
+    pub fn http2_adaptive_window(self, enabled: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.http2_adaptive_window(enabled))
     }
 
@@ -498,7 +528,10 @@ impl ClientBuilder {
     /// Default is currently 16,384 but may change internally to optimize for common uses.
     #[cfg(feature = "http2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
-    pub fn http2_max_frame_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+    pub fn http2_max_frame_size(
+        self,
+        sz: impl Into<Option<u32>>,
+    ) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.http2_max_frame_size(sz))
     }
 
@@ -507,7 +540,10 @@ impl ClientBuilder {
     /// Default is currently 16KB, but can change.
     #[cfg(feature = "http2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
-    pub fn http2_max_header_list_size(self, max_header_size_bytes: u32) -> ClientBuilder {
+    pub fn http2_max_header_list_size(
+        self,
+        max_header_size_bytes: u32,
+    ) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.http2_max_header_list_size(max_header_size_bytes))
     }
 
@@ -515,7 +551,7 @@ impl ClientBuilder {
     /// enabled.
     #[cfg(feature = "http3")]
     #[cfg_attr(docsrs, doc(cfg(feature = "http3")))]
-    pub fn http3_prior_knowledge(self) -> ClientBuilder {
+    pub fn http3_prior_knowledge(self) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.http3_prior_knowledge())
     }
 
@@ -524,7 +560,7 @@ impl ClientBuilder {
     /// Set whether sockets have `TCP_NODELAY` enabled.
     ///
     /// Default is `true`.
-    pub fn tcp_nodelay(self, enabled: bool) -> ClientBuilder {
+    pub fn tcp_nodelay(self, enabled: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.tcp_nodelay(enabled))
     }
 
@@ -539,7 +575,7 @@ impl ClientBuilder {
     ///     .local_address(local_addr)
     ///     .build().unwrap();
     /// ```
-    pub fn local_address<T>(self, addr: T) -> ClientBuilder
+    pub fn local_address<T>(self, addr: T) -> ClientBuilder<ConnectorLayers>
     where
         T: Into<Option<IpAddr>>,
     {
@@ -557,14 +593,14 @@ impl ClientBuilder {
     ///     .build().unwrap();
     /// ```
     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
-    pub fn interface(self, interface: &str) -> ClientBuilder {
+    pub fn interface(self, interface: &str) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.interface(interface))
     }
 
     /// Set that all sockets have `SO_KEEPALIVE` set with the supplied duration.
     ///
     /// If `None`, the option will not be set.
-    pub fn tcp_keepalive<D>(self, val: D) -> ClientBuilder
+    pub fn tcp_keepalive<D>(self, val: D) -> ClientBuilder<ConnectorLayers>
     where
         D: Into<Option<Duration>>,
     {
@@ -613,7 +649,7 @@ impl ClientBuilder {
             feature = "rustls-tls"
         )))
     )]
-    pub fn add_root_certificate(self, cert: Certificate) -> ClientBuilder {
+    pub fn add_root_certificate(self, cert: Certificate) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.add_root_certificate(cert))
     }
 
@@ -625,7 +661,7 @@ impl ClientBuilder {
     /// This requires the `rustls-tls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
-    pub fn add_crl(self, crl: CertificateRevocationList) -> ClientBuilder {
+    pub fn add_crl(self, crl: CertificateRevocationList) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.add_crl(crl))
     }
 
@@ -640,7 +676,7 @@ impl ClientBuilder {
     pub fn add_crls(
         self,
         crls: impl IntoIterator<Item = CertificateRevocationList>,
-    ) -> ClientBuilder {
+    ) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.add_crls(crls))
     }
 
@@ -661,7 +697,10 @@ impl ClientBuilder {
             feature = "rustls-tls"
         )))
     )]
-    pub fn tls_built_in_root_certs(self, tls_built_in_root_certs: bool) -> ClientBuilder {
+    pub fn tls_built_in_root_certs(
+        self,
+        tls_built_in_root_certs: bool,
+    ) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.tls_built_in_root_certs(tls_built_in_root_certs))
     }
 
@@ -670,7 +709,7 @@ impl ClientBuilder {
     /// If the feature is enabled, this value is `true` by default.
     #[cfg(feature = "rustls-tls-webpki-roots-no-provider")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls-webpki-roots-no-provider")))]
-    pub fn tls_built_in_webpki_certs(self, enabled: bool) -> ClientBuilder {
+    pub fn tls_built_in_webpki_certs(self, enabled: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.tls_built_in_webpki_certs(enabled))
     }
 
@@ -679,7 +718,7 @@ impl ClientBuilder {
     /// If the feature is enabled, this value is `true` by default.
     #[cfg(feature = "rustls-tls-native-roots-no-provider")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls-native-roots-no-provider")))]
-    pub fn tls_built_in_native_certs(self, enabled: bool) -> ClientBuilder {
+    pub fn tls_built_in_native_certs(self, enabled: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.tls_built_in_native_certs(enabled))
     }
 
@@ -691,7 +730,7 @@ impl ClientBuilder {
     /// enabled.
     #[cfg(any(feature = "native-tls", feature = "__rustls"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
-    pub fn identity(self, identity: Identity) -> ClientBuilder {
+    pub fn identity(self, identity: Identity) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.identity(identity))
     }
 
@@ -719,7 +758,10 @@ impl ClientBuilder {
             feature = "rustls-tls"
         )))
     )]
-    pub fn danger_accept_invalid_hostnames(self, accept_invalid_hostname: bool) -> ClientBuilder {
+    pub fn danger_accept_invalid_hostnames(
+        self,
+        accept_invalid_hostname: bool,
+    ) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.danger_accept_invalid_hostnames(accept_invalid_hostname))
     }
 
@@ -743,7 +785,10 @@ impl ClientBuilder {
             feature = "rustls-tls"
         )))
     )]
-    pub fn danger_accept_invalid_certs(self, accept_invalid_certs: bool) -> ClientBuilder {
+    pub fn danger_accept_invalid_certs(
+        self,
+        accept_invalid_certs: bool,
+    ) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.danger_accept_invalid_certs(accept_invalid_certs))
     }
 
@@ -759,7 +804,7 @@ impl ClientBuilder {
             feature = "rustls-tls"
         )))
     )]
-    pub fn tls_sni(self, tls_sni: bool) -> ClientBuilder {
+    pub fn tls_sni(self, tls_sni: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.tls_sni(tls_sni))
     }
 
@@ -787,7 +832,7 @@ impl ClientBuilder {
             feature = "rustls-tls"
         )))
     )]
-    pub fn min_tls_version(self, version: tls::Version) -> ClientBuilder {
+    pub fn min_tls_version(self, version: tls::Version) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.min_tls_version(version))
     }
 
@@ -815,7 +860,7 @@ impl ClientBuilder {
             feature = "rustls-tls"
         )))
     )]
-    pub fn max_tls_version(self, version: tls::Version) -> ClientBuilder {
+    pub fn max_tls_version(self, version: tls::Version) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.max_tls_version(version))
     }
 
@@ -829,7 +874,7 @@ impl ClientBuilder {
     /// This requires the optional `native-tls` feature to be enabled.
     #[cfg(feature = "native-tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "native-tls")))]
-    pub fn use_native_tls(self) -> ClientBuilder {
+    pub fn use_native_tls(self) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.use_native_tls())
     }
 
@@ -843,7 +888,7 @@ impl ClientBuilder {
     /// This requires the optional `rustls-tls(-...)` feature to be enabled.
     #[cfg(feature = "__rustls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
-    pub fn use_rustls_tls(self) -> ClientBuilder {
+    pub fn use_rustls_tls(self) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.use_rustls_tls())
     }
 
@@ -862,7 +907,7 @@ impl ClientBuilder {
             feature = "rustls-tls"
         )))
     )]
-    pub fn tls_info(self, tls_info: bool) -> ClientBuilder {
+    pub fn tls_info(self, tls_info: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.tls_info(tls_info))
     }
 
@@ -886,7 +931,7 @@ impl ClientBuilder {
     /// `rustls-tls(-...)` to be enabled.
     #[cfg(any(feature = "native-tls", feature = "__rustls",))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
-    pub fn use_preconfigured_tls(self, tls: impl Any) -> ClientBuilder {
+    pub fn use_preconfigured_tls(self, tls: impl Any) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(move |inner| inner.use_preconfigured_tls(tls))
     }
 
@@ -900,7 +945,7 @@ impl ClientBuilder {
     #[cfg(feature = "hickory-dns")]
     #[cfg_attr(docsrs, doc(cfg(feature = "hickory-dns")))]
     #[deprecated(note = "use `hickory_dns` instead", since = "0.12.0")]
-    pub fn trust_dns(self, enable: bool) -> ClientBuilder {
+    pub fn trust_dns(self, enable: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.hickory_dns(enable))
     }
 
@@ -913,7 +958,7 @@ impl ClientBuilder {
     /// This requires the optional `hickory-dns` feature to be enabled
     #[cfg(feature = "hickory-dns")]
     #[cfg_attr(docsrs, doc(cfg(feature = "hickory-dns")))]
-    pub fn hickory_dns(self, enable: bool) -> ClientBuilder {
+    pub fn hickory_dns(self, enable: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.hickory_dns(enable))
     }
 
@@ -923,7 +968,7 @@ impl ClientBuilder {
     /// This can be used to ensure a `Client` doesn't use the hickory-dns async resolver
     /// even if another dependency were to enable the optional `hickory-dns` feature.
     #[deprecated(note = "use `no_hickory_dns` instead", since = "0.12.0")]
-    pub fn no_trust_dns(self) -> ClientBuilder {
+    pub fn no_trust_dns(self) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.no_hickory_dns())
     }
 
@@ -932,14 +977,14 @@ impl ClientBuilder {
     /// This method exists even if the optional `hickory-dns` feature is not enabled.
     /// This can be used to ensure a `Client` doesn't use the hickory-dns async resolver
     /// even if another dependency were to enable the optional `hickory-dns` feature.
-    pub fn no_hickory_dns(self) -> ClientBuilder {
+    pub fn no_hickory_dns(self) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.no_hickory_dns())
     }
 
     /// Restrict the Client to be used with HTTPS only requests.
     ///
     /// Defaults to false.
-    pub fn https_only(self, enabled: bool) -> ClientBuilder {
+    pub fn https_only(self, enabled: bool) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.https_only(enabled))
     }
 
@@ -947,7 +992,7 @@ impl ClientBuilder {
     ///
     /// Set the port to `0` to use the conventional port for the given scheme (e.g. 80 for http).
     /// Ports in the URL itself will always be used instead of the port in the overridden addr.
-    pub fn resolve(self, domain: &str, addr: SocketAddr) -> ClientBuilder {
+    pub fn resolve(self, domain: &str, addr: SocketAddr) -> ClientBuilder<ConnectorLayers> {
         self.resolve_to_addrs(domain, &[addr])
     }
 
@@ -955,7 +1000,11 @@ impl ClientBuilder {
     ///
     /// Set the port to `0` to use the conventional port for the given scheme (e.g. 80 for http).
     /// Ports in the URL itself will always be used instead of the port in the overridden addr.
-    pub fn resolve_to_addrs(self, domain: &str, addrs: &[SocketAddr]) -> ClientBuilder {
+    pub fn resolve_to_addrs(
+        self,
+        domain: &str,
+        addrs: &[SocketAddr],
+    ) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.resolve_to_addrs(domain, addrs))
     }
 
@@ -964,23 +1013,63 @@ impl ClientBuilder {
     /// Pass an `Arc` wrapping a trait object implementing `Resolve`.
     /// Overrides for specific names passed to `resolve` and `resolve_to_addrs` will
     /// still be applied on top of this resolver.
-    pub fn dns_resolver<R: Resolve + 'static>(self, resolver: Arc<R>) -> ClientBuilder {
+    pub fn dns_resolver<R: Resolve + 'static>(
+        self,
+        resolver: Arc<R>,
+    ) -> ClientBuilder<ConnectorLayers> {
         self.with_inner(|inner| inner.dns_resolver(resolver))
+    }
+
+    /// Adds a new Tower [`Layer`](https://docs.rs/tower/latest/tower/trait.Layer.html) to the
+    /// base connector [`Service`](https://docs.rs/tower/latest/tower/trait.Service.html) which
+    /// is responsible for connection establishment.
+    ///
+    /// Each subsequent invocation of this function will wrap previous layers.
+    ///
+    /// Simple example:
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// let client = reqwest::blocking::Client::builder()
+    ///                      // resolved to outermost layer, so before the semaphore permit is attempted
+    ///                      .connect_timeout(Duration::from_millis(100))
+    ///                      // underneath the concurrency check, so only after a semaphore permit is acquired
+    ///                      .connector_layer(tower::timeout::TimeoutLayer::new(Duration::from_millis(50)))
+    ///                      .connector_layer(tower::limit::concurrency::ConcurrencyLimitLayer::new(2))
+    ///                      .build()
+    ///                      .unwrap();
+    /// ```
+    pub fn connector_layer<S, L>(self, layer: L) -> ClientBuilder<Stack<L, ConnectorLayers>>
+    where
+        S: Send + Sync + Clone + 'static,
+        L: Layer<ConnectorLayers, Service = S> + Send + Sync + Clone + 'static,
+    {
+        // skipping using `with_inner` here because we need to cast the generic type
+        let inner = self.inner.connector_layer(layer);
+
+        ClientBuilder::<Stack<L, ConnectorLayers>> {
+            inner,
+            timeout: self.timeout,
+        }
     }
 
     // private
 
-    fn with_inner<F>(mut self, func: F) -> ClientBuilder
+    fn with_inner<F>(mut self, func: F) -> ClientBuilder<ConnectorLayers>
     where
-        F: FnOnce(async_impl::ClientBuilder) -> async_impl::ClientBuilder,
+        F: FnOnce(
+            async_impl::ClientBuilder<ConnectorLayers>,
+        ) -> async_impl::ClientBuilder<ConnectorLayers>,
     {
         self.inner = func(self.inner);
         self
     }
 }
 
-impl From<async_impl::ClientBuilder> for ClientBuilder {
-    fn from(builder: async_impl::ClientBuilder) -> Self {
+impl<ConnectorLayers> From<async_impl::ClientBuilder<ConnectorLayers>>
+    for ClientBuilder<ConnectorLayers>
+{
+    fn from(builder: async_impl::ClientBuilder<ConnectorLayers>) -> Self {
         Self {
             inner: builder,
             timeout: Timeout::default(),
@@ -1014,7 +1103,7 @@ impl Client {
     /// Creates a `ClientBuilder` to configure a `Client`.
     ///
     /// This is the same as `ClientBuilder::new()`.
-    pub fn builder() -> ClientBuilder {
+    pub fn builder() -> ClientBuilder<tower::layer::util::Identity> {
         ClientBuilder::new()
     }
 
@@ -1112,7 +1201,7 @@ impl fmt::Debug for Client {
     }
 }
 
-impl fmt::Debug for ClientBuilder {
+impl<ConnectorLayers> fmt::Debug for ClientBuilder<ConnectorLayers> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.inner.fmt(f)
     }
@@ -1149,7 +1238,14 @@ impl Drop for InnerClientHandle {
 }
 
 impl ClientHandle {
-    fn new(builder: ClientBuilder) -> crate::Result<ClientHandle> {
+    fn new<ConnectorLayers>(builder: ClientBuilder<ConnectorLayers>) -> crate::Result<ClientHandle>
+    where
+        ConnectorLayers: Layer<ConnectorService> + Send + Sync + 'static,
+        ConnectorLayers::Service:
+            Service<Uri, Response = Conn, Error = BoxError> + Clone + Send + Sync + 'static,
+        <<ConnectorLayers as Layer<ConnectorService>>::Service as Service<Uri>>::Future:
+            Send + 'static,
+    {
         let timeout = builder.timeout;
         let builder = builder.inner;
         let (tx, rx) = mpsc::unbounded_channel::<(async_impl::Request, OneshotResponse)>();

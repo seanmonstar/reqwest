@@ -8,6 +8,7 @@ use hyper_util::client::legacy::connect::{Connected, Connection};
 use hyper_util::rt::TokioIo;
 #[cfg(feature = "default-tls")]
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
+use tower::{timeout::TimeoutLayer, util::BoxCloneSyncService, Layer, ServiceBuilder};
 use tower_service::Service;
 
 use pin_project_lite::pin_project;
@@ -24,13 +25,50 @@ use self::native_tls_conn::NativeTlsConn;
 #[cfg(feature = "__rustls")]
 use self::rustls_tls_conn::RustlsTlsConn;
 use crate::dns::DynResolver;
-use crate::error::BoxError;
+use crate::error::{cast_to_internal_error, BoxError};
 use crate::proxy::{Proxy, ProxyScheme};
 
 pub(crate) type HttpConnector = hyper_util::client::legacy::connect::HttpConnector<DynResolver>;
 
 #[derive(Clone)]
-pub(crate) struct Connector {
+pub(crate) enum Connector {
+    // base service, with or without an embedded timeout
+    Simple(ConnectorService),
+    // at least one custom layer along with maybe an outer timeout layer
+    // from `builder.connect_timeout()`
+    WithLayers(BoxCloneSyncService<Uri, Conn, BoxError>),
+}
+
+impl Service<Uri> for Connector {
+    type Response = Conn;
+    type Error = BoxError;
+    type Future = Connecting;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        match self {
+            Connector::Simple(service) => service.poll_ready(cx),
+            Connector::WithLayers(service) => service.poll_ready(cx),
+        }
+    }
+
+    fn call(&mut self, dst: Uri) -> Self::Future {
+        match self {
+            Connector::Simple(service) => service.call(dst),
+            Connector::WithLayers(service) => service.call(dst),
+        }
+    }
+}
+
+pub(crate) struct ConnectorLayerBuilder<ConnectorLayers> {
+    pub(crate) builder: ServiceBuilder<ConnectorLayers>,
+    // It's not trivial to identify whether the builder stack is `Stack<Identity, Identity>` or not
+    // so we simply add a boolean flag to track.
+    //
+    // Knowing allows us reduce indirection in certain cases.
+    pub(crate) has_custom_layers: bool,
+}
+
+pub(crate) struct ConnectorBuilder {
     inner: Inner,
     proxies: Arc<Vec<Proxy>>,
     verbose: verbose::Wrapper,
@@ -43,21 +81,66 @@ pub(crate) struct Connector {
     user_agent: Option<HeaderValue>,
 }
 
-#[derive(Clone)]
-enum Inner {
-    #[cfg(not(feature = "__tls"))]
-    Http(HttpConnector),
-    #[cfg(feature = "default-tls")]
-    DefaultTls(HttpConnector, TlsConnector),
-    #[cfg(feature = "__rustls")]
-    RustlsTls {
-        http: HttpConnector,
-        tls: Arc<rustls::ClientConfig>,
-        tls_proxy: Arc<rustls::ClientConfig>,
-    },
-}
+impl ConnectorBuilder {
+    pub(crate) fn build<ConnectorLayers>(
+        self,
+        layer: ConnectorLayerBuilder<ConnectorLayers>,
+    ) -> Connector
+    where
+        ConnectorLayers: Layer<ConnectorService>,
+        ConnectorLayers::Service:
+            Service<Uri, Response = Conn, Error = BoxError> + Clone + Send + Sync + 'static,
+        <<ConnectorLayers as Layer<ConnectorService>>::Service as Service<Uri>>::Future:
+            Send + 'static,
+    {
+        // construct the inner tower service
+        let mut base_service = ConnectorService {
+            inner: self.inner,
+            proxies: self.proxies,
+            verbose: self.verbose,
+            #[cfg(feature = "__tls")]
+            nodelay: self.nodelay,
+            #[cfg(feature = "__tls")]
+            tls_info: self.tls_info,
+            #[cfg(feature = "__tls")]
+            user_agent: self.user_agent,
+            simple_timeout: None,
+        };
 
-impl Connector {
+        // no user-provider layers so we can throw away our generic input layer stack
+        // and compose with named layers only
+        if !layer.has_custom_layers {
+            // if we know we have no other layers, we can embed the timeout directly inside
+            // our base service call which saves us a Box::pin
+            base_service.simple_timeout = self.timeout;
+            return Connector::Simple(base_service);
+        }
+
+        // we have user-provided generic layer stack
+        let service = layer.builder.service(base_service);
+
+        if let Some(timeout) = self.timeout {
+            // add in named timeout layer on the outside of the stack
+            let service = ServiceBuilder::new()
+                .layer(TimeoutLayer::new(timeout))
+                .service(service);
+            let service = ServiceBuilder::new()
+                .map_err(|error: BoxError| cast_to_internal_error(error))
+                .service(service);
+            let service = BoxCloneSyncService::new(service);
+            return Connector::WithLayers(service);
+        }
+
+        // no named timeout layer but we still map errors since
+        // we might have user-provided timeout layer
+        let service = ServiceBuilder::new().service(service);
+        let service = ServiceBuilder::new()
+            .map_err(|error: BoxError| cast_to_internal_error(error))
+            .service(service);
+        let service = BoxCloneSyncService::new(service);
+        return Connector::WithLayers(service);
+    }
+
     #[cfg(not(feature = "__tls"))]
     pub(crate) fn new<T>(
         mut http: HttpConnector,
@@ -66,7 +149,7 @@ impl Connector {
         #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
         interface: Option<&str>,
         nodelay: bool,
-    ) -> Connector
+    ) -> ConnectorBuilder
     where
         T: Into<Option<IpAddr>>,
     {
@@ -77,10 +160,10 @@ impl Connector {
         }
         http.set_nodelay(nodelay);
 
-        Connector {
+        ConnectorBuilder {
             inner: Inner::Http(http),
-            verbose: verbose::OFF,
             proxies,
+            verbose: verbose::OFF,
             timeout: None,
         }
     }
@@ -96,7 +179,7 @@ impl Connector {
         interface: Option<&str>,
         nodelay: bool,
         tls_info: bool,
-    ) -> crate::Result<Connector>
+    ) -> crate::Result<ConnectorBuilder>
     where
         T: Into<Option<IpAddr>>,
     {
@@ -125,7 +208,7 @@ impl Connector {
         interface: Option<&str>,
         nodelay: bool,
         tls_info: bool,
-    ) -> Connector
+    ) -> ConnectorBuilder
     where
         T: Into<Option<IpAddr>>,
     {
@@ -137,14 +220,14 @@ impl Connector {
         http.set_nodelay(nodelay);
         http.enforce_http(false);
 
-        Connector {
+        ConnectorBuilder {
             inner: Inner::DefaultTls(http, tls),
             proxies,
             verbose: verbose::OFF,
-            timeout: None,
             nodelay,
             tls_info,
             user_agent,
+            timeout: None,
         }
     }
 
@@ -159,7 +242,7 @@ impl Connector {
         interface: Option<&str>,
         nodelay: bool,
         tls_info: bool,
-    ) -> Connector
+    ) -> ConnectorBuilder
     where
         T: Into<Option<IpAddr>>,
     {
@@ -180,7 +263,7 @@ impl Connector {
             (Arc::new(tls), Arc::new(tls_proxy))
         };
 
-        Connector {
+        ConnectorBuilder {
             inner: Inner::RustlsTls {
                 http,
                 tls,
@@ -188,10 +271,10 @@ impl Connector {
             },
             proxies,
             verbose: verbose::OFF,
-            timeout: None,
             nodelay,
             tls_info,
             user_agent,
+            timeout: None,
         }
     }
 
@@ -203,6 +286,57 @@ impl Connector {
         self.verbose.0 = enabled;
     }
 
+    pub(crate) fn set_keepalive(&mut self, dur: Option<Duration>) {
+        match &mut self.inner {
+            #[cfg(feature = "default-tls")]
+            Inner::DefaultTls(http, _tls) => http.set_keepalive(dur),
+            #[cfg(feature = "__rustls")]
+            Inner::RustlsTls { http, .. } => http.set_keepalive(dur),
+            #[cfg(not(feature = "__tls"))]
+            Inner::Http(http) => http.set_keepalive(dur),
+        }
+    }
+}
+
+// Struct is public because we can't have private trait in public bounds
+// until we are on MSRV 1.74 when private-in-public was switched
+// from error to lint - https://github.com/rust-lang/rfcs/pull/2145
+// but no internal details are exposed. We don't expose debug
+// for similar reasons.
+#[allow(missing_debug_implementations)]
+#[derive(Clone)]
+pub struct ConnectorService {
+    inner: Inner,
+    proxies: Arc<Vec<Proxy>>,
+    verbose: verbose::Wrapper,
+    /// When there is a single timeout layer and no other layers,
+    /// we embed it directly inside our base Service::call().
+    /// This lets us avoid an extra `Box::pin` indirection layer
+    /// since `tokio::time::Timeout` is `Unpin`
+    simple_timeout: Option<Duration>,
+    #[cfg(feature = "__tls")]
+    nodelay: bool,
+    #[cfg(feature = "__tls")]
+    tls_info: bool,
+    #[cfg(feature = "__tls")]
+    user_agent: Option<HeaderValue>,
+}
+
+#[derive(Clone)]
+enum Inner {
+    #[cfg(not(feature = "__tls"))]
+    Http(HttpConnector),
+    #[cfg(feature = "default-tls")]
+    DefaultTls(HttpConnector, TlsConnector),
+    #[cfg(feature = "__rustls")]
+    RustlsTls {
+        http: HttpConnector,
+        tls: Arc<rustls::ClientConfig>,
+        tls_proxy: Arc<rustls::ClientConfig>,
+    },
+}
+
+impl ConnectorService {
     #[cfg(feature = "socks")]
     async fn connect_socks(&self, dst: Uri, proxy: ProxyScheme) -> Result<Conn, BoxError> {
         let dns = match proxy {
@@ -449,17 +583,6 @@ impl Connector {
 
         self.connect_with_maybe_proxy(proxy_dst, true).await
     }
-
-    pub fn set_keepalive(&mut self, dur: Option<Duration>) {
-        match &mut self.inner {
-            #[cfg(feature = "default-tls")]
-            Inner::DefaultTls(http, _tls) => http.set_keepalive(dur),
-            #[cfg(feature = "__rustls")]
-            Inner::RustlsTls { http, .. } => http.set_keepalive(dur),
-            #[cfg(not(feature = "__tls"))]
-            Inner::Http(http) => http.set_keepalive(dur),
-        }
-    }
 }
 
 fn into_uri(scheme: Scheme, host: Authority) -> Uri {
@@ -487,7 +610,7 @@ where
     }
 }
 
-impl Service<Uri> for Connector {
+impl Service<Uri> for ConnectorService {
     type Response = Conn;
     type Error = BoxError;
     type Future = Connecting;
@@ -498,7 +621,7 @@ impl Service<Uri> for Connector {
 
     fn call(&mut self, dst: Uri) -> Self::Future {
         log::debug!("starting new connection: {dst:?}");
-        let timeout = self.timeout;
+        let timeout = self.simple_timeout;
         for prox in self.proxies.iter() {
             if let Some(proxy_scheme) = prox.intercept(&dst) {
                 return Box::pin(with_timeout(
@@ -634,11 +757,18 @@ impl<T: AsyncConn> AsyncConnWithInfo for T {}
 type BoxConn = Box<dyn AsyncConnWithInfo>;
 
 pin_project! {
+    // Struct is public because we can't have private trait in public bounds
+    // until we are on MSRV 1.74 when private-in-public was switched
+    // from error to lint - https://github.com/rust-lang/rfcs/pull/2145
+    // but no internal details are exposed. We don't expose debug
+    // for similar reasons.
+
     /// Note: the `is_proxy` member means *is plain text HTTP proxy*.
     /// This tells hyper whether the URI should be written in
     /// * origin-form (`GET /just/a/path HTTP/1.1`), when `is_proxy == false`, or
     /// * absolute-form (`GET http://foo.bar/and/a/path HTTP/1.1`), otherwise.
-    pub(crate) struct Conn {
+    #[allow(missing_debug_implementations)]
+    pub struct Conn {
         #[pin]
         inner: BoxConn,
         is_proxy: bool,
