@@ -164,6 +164,36 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.default_headers(headers))
     }
 
+    /// Enable HTTP basic authentication.
+    ///
+    /// ```rust
+    /// # use reqwest::Error;
+    /// # async fn run() -> Result<(), Error> {
+    /// let client = reqwest::blocking::ClientBuilder::new()
+    ///     .basic_auth("admin", Some("good password"))
+    ///     .build()?;
+    /// let resp = client.delete("http://httpbin.org/delete")
+    ///     .send()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn basic_auth<U, P>(self, username: U, password: Option<P>) -> ClientBuilder
+    where
+        U: fmt::Display,
+        P: fmt::Display,
+    {
+        self.with_inner(move |inner| inner.basic_auth(username, password))
+    }
+
+    /// Enable HTTP bearer authentication.
+    pub fn bearer_auth<T>(self, token: T) -> ClientBuilder
+    where
+        T: fmt::Display, 
+    {
+        self.with_inner(move |inner| inner.bearer_auth(token))
+    }
+
     /// Enable a persistent cookie store for the client.
     ///
     /// Cookies received in responses will be preserved and included in
