@@ -47,6 +47,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 For private advice, support, reviews, access to the maintainer, and the like, reach out for [commercial support][sponsor].
 
+**NOTE**: Please keep in mind that constructing a Blocking Client client inside the Tokio Runtime will result a panic.
+
 ## Requirements
 
 On Linux:
