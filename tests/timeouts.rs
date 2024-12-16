@@ -338,6 +338,24 @@ fn timeout_blocking_request() {
 }
 
 #[cfg(feature = "blocking")]
+#[test]
+fn connect_timeout_blocking_request() {
+    let _ = env_logger::try_init();
+
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_millis(100))
+        .build()
+        .unwrap();
+
+    // never returns
+    let url = "http://192.0.2.1:81/slow";
+
+    let err = client.get(url).send().unwrap_err();
+
+    assert!(err.is_timeout());
+}
+
+#[cfg(feature = "blocking")]
 #[cfg(feature = "stream")]
 #[test]
 fn blocking_request_timeout_body() {

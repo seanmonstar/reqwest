@@ -10,7 +10,7 @@ authors = ["Sean McArthur <sean@seanmonstar.com>"]
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 edition = "2021"
-rust-version = "1.63.0"
+rust-version = "1.64.0"
 autotests = true
 
 [package.metadata.docs.rs]
@@ -105,6 +105,7 @@ url = "2.4"
 bytes = "1.0"
 serde = "1.0"
 serde_urlencoded = "0.7.1"
+tower = { version = "0.5.2", default-features = false, features = ["timeout", "util"] }
 tower-service = "0.3"
 futures-core = { version = "0.3.28", default-features = false }
 futures-util = { version = "0.3.28", default-features = false }
@@ -169,7 +170,6 @@ quinn = { version = "0.11.1", default-features = false, features = ["rustls", "r
 slab = { version = "0.4.9", optional = true } # just to get minimal versions working with quinn
 futures-channel = { version = "0.3", optional = true }
 
-
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.10"
 hyper = { version = "1.1.0", default-features = false, features = ["http1", "http2", "client", "server"] }
@@ -222,6 +222,11 @@ features = [
 wasm-bindgen = { version = "0.2.89", features = ["serde-serialize"] }
 wasm-bindgen-test = "0.3"
 
+[dev-dependencies]
+tower = { version = "0.5.2", default-features = false, features = ["limit"] }
+num_cpus = "1.0"
+libc = "0"
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(reqwest_unstable)'] }
 
@@ -252,6 +257,10 @@ path = "examples/form.rs"
 [[example]]
 name = "simple"
 path = "examples/simple.rs"
+
+[[example]]
+name = "connect_via_lower_priority_tokio_runtime"
+path = "examples/connect_via_lower_priority_tokio_runtime.rs"
 
 [[test]]
 name = "blocking"
