@@ -8,7 +8,8 @@ use hyper_util::client::legacy::connect::{Connected, Connection};
 use hyper_util::rt::TokioIo;
 #[cfg(feature = "default-tls")]
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
-use tower::{timeout::TimeoutLayer, util::BoxCloneSyncService, Layer, ServiceBuilder};
+use tower::util::BoxCloneSyncServiceLayer;
+use tower::{timeout::TimeoutLayer, util::BoxCloneSyncService, ServiceBuilder};
 use tower_service::Service;
 
 use pin_project_lite::pin_project;
@@ -59,14 +60,10 @@ impl Service<Uri> for Connector {
     }
 }
 
-pub(crate) struct ConnectorLayerBuilder<ConnectorLayers> {
-    pub(crate) builder: ServiceBuilder<ConnectorLayers>,
-    // It's not trivial to identify whether the builder stack is `Stack<Identity, Identity>` or not
-    // so we simply add a boolean flag to track.
-    //
-    // Knowing allows us reduce indirection in certain cases.
-    pub(crate) has_custom_layers: bool,
-}
+pub(crate) type BoxedConnectorService = BoxCloneSyncService<Uri, Conn, BoxError>;
+
+pub(crate) type BoxedConnectorLayer =
+    BoxCloneSyncServiceLayer<BoxedConnectorService, Uri, Conn, BoxError>;
 
 pub(crate) struct ConnectorBuilder {
     inner: Inner,
@@ -82,17 +79,8 @@ pub(crate) struct ConnectorBuilder {
 }
 
 impl ConnectorBuilder {
-    pub(crate) fn build<ConnectorLayers>(
-        self,
-        layer: ConnectorLayerBuilder<ConnectorLayers>,
-    ) -> Connector
-    where
-        ConnectorLayers: Layer<ConnectorService>,
-        ConnectorLayers::Service:
-            Service<Uri, Response = Conn, Error = BoxError> + Clone + Send + Sync + 'static,
-        <<ConnectorLayers as Layer<ConnectorService>>::Service as Service<Uri>>::Future:
-            Send + 'static,
-    {
+    pub(crate) fn build(self, layers: Vec<BoxedConnectorLayer>) -> Connector
+where {
         // construct the inner tower service
         let mut base_service = ConnectorService {
             inner: self.inner,
@@ -107,38 +95,48 @@ impl ConnectorBuilder {
             simple_timeout: None,
         };
 
-        // no user-provider layers so we can throw away our generic input layer stack
-        // and compose with named layers only
-        if !layer.has_custom_layers {
-            // if we know we have no other layers, we can embed the timeout directly inside
-            // our base service call which saves us a Box::pin
+        if layers.is_empty() {
+            // we have no user-provided layers, only use concrete types
             base_service.simple_timeout = self.timeout;
             return Connector::Simple(base_service);
         }
 
-        // we have user-provided generic layer stack
-        let service = layer.builder.service(base_service);
+        // otherwise we have user provided layers
+        // so we need type erasure all the way through
 
-        if let Some(timeout) = self.timeout {
-            // add in named timeout layer on the outside of the stack
-            let service = ServiceBuilder::new()
-                .layer(TimeoutLayer::new(timeout))
-                .service(service);
-            let service = ServiceBuilder::new()
-                .map_err(|error: BoxError| cast_to_internal_error(error))
-                .service(service);
-            let service = BoxCloneSyncService::new(service);
-            return Connector::WithLayers(service);
+        let mut service = BoxCloneSyncService::new(base_service);
+
+        for layer in layers {
+            service = ServiceBuilder::new().layer(layer).service(service);
         }
 
-        // no named timeout layer but we still map errors since
-        // we might have user-provided timeout layer
-        let service = ServiceBuilder::new().service(service);
-        let service = ServiceBuilder::new()
-            .map_err(|error: BoxError| cast_to_internal_error(error))
-            .service(service);
-        let service = BoxCloneSyncService::new(service);
-        return Connector::WithLayers(service);
+        // now we handle the concrete stuff - any `connect_timeout`,
+        // plus a final map_err layer we can use to cast default tower layer
+        // errors to internal errors
+        match self.timeout {
+            Some(timeout) => {
+                let service = ServiceBuilder::new()
+                    .layer(TimeoutLayer::new(timeout))
+                    .service(service);
+                let service = ServiceBuilder::new()
+                    .map_err(|error: BoxError| cast_to_internal_error(error))
+                    .service(service);
+                let service = BoxCloneSyncService::new(service);
+
+                Connector::WithLayers(service)
+            }
+            None => {
+                // no timeout, but still map err
+                // no named timeout layer but we still map errors since
+                // we might have user-provided timeout layer
+                let service = ServiceBuilder::new().service(service);
+                let service = ServiceBuilder::new()
+                    .map_err(|error: BoxError| cast_to_internal_error(error))
+                    .service(service);
+                let service = BoxCloneSyncService::new(service);
+                Connector::WithLayers(service)
+            }
+        }
     }
 
     #[cfg(not(feature = "__tls"))]
@@ -298,14 +296,9 @@ impl ConnectorBuilder {
     }
 }
 
-// Struct is public because we can't have private trait in public bounds
-// until we are on MSRV 1.74 when private-in-public was switched
-// from error to lint - https://github.com/rust-lang/rfcs/pull/2145
-// but no internal details are exposed. We don't expose debug
-// for similar reasons.
 #[allow(missing_debug_implementations)]
 #[derive(Clone)]
-pub struct ConnectorService {
+pub(crate) struct ConnectorService {
     inner: Inner,
     proxies: Arc<Vec<Proxy>>,
     verbose: verbose::Wrapper,
@@ -757,16 +750,16 @@ impl<T: AsyncConn> AsyncConnWithInfo for T {}
 type BoxConn = Box<dyn AsyncConnWithInfo>;
 
 pin_project! {
-    // Struct is public because we can't have private trait in public bounds
-    // until we are on MSRV 1.74 when private-in-public was switched
-    // from error to lint - https://github.com/rust-lang/rfcs/pull/2145
-    // but no internal details are exposed. We don't expose debug
-    // for similar reasons.
-
     /// Note: the `is_proxy` member means *is plain text HTTP proxy*.
     /// This tells hyper whether the URI should be written in
     /// * origin-form (`GET /just/a/path HTTP/1.1`), when `is_proxy == false`, or
     /// * absolute-form (`GET http://foo.bar/and/a/path HTTP/1.1`), otherwise.
+
+    // Currently Conn is public but has no implementation details exposed.
+    // We need this because we support pre-1.74 rust versions where `private-in-public`
+    // is a hard error rather than lint warning.
+    // Eventually we probably will want to expose some elements of the connection stream
+    // for layer handling on the tower backswing.
     #[allow(missing_debug_implementations)]
     pub struct Conn {
         #[pin]
