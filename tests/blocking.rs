@@ -159,7 +159,7 @@ fn test_post_form() {
 }
 
 /// Calling `Response::error_for_status`` on a response with status in 4xx
-/// returns a error.
+/// returns an error.
 #[test]
 fn test_error_for_status_4xx() {
     let server = server::http(move |_req| async {
@@ -178,7 +178,7 @@ fn test_error_for_status_4xx() {
 }
 
 /// Calling `Response::error_for_status`` on a response with status in 5xx
-/// returns a error.
+/// returns an error.
 #[test]
 fn test_error_for_status_5xx() {
     let server = server::http(move |_req| async {

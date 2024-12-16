@@ -458,7 +458,7 @@ impl NoProxy {
     /// * Any other entry is considered a domain name (and may contain a leading dot, for example `google.com`
     ///   and `.google.com` are equivalent) and would match both that domain AND all subdomains.
     ///
-    /// For example, if `"NO_PROXY=google.com, 192.168.1.0/24"` was set, all of the following would match
+    /// For example, if `"NO_PROXY=google.com, 192.168.1.0/24"` was set, all the following would match
     /// (and therefore would bypass the proxy):
     /// * `http://google.com/`
     /// * `http://www.google.com/`
@@ -872,7 +872,7 @@ impl Dst for Uri {
 ///
 /// All platforms will check for proxy settings via environment variables.
 /// If those aren't set, platform-wide proxy settings will be looked up on
-/// Windows and MacOS platforms instead. Errors encountered while discovering
+/// Windows and macOS platforms instead. Errors encountered while discovering
 /// these settings are ignored.
 ///
 /// Returns:
@@ -956,7 +956,7 @@ fn is_cgi() -> bool {
 fn get_from_platform_impl() -> Result<Option<String>, Box<dyn Error>> {
     let internet_setting = windows_registry::CURRENT_USER
         .open("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")?;
-    // ensure the proxy is enable, if the value doesn't exist, an error will returned.
+    // ensure the proxy is enabled, if the value doesn't exist, an error will be returned.
     let proxy_enable = internet_setting.get_u32("ProxyEnable")?;
     let proxy_server = internet_setting.get_string("ProxyServer")?;
 

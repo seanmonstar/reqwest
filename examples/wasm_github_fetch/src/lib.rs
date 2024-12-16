@@ -4,7 +4,7 @@ use wasm_bindgen::prelude::*;
 // NOTE: This test is a clone of https://github.com/rustwasm/wasm-bindgen/blob/master/examples/fetch/src/lib.rs
 // but uses Reqwest instead of the web_sys fetch api directly
 
-/// A struct to hold some data from the github Branch API.
+/// A struct to hold some data from the GitHub Branch API.
 ///
 /// Note how we don't have to define every member -- serde will ignore extra
 /// data when deserializing
