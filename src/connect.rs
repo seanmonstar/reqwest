@@ -464,7 +464,7 @@ impl Connector {
 
 fn into_uri(scheme: Scheme, host: Authority) -> Uri {
     // TODO: Should the `http` crate get `From<(Scheme, Authority)> for Uri`?
-    http::Uri::builder()
+    Uri::builder()
         .scheme(scheme)
         .authority(host)
         .path_and_query(http::uri::PathAndQuery::from_static("/"))
@@ -857,7 +857,7 @@ mod native_tls_conn {
             self: Pin<&mut Self>,
             cx: &mut Context,
             buf: ReadBufCursor<'_>,
-        ) -> Poll<tokio::io::Result<()>> {
+        ) -> Poll<io::Result<()>> {
             let this = self.project();
             Read::poll_read(this.inner, cx, buf)
         }
@@ -868,7 +868,7 @@ mod native_tls_conn {
             self: Pin<&mut Self>,
             cx: &mut Context,
             buf: &[u8],
-        ) -> Poll<Result<usize, tokio::io::Error>> {
+        ) -> Poll<Result<usize, io::Error>> {
             let this = self.project();
             Write::poll_write(this.inner, cx, buf)
         }
@@ -886,18 +886,12 @@ mod native_tls_conn {
             self.inner.is_write_vectored()
         }
 
-        fn poll_flush(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-        ) -> Poll<Result<(), tokio::io::Error>> {
+        fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
             let this = self.project();
             Write::poll_flush(this.inner, cx)
         }
 
-        fn poll_shutdown(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-        ) -> Poll<Result<(), tokio::io::Error>> {
+        fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
             let this = self.project();
             Write::poll_shutdown(this.inner, cx)
         }
@@ -972,7 +966,7 @@ mod rustls_tls_conn {
             self: Pin<&mut Self>,
             cx: &mut Context,
             buf: ReadBufCursor<'_>,
-        ) -> Poll<tokio::io::Result<()>> {
+        ) -> Poll<io::Result<()>> {
             let this = self.project();
             Read::poll_read(this.inner, cx, buf)
         }
@@ -983,7 +977,7 @@ mod rustls_tls_conn {
             self: Pin<&mut Self>,
             cx: &mut Context,
             buf: &[u8],
-        ) -> Poll<Result<usize, tokio::io::Error>> {
+        ) -> Poll<Result<usize, io::Error>> {
             let this = self.project();
             Write::poll_write(this.inner, cx, buf)
         }
@@ -1001,18 +995,12 @@ mod rustls_tls_conn {
             self.inner.is_write_vectored()
         }
 
-        fn poll_flush(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-        ) -> Poll<Result<(), tokio::io::Error>> {
+        fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
             let this = self.project();
             Write::poll_flush(this.inner, cx)
         }
 
-        fn poll_shutdown(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-        ) -> Poll<Result<(), tokio::io::Error>> {
+        fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
             let this = self.project();
             Write::poll_shutdown(this.inner, cx)
         }

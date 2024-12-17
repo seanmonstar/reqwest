@@ -204,10 +204,7 @@ impl Certificate {
     }
 
     #[cfg(feature = "__rustls")]
-    pub(crate) fn add_to_rustls(
-        self,
-        root_cert_store: &mut rustls::RootCertStore,
-    ) -> crate::Result<()> {
+    pub(crate) fn add_to_rustls(self, root_cert_store: &mut RootCertStore) -> crate::Result<()> {
         use std::io::Cursor;
 
         match self.original {
@@ -736,8 +733,8 @@ impl TlsInfo {
     }
 }
 
-impl std::fmt::Debug for TlsInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Debug for TlsInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("TlsInfo").finish()
     }
 }

@@ -237,7 +237,7 @@
 //! [get]: ./fn.get.html
 //! [builder]: ./struct.RequestBuilder.html
 //! [serde]: http://serde.rs
-//! [redirect]: crate::redirect
+//! [redirect]: redirect
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
 //! [sponsor]: https://seanmonstar.com/sponsor
@@ -306,7 +306,7 @@ pub use self::response::ResponseBuilderExt;
 /// - supplied `Url` cannot be parsed
 /// - there was an error while sending request
 /// - redirect limit was exhausted
-pub async fn get<T: IntoUrl>(url: T) -> crate::Result<Response> {
+pub async fn get<T: IntoUrl>(url: T) -> Result<Response> {
     Client::builder().build()?.get(url).send().await
 }
 
