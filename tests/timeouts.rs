@@ -65,7 +65,6 @@ async fn request_timeout() {
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 #[tokio::test]
 async fn connect_timeout() {
     let _ = env_logger::try_init();
