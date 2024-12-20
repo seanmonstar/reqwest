@@ -18,7 +18,8 @@ use crate::async_impl::h3_client::connect::H3Connector;
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
 use crate::connect::{
-    BoxedConnectorLayer, BoxedConnectorService, Conn, Connector, ConnectorBuilder,
+    sealed::{Conn, Unnameable},
+    BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
 };
 #[cfg(feature = "cookies")]
 use crate::cookie;
@@ -1987,8 +1988,9 @@ impl ClientBuilder {
     pub fn connector_layer<L>(mut self, layer: L) -> ClientBuilder
     where
         L: Layer<BoxedConnectorService> + Clone + Send + Sync + 'static,
-        L::Service: Service<Uri, Response = Conn, Error = BoxError> + Clone + Send + Sync + 'static,
-        <L::Service as Service<Uri>>::Future: Send + 'static,
+        L::Service:
+            Service<Unnameable, Response = Conn, Error = BoxError> + Clone + Send + Sync + 'static,
+        <L::Service as Service<Unnameable>>::Future: Send + 'static,
     {
         let layer = BoxCloneSyncServiceLayer::new(layer);
 

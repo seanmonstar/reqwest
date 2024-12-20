@@ -10,7 +10,6 @@ use std::thread;
 use std::time::Duration;
 
 use http::header::HeaderValue;
-use http::Uri;
 use log::{error, trace};
 use tokio::sync::{mpsc, oneshot};
 use tower::Layer;
@@ -19,8 +18,8 @@ use tower::Service;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::wait;
+use crate::connect::sealed::{Conn, Unnameable};
 use crate::connect::BoxedConnectorService;
-use crate::connect::Conn;
 use crate::dns::Resolve;
 use crate::error::BoxError;
 #[cfg(feature = "__tls")]
@@ -998,8 +997,9 @@ impl ClientBuilder {
     pub fn connector_layer<L>(self, layer: L) -> ClientBuilder
     where
         L: Layer<BoxedConnectorService> + Clone + Send + Sync + 'static,
-        L::Service: Service<Uri, Response = Conn, Error = BoxError> + Clone + Send + Sync + 'static,
-        <L::Service as Service<Uri>>::Future: Send + 'static,
+        L::Service:
+            Service<Unnameable, Response = Conn, Error = BoxError> + Clone + Send + Sync + 'static,
+        <L::Service as Service<Unnameable>>::Future: Send + 'static,
     {
         self.with_inner(|inner| inner.connector_layer(layer))
     }
