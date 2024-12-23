@@ -197,7 +197,7 @@ async fn body_pipe_response() {
             http::Response::new("pipe me".into())
         } else {
             assert_eq!(req.uri(), "/pipe");
-            assert_eq!(req.headers()["transfer-encoding"], "chunked");
+            assert_eq!(req.headers()["content-length"], "7");
 
             let full: Vec<u8> = req
                 .into_body()
