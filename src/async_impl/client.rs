@@ -796,7 +796,7 @@ impl ClientBuilder {
                 accepts: config.accepts,
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store,
-                // Use match instead of map since config is partially moved
+                // Use match instead of map since config is partially moved,
                 // and it cannot be used in closure
                 #[cfg(feature = "http3")]
                 h3_client: match h3_connector {
@@ -1643,7 +1643,7 @@ impl ClientBuilder {
 
     /// Set the minimum required TLS version for connections.
     ///
-    /// By default the TLS backend's own default is used.
+    /// By default, the TLS backend's own default is used.
     ///
     /// # Errors
     ///
@@ -1672,7 +1672,7 @@ impl ClientBuilder {
 
     /// Set the maximum allowed TLS version for connections.
     ///
-    /// By default there's no maximum.
+    /// By default, there's no maximum.
     ///
     /// # Errors
     ///
@@ -2731,7 +2731,7 @@ impl Future for PendingRequest {
             if should_redirect {
                 let loc = res.headers().get(LOCATION).and_then(|val| {
                     let loc = (|| -> Option<Url> {
-                        // Some sites may send a utf-8 Location header,
+                        // Some sites may send a UTF-8 Location header,
                         // even though we're supposed to treat those bytes
                         // as opaque, we'll check specifically for utf8.
                         self.url.join(str::from_utf8(val.as_bytes()).ok()?).ok()

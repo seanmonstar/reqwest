@@ -209,7 +209,7 @@ impl RequestBuilder {
             match <HeaderName as TryFrom<K>>::try_from(key) {
                 Ok(key) => match <HeaderValue as TryFrom<V>>::try_from(value) {
                     Ok(mut value) => {
-                        // We want to potentially make an unsensitive header
+                        // We want to potentially make an non-sensitive header
                         // to be sensitive, not the reverse. So, don't turn off
                         // a previously sensitive header.
                         if sensitive {
