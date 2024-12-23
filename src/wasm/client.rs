@@ -222,7 +222,10 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         }
     }
 
-    let abort = AbortGuard::new()?;
+    let mut abort = AbortGuard::new()?;
+    if let Some(timeout) = req.timeout() {
+        abort.timeout(*timeout);
+    }
     init.signal(Some(&abort.signal()));
 
     let js_req = web_sys::Request::new_with_str_and_init(req.url().as_str(), &init)
