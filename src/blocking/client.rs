@@ -12,11 +12,16 @@ use std::time::Duration;
 use http::header::HeaderValue;
 use log::{error, trace};
 use tokio::sync::{mpsc, oneshot};
+use tower::Layer;
+use tower::Service;
 
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::wait;
+use crate::connect::sealed::{Conn, Unnameable};
+use crate::connect::BoxedConnectorService;
 use crate::dns::Resolve;
+use crate::error::BoxError;
 #[cfg(feature = "__tls")]
 use crate::tls;
 #[cfg(feature = "__rustls")]
@@ -84,13 +89,15 @@ impl ClientBuilder {
     /// Constructs a new `ClientBuilder`.
     ///
     /// This is the same as `Client::builder()`.
-    pub fn new() -> ClientBuilder {
+    pub fn new() -> Self {
         ClientBuilder {
             inner: async_impl::ClientBuilder::new(),
             timeout: Timeout::default(),
         }
     }
+}
 
+impl ClientBuilder {
     /// Returns a `Client` that uses this `ClientBuilder` configuration.
     ///
     /// # Errors
@@ -966,6 +973,35 @@ impl ClientBuilder {
     /// still be applied on top of this resolver.
     pub fn dns_resolver<R: Resolve + 'static>(self, resolver: Arc<R>) -> ClientBuilder {
         self.with_inner(|inner| inner.dns_resolver(resolver))
+    }
+
+    /// Adds a new Tower [`Layer`](https://docs.rs/tower/latest/tower/trait.Layer.html) to the
+    /// base connector [`Service`](https://docs.rs/tower/latest/tower/trait.Service.html) which
+    /// is responsible for connection establishment.
+    ///
+    /// Each subsequent invocation of this function will wrap previous layers.
+    ///
+    /// Example usage:
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// let client = reqwest::blocking::Client::builder()
+    ///                      // resolved to outermost layer, meaning while we are waiting on concurrency limit
+    ///                      .connect_timeout(Duration::from_millis(200))
+    ///                      // underneath the concurrency check, so only after concurrency limit lets us through
+    ///                      .connector_layer(tower::timeout::TimeoutLayer::new(Duration::from_millis(50)))
+    ///                      .connector_layer(tower::limit::concurrency::ConcurrencyLimitLayer::new(2))
+    ///                      .build()
+    ///                      .unwrap();
+    /// ```
+    pub fn connector_layer<L>(self, layer: L) -> ClientBuilder
+    where
+        L: Layer<BoxedConnectorService> + Clone + Send + Sync + 'static,
+        L::Service:
+            Service<Unnameable, Response = Conn, Error = BoxError> + Clone + Send + Sync + 'static,
+        <L::Service as Service<Unnameable>>::Future: Send + 'static,
+    {
+        self.with_inner(|inner| inner.connector_layer(layer))
     }
 
     // private
