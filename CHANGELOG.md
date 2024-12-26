@@ -1,3 +1,10 @@
+## v0.12.10
+
+- Add `ClientBuilder::connector_layer()` to allow customizing the connector stack.
+- Add `ClientBuilder::http2_max_header_list_size()` option.
+- Fix propagating body size hint (`content-length`) information when wrapping bodies.
+- Fix decompression of chunked bodies so the connections can be reused more often.
+
 ## v0.12.9
 
 - Add `tls::CertificateRevocationLists` support.
