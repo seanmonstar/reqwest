@@ -1964,7 +1964,7 @@ impl ClientBuilder {
 
     /// Adds a new Tower [`Layer`](https://docs.rs/tower/latest/tower/trait.Layer.html) to the
     /// base connector [`Service`](https://docs.rs/tower/latest/tower/trait.Service.html) which
-    /// is responsible for connection establishment.a
+    /// is responsible for connection establishment.
     ///
     /// Each subsequent invocation of this function will wrap previous layers.
     ///
