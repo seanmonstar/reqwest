@@ -127,6 +127,52 @@ async fn test_redirect_307_and_308_tries_to_post_again() {
     }
 }
 
+#[tokio::test]
+async fn test_redirect_custom_policy_previous_next_methods() {
+    use reqwest::{Method, StatusCode};
+
+    let codes = [301u16, 307];
+    for &code in &codes {
+        let redirect = server::http(move |req| async move {
+            if req.method() == "POST" {
+                assert_eq!(req.uri(), &*format!("/{code}"));
+                http::Response::builder()
+                    .status(code)
+                    .header("location", "/dst")
+                    .header("server", "test-redirect")
+                    .body(Body::default())
+                    .unwrap()
+            } else {
+                panic!("unexpected method {}", req.method());
+            }
+        });
+
+        let policy = reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous_method() == Method::POST
+                && attempt.status() == StatusCode::MOVED_PERMANENTLY
+            {
+                assert_eq!(attempt.next_method(), Method::GET);
+            } else if attempt.previous_method() == Method::POST
+                && attempt.status() == StatusCode::TEMPORARY_REDIRECT
+            {
+                assert_eq!(attempt.next_method(), Method::POST);
+            } else {
+                panic!("unexpected attempt: {:?}", attempt);
+            }
+            attempt.stop()
+        });
+
+        let url = format!("http://{}/{}", redirect.addr(), code);
+        let client = reqwest::ClientBuilder::new()
+            .redirect(policy)
+            .build()
+            .unwrap();
+        let res = client.post(&url).send().await.unwrap();
+        assert_eq!(res.url().as_str(), url);
+        assert_eq!(res.status(), StatusCode::from_u16(code).unwrap());
+    }
+}
+
 #[cfg(feature = "blocking")]
 #[test]
 fn test_redirect_307_does_not_try_if_reader_cannot_reset() {
