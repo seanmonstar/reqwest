@@ -1,3 +1,7 @@
+## v0.12.11
+
+- Fix decompression returning an error when HTTP/2 ends with an empty data frame.
+
 ## v0.12.10
 
 - Add `ClientBuilder::connector_layer()` to allow customizing the connector stack.
