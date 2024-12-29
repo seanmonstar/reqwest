@@ -105,7 +105,6 @@ url = "2.4"
 bytes = "1.0"
 serde = "1.0"
 serde_urlencoded = "0.7.1"
-tower = { version = "0.5.2", default-features = false, features = ["timeout", "util"] }
 tower-service = "0.3"
 futures-core = { version = "0.3.28", default-features = false }
 futures-util = { version = "0.3.28", default-features = false }
@@ -130,6 +129,7 @@ log = "0.4.17"
 mime = "0.3.16"
 percent-encoding = "2.3"
 tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
+tower = { version = "0.5.2", default-features = false, features = ["timeout", "util"] }
 pin-project-lite = "0.2.11"
 ipnet = "2.3"
 
