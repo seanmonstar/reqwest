@@ -12,11 +12,16 @@ use std::time::Duration;
 use http::header::HeaderValue;
 use log::{error, trace};
 use tokio::sync::{mpsc, oneshot};
+use tower::Layer;
+use tower::Service;
 
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::wait;
+use crate::connect::sealed::{Conn, Unnameable};
+use crate::connect::BoxedConnectorService;
 use crate::dns::Resolve;
+use crate::error::BoxError;
 #[cfg(feature = "__tls")]
 use crate::tls;
 #[cfg(feature = "__rustls")]
@@ -84,13 +89,15 @@ impl ClientBuilder {
     /// Constructs a new `ClientBuilder`.
     ///
     /// This is the same as `Client::builder()`.
-    pub fn new() -> ClientBuilder {
+    pub fn new() -> Self {
         ClientBuilder {
             inner: async_impl::ClientBuilder::new(),
             timeout: Timeout::default(),
         }
     }
+}
 
+impl ClientBuilder {
     /// Returns a `Client` that uses this `ClientBuilder` configuration.
     ///
     /// # Errors
@@ -201,7 +208,7 @@ impl ClientBuilder {
 
     /// Enable auto gzip decompression by checking the `Content-Encoding` response header.
     ///
-    /// If auto gzip decompresson is turned on:
+    /// If auto gzip decompression is turned on:
     ///
     /// - When sending a request and if the request's headers do not already contain
     ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `gzip`.
@@ -267,7 +274,7 @@ impl ClientBuilder {
 
     /// Enable auto deflate decompression by checking the `Content-Encoding` response header.
     ///
-    /// If auto deflate decompresson is turned on:
+    /// If auto deflate decompression is turned on:
     ///
     /// - When sending a request and if the request's headers do not already contain
     ///   an `Accept-Encoding` **and** `Range` values, the `Accept-Encoding` header is set to `deflate`.
@@ -353,7 +360,7 @@ impl ClientBuilder {
     /// Clear all `Proxies`, so `Client` will use no proxy anymore.
     ///
     /// # Note
-    /// To add a proxy exclusion list, use [crate::proxy::Proxy::no_proxy()]
+    /// To add a proxy exclusion list, use [Proxy::no_proxy()]
     /// on all desired proxies instead.
     ///
     /// This also disables the automatic usage of the "system" proxy.
@@ -765,7 +772,7 @@ impl ClientBuilder {
 
     /// Set the minimum required TLS version for connections.
     ///
-    /// By default the TLS backend's own default is used.
+    /// By default, the TLS backend's own default is used.
     ///
     /// # Errors
     ///
@@ -793,7 +800,7 @@ impl ClientBuilder {
 
     /// Set the maximum allowed TLS version for connections.
     ///
-    /// By default there's no maximum.
+    /// By default, there's no maximum.
     ///
     /// # Errors
     ///
@@ -966,6 +973,35 @@ impl ClientBuilder {
     /// still be applied on top of this resolver.
     pub fn dns_resolver<R: Resolve + 'static>(self, resolver: Arc<R>) -> ClientBuilder {
         self.with_inner(|inner| inner.dns_resolver(resolver))
+    }
+
+    /// Adds a new Tower [`Layer`](https://docs.rs/tower/latest/tower/trait.Layer.html) to the
+    /// base connector [`Service`](https://docs.rs/tower/latest/tower/trait.Service.html) which
+    /// is responsible for connection establishment.
+    ///
+    /// Each subsequent invocation of this function will wrap previous layers.
+    ///
+    /// Example usage:
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// let client = reqwest::blocking::Client::builder()
+    ///                      // resolved to outermost layer, meaning while we are waiting on concurrency limit
+    ///                      .connect_timeout(Duration::from_millis(200))
+    ///                      // underneath the concurrency check, so only after concurrency limit lets us through
+    ///                      .connector_layer(tower::timeout::TimeoutLayer::new(Duration::from_millis(50)))
+    ///                      .connector_layer(tower::limit::concurrency::ConcurrencyLimitLayer::new(2))
+    ///                      .build()
+    ///                      .unwrap();
+    /// ```
+    pub fn connector_layer<L>(self, layer: L) -> ClientBuilder
+    where
+        L: Layer<BoxedConnectorService> + Clone + Send + Sync + 'static,
+        L::Service:
+            Service<Unnameable, Response = Conn, Error = BoxError> + Clone + Send + Sync + 'static,
+        <L::Service as Service<Unnameable>>::Future: Send + 'static,
+    {
+        self.with_inner(|inner| inner.connector_layer(layer))
     }
 
     // private

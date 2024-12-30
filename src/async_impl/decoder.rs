@@ -378,14 +378,10 @@ impl HttpBody for Decoder {
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                     None => {
                         // poll inner connection until EOF after gzip stream is finished
-                        let inner_stream = decoder.get_mut().get_mut().get_mut().get_mut();
-                        match futures_core::ready!(Pin::new(inner_stream).poll_next(cx)) {
-                            Some(Ok(_)) => Poll::Ready(Some(Err(crate::error::decode(
-                                "there are extra bytes after body has been decompressed",
-                            )))),
-                            Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
-                            None => Poll::Ready(None),
-                        }
+                        poll_inner_should_be_empty(
+                            decoder.get_mut().get_mut().get_mut().get_mut(),
+                            cx,
+                        )
                     }
                 }
             }
@@ -396,14 +392,10 @@ impl HttpBody for Decoder {
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                     None => {
                         // poll inner connection until EOF after brotli stream is finished
-                        let inner_stream = decoder.get_mut().get_mut().get_mut().get_mut();
-                        match futures_core::ready!(Pin::new(inner_stream).poll_next(cx)) {
-                            Some(Ok(_)) => Poll::Ready(Some(Err(crate::error::decode(
-                                "there are extra bytes after body has been decompressed",
-                            )))),
-                            Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
-                            None => Poll::Ready(None),
-                        }
+                        poll_inner_should_be_empty(
+                            decoder.get_mut().get_mut().get_mut().get_mut(),
+                            cx,
+                        )
                     }
                 }
             }
@@ -414,14 +406,10 @@ impl HttpBody for Decoder {
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                     None => {
                         // poll inner connection until EOF after zstd stream is finished
-                        let inner_stream = decoder.get_mut().get_mut().get_mut().get_mut();
-                        match futures_core::ready!(Pin::new(inner_stream).poll_next(cx)) {
-                            Some(Ok(_)) => Poll::Ready(Some(Err(crate::error::decode(
-                                "there are extra bytes after body has been decompressed",
-                            )))),
-                            Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
-                            None => Poll::Ready(None),
-                        }
+                        poll_inner_should_be_empty(
+                            decoder.get_mut().get_mut().get_mut().get_mut(),
+                            cx,
+                        )
                     }
                 }
             }
@@ -432,14 +420,10 @@ impl HttpBody for Decoder {
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
                     None => {
                         // poll inner connection until EOF after deflate stream is finished
-                        let inner_stream = decoder.get_mut().get_mut().get_mut().get_mut();
-                        match futures_core::ready!(Pin::new(inner_stream).poll_next(cx)) {
-                            Some(Ok(_)) => Poll::Ready(Some(Err(crate::error::decode(
-                                "there are extra bytes after body has been decompressed",
-                            )))),
-                            Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
-                            None => Poll::Ready(None),
-                        }
+                        poll_inner_should_be_empty(
+                            decoder.get_mut().get_mut().get_mut().get_mut(),
+                            cx,
+                        )
                     }
                 }
             }
@@ -457,6 +441,34 @@ impl HttpBody for Decoder {
                 feature = "deflate"
             ))]
             _ => http_body::SizeHint::default(),
+        }
+    }
+}
+
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate"
+))]
+fn poll_inner_should_be_empty(
+    inner: &mut PeekableIoStream,
+    cx: &mut Context,
+) -> Poll<Option<Result<Frame<Bytes>, crate::Error>>> {
+    // poll inner connection until EOF after deflate stream is finished
+    // loop in case of empty frames
+    let mut inner = Pin::new(inner);
+    loop {
+        match futures_core::ready!(inner.as_mut().poll_next(cx)) {
+            // ignore any empty frames
+            Some(Ok(bytes)) if bytes.is_empty() => continue,
+            Some(Ok(_)) => {
+                return Poll::Ready(Some(Err(crate::error::decode(
+                    "there are extra bytes after body has been decompressed",
+                ))))
+            }
+            Some(Err(err)) => return Poll::Ready(Some(Err(crate::error::decode_io(err)))),
+            None => return Poll::Ready(None),
         }
     }
 }

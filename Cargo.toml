@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.12.9"
+version = "0.12.11"
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -10,7 +10,7 @@ authors = ["Sean McArthur <sean@seanmonstar.com>"]
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 edition = "2021"
-rust-version = "1.63.0"
+rust-version = "1.64.0"
 autotests = true
 
 [package.metadata.docs.rs]
@@ -132,6 +132,7 @@ log = "0.4.17"
 mime = "0.3.16"
 percent-encoding = "2.3"
 tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
+tower = { version = "0.5.2", default-features = false, features = ["timeout", "util"] }
 pin-project-lite = "0.2.11"
 ipnet = "2.3"
 
@@ -167,7 +168,6 @@ h3-quinn = { version = "0.0.7", optional = true }
 quinn = { version = "0.11.1", default-features = false, features = ["rustls", "runtime-tokio"], optional = true }
 slab = { version = "0.4.9", optional = true } # just to get minimal versions working with quinn
 futures-channel = { version = "0.3", optional = true }
-
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.10"
@@ -222,6 +222,11 @@ features = [
 wasm-bindgen = { version = "0.2.89", features = ["serde-serialize"] }
 wasm-bindgen-test = "0.3"
 
+[dev-dependencies]
+tower = { version = "0.5.2", default-features = false, features = ["limit"] }
+num_cpus = "1.0"
+libc = "0"
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(reqwest_unstable)'] }
 
@@ -252,6 +257,10 @@ path = "examples/form.rs"
 [[example]]
 name = "simple"
 path = "examples/simple.rs"
+
+[[example]]
+name = "connect_via_lower_priority_tokio_runtime"
+path = "examples/connect_via_lower_priority_tokio_runtime.rs"
 
 [[test]]
 name = "blocking"

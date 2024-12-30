@@ -282,7 +282,7 @@ impl Identity {
     /// Parses a chain of PEM encoded X509 certificates, with the leaf certificate first.
     /// `key` is a PEM encoded PKCS #8 formatted private key for the leaf certificate.
     ///
-    /// The certificate chain should contain any intermediate cerficates that should be sent to
+    /// The certificate chain should contain any intermediate certificates that should be sent to
     /// clients to allow them to build a chain to a trusted root.
     ///
     /// A certificate chain here means a series of PEM encoded certificates concatenated together.

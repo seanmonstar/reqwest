@@ -165,6 +165,19 @@ impl Error {
     }
 }
 
+/// Converts from external types to reqwest's
+/// internal equivalents.
+///
+/// Currently only is used for `tower::timeout::error::Elapsed`.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn cast_to_internal_error(error: BoxError) -> BoxError {
+    if error.is::<tower::timeout::error::Elapsed>() {
+        Box::new(crate::error::TimedOut) as BoxError
+    } else {
+        error
+    }
+}
+
 impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut builder = f.debug_struct("reqwest::Error");

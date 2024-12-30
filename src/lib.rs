@@ -173,7 +173,7 @@
 //!
 //! The Client implementation automatically switches to the WASM one when the target_arch is wasm32,
 //! the usage is basically the same as the async api. Some of the features are disabled in wasm
-//! : [`tls`], [`cookie`], [`blocking`].
+//! : [`tls`], [`cookie`], [`blocking`], as well as various `ClientBuilder` methods such as `timeout()` and `connector_layer()`.
 //!
 //!
 //! ## Optional Features

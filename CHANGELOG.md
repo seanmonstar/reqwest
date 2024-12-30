@@ -1,3 +1,14 @@
+## v0.12.11
+
+- Fix decompression returning an error when HTTP/2 ends with an empty data frame.
+
+## v0.12.10
+
+- Add `ClientBuilder::connector_layer()` to allow customizing the connector stack.
+- Add `ClientBuilder::http2_max_header_list_size()` option.
+- Fix propagating body size hint (`content-length`) information when wrapping bodies.
+- Fix decompression of chunked bodies so the connections can be reused more often.
+
 ## v0.12.9
 
 - Add `tls::CertificateRevocationLists` support.
@@ -24,7 +35,7 @@
 - Add `impl Service<http::Request<Body>>` for `Client` and `&'_ Client`.
 - Add support for `!Sync` bodies in `Body::wrap_stream()`.
 - Enable happy eyeballs when `hickory-dns` is used.
-- Fix `Proxy` so that `HTTP(S)_PROXY` values take precendence over `ALL_PROXY`.
+- Fix `Proxy` so that `HTTP(S)_PROXY` values take precedence over `ALL_PROXY`.
 - Fix `blocking::RequestBuilder::header()` from unsetting `sensitive` on passed header values.
 
 ## v0.12.5
@@ -390,7 +401,7 @@
 
 ## v0.9.17
 
-- Fix `Cookie` headers so as to not include attributes from the `Set-Cookie` (like `HttpOnly`, `Secure`, etc).
+- Fix `Cookie` headers to not include attributes from the `Set-Cookie` (like `HttpOnly`, `Secure`, etc.)
 
 ## v0.9.16
 
@@ -409,8 +420,8 @@
 
 - Add optional support for SOCKS5 proxies, by enabling the `socks5` cargo feature.
 - Add Cookie Store support to `Client`, automatically handling cookies for a session.
-* Add `ClientBuilder::cookie_store(enable: bool)` method to enable a cookie store that persists across requests.
-* Add `Response::cookies()` accessor that allows iterating over response cookies.
+- Add `ClientBuilder::cookie_store(enable: bool)` method to enable a cookie store that persists across requests.
+- Add `Response::cookies()` accessor that allows iterating over response cookies.
 - Fix `Proxy` to check the URL for a username and password.
 
 ## v0.9.13
@@ -536,7 +547,7 @@
 
 - Fix large request bodies failing because of improper handling of backpressure.
 - Remove body-related headers when redirect changes a `POST` into a `GET`.
-- Reduce memory size of `Response` and `Error` signicantly.
+- Reduce memory size of `Response` and `Error` significantly.
 
 # v0.9.0
 
@@ -745,7 +756,7 @@
 
 - Proxy support (#30)
 - Self-signed TLS certificates (#97)
-- Disabling TLS hostname validation   (#89)
+- Disabling TLS hostname validation (#89)
 - A `Request` type that can be used instead of the `RequestBuilder` (#85)
 - Add `Response::error_for_status()` to easily convert 400 and 500 status responses into an `Error`  (#98)
 - Upgrade hyper to 0.11
@@ -758,7 +769,7 @@
 ### Fixes
 
 - Publicly exports `RedirectAction` and `RedirectAttempt`
-- `Error::get_ref` returns `Error + Send + Sync`  
+- `Error::get_ref` returns `Error + Send + Sync`
 
 ### Breaking Changes
 
