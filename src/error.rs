@@ -169,6 +169,7 @@ impl Error {
 /// internal equivalents.
 ///
 /// Currently only is used for `tower::timeout::error::Elapsed`.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn cast_to_internal_error(error: BoxError) -> BoxError {
     if error.is::<tower::timeout::error::Elapsed>() {
         Box::new(crate::error::TimedOut) as BoxError
