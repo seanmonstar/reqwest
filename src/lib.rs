@@ -306,8 +306,40 @@ pub use self::response::ResponseBuilderExt;
 /// - supplied `Url` cannot be parsed
 /// - there was an error while sending request
 /// - redirect limit was exhausted
+#[cfg(not(any(target_os = "wasi", target_env = "p2")))]
 pub async fn get<T: IntoUrl>(url: T) -> crate::Result<Response> {
     Client::builder().build()?.get(url).send().await
+}
+
+/// Shortcut method to quickly make a `GET` request.
+///
+/// See also the methods on the [`reqwest::Response`](./struct.Response.html)
+/// type.
+///
+/// **NOTE**: This function creates a new internal `Client` on each call,
+/// and so should not be used if making many requests. Create a
+/// [`Client`](./struct.Client.html) instead.
+///
+/// # Examples
+///
+/// ```rust
+/// # fn run() -> Result<(), reqwest::Error> {
+/// let body = reqwest::get("https://www.rust-lang.org")?
+///     .text()?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Errors
+///
+/// This function fails if:
+///
+/// - supplied `Url` cannot be parsed
+/// - there was an error while sending request
+/// - redirect limit was exhausted
+#[cfg(all(target_os = "wasi", target_env = "p2"))]
+pub fn get<T: IntoUrl>(url: T) -> crate::Result<Response> {
+    Client::builder().build()?.get(url).send()
 }
 
 fn _assert_impls() {
@@ -372,6 +404,6 @@ if_wasm! {
     mod util;
 
     pub use self::wasm::{Body, Client, ClientBuilder, Request, RequestBuilder, Response};
-    #[cfg(feature = "multipart")]
+    #[cfg(all(not(all(target_os = "wasi", target_env = "p2")), feature = "multipart"))]
     pub use self::wasm::multipart;
 }

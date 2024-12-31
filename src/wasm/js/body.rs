@@ -225,7 +225,7 @@ mod tests {
         let js_req = web_sys::Request::new_with_str_and_init("", &init)
             .expect("could not create JS request");
         let text_promise = js_req.text().expect("could not get text promise");
-        let text = crate::wasm::promise::<JsValue>(text_promise)
+        let text = crate::wasm::js::promise::<JsValue>(text_promise)
             .await
             .expect("could not get request body as text");
 
@@ -247,7 +247,7 @@ mod tests {
         let js_req = web_sys::Request::new_with_str_and_init("", &init)
             .expect("could not create JS request");
         let text_promise = js_req.text().expect("could not get text promise");
-        let text = crate::wasm::promise::<JsValue>(text_promise)
+        let text = crate::wasm::js::promise::<JsValue>(text_promise)
             .await
             .expect("could not get request body as text");
 
@@ -273,7 +273,7 @@ mod tests {
         let array_buffer_promise = js_req
             .array_buffer()
             .expect("could not get array_buffer promise");
-        let array_buffer = crate::wasm::promise::<JsValue>(array_buffer_promise)
+        let array_buffer = crate::wasm::js::promise::<JsValue>(array_buffer_promise)
             .await
             .expect("could not get request body as array buffer");
 
@@ -301,7 +301,7 @@ mod tests {
         let array_buffer_promise = js_req
             .array_buffer()
             .expect("could not get array_buffer promise");
-        let array_buffer = crate::wasm::promise::<JsValue>(array_buffer_promise)
+        let array_buffer = crate::wasm::js::promise::<JsValue>(array_buffer_promise)
             .await
             .expect("could not get request body as array buffer");
 
