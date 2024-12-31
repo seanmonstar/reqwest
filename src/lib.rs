@@ -370,6 +370,8 @@ if_hyper! {
 if_wasm! {
     mod wasm;
     mod util;
+    #[cfg(feature = "cookies")]
+    pub mod cookie;
 
     pub use self::wasm::{Body, Client, ClientBuilder, Request, RequestBuilder, Response};
     #[cfg(feature = "multipart")]
