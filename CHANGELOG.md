@@ -1,3 +1,7 @@
+## v0.12.12
+
+- (wasm) Fix compilation by not compiler `tokio/time` on WASM.
+
 ## v0.12.11
 
 - Fix decompression returning an error when HTTP/2 ends with an empty data frame.
