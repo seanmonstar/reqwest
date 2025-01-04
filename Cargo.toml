@@ -256,6 +256,11 @@ name = "simple"
 path = "examples/simple.rs"
 
 [[example]]
+name = "h3_simple"
+path = "examples/h3_simple.rs"
+required-features = ["http3", "rustls-tls"]
+
+[[example]]
 name = "connect_via_lower_priority_tokio_runtime"
 path = "examples/connect_via_lower_priority_tokio_runtime.rs"
 
