@@ -356,7 +356,6 @@ impl ConnectorService {
                     let host = dst.host().ok_or("no host in url")?.to_string();
                     let conn = socks::connect(proxy, dst, dns).await?;
                     let conn = TokioIo::new(conn);
-                    let conn = TokioIo::new(conn);
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                     let io = tls_connector.connect(&host, conn).await?;
                     let io = TokioIo::new(io);
@@ -376,7 +375,6 @@ impl ConnectorService {
                     let tls = tls.clone();
                     let host = dst.host().ok_or("no host in url")?.to_string();
                     let conn = socks::connect(proxy, dst, dns).await?;
-                    let conn = TokioIo::new(conn);
                     let conn = TokioIo::new(conn);
                     let server_name =
                         rustls_pki_types::ServerName::try_from(host.as_str().to_owned())
