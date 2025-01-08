@@ -2165,7 +2165,7 @@ impl Client {
             None => (None, Body::empty()),
         };
 
-        self.proxy_auth(&uri, &mut headers);
+        self.inner.proxy_auth(&uri, &mut headers);
 
         let builder = hyper::Request::builder()
             .method(method.clone())
@@ -2215,33 +2215,6 @@ impl Client {
                 read_timeout_fut,
                 read_timeout: self.inner.read_timeout,
             }),
-        }
-    }
-
-    fn proxy_auth(&self, dst: &Uri, headers: &mut HeaderMap) {
-        if !self.inner.proxies_maybe_http_auth {
-            return;
-        }
-
-        // Only set the header here if the destination scheme is 'http',
-        // since otherwise, the header will be included in the CONNECT tunnel
-        // request instead.
-        if dst.scheme() != Some(&Scheme::HTTP) {
-            return;
-        }
-
-        if headers.contains_key(PROXY_AUTHORIZATION) {
-            return;
-        }
-
-        for proxy in self.inner.proxies.iter() {
-            if proxy.is_match(dst) {
-                if let Some(header) = proxy.http_basic_auth(dst) {
-                    headers.insert(PROXY_AUTHORIZATION, header);
-                }
-
-                break;
-            }
         }
     }
 }
@@ -2459,6 +2432,33 @@ impl ClientRef {
 
         if let Some(ref d) = self.read_timeout {
             f.field("read_timeout", d);
+        }
+    }
+
+    fn proxy_auth(&self, dst: &Uri, headers: &mut HeaderMap) {
+        if !self.proxies_maybe_http_auth {
+            return;
+        }
+
+        // Only set the header here if the destination scheme is 'http',
+        // since otherwise, the header will be included in the CONNECT tunnel
+        // request instead.
+        if dst.scheme() != Some(&Scheme::HTTP) {
+            return;
+        }
+
+        if headers.contains_key(PROXY_AUTHORIZATION) {
+            return;
+        }
+
+        for proxy in self.proxies.iter() {
+            if proxy.is_match(dst) {
+                if let Some(header) = proxy.http_basic_auth(dst) {
+                    headers.insert(PROXY_AUTHORIZATION, header);
+                }
+
+                break;
+            }
         }
     }
 }
@@ -2807,6 +2807,8 @@ impl Future for PendingRequest {
                                     add_cookie_header(&mut headers, &**cookie_store, &self.url);
                                 }
                             }
+
+                            self.client.proxy_auth(&uri, &mut headers);
 
                             *self.as_mut().in_flight().get_mut() =
                                 match *self.as_mut().in_flight().as_ref() {
