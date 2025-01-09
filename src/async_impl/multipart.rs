@@ -140,9 +140,21 @@ impl Form {
     }
 
     /// Consume this instance and transform into an instance of Body for use in a request.
-    pub(crate) fn stream(mut self) -> Body {
+    pub(crate) fn stream(self) -> Body {
         if self.inner.fields.is_empty() {
             return Body::empty();
+        }
+
+        Body::stream(self.into_stream())
+    }
+
+    /// Produce a stream of the bytes in this `Form`, consuming it.
+    pub fn into_stream(mut self) -> impl Stream<Item = Result<Bytes, crate::Error>> + Send + Sync {
+        if self.inner.fields.is_empty() {
+            let empty_stream: Pin<
+                Box<dyn Stream<Item = Result<Bytes, crate::Error>> + Send + Sync>,
+            > = Box::pin(futures_util::stream::empty());
+            return empty_stream;
         }
 
         // create initial part to init reduce chain
@@ -161,7 +173,7 @@ impl Form {
         let last = stream::once(future::ready(Ok(
             format!("--{}--\r\n", self.boundary()).into()
         )));
-        Body::stream(stream.chain(last))
+        Box::pin(stream.chain(last))
     }
 
     /// Generate a hyper::Body stream for a single Part instance of a Form request.
