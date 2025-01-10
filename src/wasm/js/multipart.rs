@@ -377,7 +377,7 @@ mod tests {
 
         let form_data_promise = js_req.form_data().expect("could not get form_data promise");
 
-        let form_data = crate::wasm::promise::<FormData>(form_data_promise)
+        let form_data = crate::wasm::js::promise::<FormData>(form_data_promise)
             .await
             .expect("could not get body as form data");
 
@@ -387,7 +387,7 @@ mod tests {
         assert_eq!(text_file.type_(), text_file_type);
 
         let text_promise = text_file.text();
-        let text = crate::wasm::promise::<JsValue>(text_promise)
+        let text = crate::wasm::js::promise::<JsValue>(text_promise)
             .await
             .expect("could not get text body as text");
         assert_eq!(
@@ -408,7 +408,7 @@ mod tests {
         assert_eq!(string, string_content);
 
         let binary_array_buffer_promise = binary_file.array_buffer();
-        let array_buffer = crate::wasm::promise::<JsValue>(binary_array_buffer_promise)
+        let array_buffer = crate::wasm::js::promise::<JsValue>(binary_array_buffer_promise)
             .await
             .expect("could not get request body as array buffer");
 
