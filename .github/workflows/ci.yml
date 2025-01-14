@@ -9,6 +9,8 @@ on:
 env:
   REQWEST_TEST_BODY_FULL: 1
   RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
 jobs:
   ci-pass:
@@ -33,7 +35,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@stable
@@ -69,10 +71,14 @@ jobs:
           - "feat.: default-tls disabled"
           - "feat.: rustls-tls"
           - "feat.: rustls-tls-manual-roots"
+          - "feat.: rustls-tls-native-roots"
+          - "feat.: rustls-tls-no-provider"
           - "feat.: native-tls"
           - "feat.: default-tls and rustls-tls"
+          - "feat.: rustls-tls and rustls-tls-no-provider"
           - "feat.: cookies"
           - "feat.: blocking"
+          - "feat.: blocking only"
           - "feat.: gzip"
           - "feat.: brotli"
           - "feat.: deflate"
@@ -81,39 +87,39 @@ jobs:
           - "feat.: stream"
           - "feat.: socks/default-tls"
           - "feat.: socks/rustls-tls"
-          - "feat.: trust-dns"
+          - "feat.: hickory-dns"
 
         include:
           - name: linux / stable
-            test-features: "--features __internal_proxy_sys_no_cache"
           - name: linux / beta
             rust: beta
-            test-features: "--features __internal_proxy_sys_no_cache"
           # - name: linux / nightly
           #   rust: nightly
-          #   test-features: "--features __internal_proxy_sys_no_cache"
           - name: macOS / stable
             os: macOS-latest
-            test-features: "--features __internal_proxy_sys_no_cache"
 
           - name: windows / stable-x86_64-msvc
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            features: "--features blocking,gzip,brotli,deflate,json,multipart"
+            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart,stream"
           - name: windows / stable-i686-msvc
             os: windows-latest
             target: i686-pc-windows-msvc
-            features: "--features blocking,gzip,brotli,deflate,json,multipart"
+            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart,stream"
           - name: windows / stable-x86_64-gnu
             os: windows-latest
             rust: stable-x86_64-pc-windows-gnu
             target: x86_64-pc-windows-gnu
-            features: "--features blocking,gzip,brotli,deflate,json,multipart"
+            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart,stream"
+            package_name: mingw-w64-x86_64-gcc
+            mingw64_path: "C:\\msys64\\mingw64\\bin"
           - name: windows / stable-i686-gnu
             os: windows-latest
             rust: stable-i686-pc-windows-gnu
             target: i686-pc-windows-gnu
-            features: "--features blocking,gzip,brotli,deflate,json,multipart"
+            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart,stream"
+            package_name: mingw-w64-i686-gcc
+            mingw64_path: "C:\\msys64\\mingw32\\bin"
 
           - name: "feat.: default-tls disabled"
             features: "--no-default-features"
@@ -121,20 +127,30 @@ jobs:
             features: "--no-default-features --features rustls-tls"
           - name: "feat.: rustls-tls-manual-roots"
             features: "--no-default-features --features rustls-tls-manual-roots"
+          - name: "feat.: rustls-tls-native-roots"
+            features: "--no-default-features --features rustls-tls-native-roots"
+          - name: "feat.: rustls-tls-no-provider"
+            features: "--no-default-features --features rustls-tls-no-provider"
           - name: "feat.: native-tls"
             features: "--features native-tls"
+          - name: "feat.: rustls-tls and rustls-tls-no-provider"
+            features: "--features rustls-tls,rustls-tls-no-provider"
           - name: "feat.: default-tls and rustls-tls"
             features: "--features rustls-tls"
           - name: "feat.: cookies"
             features: "--features cookies"
           - name: "feat.: blocking"
             features: "--features blocking"
+          - name: "feat.: blocking only"
+            features: "--no-default-features --features blocking"
           - name: "feat.: gzip"
-            features: "--features gzip"
+            features: "--features gzip,stream"
           - name: "feat.: brotli"
-            features: "--features brotli"
+            features: "--features brotli,stream"
+          - name: "feat.: zstd"
+            features: "--features zstd,stream"
           - name: "feat.: deflate"
-            features: "--features deflate"
+            features: "--features deflate,stream"
           - name: "feat.: json"
             features: "--features json"
           - name: "feat.: multipart"
@@ -145,12 +161,12 @@ jobs:
             features: "--features socks"
           - name: "feat.: socks/rustls-tls"
             features: "--features socks,rustls-tls"
-          - name: "feat.: trust-dns"
-            features: "--features trust-dns"
+          - name: "feat.: hickory-dns"
+            features: "--features hickory-dns"
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@master
@@ -158,30 +174,32 @@ jobs:
           toolchain: ${{ matrix.rust || 'stable' }}
           targets: ${{ matrix.target }}
 
-      - name: Add mingw32 to path for i686-gnu
+      - name: Add mingw-w64 to path for i686-gnu
         run: |
-          echo "C:\msys64\mingw32\bin" >> $GITHUB_PATH
+          echo "${{ matrix.mingw64_path }}" >> $GITHUB_PATH
           echo "C:\msys64\usr\bin" >> $GITHUB_PATH
-        if: matrix.target == 'i686-pc-windows-gnu'
+        if: matrix.mingw64_path
         shell: bash
-      - name: Add mingw64 to path for x86_64-gnu
+
+      - name: Update gcc
+        if: matrix.package_name
+        run: pacman.exe -Sy --noconfirm ${{ matrix.package_name }}
+
+      - name: Create Cargo.lock
+        run: cargo update
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Run tests
         run: |
-          echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH
-          echo "C:\msys64\usr\bin" >> $GITHUB_PATH
-        if: matrix.target == 'x86_64-pc-windows-gnu'
+          set -euxo pipefail
+          cargo nextest run --locked --workspace ${{ matrix.features }} ${{ matrix.test-features }}
+          cargo test --locked --workspace --doc ${{ matrix.features }} ${{ matrix.test-features }}
         shell: bash
-      - name: Update gcc
-        if: matrix.target == 'x86_64-pc-windows-gnu'
-        run: pacman.exe -Sy --noconfirm mingw-w64-x86_64-toolchain
-      - name: Update gcc
-        if: matrix.target == 'i686-pc-windows-gnu'
-        run: pacman.exe -Sy --noconfirm mingw-w64-i686-toolchain
-
-      - name: Build
-        run: cargo build ${{ matrix.features }}
-
-      - name: Test
-        run: cargo test ${{ matrix.features }} ${{ matrix.test-features }} -- --test-threads=1
 
   unstable:
     name: "unstable features"
@@ -189,7 +207,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@master
@@ -197,15 +215,19 @@ jobs:
           toolchain: 'stable'
 
       - name: Check
-        run: RUSTFLAGS="--cfg reqwest_unstable" cargo check --features http3
+        run: cargo test --features http3
+        env:
+          RUSTFLAGS: --cfg reqwest_unstable
+          RUSTDOCFLAGS: --cfg reqwest_unstable
 
   docs:
     name: Docs
+    needs: [test]
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -222,12 +244,12 @@ jobs:
     needs: [style]
 
     # Use Ubuntu 20.04 here, because latest (22.04) uses OpenSSL v3.
-    # Currently OpenSSL v3 causes compile issues with openssl-sys
+    # Currently, OpenSSL v3 causes compile issues with openssl-sys
     runs-on: ubuntu-20.04
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@nightly
@@ -241,9 +263,12 @@ jobs:
       - name: Check minimal versions
         env:
           RUSTFLAGS: --cfg reqwest_unstable
+        # Make sure proc-macro2 v1.0.60 is used
+        # See https://github.com/rust-lang/rust/issues/113152
         run: |
           cargo clean
           cargo update -Z minimal-versions
+          cargo update -p proc-macro2 --precise 1.0.87
           cargo check
           cargo check --all-features
 
@@ -255,7 +280,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Get MSRV package metadata
         id: metadata
@@ -265,6 +290,17 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ steps.metadata.outputs.msrv }}
+
+      - name: Fix log and tokio versions
+        run: |
+          cargo update
+          cargo update -p log --precise 0.4.18
+          cargo update -p tokio --precise 1.29.1
+          cargo update -p tokio-util --precise 0.7.11
+          cargo update -p idna_adapter --precise 1.1.0
+          cargo update -p hashbrown@0.15.2 --precise 0.15.0
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Check
         run: cargo check
@@ -277,7 +313,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@stable
@@ -296,7 +332,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@stable

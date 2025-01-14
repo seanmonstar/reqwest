@@ -1,32 +1,31 @@
 mod support;
-use std::io::Write;
 use support::server;
 use tokio::io::AsyncWriteExt;
 
 #[tokio::test]
-async fn deflate_response() {
-    deflate_case(10_000, 4096).await;
+async fn zstd_response() {
+    zstd_case(10_000, 4096).await;
 }
 
 #[tokio::test]
-async fn deflate_single_byte_chunks() {
-    deflate_case(10, 1).await;
+async fn zstd_single_byte_chunks() {
+    zstd_case(10, 1).await;
 }
 
 #[tokio::test]
-async fn test_deflate_empty_body() {
+async fn test_zstd_empty_body() {
     let server = server::http(move |req| async move {
         assert_eq!(req.method(), "HEAD");
 
         http::Response::builder()
-            .header("content-encoding", "deflate")
+            .header("content-encoding", "zstd")
             .body(Default::default())
             .unwrap()
     });
 
     let client = reqwest::Client::new();
     let res = client
-        .head(&format!("http://{}/deflate", server.addr()))
+        .head(&format!("http://{}/zstd", server.addr()))
         .send()
         .await
         .unwrap();
@@ -43,7 +42,7 @@ async fn test_accept_header_is_not_changed_if_set() {
         assert!(req.headers()["accept-encoding"]
             .to_str()
             .unwrap()
-            .contains("deflate"));
+            .contains("zstd"));
         http::Response::default()
     });
 
@@ -85,53 +84,48 @@ async fn test_accept_encoding_header_is_not_changed_if_set() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
-async fn deflate_case(response_size: usize, chunk_size: usize) {
+async fn zstd_case(response_size: usize, chunk_size: usize) {
     use futures_util::stream::StreamExt;
 
     let content: String = (0..response_size)
         .into_iter()
         .map(|i| format!("test {i}"))
         .collect();
-    let mut encoder = libflate::zlib::Encoder::new(Vec::new()).unwrap();
-    match encoder.write(content.as_bytes()) {
-        Ok(n) => assert!(n > 0, "Failed to write to encoder."),
-        _ => panic!("Failed to deflate encode string."),
-    };
 
-    let deflated_content = encoder.finish().into_result().unwrap();
+    let zstded_content = zstd_crate::encode_all(content.as_bytes(), 3).unwrap();
 
     let mut response = format!(
         "\
          HTTP/1.1 200 OK\r\n\
          Server: test-accept\r\n\
-         Content-Encoding: deflate\r\n\
+         Content-Encoding: zstd\r\n\
          Content-Length: {}\r\n\
          \r\n",
-        &deflated_content.len()
+        &zstded_content.len()
     )
     .into_bytes();
-    response.extend(&deflated_content);
+    response.extend(&zstded_content);
 
     let server = server::http(move |req| {
         assert!(req.headers()["accept-encoding"]
             .to_str()
             .unwrap()
-            .contains("deflate"));
+            .contains("zstd"));
 
-        let deflated = deflated_content.clone();
+        let zstded = zstded_content.clone();
         async move {
-            let len = deflated.len();
+            let len = zstded.len();
             let stream =
-                futures_util::stream::unfold((deflated, 0), move |(deflated, pos)| async move {
-                    let chunk = deflated.chunks(chunk_size).nth(pos)?.to_vec();
+                futures_util::stream::unfold((zstded, 0), move |(zstded, pos)| async move {
+                    let chunk = zstded.chunks(chunk_size).nth(pos)?.to_vec();
 
-                    Some((chunk, (deflated, pos + 1)))
+                    Some((chunk, (zstded, pos + 1)))
                 });
 
             let body = reqwest::Body::wrap_stream(stream.map(Ok::<_, std::convert::Infallible>));
 
             http::Response::builder()
-                .header("content-encoding", "deflate")
+                .header("content-encoding", "zstd")
                 .header("content-length", len)
                 .body(body)
                 .unwrap()
@@ -141,7 +135,7 @@ async fn deflate_case(response_size: usize, chunk_size: usize) {
     let client = reqwest::Client::new();
 
     let res = client
-        .get(&format!("http://{}/deflate", server.addr()))
+        .get(&format!("http://{}/zstd", server.addr()))
         .send()
         .await
         .expect("response");
@@ -153,30 +147,25 @@ async fn deflate_case(response_size: usize, chunk_size: usize) {
 const COMPRESSED_RESPONSE_HEADERS: &[u8] = b"HTTP/1.1 200 OK\x0d\x0a\
             Content-Type: text/plain\x0d\x0a\
             Connection: keep-alive\x0d\x0a\
-            Content-Encoding: deflate\x0d\x0a";
+            Content-Encoding: zstd\x0d\x0a";
 
 const RESPONSE_CONTENT: &str = "some message here";
 
-fn deflate_compress(input: &[u8]) -> Vec<u8> {
-    let mut encoder = libflate::zlib::Encoder::new(Vec::new()).unwrap();
-    match encoder.write(input) {
-        Ok(n) => assert!(n > 0, "Failed to write to encoder."),
-        _ => panic!("Failed to deflate encode string."),
-    };
-    encoder.finish().into_result().unwrap()
+fn zstd_compress(input: &[u8]) -> Vec<u8> {
+    zstd_crate::encode_all(input, 3).unwrap()
 }
 
 #[tokio::test]
 async fn test_non_chunked_non_fragmented_response() {
     let server = server::low_level_with_response(|_raw_request, client_socket| {
         Box::new(async move {
-            let deflated_content = deflate_compress(RESPONSE_CONTENT.as_bytes());
+            let zstded_content = zstd_compress(RESPONSE_CONTENT.as_bytes());
             let content_length_header =
-                format!("Content-Length: {}\r\n\r\n", deflated_content.len()).into_bytes();
+                format!("Content-Length: {}\r\n\r\n", zstded_content.len()).into_bytes();
             let response = [
                 COMPRESSED_RESPONSE_HEADERS,
                 &content_length_header,
-                &deflated_content,
+                &zstded_content,
             ]
             .concat();
 
@@ -205,15 +194,15 @@ async fn test_chunked_fragmented_response_1() {
 
     let server = server::low_level_with_response(|_raw_request, client_socket| {
         Box::new(async move {
-            let deflated_content = deflate_compress(RESPONSE_CONTENT.as_bytes());
+            let zstded_content = zstd_compress(RESPONSE_CONTENT.as_bytes());
             let response_first_part = [
                 COMPRESSED_RESPONSE_HEADERS,
                 format!(
                     "Transfer-Encoding: chunked\r\n\r\n{:x}\r\n",
-                    deflated_content.len()
+                    zstded_content.len()
                 )
                 .as_bytes(),
-                &deflated_content,
+                &zstded_content,
             ]
             .concat();
             let response_second_part = b"\r\n0\r\n\r\n";
@@ -259,15 +248,15 @@ async fn test_chunked_fragmented_response_2() {
 
     let server = server::low_level_with_response(|_raw_request, client_socket| {
         Box::new(async move {
-            let deflated_content = deflate_compress(RESPONSE_CONTENT.as_bytes());
+            let zstded_content = zstd_compress(RESPONSE_CONTENT.as_bytes());
             let response_first_part = [
                 COMPRESSED_RESPONSE_HEADERS,
                 format!(
                     "Transfer-Encoding: chunked\r\n\r\n{:x}\r\n",
-                    deflated_content.len()
+                    zstded_content.len()
                 )
                 .as_bytes(),
-                &deflated_content,
+                &zstded_content,
                 b"\r\n",
             ]
             .concat();
@@ -314,15 +303,15 @@ async fn test_chunked_fragmented_response_with_extra_bytes() {
 
     let server = server::low_level_with_response(|_raw_request, client_socket| {
         Box::new(async move {
-            let deflated_content = deflate_compress(RESPONSE_CONTENT.as_bytes());
+            let zstded_content = zstd_compress(RESPONSE_CONTENT.as_bytes());
             let response_first_part = [
                 COMPRESSED_RESPONSE_HEADERS,
                 format!(
                     "Transfer-Encoding: chunked\r\n\r\n{:x}\r\n",
-                    deflated_content.len()
+                    zstded_content.len()
                 )
                 .as_bytes(),
-                &deflated_content,
+                &zstded_content,
             ]
             .concat();
             let response_second_part = b"\r\n2ab\r\n0\r\n\r\n";

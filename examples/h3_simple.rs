@@ -29,7 +29,7 @@ async fn main() -> Result<(), reqwest::Error> {
         }
     };
 
-    eprintln!("Fetching {:?}...", url);
+    eprintln!("Fetching {url:?}...");
 
     let res = get(url).await?;
 
@@ -38,7 +38,7 @@ async fn main() -> Result<(), reqwest::Error> {
 
     let body = res.text().await?;
 
-    println!("{}", body);
+    println!("{body}");
 
     Ok(())
 }

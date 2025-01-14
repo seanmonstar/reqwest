@@ -2,10 +2,12 @@ use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 use bytes::Bytes;
-use futures_core::Stream;
 use http_body::Body as HttpBody;
+use http_body_util::combinators::BoxBody;
+//use sync_wrapper::SyncWrapper;
 use pin_project_lite::pin_project;
 #[cfg(feature = "stream")]
 use tokio::fs::File;
@@ -18,31 +20,36 @@ pub struct Body {
     inner: Inner,
 }
 
-// The `Stream` trait isn't stable, so the impl isn't public.
-pub(crate) struct ImplStream(Body);
-
 enum Inner {
     Reusable(Bytes),
-    Streaming {
-        body: Pin<
-            Box<
-                dyn HttpBody<Data = Bytes, Error = Box<dyn std::error::Error + Send + Sync>>
-                    + Send
-                    + Sync,
-            >,
-        >,
-        timeout: Option<Pin<Box<Sleep>>>,
-    },
+    Streaming(BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>),
 }
 
 pin_project! {
-    struct WrapStream<S> {
+    /// A body with a total timeout.
+    ///
+    /// The timeout does not reset upon each chunk, but rather requires the whole
+    /// body be streamed before the deadline is reached.
+    pub(crate) struct TotalTimeoutBody<B> {
         #[pin]
-        inner: S,
+        inner: B,
+        timeout: Pin<Box<Sleep>>,
     }
 }
 
-struct WrapHyper(hyper::Body);
+pin_project! {
+    pub(crate) struct ReadTimeoutBody<B> {
+        #[pin]
+        inner: B,
+        #[pin]
+        sleep: Option<Sleep>,
+        timeout: Duration,
+    }
+}
+
+/// Converts any `impl Body` into a `impl Stream` of just its DATA frames.
+#[cfg(any(feature = "stream", feature = "multipart",))]
+pub(crate) struct DataStream<B>(pub(crate) B);
 
 impl Body {
     /// Returns a reference to the internal data of the `Body`.
@@ -51,7 +58,7 @@ impl Body {
     pub fn as_bytes(&self) -> Option<&[u8]> {
         match &self.inner {
             Inner::Reusable(bytes) => Some(bytes.as_ref()),
-            Inner::Streaming { .. } => None,
+            Inner::Streaming(..) => None,
         }
     }
 
@@ -82,48 +89,31 @@ impl Body {
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     pub fn wrap_stream<S>(stream: S) -> Body
     where
-        S: futures_core::stream::TryStream + Send + Sync + 'static,
+        S: futures_core::stream::TryStream + Send + 'static,
         S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
         Bytes: From<S::Ok>,
     {
         Body::stream(stream)
     }
 
+    #[cfg(any(feature = "stream", feature = "multipart", feature = "blocking"))]
     pub(crate) fn stream<S>(stream: S) -> Body
     where
-        S: futures_core::stream::TryStream + Send + Sync + 'static,
+        S: futures_core::stream::TryStream + Send + 'static,
         S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
         Bytes: From<S::Ok>,
     {
         use futures_util::TryStreamExt;
+        use http_body::Frame;
+        use http_body_util::StreamBody;
 
-        let body = Box::pin(WrapStream {
-            inner: stream.map_ok(Bytes::from).map_err(Into::into),
-        });
+        let body = http_body_util::BodyExt::boxed(StreamBody::new(sync_wrapper::SyncStream::new(
+            stream
+                .map_ok(|d| Frame::data(Bytes::from(d)))
+                .map_err(Into::into),
+        )));
         Body {
-            inner: Inner::Streaming {
-                body,
-                timeout: None,
-            },
-        }
-    }
-
-    pub(crate) fn response(body: hyper::Body, timeout: Option<Pin<Box<Sleep>>>) -> Body {
-        Body {
-            inner: Inner::Streaming {
-                body: Box::pin(WrapHyper(body)),
-                timeout,
-            },
-        }
-    }
-
-    #[cfg(feature = "blocking")]
-    pub(crate) fn wrap(body: hyper::Body) -> Body {
-        Body {
-            inner: Inner::Streaming {
-                body: Box::pin(WrapHyper(body)),
-                timeout: None,
-            },
+            inner: Inner::Streaming(body),
         }
     }
 
@@ -134,6 +124,34 @@ impl Body {
     pub(crate) fn reusable(chunk: Bytes) -> Body {
         Body {
             inner: Inner::Reusable(chunk),
+        }
+    }
+
+    /// Wrap a [`HttpBody`] in a box inside `Body`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use reqwest::Body;
+    /// # use futures_util;
+    /// # fn main() {
+    /// let content = "hello,world!".to_string();
+    ///
+    /// let body = Body::wrap(content);
+    /// # }
+    /// ```
+    pub fn wrap<B>(inner: B) -> Body
+    where
+        B: HttpBody + Send + Sync + 'static,
+        B::Data: Into<Bytes>,
+        B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    {
+        use http_body_util::BodyExt;
+
+        let boxed = IntoBytesBody { inner }.map_err(Into::into).boxed();
+
+        Body {
+            inner: Inner::Streaming(boxed),
         }
     }
 
@@ -153,30 +171,39 @@ impl Body {
         }
     }
 
-    pub(crate) fn into_stream(self) -> ImplStream {
-        ImplStream(self)
+    #[cfg(feature = "multipart")]
+    pub(crate) fn into_stream(self) -> DataStream<Body> {
+        DataStream(self)
     }
 
     #[cfg(feature = "multipart")]
     pub(crate) fn content_length(&self) -> Option<u64> {
         match self.inner {
             Inner::Reusable(ref bytes) => Some(bytes.len() as u64),
-            Inner::Streaming { ref body, .. } => body.size_hint().exact(),
+            Inner::Streaming(ref body) => body.size_hint().exact(),
         }
     }
 }
 
+impl Default for Body {
+    #[inline]
+    fn default() -> Body {
+        Body::empty()
+    }
+}
+
+/*
 impl From<hyper::Body> for Body {
     #[inline]
     fn from(body: hyper::Body) -> Body {
         Self {
             inner: Inner::Streaming {
                 body: Box::pin(WrapHyper(body)),
-                timeout: None,
             },
         }
     }
 }
+*/
 
 impl From<Bytes> for Body {
     #[inline]
@@ -228,137 +255,254 @@ impl fmt::Debug for Body {
     }
 }
 
-// ===== impl ImplStream =====
-
-impl HttpBody for ImplStream {
+impl HttpBody for Body {
     type Data = Bytes;
     type Error = crate::Error;
 
-    fn poll_data(
+    fn poll_frame(
         mut self: Pin<&mut Self>,
         cx: &mut Context,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let opt_try_chunk = match self.0.inner {
-            Inner::Streaming {
-                ref mut body,
-                ref mut timeout,
-            } => {
-                if let Some(ref mut timeout) = timeout {
-                    if let Poll::Ready(()) = timeout.as_mut().poll(cx) {
-                        return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
-                    }
-                }
-                futures_core::ready!(Pin::new(body).poll_data(cx))
-                    .map(|opt_chunk| opt_chunk.map(Into::into).map_err(crate::error::body))
-            }
+    ) -> Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        match self.inner {
             Inner::Reusable(ref mut bytes) => {
-                if bytes.is_empty() {
-                    None
+                let out = bytes.split_off(0);
+                if out.is_empty() {
+                    Poll::Ready(None)
                 } else {
-                    Some(Ok(std::mem::replace(bytes, Bytes::new())))
+                    Poll::Ready(Some(Ok(hyper::body::Frame::data(out))))
                 }
             }
+            Inner::Streaming(ref mut body) => Poll::Ready(
+                futures_core::ready!(Pin::new(body).poll_frame(cx))
+                    .map(|opt_chunk| opt_chunk.map_err(crate::error::body)),
+            ),
+        }
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        match self.inner {
+            Inner::Reusable(ref bytes) => http_body::SizeHint::with_exact(bytes.len() as u64),
+            Inner::Streaming(ref body) => body.size_hint(),
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        match self.inner {
+            Inner::Reusable(ref bytes) => bytes.is_empty(),
+            Inner::Streaming(ref body) => body.is_end_stream(),
+        }
+    }
+}
+
+// ===== impl TotalTimeoutBody =====
+
+pub(crate) fn total_timeout<B>(body: B, timeout: Pin<Box<Sleep>>) -> TotalTimeoutBody<B> {
+    TotalTimeoutBody {
+        inner: body,
+        timeout,
+    }
+}
+
+pub(crate) fn with_read_timeout<B>(body: B, timeout: Duration) -> ReadTimeoutBody<B> {
+    ReadTimeoutBody {
+        inner: body,
+        sleep: None,
+        timeout,
+    }
+}
+
+impl<B> hyper::body::Body for TotalTimeoutBody<B>
+where
+    B: hyper::body::Body,
+    B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    type Data = B::Data;
+    type Error = crate::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context,
+    ) -> Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        let this = self.project();
+        if let Poll::Ready(()) = this.timeout.as_mut().poll(cx) {
+            return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
+        }
+        Poll::Ready(
+            futures_core::ready!(this.inner.poll_frame(cx))
+                .map(|opt_chunk| opt_chunk.map_err(crate::error::body)),
+        )
+    }
+
+    #[inline]
+    fn size_hint(&self) -> http_body::SizeHint {
+        self.inner.size_hint()
+    }
+
+    #[inline]
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
+    }
+}
+
+impl<B> hyper::body::Body for ReadTimeoutBody<B>
+where
+    B: hyper::body::Body,
+    B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    type Data = B::Data;
+    type Error = crate::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context,
+    ) -> Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        let mut this = self.project();
+
+        // Start the `Sleep` if not active.
+        let sleep_pinned = if let Some(some) = this.sleep.as_mut().as_pin_mut() {
+            some
+        } else {
+            this.sleep.set(Some(tokio::time::sleep(*this.timeout)));
+            this.sleep.as_mut().as_pin_mut().unwrap()
         };
 
-        Poll::Ready(opt_try_chunk)
-    }
-
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        _cx: &mut Context,
-    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        Poll::Ready(Ok(None))
-    }
-
-    fn is_end_stream(&self) -> bool {
-        match self.0.inner {
-            Inner::Streaming { ref body, .. } => body.is_end_stream(),
-            Inner::Reusable(ref bytes) => bytes.is_empty(),
+        // Error if the timeout has expired.
+        if let Poll::Ready(()) = sleep_pinned.poll(cx) {
+            return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
         }
+
+        let item = futures_core::ready!(this.inner.poll_frame(cx))
+            .map(|opt_chunk| opt_chunk.map_err(crate::error::body));
+        // a ready frame means timeout is reset
+        this.sleep.set(None);
+        Poll::Ready(item)
     }
 
+    #[inline]
     fn size_hint(&self) -> http_body::SizeHint {
-        match self.0.inner {
-            Inner::Streaming { ref body, .. } => body.size_hint(),
-            Inner::Reusable(ref bytes) => {
-                let mut hint = http_body::SizeHint::default();
-                hint.set_exact(bytes.len() as u64);
-                hint
-            }
-        }
+        self.inner.size_hint()
+    }
+
+    #[inline]
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
     }
 }
 
-impl Stream for ImplStream {
-    type Item = Result<Bytes, crate::Error>;
+pub(crate) type ResponseBody =
+    http_body_util::combinators::BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        self.poll_data(cx)
-    }
-}
-
-// ===== impl WrapStream =====
-
-impl<S, D, E> HttpBody for WrapStream<S>
+pub(crate) fn boxed<B>(body: B) -> ResponseBody
 where
-    S: Stream<Item = Result<D, E>>,
-    D: Into<Bytes>,
+    B: hyper::body::Body<Data = Bytes> + Send + Sync + 'static,
+    B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    use http_body_util::BodyExt;
+
+    body.map_err(box_err).boxed()
+}
+
+pub(crate) fn response<B>(
+    body: B,
+    deadline: Option<Pin<Box<Sleep>>>,
+    read_timeout: Option<Duration>,
+) -> ResponseBody
+where
+    B: hyper::body::Body<Data = Bytes> + Send + Sync + 'static,
+    B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    use http_body_util::BodyExt;
+
+    match (deadline, read_timeout) {
+        (Some(total), Some(read)) => {
+            let body = with_read_timeout(body, read).map_err(box_err);
+            total_timeout(body, total).map_err(box_err).boxed()
+        }
+        (Some(total), None) => total_timeout(body, total).map_err(box_err).boxed(),
+        (None, Some(read)) => with_read_timeout(body, read).map_err(box_err).boxed(),
+        (None, None) => body.map_err(box_err).boxed(),
+    }
+}
+
+fn box_err<E>(err: E) -> Box<dyn std::error::Error + Send + Sync>
+where
     E: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
-    type Data = Bytes;
-    type Error = E;
+    err.into()
+}
 
-    fn poll_data(
-        self: Pin<&mut Self>,
-        cx: &mut Context,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let item = futures_core::ready!(self.project().inner.poll_next(cx)?);
+// ===== impl DataStream =====
 
-        Poll::Ready(item.map(|val| Ok(val.into())))
-    }
+#[cfg(any(feature = "stream", feature = "multipart",))]
+impl<B> futures_core::Stream for DataStream<B>
+where
+    B: HttpBody<Data = Bytes> + Unpin,
+{
+    type Item = Result<Bytes, B::Error>;
 
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        _cx: &mut Context,
-    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        Poll::Ready(Ok(None))
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        loop {
+            return match futures_core::ready!(Pin::new(&mut self.0).poll_frame(cx)) {
+                Some(Ok(frame)) => {
+                    // skip non-data frames
+                    if let Ok(buf) = frame.into_data() {
+                        Poll::Ready(Some(Ok(buf)))
+                    } else {
+                        continue;
+                    }
+                }
+                Some(Err(err)) => Poll::Ready(Some(Err(err))),
+                None => Poll::Ready(None),
+            };
+        }
     }
 }
 
-// ===== impl WrapHyper =====
+// ===== impl IntoBytesBody =====
 
-impl HttpBody for WrapHyper {
+pin_project! {
+    struct IntoBytesBody<B> {
+        #[pin]
+        inner: B,
+    }
+}
+
+// We can't use `map_frame()` because that loses the hint data (for good reason).
+// But we aren't transforming the data.
+impl<B> hyper::body::Body for IntoBytesBody<B>
+where
+    B: hyper::body::Body,
+    B::Data: Into<Bytes>,
+{
     type Data = Bytes;
-    type Error = Box<dyn std::error::Error + Send + Sync>;
+    type Error = B::Error;
 
-    fn poll_data(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        // safe pin projection
-        Pin::new(&mut self.0)
-            .poll_data(cx)
-            .map(|opt| opt.map(|res| res.map_err(Into::into)))
-    }
-
-    fn poll_trailers(
+    fn poll_frame(
         self: Pin<&mut Self>,
-        _cx: &mut Context,
-    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        Poll::Ready(Ok(None))
+        cx: &mut Context,
+    ) -> Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        match futures_core::ready!(self.project().inner.poll_frame(cx)) {
+            Some(Ok(f)) => Poll::Ready(Some(Ok(f.map_data(Into::into)))),
+            Some(Err(e)) => Poll::Ready(Some(Err(e))),
+            None => Poll::Ready(None),
+        }
     }
 
-    fn is_end_stream(&self) -> bool {
-        self.0.is_end_stream()
-    }
-
+    #[inline]
     fn size_hint(&self) -> http_body::SizeHint {
-        HttpBody::size_hint(&self.0)
+        self.inner.size_hint()
+    }
+
+    #[inline]
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use http_body::Body as _;
+
     use super::Body;
 
     #[test]
@@ -366,5 +510,21 @@ mod tests {
         let test_data = b"Test body";
         let body = Body::from(&test_data[..]);
         assert_eq!(body.as_bytes(), Some(&test_data[..]));
+    }
+
+    #[test]
+    fn body_exact_length() {
+        let empty_body = Body::empty();
+        assert!(empty_body.is_end_stream());
+        assert_eq!(empty_body.size_hint().exact(), Some(0));
+
+        let bytes_body = Body::reusable("abc".into());
+        assert!(!bytes_body.is_end_stream());
+        assert_eq!(bytes_body.size_hint().exact(), Some(3));
+
+        // can delegate even when wrapped
+        let stream_body = Body::wrap(empty_body);
+        assert!(stream_body.is_end_stream());
+        assert_eq!(stream_body.size_hint().exact(), Some(0));
     }
 }

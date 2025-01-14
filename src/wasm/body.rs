@@ -3,7 +3,7 @@ use super::multipart::Form;
 /// dox
 use bytes::Bytes;
 use js_sys::Uint8Array;
-use std::fmt;
+use std::{borrow::Cow, fmt};
 use wasm_bindgen::JsValue;
 
 /// The body of a `Request`.
@@ -18,13 +18,44 @@ pub struct Body {
 }
 
 enum Inner {
-    Bytes(Bytes),
+    Single(Single),
     /// MultipartForm holds a multipart/form-data body.
     #[cfg(feature = "multipart")]
     MultipartForm(Form),
-    /// MultipartPart holds the body of a multipart/form-data part.
-    #[cfg(feature = "multipart")]
-    MultipartPart(Bytes),
+}
+
+#[derive(Clone)]
+pub(crate) enum Single {
+    Bytes(Bytes),
+    Text(Cow<'static, str>),
+}
+
+impl Single {
+    fn as_bytes(&self) -> &[u8] {
+        match self {
+            Single::Bytes(bytes) => bytes.as_ref(),
+            Single::Text(text) => text.as_bytes(),
+        }
+    }
+
+    pub(crate) fn to_js_value(&self) -> JsValue {
+        match self {
+            Single::Bytes(bytes) => {
+                let body_bytes: &[u8] = bytes.as_ref();
+                let body_uint8_array: Uint8Array = body_bytes.into();
+                let js_value: &JsValue = body_uint8_array.as_ref();
+                js_value.to_owned()
+            }
+            Single::Text(text) => JsValue::from_str(text),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        match self {
+            Single::Bytes(bytes) => bytes.is_empty(),
+            Single::Text(text) => text.is_empty(),
+        }
+    }
 }
 
 impl Body {
@@ -34,36 +65,29 @@ impl Body {
     #[inline]
     pub fn as_bytes(&self) -> Option<&[u8]> {
         match &self.inner {
-            Inner::Bytes(bytes) => Some(bytes.as_ref()),
+            Inner::Single(single) => Some(single.as_bytes()),
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(_) => None,
-            #[cfg(feature = "multipart")]
-            Inner::MultipartPart(bytes) => Some(bytes.as_ref()),
         }
     }
+
     pub(crate) fn to_js_value(&self) -> crate::Result<JsValue> {
         match &self.inner {
-            Inner::Bytes(body_bytes) => {
-                let body_bytes: &[u8] = body_bytes.as_ref();
-                let body_uint8_array: Uint8Array = body_bytes.into();
-                let js_value: &JsValue = body_uint8_array.as_ref();
-                Ok(js_value.to_owned())
-            }
+            Inner::Single(single) => Ok(single.to_js_value()),
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(form) => {
                 let form_data = form.to_form_data()?;
                 let js_value: &JsValue = form_data.as_ref();
                 Ok(js_value.to_owned())
             }
-            #[cfg(feature = "multipart")]
-            Inner::MultipartPart(body_bytes) => {
-                let body_bytes: &[u8] = body_bytes.as_ref();
-                let body_uint8_array: Uint8Array = body_bytes.into();
-                let body_array = js_sys::Array::new();
-                body_array.push(&body_uint8_array);
-                let js_value: &JsValue = body_array.as_ref();
-                Ok(js_value.to_owned())
-            }
+        }
+    }
+
+    #[cfg(feature = "multipart")]
+    pub(crate) fn as_single(&self) -> Option<&Single> {
+        match &self.inner {
+            Inner::Single(single) => Some(single),
+            Inner::MultipartForm(_) => None,
         }
     }
 
@@ -79,39 +103,30 @@ impl Body {
     #[cfg(feature = "multipart")]
     pub(crate) fn into_part(self) -> Body {
         match self.inner {
-            Inner::Bytes(bytes) => Self {
-                inner: Inner::MultipartPart(bytes),
+            Inner::Single(single) => Self {
+                inner: Inner::Single(single),
             },
             Inner::MultipartForm(form) => Self {
                 inner: Inner::MultipartForm(form),
-            },
-            Inner::MultipartPart(bytes) => Self {
-                inner: Inner::MultipartPart(bytes),
             },
         }
     }
 
     pub(crate) fn is_empty(&self) -> bool {
         match &self.inner {
-            Inner::Bytes(bytes) => bytes.is_empty(),
+            Inner::Single(single) => single.is_empty(),
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(form) => form.is_empty(),
-            #[cfg(feature = "multipart")]
-            Inner::MultipartPart(bytes) => bytes.is_empty(),
         }
     }
 
     pub(crate) fn try_clone(&self) -> Option<Body> {
         match &self.inner {
-            Inner::Bytes(bytes) => Some(Self {
-                inner: Inner::Bytes(bytes.clone()),
+            Inner::Single(single) => Some(Self {
+                inner: Inner::Single(single.clone()),
             }),
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(_) => None,
-            #[cfg(feature = "multipart")]
-            Inner::MultipartPart(bytes) => Some(Self {
-                inner: Inner::MultipartPart(bytes.clone()),
-            }),
         }
     }
 }
@@ -120,7 +135,7 @@ impl From<Bytes> for Body {
     #[inline]
     fn from(bytes: Bytes) -> Body {
         Body {
-            inner: Inner::Bytes(bytes),
+            inner: Inner::Single(Single::Bytes(bytes)),
         }
     }
 }
@@ -129,7 +144,7 @@ impl From<Vec<u8>> for Body {
     #[inline]
     fn from(vec: Vec<u8>) -> Body {
         Body {
-            inner: Inner::Bytes(vec.into()),
+            inner: Inner::Single(Single::Bytes(vec.into())),
         }
     }
 }
@@ -138,7 +153,7 @@ impl From<&'static [u8]> for Body {
     #[inline]
     fn from(s: &'static [u8]) -> Body {
         Body {
-            inner: Inner::Bytes(Bytes::from_static(s)),
+            inner: Inner::Single(Single::Bytes(Bytes::from_static(s))),
         }
     }
 }
@@ -147,7 +162,7 @@ impl From<String> for Body {
     #[inline]
     fn from(s: String) -> Body {
         Body {
-            inner: Inner::Bytes(s.into()),
+            inner: Inner::Single(Single::Text(s.into())),
         }
     }
 }
@@ -155,7 +170,9 @@ impl From<String> for Body {
 impl From<&'static str> for Body {
     #[inline]
     fn from(s: &'static str) -> Body {
-        s.as_bytes().into()
+        Body {
+            inner: Inner::Single(Single::Text(s.into())),
+        }
     }
 }
 
@@ -165,6 +182,10 @@ impl fmt::Debug for Body {
     }
 }
 
+// Can use new methods in web-sys when requiring v0.2.93.
+// > `init.method(m)` to `init.set_method(m)`
+// For now, ignore their deprecation.
+#[allow(deprecated)]
 #[cfg(test)]
 mod tests {
     use crate::Body;

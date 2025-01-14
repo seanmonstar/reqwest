@@ -1,6 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
+#![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
 mod support;
-use support::*;
+use support::server;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::test]
@@ -11,7 +12,7 @@ async fn http_upgrade() {
         assert_eq!(req.headers()["upgrade"], "foobar");
 
         tokio::spawn(async move {
-            let mut upgraded = hyper::upgrade::on(req).await.unwrap();
+            let mut upgraded = hyper_util::rt::TokioIo::new(hyper::upgrade::on(req).await.unwrap());
 
             let mut buf = vec![0; 7];
             upgraded.read_exact(&mut buf).await.unwrap();
@@ -25,7 +26,7 @@ async fn http_upgrade() {
                 .status(http::StatusCode::SWITCHING_PROTOCOLS)
                 .header(http::header::CONNECTION, "upgrade")
                 .header(http::header::UPGRADE, "foobar")
-                .body(hyper::Body::empty())
+                .body(reqwest::Body::default())
                 .unwrap()
         }
     });

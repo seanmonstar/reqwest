@@ -5,7 +5,8 @@ use bytes::Bytes;
 use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::Uri;
-use hyper::client::connect::dns::Name;
+use hyper_util::client::legacy::connect::dns::Name;
+use quinn::crypto::rustls::QuicClientConfig;
 use quinn::{ClientConfig, Endpoint, TransportConfig};
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
@@ -28,24 +29,29 @@ impl H3Connector {
         tls: rustls::ClientConfig,
         local_addr: Option<IpAddr>,
         transport_config: TransportConfig,
-    ) -> H3Connector {
-        let mut config = ClientConfig::new(Arc::new(tls));
+    ) -> Result<H3Connector, BoxError> {
+        let quic_client_config = Arc::new(QuicClientConfig::try_from(tls)?);
+        let mut config = ClientConfig::new(quic_client_config);
         // FIXME: Replace this when there is a setter.
-        config.transport = Arc::new(transport_config);
+        config.transport_config(Arc::new(transport_config));
 
         let socket_addr = match local_addr {
             Some(ip) => SocketAddr::new(ip, 0),
             None => "[::]:0".parse::<SocketAddr>().unwrap(),
         };
 
-        let mut endpoint = Endpoint::client(socket_addr).expect("unable to create QUIC endpoint");
+        let mut endpoint = Endpoint::client(socket_addr)?;
         endpoint.set_default_client_config(config);
 
-        Self { resolver, endpoint }
+        Ok(Self { resolver, endpoint })
     }
 
     pub async fn connect(&mut self, dest: Uri) -> Result<H3Connection, BoxError> {
-        let host = dest.host().ok_or("destination must have a host")?;
+        let host = dest
+            .host()
+            .ok_or("destination must have a host")?
+            .trim_start_matches('[')
+            .trim_end_matches(']');
         let port = dest.port_u16().unwrap_or(443);
 
         let addrs = if let Some(addr) = IpAddr::from_str(host).ok() {

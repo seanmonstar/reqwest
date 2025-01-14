@@ -1,6 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
+#![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
 mod support;
-use support::*;
+use support::server;
 
 use std::env;
 
@@ -162,7 +163,6 @@ async fn test_no_proxy() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
-#[cfg_attr(not(feature = "__internal_proxy_sys_no_cache"), ignore)]
 #[tokio::test]
 async fn test_using_system_proxy() {
     let url = "http://not.a.real.sub.hyper.rs/prox";
@@ -173,9 +173,6 @@ async fn test_using_system_proxy() {
 
         async { http::Response::default() }
     });
-
-    // Note: we're relying on the `__internal_proxy_sys_no_cache` feature to
-    // check the environment every time.
 
     // save system setting first.
     let system_proxy = env::var("http_proxy");

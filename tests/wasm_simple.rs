@@ -21,7 +21,7 @@ async fn simple_example() {
     log(&format!("Status: {}", res.status()));
 
     let body = res.text().await.expect("response to utf-8 text");
-    log(&format!("Body:\n\n{}", body));
+    log(&format!("Body:\n\n{body}"));
 }
 
 #[wasm_bindgen_test]

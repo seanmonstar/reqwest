@@ -7,15 +7,14 @@
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
     // Some simple CLI args requirements...
-    let url = match std::env::args().nth(1) {
-        Some(url) => url,
-        None => {
-            println!("No CLI URL provided, using default.");
-            "https://hyper.rs".into()
-        }
+    let url = if let Some(url) = std::env::args().nth(1) {
+        url
+    } else {
+        println!("No CLI URL provided, using default.");
+        "https://hyper.rs".into()
     };
 
-    eprintln!("Fetching {:?}...", url);
+    eprintln!("Fetching {url:?}...");
 
     // reqwest::get() is a convenience function.
     //
@@ -28,7 +27,7 @@ async fn main() -> Result<(), reqwest::Error> {
 
     let body = res.text().await?;
 
-    println!("{}", body);
+    println!("{body}");
 
     Ok(())
 }
