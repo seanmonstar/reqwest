@@ -29,11 +29,11 @@ async fn request_with_timeout() {
     let client = reqwest::Client::new();
     let err = client
         .get("https://hyper.rs")
-        .timeout(Duration::from_millis(10))
+        .timeout(Duration::from_millis(1))
         .send()
         .await
         .expect_err("Expected error from aborted request");
 
     assert!(err.is_request());
-    assert!(format!("{:?}", err).contains("The user aborted a request."));
+    assert!(format!("{err:?}").contains("The user aborted a request."));
 }
