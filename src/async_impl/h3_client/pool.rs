@@ -1,7 +1,9 @@
 use bytes::Bytes;
 use std::collections::{HashMap, HashSet};
+use std::pin::Pin;
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -126,7 +128,6 @@ impl PoolClient {
         &mut self,
         req: Request<Body>,
     ) -> Result<Response<ResponseBody>, BoxError> {
-        use http_body_util::{BodyExt, Full};
         use hyper::body::Body as _;
 
         let (head, req_body) = req.into_parts();
@@ -152,14 +153,7 @@ impl PoolClient {
 
         let resp = stream.recv_response().await?;
 
-        let mut resp_body = Vec::new();
-        while let Some(chunk) = stream.recv_data().await? {
-            resp_body.extend(chunk.chunk())
-        }
-
-        let resp_body = Full::new(resp_body.into())
-            .map_err(|never| match never {})
-            .boxed();
+        let resp_body = crate::async_impl::body::boxed(Incoming::new(stream, resp.headers()));
 
         Ok(resp.map(|_| resp_body))
     }
@@ -191,6 +185,52 @@ impl PoolConnection {
             Err(TryRecvError::Empty) => false,
             Err(TryRecvError::Disconnected) => true,
             Ok(_) => true,
+        }
+    }
+}
+
+struct Incoming<S, B> {
+    inner: h3::client::RequestStream<S, B>,
+    content_length: Option<u64>,
+}
+
+impl<S, B> Incoming<S, B> {
+    fn new(stream: h3::client::RequestStream<S, B>, headers: &http::header::HeaderMap) -> Self {
+        Self {
+            inner: stream,
+            content_length: headers
+                .get(http::header::CONTENT_LENGTH)
+                .and_then(|h| h.to_str().ok())
+                .and_then(|v| v.parse().ok()),
+        }
+    }
+}
+
+impl<S, B> http_body::Body for Incoming<S, B>
+where
+    S: h3::quic::RecvStream,
+{
+    type Data = Bytes;
+    type Error = crate::error::Error;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context,
+    ) -> Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        match futures_core::ready!(self.inner.poll_recv_data(cx)) {
+            Ok(Some(mut b)) => Poll::Ready(Some(Ok(hyper::body::Frame::data(
+                b.copy_to_bytes(b.remaining()),
+            )))),
+            Ok(None) => Poll::Ready(None),
+            Err(e) => Poll::Ready(Some(Err(crate::error::body(e)))),
+        }
+    }
+
+    fn size_hint(&self) -> hyper::body::SizeHint {
+        if let Some(content_length) = self.content_length {
+            hyper::body::SizeHint::with_exact(content_length)
+        } else {
+            hyper::body::SizeHint::default()
         }
     }
 }
