@@ -129,6 +129,20 @@ impl Body {
             Inner::MultipartForm(_) => None,
         }
     }
+
+    #[inline]
+    pub(crate) fn empty() -> Body {
+        Body {
+            inner: Inner::Single(Single::Bytes(Bytes::new())),
+        }
+    }
+}
+
+impl From<()> for Body {
+    #[inline]
+    fn from(_: ()) -> Body {
+        Body::empty()
+    }
 }
 
 impl From<Bytes> for Body {
@@ -201,6 +215,12 @@ mod tests {
         // `log(..)`
         #[wasm_bindgen(js_namespace = console)]
         fn log(s: String);
+    }
+
+    #[wasm_bindgen_test]
+    async fn test_body_empty() {
+        let body = Body::empty();
+        assert_eq!(body.as_bytes(), Some(&[] as &[u8]));
     }
 
     #[wasm_bindgen_test]
