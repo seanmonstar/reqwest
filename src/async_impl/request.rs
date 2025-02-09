@@ -231,9 +231,23 @@ impl RequestBuilder {
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
+    /// Headers of the same name will be replaced instead of merged.
     pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             crate::util::replace_headers(req.headers_mut(), headers);
+        }
+        self
+    }
+
+    /// Alter existing Headers.
+    ///
+    /// Does nothing if there was an earlier error when constructing the Request
+    pub fn alter_headers<F>(mut self, f: F) -> Self
+    where
+        F: for<'a> FnOnce(&'a mut HeaderMap),
+    {
+        if let Ok(req) = self.request.as_mut() {
+            (f)(req.headers_mut())
         }
         self
     }
@@ -739,6 +753,29 @@ mod tests {
             .header("im-a", "keeper")
             .header("foo", "pop me")
             .headers(headers)
+            .build()
+            .expect("request build");
+
+        assert_eq!(req.headers()["im-a"], "keeper");
+
+        let foo = req.headers().get_all("foo").iter().collect::<Vec<_>>();
+        assert_eq!(foo.len(), 2);
+        assert_eq!(foo[0], "bar");
+        assert_eq!(foo[1], "baz");
+    }
+
+    #[test]
+    fn test_alter_headers() {
+        let client = Client::new();
+        let req = client
+            .get("https://hyper.rs")
+            .header("im-a", "keeper")
+            .header("foo", "pop me")
+            .alter_headers(|h| {
+                h.remove("foo");
+                h.insert("foo", "bar".parse().unwrap());
+                h.append("foo", "baz".parse().unwrap());
+            })
             .build()
             .expect("request build");
 
