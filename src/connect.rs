@@ -1157,7 +1157,6 @@ mod rustls_tls_conn {
 #[cfg(feature = "socks")]
 mod socks {
     use std::io;
-    use std::net::ToSocketAddrs;
 
     use http::Uri;
     use tokio::net::TcpStream;
@@ -1188,7 +1187,7 @@ mod socks {
         };
 
         if let DnsResolve::Local = dns {
-            let maybe_new_target = (host.as_str(), port).to_socket_addrs()?.next();
+            let maybe_new_target = tokio::net::lookup_host((host.as_str(), port)).await?.next();
             if let Some(new_target) = maybe_new_target {
                 host = new_target.ip().to_string();
             }
