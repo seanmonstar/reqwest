@@ -4,10 +4,9 @@ use std::future::Future;
 #[cfg(feature = "multipart")]
 use std::io::Cursor;
 use std::io::{self, Read};
-use std::mem;
+use std::mem::{self, MaybeUninit};
 use std::ptr;
 
-use bytes::buf::UninitSlice;
 use bytes::Bytes;
 use futures_channel::mpsc;
 
@@ -280,7 +279,8 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
     let con_len = sender.body.1;
     let cap = cmp::min(sender.body.1.unwrap_or(8192), 8192);
     let mut written = 0;
-    let mut buf = BytesMut::with_capacity(cap as usize);
+    let mut buf = BytesMut::zeroed(cap as usize);
+    buf.clear();
     let mut body = sender.body.0;
     // Put in an option so that it can be consumed on error to call abort()
     let mut tx = Some(sender.tx);
@@ -305,16 +305,19 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
         // This behaviour is questionable, but it exists and the
         // fact is that there is actually no remaining data to read.
         if buf.is_empty() {
-            if buf.remaining_mut() == 0 {
+            if buf.capacity() == buf.len() {
                 buf.reserve(8192);
                 // zero out the reserved memory
-                let uninit = buf.chunk_mut();
+                let uninit = buf.spare_capacity_mut();
+                let uninit_len = uninit.len();
                 unsafe {
-                    ptr::write_bytes(uninit.as_mut_ptr(), 0, uninit.len());
+                    ptr::write_bytes(uninit.as_mut_ptr().cast::<u8>(), 0, uninit_len);
                 }
             }
 
-            let bytes = unsafe { mem::transmute::<&mut UninitSlice, &mut [u8]>(buf.chunk_mut()) };
+            let bytes = unsafe {
+                mem::transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(buf.spare_capacity_mut())
+            };
             match body.read(bytes) {
                 Ok(0) => {
                     // The buffer was empty and nothing's left to
