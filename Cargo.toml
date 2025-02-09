@@ -27,7 +27,7 @@ features = [
 ]
 
 [features]
-default = ["default-tls", "charset", "http2", "macos-system-configuration"]
+default = ["default-tls", "charset", "http2", "macos-system-configuration", "socks"]
 
 # Note: this doesn't enable the 'native-tls' feature, which adds specific
 # functionality for it.
