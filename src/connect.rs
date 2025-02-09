@@ -337,8 +337,12 @@ impl ConnectorService {
     #[cfg(feature = "socks")]
     async fn connect_socks(&self, dst: Uri, proxy: ProxyScheme) -> Result<Conn, BoxError> {
         let dns = match proxy {
-            ProxyScheme::Socks4 { remote_dns: false, .. } => socks::DnsResolve::Local,
-            ProxyScheme::Socks4 { remote_dns: true, .. } => socks::DnsResolve::Proxy,
+            ProxyScheme::Socks4 {
+                remote_dns: false, ..
+            } => socks::DnsResolve::Local,
+            ProxyScheme::Socks4 {
+                remote_dns: true, ..
+            } => socks::DnsResolve::Proxy,
             ProxyScheme::Socks5 {
                 remote_dns: false, ..
             } => socks::DnsResolve::Local,

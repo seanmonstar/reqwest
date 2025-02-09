@@ -578,7 +578,10 @@ impl ProxyScheme {
     /// Current SOCKS4 support is provided via blocking IO.
     #[cfg(feature = "socks")]
     fn socks4(addr: SocketAddr) -> crate::Result<Self> {
-        Ok(ProxyScheme::Socks4 { addr, remote_dns: false })
+        Ok(ProxyScheme::Socks4 {
+            addr,
+            remote_dns: false,
+        })
     }
 
     /// Proxy traffic via the specified socket address over SOCKS4A
