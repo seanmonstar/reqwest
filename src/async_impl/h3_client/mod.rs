@@ -40,9 +40,22 @@ impl H3Client {
         trace!("did not find connection {key:?} in pool so connecting...");
 
         let dest = pool::domain_as_uri(key.clone());
-        self.pool.connecting(key.clone())?;
+
+        let lock = match self.pool.connecting(&key) {
+            pool::Connecting::InProgress(waiter) => {
+                trace!("connecting to {key:?} is already in progress, subscribing...");
+
+                match waiter.receive().await {
+                    Some(client) => return Ok(client),
+                    None => return Err("failed to establish connection for HTTP/3 request".into()),
+                }
+            }
+            pool::Connecting::Acquired(lock) => lock,
+        };
+        trace!("connecting to {key:?}...");
         let (driver, tx) = self.connector.connect(dest).await?;
-        Ok(self.pool.new_connection(key, driver, tx))
+        trace!("saving new pooled connection to {key:?}");
+        Ok(self.pool.new_connection(lock, driver, tx))
     }
 
     async fn send_request(
