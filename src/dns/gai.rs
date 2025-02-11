@@ -5,10 +5,14 @@ use tower_service::Service;
 use crate::dns::{Addrs, Name, Resolve, Resolving};
 use crate::error::BoxError;
 
+/// A resolver using blocking `getaddrinfo` calls in a threadpool.
+///
+/// Based on [`hyper_util`]s [`GaiResolver`](hyper_util::client::legacy::connect::dns::GaiResolver).
 #[derive(Debug)]
 pub struct GaiResolver(HyperGaiResolver);
 
 impl GaiResolver {
+    /// Construct a new [`GaiResolver`].
     pub fn new() -> Self {
         Self(HyperGaiResolver::new())
     }

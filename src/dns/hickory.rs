@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use super::{Addrs, Name, Resolve, Resolving};
 
-/// Wrapper around an `AsyncResolver`, which implements the `Resolve` trait.
+/// Wrapper around an [`TokioAsyncResolver`], which implements the [`Resolve`] trait.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct HickoryDnsResolver {
     /// Since we might not have been called in the context of a
