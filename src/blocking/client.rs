@@ -6,6 +6,7 @@ use std::future::Future;
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::task::ready;
 use std::thread;
 use std::time::Duration;
 
@@ -1306,12 +1307,12 @@ where
     futures_util::pin_mut!(fut);
 
     // "select" on the sender being canceled, and the future completing
-    let res = futures_util::future::poll_fn(|cx| {
+    let res = std::future::poll_fn(|cx| {
         match fut.as_mut().poll(cx) {
             Poll::Ready(val) => Poll::Ready(Some(val)),
             Poll::Pending => {
                 // check if the callback is canceled
-                futures_core::ready!(tx.poll_closed(cx));
+                ready!(tx.poll_closed(cx));
                 Poll::Ready(None)
             }
         }

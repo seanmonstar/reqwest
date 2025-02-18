@@ -1,5 +1,6 @@
 use bytes::Bytes;
 use std::collections::HashMap;
+use std::future;
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -10,7 +11,6 @@ use crate::async_impl::body::ResponseBody;
 use crate::error::{BoxError, Error, Kind};
 use crate::Body;
 use bytes::Buf;
-use futures_util::future;
 use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::uri::{Authority, Scheme};
