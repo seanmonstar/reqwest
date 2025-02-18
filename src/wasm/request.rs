@@ -119,7 +119,7 @@ impl Request {
             url: self.url.clone(),
             headers: self.headers.clone(),
             body,
-            timeout: self.timeout.clone(),
+            timeout: self.timeout,
             cors: self.cors,
             credentials: self.credentials,
         })

@@ -236,6 +236,13 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     let p = js_fetch(&js_req);
     let js_resp = super::promise::<web_sys::Response>(p)
         .await
+        .map_err(|error| {
+            if error.to_string() == "JsValue(\"reqwest::errors::TimedOut\")" {
+                crate::error::TimedOut.into()
+            } else {
+                error
+            }
+        })
         .map_err(crate::error::request)?;
 
     // Convert from the js Response
