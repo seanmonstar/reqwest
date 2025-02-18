@@ -1,15 +1,16 @@
 use bytes::Bytes;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::future;
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::sync::watch;
 use tokio::time::Instant;
 
 use crate::async_impl::body::ResponseBody;
 use crate::error::{BoxError, Error, Kind};
 use crate::Body;
 use bytes::Buf;
-use futures_util::future;
 use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::uri::{Authority, Scheme};
@@ -23,23 +24,89 @@ pub struct Pool {
     inner: Arc<Mutex<PoolInner>>,
 }
 
+struct ConnectingLockInner {
+    key: Key,
+    pool: Arc<Mutex<PoolInner>>,
+}
+
+/// A lock that ensures only one HTTP/3 connection is established per host at a
+/// time. The lock is automatically released when dropped.
+pub struct ConnectingLock(Option<ConnectingLockInner>);
+
+/// A waiter that allows subscribers to receive updates when a new connection is
+/// established or when the connection attempt fails. For example, whe
+/// connection lock is dropped due to an error.
+pub struct ConnectingWaiter {
+    receiver: watch::Receiver<Option<PoolClient>>,
+}
+
+pub enum Connecting {
+    /// A connection attempt is already in progress.
+    /// You must subscribe to updates instead of initiating a new connection.
+    InProgress(ConnectingWaiter),
+    /// The connection lock has been acquired, allowing you to initiate a
+    /// new connection.
+    Acquired(ConnectingLock),
+}
+
+impl ConnectingLock {
+    fn new(key: Key, pool: Arc<Mutex<PoolInner>>) -> Self {
+        Self(Some(ConnectingLockInner { key, pool }))
+    }
+
+    /// Forget the lock and return corresponding Key
+    fn forget(mut self) -> Key {
+        // Unwrap is safe because the Option can be None only after dropping the
+        // lock
+        self.0.take().unwrap().key
+    }
+}
+
+impl Drop for ConnectingLock {
+    fn drop(&mut self) {
+        if let Some(ConnectingLockInner { key, pool }) = self.0.take() {
+            let mut pool = pool.lock().unwrap();
+            pool.connecting.remove(&key);
+            trace!("HTTP/3 connecting lock for {:?} is dropped", key);
+        }
+    }
+}
+
+impl ConnectingWaiter {
+    pub async fn receive(mut self) -> Option<PoolClient> {
+        match self.receiver.wait_for(Option::is_some).await {
+            // unwrap because we already checked that option is Some
+            Ok(ok) => Some(ok.as_ref().unwrap().to_owned()),
+            Err(_) => None,
+        }
+    }
+}
+
 impl Pool {
     pub fn new(timeout: Option<Duration>) -> Self {
         Self {
             inner: Arc::new(Mutex::new(PoolInner {
-                connecting: HashSet::new(),
+                connecting: HashMap::new(),
                 idle_conns: HashMap::new(),
                 timeout,
             })),
         }
     }
 
-    pub fn connecting(&self, key: Key) -> Result<(), BoxError> {
+    /// Aqcuire a connecting lock. This is to ensure that we have only one HTTP3
+    /// connection per host.
+    pub fn connecting(&self, key: &Key) -> Connecting {
         let mut inner = self.inner.lock().unwrap();
-        if !inner.connecting.insert(key.clone()) {
-            return Err(format!("HTTP/3 connecting already in progress for {key:?}").into());
+
+        if let Some(sender) = inner.connecting.get(key) {
+            Connecting::InProgress(ConnectingWaiter {
+                receiver: sender.subscribe(),
+            })
+        } else {
+            let (tx, _) = watch::channel(None);
+            inner.connecting.insert(key.clone(), tx);
+            Connecting::Acquired(ConnectingLock::new(key.clone(), Arc::clone(&self.inner)))
         }
-        return Ok(());
     }
 
     pub fn try_pool(&self, key: &Key) -> Option<PoolClient> {
@@ -70,7 +137,7 @@ impl Pool {
 
     pub fn new_connection(
         &mut self,
-        key: Key,
+        lock: ConnectingLock,
         mut driver: h3::client::Connection<Connection, Bytes>,
         tx: SendRequest<OpenStreams, Bytes>,
     ) -> PoolClient {
@@ -84,20 +151,33 @@ impl Pool {
 
         let mut inner = self.inner.lock().unwrap();
 
-        let client = PoolClient::new(tx);
-        let conn = PoolConnection::new(client.clone(), close_rx);
-        inner.insert(key.clone(), conn);
-
         // We clean up "connecting" here so we don't have to acquire the lock again.
-        let existed = inner.connecting.remove(&key);
-        debug_assert!(existed, "key not in connecting set");
+        let key = lock.forget();
+        let Some(notifier) = inner.connecting.remove(&key) else {
+            unreachable!("there should be one connecting lock at a time");
+        };
+        let client = PoolClient::new(tx);
+
+        // Send the client to all our awaiters
+        let pool_client = if let Err(watch::error::SendError(Some(unsent_client))) =
+            notifier.send(Some(client.clone()))
+        {
+            // If there are no awaiters, the client is returned to us. As a
+            // micro optimisation, let's reuse it and avoid clonning.
+            unsent_client
+        } else {
+            client.clone()
+        };
+
+        let conn = PoolConnection::new(pool_client, close_rx);
+        inner.insert(key, conn);
 
         client
     }
 }
 
 struct PoolInner {
-    connecting: HashSet<Key>,
+    connecting: HashMap<Key, watch::Sender<Option<PoolClient>>>,
     idle_conns: HashMap<Key, PoolConnection>,
     timeout: Option<Duration>,
 }
