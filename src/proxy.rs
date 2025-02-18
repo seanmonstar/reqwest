@@ -105,7 +105,7 @@ pub enum ProxyScheme {
         host: http::uri::Authority,
     },
     #[cfg(feature = "socks")]
-    Socks4 { addr: SocketAddr },
+    Socks4 { addr: SocketAddr, remote_dns: bool },
     #[cfg(feature = "socks")]
     Socks5 {
         addr: SocketAddr,
@@ -578,7 +578,25 @@ impl ProxyScheme {
     /// Current SOCKS4 support is provided via blocking IO.
     #[cfg(feature = "socks")]
     fn socks4(addr: SocketAddr) -> crate::Result<Self> {
-        Ok(ProxyScheme::Socks4 { addr })
+        Ok(ProxyScheme::Socks4 {
+            addr,
+            remote_dns: false,
+        })
+    }
+
+    /// Proxy traffic via the specified socket address over SOCKS4A
+    ///
+    /// This differs from SOCKS4 in that DNS resolution is also performed via the proxy.
+    ///
+    /// # Note
+    ///
+    /// Current SOCKS4 support is provided via blocking IO.
+    #[cfg(feature = "socks")]
+    fn socks4a(addr: SocketAddr) -> crate::Result<Self> {
+        Ok(ProxyScheme::Socks4 {
+            addr,
+            remote_dns: true,
+        })
     }
 
     /// Proxy traffic via the specified socket address over SOCKS5
@@ -694,7 +712,7 @@ impl ProxyScheme {
         let to_addr = || {
             let addrs = url
                 .socket_addrs(|| match url.scheme() {
-                    "socks4" | "socks5" | "socks5h" => Some(1080),
+                    "socks4" | "socks4a" | "socks5" | "socks5h" => Some(1080),
                     _ => None,
                 })
                 .map_err(crate::error::builder)?;
@@ -709,6 +727,8 @@ impl ProxyScheme {
             "https" => Self::https(&url[Position::BeforeHost..Position::AfterPort])?,
             #[cfg(feature = "socks")]
             "socks4" => Self::socks4(to_addr()?)?,
+            #[cfg(feature = "socks")]
+            "socks4a" => Self::socks4a(to_addr()?)?,
             #[cfg(feature = "socks")]
             "socks5" => Self::socks5(to_addr()?)?,
             #[cfg(feature = "socks")]
@@ -756,8 +776,9 @@ impl fmt::Debug for ProxyScheme {
             ProxyScheme::Http { auth: _auth, host } => write!(f, "http://{host}"),
             ProxyScheme::Https { auth: _auth, host } => write!(f, "https://{host}"),
             #[cfg(feature = "socks")]
-            ProxyScheme::Socks4 { addr } => {
-                write!(f, "socks4://{addr}")
+            ProxyScheme::Socks4 { addr, remote_dns } => {
+                let h = if *remote_dns { "a" } else { "" };
+                write!(f, "socks4{}://{}", h, addr)
             }
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 {
