@@ -29,6 +29,9 @@ use system_configuration::{
     sys::schema_definitions::kSCPropNetProxiesHTTPSProxy,
 };
 
+#[cfg(target_os = "windows")]
+use windows_registry::CURRENT_USER;
+
 /// Configuration of a proxy that a `Client` should pass requests to.
 ///
 /// A `Proxy` has a couple pieces to it:
@@ -280,6 +283,13 @@ impl Proxy {
             get_from_platform(),
         ))));
         proxy.no_proxy = NoProxy::from_env();
+
+        #[cfg(target_os = "windows")]
+        {
+            let win_exceptions: String = get_windows_proxy_exceptions();
+            proxy.no_proxy = NoProxy::from_string(&win_exceptions);
+        }
+
         proxy
     }
 
@@ -1134,6 +1144,17 @@ fn extract_type_prefix(address: &str) -> Option<&str> {
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 fn parse_platform_values(platform_values: String) -> SystemProxyMap {
     parse_platform_values_impl(platform_values)
+}
+
+#[cfg(target_os = "windows")]
+fn get_windows_proxy_exceptions() -> String {
+    let mut exceptions = String::new();
+    if let Ok(key) = CURRENT_USER.create(r"Software\Microsoft\Windows\CurrentVersion\Internet Settings") {
+        if let Ok(value) = key.get_string("ProxyOverride") {
+            exceptions = value.split(';').map(|s| s.trim()).collect::<Vec<&str>>().join(",");
+        }
+    }
+    exceptions
 }
 
 #[cfg(test)]
