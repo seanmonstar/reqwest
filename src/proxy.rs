@@ -1149,9 +1149,16 @@ fn parse_platform_values(platform_values: String) -> SystemProxyMap {
 #[cfg(target_os = "windows")]
 fn get_windows_proxy_exceptions() -> String {
     let mut exceptions = String::new();
-    if let Ok(key) = CURRENT_USER.create(r"Software\Microsoft\Windows\CurrentVersion\Internet Settings") {
+    if let Ok(key) =
+        CURRENT_USER.create(r"Software\Microsoft\Windows\CurrentVersion\Internet Settings")
+    {
         if let Ok(value) = key.get_string("ProxyOverride") {
-            exceptions = value.split(';').map(|s| s.trim()).collect::<Vec<&str>>().join(",").replace("*.", "");
+            exceptions = value
+                .split(';')
+                .map(|s| s.trim())
+                .collect::<Vec<&str>>()
+                .join(",")
+                .replace("*.", "");
         }
     }
     exceptions
