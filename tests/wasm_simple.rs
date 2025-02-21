@@ -35,5 +35,5 @@ async fn request_with_timeout() {
         .expect_err("Expected error from aborted request");
 
     assert!(err.is_request());
-    assert!(format!("{err:?}").contains("AbortError"), "{err:?}");
+    assert!(err.is_timeout());
 }

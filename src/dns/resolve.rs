@@ -101,7 +101,7 @@ impl Resolve for DnsResolverWithOverrides {
         match self.overrides.get(name.as_str()) {
             Some(dest) => {
                 let addrs: Addrs = Box::new(dest.clone().into_iter());
-                Box::pin(futures_util::future::ready(Ok(addrs)))
+                Box::pin(std::future::ready(Ok(addrs)))
             }
             None => self.dns_resolver.resolve(name),
         }

@@ -63,7 +63,8 @@ impl AbortGuard {
 
     fn timeout(&mut self, timeout: Duration) {
         let ctrl = self.ctrl.clone();
-        let abort = Closure::once(move || ctrl.abort());
+        let abort =
+            Closure::once(move || ctrl.abort_with_reason(&"reqwest::errors::TimedOut".into()));
         let timeout = set_timeout(
             abort.as_ref().unchecked_ref::<js_sys::Function>(),
             timeout.as_millis().try_into().expect("timeout"),
