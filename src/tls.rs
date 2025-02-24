@@ -56,6 +56,7 @@ use rustls_pki_types::{ServerName, UnixTime};
 use std::{
     fmt,
     io::{BufRead, BufReader},
+    sync::Arc,
 };
 
 /// Represents a X509 certificate revocation list.
@@ -564,6 +565,8 @@ pub(crate) enum TlsBackend {
     Rustls,
     #[cfg(feature = "__rustls")]
     BuiltRustls(rustls::ClientConfig),
+    #[cfg(feature = "__rustls")]
+    DynamicRustls(Arc<dyn DynamicRustlsConfig>),
     #[cfg(any(feature = "native-tls", feature = "__rustls",))]
     UnknownPreconfigured,
 }
@@ -579,6 +582,8 @@ impl fmt::Debug for TlsBackend {
             TlsBackend::Rustls => write!(f, "Rustls"),
             #[cfg(feature = "__rustls")]
             TlsBackend::BuiltRustls(_) => write!(f, "BuiltRustls"),
+            #[cfg(feature = "__rustls")]
+            TlsBackend::DynamicRustls(_) => write!(f, "DynamicRustls"),
             #[cfg(any(feature = "native-tls", feature = "__rustls",))]
             TlsBackend::UnknownPreconfigured => write!(f, "UnknownPreconfigured"),
         }
@@ -600,6 +605,20 @@ impl Default for TlsBackend {
         {
             TlsBackend::Rustls
         }
+    }
+}
+
+#[cfg(feature = "__rustls")]
+/// Trait for creating a dynamic [rustls::ClientConfig] per destination's [http::Uri].
+pub trait DynamicRustlsConfig: Send + Sync {
+    /// Returns a [rustls::ClientConfig] based on the destination's [http::Uri].
+    fn config(&self, dst: &http::Uri) -> Arc<rustls::ClientConfig>;
+}
+
+#[cfg(feature = "__rustls")]
+impl DynamicRustlsConfig for Arc<rustls::ClientConfig> {
+    fn config(&self, _dst: &http::Uri) -> Arc<rustls::ClientConfig> {
+        self.clone()
     }
 }
 

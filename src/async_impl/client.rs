@@ -31,6 +31,8 @@ use crate::into_url::try_uri;
 use crate::redirect::{self, remove_sensitive_headers};
 #[cfg(feature = "__rustls")]
 use crate::tls::CertificateRevocationList;
+#[cfg(feature = "__rustls")]
+use crate::tls::DynamicRustlsConfig;
 #[cfg(feature = "__tls")]
 use crate::tls::{self, TlsBackend};
 #[cfg(feature = "__tls")]
@@ -483,11 +485,13 @@ impl ClientBuilder {
                 ),
                 #[cfg(feature = "__rustls")]
                 TlsBackend::BuiltRustls(conn) => {
+                    let tls = Arc::new(Arc::new(conn));
+
                     #[cfg(feature = "http3")]
                     {
                         h3_connector = build_h3_connector(
                             resolver,
-                            conn.clone(),
+                            tls.clone(),
                             config.quic_max_idle_timeout,
                             config.quic_stream_receive_window,
                             config.quic_receive_window,
@@ -499,7 +503,39 @@ impl ClientBuilder {
 
                     ConnectorBuilder::new_rustls_tls(
                         http,
-                        conn,
+                        tls,
+                        proxies.clone(),
+                        user_agent(&config.headers),
+                        config.local_address,
+                        #[cfg(any(
+                            target_os = "android",
+                            target_os = "fuchsia",
+                            target_os = "linux"
+                        ))]
+                        config.interface.as_deref(),
+                        config.nodelay,
+                        config.tls_info,
+                    )
+                }
+                #[cfg(feature = "__rustls")]
+                TlsBackend::DynamicRustls(tls) => {
+                    #[cfg(feature = "http3")]
+                    {
+                        h3_connector = build_h3_connector(
+                            resolver,
+                            tls.clone(),
+                            config.quic_max_idle_timeout,
+                            config.quic_stream_receive_window,
+                            config.quic_receive_window,
+                            config.quic_send_window,
+                            config.local_address,
+                            &config.http_version_pref,
+                        )?;
+                    }
+
+                    ConnectorBuilder::new_rustls_tls(
+                        http,
+                        tls,
                         proxies.clone(),
                         user_agent(&config.headers),
                         config.local_address,
@@ -682,7 +718,7 @@ impl ClientBuilder {
 
                         h3_connector = build_h3_connector(
                             resolver,
-                            tls.clone(),
+                            Arc::new(Arc::new(tls.clone())),
                             config.quic_max_idle_timeout,
                             config.quic_stream_receive_window,
                             config.quic_receive_window,
@@ -694,7 +730,7 @@ impl ClientBuilder {
 
                     ConnectorBuilder::new_rustls_tls(
                         http,
-                        tls,
+                        Arc::new(Arc::new(tls)),
                         proxies.clone(),
                         user_agent(&config.headers),
                         config.local_address,
@@ -1781,6 +1817,19 @@ impl ClientBuilder {
 
         // Otherwise, we don't recognize the TLS backend!
         self.config.tls = crate::tls::TlsBackend::UnknownPreconfigured;
+        self
+    }
+
+    /// Use a dynamic [rustls::ClientConfig] per destination's [http::Uri].
+    ///
+    /// Useful in situations like making a request to a server with a known [Raw Public Key](https://www.rfc-editor.org/rfc/rfc7250).
+    #[cfg(feature = "__rustls")]
+    pub fn use_dynamic_rustls<D: DynamicRustlsConfig + 'static>(
+        mut self,
+        tls: Arc<D>,
+    ) -> ClientBuilder {
+        self.config.tls = TlsBackend::DynamicRustls(tls);
+
         self
     }
 

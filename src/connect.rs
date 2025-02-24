@@ -28,6 +28,8 @@ use self::rustls_tls_conn::RustlsTlsConn;
 use crate::dns::DynResolver;
 use crate::error::{cast_to_internal_error, BoxError};
 use crate::proxy::{Proxy, ProxyScheme};
+#[cfg(feature = "__rustls")]
+use crate::tls::DynamicRustlsConfig;
 use sealed::{Conn, Unnameable};
 
 pub(crate) type HttpConnector = hyper_util::client::legacy::connect::HttpConnector<DynResolver>;
@@ -236,7 +238,7 @@ where {
     #[cfg(feature = "__rustls")]
     pub(crate) fn new_rustls_tls<T>(
         mut http: HttpConnector,
-        tls: rustls::ClientConfig,
+        tls: Arc<dyn DynamicRustlsConfig>,
         proxies: Arc<Vec<Proxy>>,
         user_agent: Option<HeaderValue>,
         local_addr: T,
@@ -256,21 +258,8 @@ where {
         http.set_nodelay(nodelay);
         http.enforce_http(false);
 
-        let (tls, tls_proxy) = if proxies.is_empty() {
-            let tls = Arc::new(tls);
-            (tls.clone(), tls)
-        } else {
-            let mut tls_proxy = tls.clone();
-            tls_proxy.alpn_protocols.clear();
-            (Arc::new(tls), Arc::new(tls_proxy))
-        };
-
         ConnectorBuilder {
-            inner: Inner::RustlsTls {
-                http,
-                tls,
-                tls_proxy,
-            },
+            inner: Inner::RustlsTls { http, tls },
             proxies,
             verbose: verbose::OFF,
             nodelay,
@@ -328,8 +317,7 @@ enum Inner {
     #[cfg(feature = "__rustls")]
     RustlsTls {
         http: HttpConnector,
-        tls: Arc<rustls::ClientConfig>,
-        tls_proxy: Arc<rustls::ClientConfig>,
+        tls: Arc<dyn DynamicRustlsConfig>,
     },
 }
 
@@ -378,7 +366,7 @@ impl ConnectorService {
                     use std::convert::TryFrom;
                     use tokio_rustls::TlsConnector as RustlsConnector;
 
-                    let tls = tls.clone();
+                    let tls = tls.config(&dst);
                     let host = dst.host().ok_or("no host in url")?.to_string();
                     let conn = socks::connect(proxy, dst, dns).await?;
                     let conn = TokioIo::new(conn);
@@ -469,7 +457,7 @@ impl ConnectorService {
                     http.set_nodelay(true);
                 }
 
-                let mut http = hyper_rustls::HttpsConnector::from((http, tls.clone()));
+                let mut http = hyper_rustls::HttpsConnector::from((http, tls.config(&dst)));
                 let io = http.call(dst).await?;
 
                 if let hyper_rustls::MaybeHttpsStream::Https(stream) = io {
@@ -545,11 +533,13 @@ impl ConnectorService {
                 }
             }
             #[cfg(feature = "__rustls")]
-            Inner::RustlsTls {
-                http,
-                tls,
-                tls_proxy,
-            } => {
+            Inner::RustlsTls { http, tls } => {
+                let tls = tls.config(&dst);
+                let mut tls_proxy = tls.clone();
+                if let Some(config) = Arc::get_mut(&mut tls_proxy) {
+                    config.alpn_protocols.clear();
+                }
+
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     use rustls_pki_types::ServerName;
                     use std::convert::TryFrom;
@@ -558,8 +548,8 @@ impl ConnectorService {
                     let host = dst.host().ok_or("no host in url")?.to_string();
                     let port = dst.port().map(|r| r.as_u16()).unwrap_or(443);
                     let http = http.clone();
-                    let mut http = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
-                    let tls = tls.clone();
+                    let mut http = hyper_rustls::HttpsConnector::from((http, tls_proxy));
+                    let tls = tls.config(&dst);
                     let conn = http.call(proxy_dst).await?;
                     log::trace!("tunneling HTTPS over proxy");
                     let maybe_server_name = ServerName::try_from(host.as_str().to_owned())

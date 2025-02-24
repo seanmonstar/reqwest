@@ -1,6 +1,7 @@
 use crate::async_impl::h3_client::dns::resolve;
 use crate::dns::DynResolver;
 use crate::error::BoxError;
+use crate::tls::DynamicRustlsConfig;
 use bytes::Bytes;
 use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
@@ -21,29 +22,30 @@ type H3Connection = (
 pub(crate) struct H3Connector {
     resolver: DynResolver,
     endpoint: Endpoint,
+    tls: Arc<dyn DynamicRustlsConfig>,
+    transport_config: Arc<TransportConfig>,
 }
 
 impl H3Connector {
     pub fn new(
         resolver: DynResolver,
-        tls: rustls::ClientConfig,
+        tls: Arc<dyn DynamicRustlsConfig>,
         local_addr: Option<IpAddr>,
         transport_config: TransportConfig,
     ) -> Result<H3Connector, BoxError> {
-        let quic_client_config = Arc::new(QuicClientConfig::try_from(tls)?);
-        let mut config = ClientConfig::new(quic_client_config);
-        // FIXME: Replace this when there is a setter.
-        config.transport_config(Arc::new(transport_config));
-
         let socket_addr = match local_addr {
             Some(ip) => SocketAddr::new(ip, 0),
             None => "[::]:0".parse::<SocketAddr>().unwrap(),
         };
 
-        let mut endpoint = Endpoint::client(socket_addr)?;
-        endpoint.set_default_client_config(config);
+        let endpoint = Endpoint::client(socket_addr)?;
 
-        Ok(Self { resolver, endpoint })
+        Ok(Self {
+            resolver,
+            endpoint,
+            tls,
+            transport_config: Arc::new(transport_config),
+        })
     }
 
     pub async fn connect(&mut self, dest: Uri) -> Result<H3Connection, BoxError> {
@@ -66,17 +68,29 @@ impl H3Connector {
             addrs.collect()
         };
 
-        self.remote_connect(addrs, host).await
+        let tls = self.tls.config(&dest);
+        let quic_client_config = Arc::new(QuicClientConfig::try_from(tls)?);
+        let mut config = ClientConfig::new(quic_client_config);
+        // FIXME: Replace this when there is a setter.
+        config.transport_config(self.transport_config.clone());
+
+        self.remote_connect(config, addrs, host).await
     }
 
     async fn remote_connect(
         &mut self,
+        config: ClientConfig,
         addrs: Vec<SocketAddr>,
         server_name: &str,
     ) -> Result<H3Connection, BoxError> {
         let mut err = None;
+
         for addr in addrs {
-            match self.endpoint.connect(addr, server_name)?.await {
+            match self
+                .endpoint
+                .connect_with(config.clone(), addr, server_name)?
+                .await
+            {
                 Ok(new_conn) => {
                     let quinn_conn = Connection::new(new_conn);
                     return Ok(h3::client::new(quinn_conn).await?);
