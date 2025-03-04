@@ -244,7 +244,7 @@ async fn test_redirect_policy_can_stop_redirects_without_an_error() {
     let url = format!("http://{}/no-redirect", server.addr());
 
     let res = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
+        .redirect_policy(reqwest::redirect::Policy::none())
         .build()
         .unwrap()
         .get(&url)
@@ -375,4 +375,65 @@ async fn test_redirect_https_only_enforced_gh1312() {
 
     let err = res.unwrap_err();
     assert!(err.is_redirect());
+}
+
+#[tokio::test]
+async fn test_request_redirect() {
+    let code = 301u16;
+
+    let redirect = server::http(move |req| async move {
+        if req.method() == "POST" {
+            assert_eq!(req.uri(), &*format!("/{}", code));
+            http::Response::builder()
+                .status(code)
+                .header("location", "/dst")
+                .header("server", "test-redirect")
+                .body(Default::default())
+                .unwrap()
+        } else {
+            assert_eq!(req.method(), "GET");
+
+            http::Response::builder()
+                .header("server", "test-dst")
+                .body(Default::default())
+                .unwrap()
+        }
+    });
+
+    let url = format!("http://{}/{}", redirect.addr(), code);
+    let dst = format!("http://{}/{}", redirect.addr(), "dst");
+
+    let default_redirect_client = reqwest::Client::new();
+    let res = default_redirect_client
+        .request(reqwest::Method::POST, &url)
+        .redirect(reqwest::redirect::Policy::none())
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.url().as_str(), url);
+    assert_eq!(res.status(), reqwest::StatusCode::MOVED_PERMANENTLY);
+    assert_eq!(
+        res.headers().get(reqwest::header::SERVER).unwrap(),
+        &"test-redirect"
+    );
+
+    let no_redirect_client = reqwest::Client::builder()
+        .redirect_policy(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    let res = no_redirect_client
+        .request(reqwest::Method::POST, &url)
+        .redirect(reqwest::redirect::Policy::limited(2))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.url().as_str(), dst);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(
+        res.headers().get(reqwest::header::SERVER).unwrap(),
+        &"test-dst"
+    );
 }
