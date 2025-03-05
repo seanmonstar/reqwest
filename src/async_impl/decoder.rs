@@ -597,7 +597,7 @@ impl Accepts {
     }
     */
 
-    pub(super) fn as_str(&self) -> Option<&'static str> {
+    pub(super) const fn as_str(&self) -> Option<&'static str> {
         match (
             self.is_gzip(),
             self.is_brotli(),
@@ -623,7 +623,7 @@ impl Accepts {
         }
     }
 
-    fn is_gzip(&self) -> bool {
+    const fn is_gzip(&self) -> bool {
         #[cfg(feature = "gzip")]
         {
             self.gzip
@@ -635,7 +635,7 @@ impl Accepts {
         }
     }
 
-    fn is_brotli(&self) -> bool {
+    const fn is_brotli(&self) -> bool {
         #[cfg(feature = "brotli")]
         {
             self.brotli
@@ -647,7 +647,7 @@ impl Accepts {
         }
     }
 
-    fn is_zstd(&self) -> bool {
+    const fn is_zstd(&self) -> bool {
         #[cfg(feature = "zstd")]
         {
             self.zstd
@@ -659,7 +659,7 @@ impl Accepts {
         }
     }
 
-    fn is_deflate(&self) -> bool {
+    const fn is_deflate(&self) -> bool {
         #[cfg(feature = "deflate")]
         {
             self.deflate
