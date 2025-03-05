@@ -187,6 +187,104 @@ async fn test_non_chunked_non_fragmented_response() {
 }
 
 #[tokio::test]
+async fn test_non_chunked_fragmented_response() {
+    const DELAY_BETWEEN_RESPONSE_PARTS: tokio::time::Duration =
+        tokio::time::Duration::from_millis(1000);
+    const DELAY_MARGIN: tokio::time::Duration = tokio::time::Duration::from_millis(50);
+
+    let server = server::low_level_with_response(|_raw_request, client_socket| {
+        Box::new(async move {
+            let zstded_content = zstd_compress(RESPONSE_CONTENT.as_bytes());
+            let content_length_header =
+                format!("Content-Length: {}\r\n\r\n", zstded_content.len()).into_bytes();
+            let response_first_part = [
+                COMPRESSED_RESPONSE_HEADERS,
+                &content_length_header,
+                &zstded_content,
+            ]
+            .concat();
+            let response_second_part = b"\r\n0\r\n\r\n";
+
+            client_socket
+                .write_all(response_first_part.as_slice())
+                .await
+                .expect("response_first_part write_all failed");
+            client_socket
+                .flush()
+                .await
+                .expect("response_first_part flush failed");
+
+            tokio::time::sleep(DELAY_BETWEEN_RESPONSE_PARTS).await;
+
+            client_socket
+                .write_all(response_second_part)
+                .await
+                .expect("response_second_part write_all failed");
+            client_socket
+                .flush()
+                .await
+                .expect("response_second_part flush failed");
+        })
+    });
+
+    let res = reqwest::Client::new()
+        .get(&format!("http://{}/", server.addr()))
+        .send()
+        .await
+        .expect("response");
+
+    assert_eq!(res.text().await.expect("text"), RESPONSE_CONTENT);
+}
+
+#[tokio::test]
+async fn test_non_chunked_fragmented_response2() {
+    const DELAY_BETWEEN_RESPONSE_PARTS: tokio::time::Duration =
+        tokio::time::Duration::from_millis(10);
+    const DELAY_MARGIN: tokio::time::Duration = tokio::time::Duration::from_millis(50);
+
+    let server = server::low_level_with_response(|_raw_request, client_socket| {
+        Box::new(async move {
+            let zstded_content = zstd_compress(RESPONSE_CONTENT.as_bytes());
+            let content_length_header =
+                format!("Content-Length: {}\r\n\r\n", zstded_content.len()).into_bytes();
+            let content = zstded_content.chunks(2).collect::<Vec<_>>();
+            let mut content_iter = content.iter();
+            let response_first_part = [
+                COMPRESSED_RESPONSE_HEADERS,
+                &content_length_header,
+                &content_iter.next().expect("fcontent_iter.next() failed"),
+            ]
+            .concat();
+            client_socket
+                .write_all(response_first_part.as_slice())
+                .await
+                .expect("response_first_part write_all failed");
+            client_socket
+                .flush()
+                .await
+                .expect("response_first_part flush failed");
+
+            for chunk in content_iter {
+                tokio::time::sleep(DELAY_BETWEEN_RESPONSE_PARTS).await;
+                client_socket
+                    .write_all(chunk)
+                    .await
+                    .expect("chunk write_all failed");
+                client_socket.flush().await.expect("chunk flush failed");
+            }
+        })
+    });
+
+    let res = reqwest::Client::new()
+        .get(&format!("http://{}/", server.addr()))
+        .send()
+        .await
+        .expect("response");
+
+    assert_eq!(res.text().await.expect("text"), RESPONSE_CONTENT);
+}
+
+#[tokio::test]
 async fn test_chunked_fragmented_response_1() {
     const DELAY_BETWEEN_RESPONSE_PARTS: tokio::time::Duration =
         tokio::time::Duration::from_millis(1000);
