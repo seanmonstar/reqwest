@@ -520,13 +520,13 @@ impl Future for Pending {
                 .fuse(),
             )))),
             #[cfg(feature = "zstd")]
-            DecoderType::Zstd => Poll::Ready(Ok(Inner::Zstd(Box::pin(
-                FramedRead::new(
-                    ZstdDecoder::new(StreamReader::new(_body)),
-                    BytesCodec::new(),
-                )
-                .fuse(),
-            )))),
+            DecoderType::Zstd => {
+                let mut decoder = ZstdDecoder::new(StreamReader::new(_body));
+                decoder.multiple_members(true);
+                Poll::Ready(Ok(Inner::Zstd(Box::pin(
+                    FramedRead::new(decoder, BytesCodec::new()).fuse(),
+                ))))
+            }
             #[cfg(feature = "gzip")]
             DecoderType::Gzip => Poll::Ready(Ok(Inner::Gzip(Box::pin(
                 FramedRead::new(
