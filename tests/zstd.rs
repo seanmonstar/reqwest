@@ -219,7 +219,7 @@ async fn test_non_chunked_non_fragmented_multiple_frames_response() {
     });
 
     let res = reqwest::Client::new()
-        .get(&format!("http://{}/", server.addr()))
+        .get(format!("http://{}/", server.addr()))
         .send()
         .await
         .expect("response");
@@ -283,7 +283,7 @@ async fn test_chunked_fragmented_multiple_frames_in_one_chunk() {
     let start = tokio::time::Instant::now();
 
     let res = reqwest::Client::new()
-        .get(&format!("http://{}/", server.addr()))
+        .get(format!("http://{}/", server.addr()))
         .send()
         .await
         .expect("Failed to get response");
