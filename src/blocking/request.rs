@@ -1013,6 +1013,20 @@ mod tests {
     }
 
     #[test]
+    fn from_empty_http_request() {
+        let http_request = HttpRequest::builder()
+            .method("GET")
+            .uri("http://localhost/")
+            .body(())
+            .unwrap();
+        let req = Request::try_from(http_request).unwrap();
+        assert_eq!(req.body().unwrap().as_bytes(), Some(&[] as &[u8]));
+        assert_eq!(req.headers(), &HeaderMap::new());
+        assert_eq!(req.method(), Method::GET);
+        assert_eq!(req.url().as_str(), "http://localhost/");
+    }
+
+    #[test]
     fn convert_from_http_request() {
         let http_request = HttpRequest::builder()
             .method("GET")
