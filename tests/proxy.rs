@@ -230,3 +230,31 @@ async fn http_over_http() {
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
+
+#[tokio::test]
+async fn test_tls_info_not_present_to_http_proxy() {
+    let url = "http://hyper.rs/prox";
+
+    let server = server::http(move |req| {
+        assert_eq!(req.method(), "GET");
+        assert_eq!(req.uri(), url);
+        assert_eq!(req.headers()["host"], "hyper.rs");
+
+        async { http::Response::default() }
+    });
+
+    let proxy = format!("http://{}", server.addr());
+
+    let res = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::http(&proxy).unwrap())
+        .tls_info(true)
+        .build()
+        .unwrap()
+        .get(url)
+        .send()
+        .await
+        .unwrap();
+
+    let tls_info = res.extensions().get::<reqwest::tls::TlsInfo>();
+    assert!(tls_info.is_none());
+}
