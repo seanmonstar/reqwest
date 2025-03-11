@@ -1,3 +1,17 @@
+## v0.12.13
+
+- Add `Form::into_reader()` for blocking `multipart` forms.
+- Add `Form::into_stream()` for async `multipart` forms.
+- Add support for SOCKS4a proxies.
+- Fix decoding responses with multiple zstd frames.
+- Fix `RequestBuilder::form()` from overwriting a previously set `Content-Type` header, like the other builder methods.
+- Fix cloning of request timeout in `blocking::Request`.
+- Fix http3 synchronization of connection creation, reducing unneccesary extra connections.
+- Fix Windows system proxy to use `ProxyOverride` as a `NO_PROXY` value.
+- Fix blocking read to correctly reserve and zero read buffer.
+- (wasm) Add support for request timeouts.
+- (wasm) Fix `Error::is_timeout()` to return true when from a request timeout.
+
 ## v0.12.12
 
 - (wasm) Fix compilation by not compiler `tokio/time` on WASM.
