@@ -300,6 +300,7 @@ jobs:
           cargo update -p idna_adapter --precise 1.1.0
           cargo update -p hashbrown@0.15.2 --precise 0.15.0
           cargo update -p native-tls --precise 0.2.13
+          cargo update -p once_cell --precise 1.20.3
 
       - uses: Swatinem/rust-cache@v2
 
