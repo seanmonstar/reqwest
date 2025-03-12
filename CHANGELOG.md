@@ -1,3 +1,7 @@
+## v0.12.14
+
+- Fix missing `fetch_mode_no_cors()`, marking as deprecated when not on WASM.
+
 ## v0.12.13
 
 - Add `Form::into_reader()` for blocking `multipart` forms.
