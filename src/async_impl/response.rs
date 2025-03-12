@@ -79,13 +79,21 @@ impl Response {
         self.res.headers_mut()
     }
 
-    /// Get the content-length of this response, if known.
+    /// Get the content length of the response, if it is known.
+    ///
+    /// This value is not computed by parsing the `Content-Length` header of the
+    /// response, but by looking at the number of bytes actually streamed from
+    /// the server.
+    ///
+    /// To read the value of the `Content-Length` header, use the
+    /// [`Response::headers`] method instead.
     ///
     /// Reasons it may not be known:
     ///
-    /// - The server didn't send a `content-length` header.
-    /// - The response is compressed and automatically decoded (thus changing
-    ///   the actual decoded length).
+    /// - The response does not include a body (e.g. it responds to a `HEAD`
+    ///   request).
+    /// - The response is gzipped and automatically decoded (thus changing the
+    ///   actual decoded length).
     pub fn content_length(&self) -> Option<u64> {
         use hyper::body::Body;
 
