@@ -693,12 +693,12 @@ impl ProxyScheme {
         match self {
             ProxyScheme::Http { ref mut auth, .. } => {
                 if auth.is_none() {
-                    *auth = update.clone();
+                    auth.clone_from(update);
                 }
             }
             ProxyScheme::Https { ref mut auth, .. } => {
                 if auth.is_none() {
-                    *auth = update.clone();
+                    auth.clone_from(update);
                 }
             }
             #[cfg(feature = "socks")]
