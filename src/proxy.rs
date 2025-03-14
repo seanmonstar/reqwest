@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::into_url::{IntoUrl, IntoUrlSealed};
 use crate::Url;
-use http::{header::HeaderValue, Uri};
+use http::{header::HeaderValue, HeaderMap, Uri};
 use ipnet::IpNet;
 use percent_encoding::percent_decode;
 use std::collections::HashMap;
@@ -102,10 +102,12 @@ pub enum ProxyScheme {
     Http {
         auth: Option<HeaderValue>,
         host: http::uri::Authority,
+        misc: Option<HeaderMap>,
     },
     Https {
         auth: Option<HeaderValue>,
         host: http::uri::Authority,
+        misc: Option<HeaderMap>,
     },
     #[cfg(feature = "socks")]
     Socks4 { addr: SocketAddr, remote_dns: bool },
@@ -121,6 +123,14 @@ impl ProxyScheme {
     fn maybe_http_auth(&self) -> Option<&HeaderValue> {
         match self {
             ProxyScheme::Http { auth, .. } | ProxyScheme::Https { auth, .. } => auth.as_ref(),
+            #[cfg(feature = "socks")]
+            _ => None,
+        }
+    }
+
+    fn maybe_http_custom_headers(&self) -> Option<&HeaderMap> {
+        match self {
+            ProxyScheme::Http { misc, .. } | ProxyScheme::Https { misc, .. } => misc.as_ref(),
             #[cfg(feature = "socks")]
             _ => None,
         }
@@ -355,6 +365,13 @@ impl Proxy {
         self
     }
 
+    /// Adds a Custom Headers to Proxy
+    ///
+    pub fn headers(mut self, headers: HeaderMap) -> Proxy {
+        self.intercept.set_custom_headers(headers);
+        self
+    }
+
     pub(crate) fn maybe_has_http_auth(&self) -> bool {
         match &self.intercept {
             Intercept::All(p) | Intercept::Http(p) => p.maybe_http_auth().is_some(),
@@ -376,6 +393,19 @@ impl Proxy {
                 .and_then(|s| s.maybe_http_auth().cloned()),
             Intercept::Custom(custom) => {
                 custom.call(uri).and_then(|s| s.maybe_http_auth().cloned())
+            }
+            Intercept::Https(_) => None,
+        }
+    }
+
+    pub(crate) fn http_custom_headers<D: Dst>(&self, uri: &D) -> Option<HeaderMap> {
+        match &self.intercept {
+            Intercept::All(p) | Intercept::Http(p) => p.maybe_http_custom_headers().cloned(),
+            Intercept::System(system) => system
+                .get("http")
+                .and_then(|s| s.maybe_http_custom_headers().cloned()),
+            Intercept::Custom(custom) => {
+                custom.call(uri).and_then(|s| s.maybe_http_custom_headers().cloned())
             }
             Intercept::Https(_) => None,
         }
@@ -570,6 +600,7 @@ impl ProxyScheme {
         Ok(ProxyScheme::Http {
             auth: None,
             host: host.parse().map_err(crate::error::builder)?,
+            misc: None
         })
     }
 
@@ -578,6 +609,7 @@ impl ProxyScheme {
         Ok(ProxyScheme::Https {
             auth: None,
             host: host.parse().map_err(crate::error::builder)?,
+            misc: None
         })
     }
 
@@ -689,6 +721,25 @@ impl ProxyScheme {
         }
     }
 
+    fn set_custom_headers(&mut self, headers: HeaderMap) {
+        match *self {
+            ProxyScheme::Http { ref mut misc, .. } => {
+                misc.get_or_insert_with(HeaderMap::new).extend(headers)
+            }
+            ProxyScheme::Https { ref mut misc, .. } => {
+                misc.get_or_insert_with(HeaderMap::new).extend(headers)
+            }
+            #[cfg(feature = "socks")]
+            ProxyScheme::Socks4 { .. } => {
+                panic!("Socks4 is not supported for this method")
+            }
+            #[cfg(feature = "socks")]
+            ProxyScheme::Socks5 { .. } => {
+                panic!("Socks5 is not supported for this method")
+            }
+        }
+    }
+
     fn if_no_auth(mut self, update: &Option<HeaderValue>) -> Self {
         match self {
             ProxyScheme::Http { ref mut auth, .. } => {
@@ -783,8 +834,8 @@ impl ProxyScheme {
 impl fmt::Debug for ProxyScheme {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ProxyScheme::Http { auth: _auth, host } => write!(f, "http://{host}"),
-            ProxyScheme::Https { auth: _auth, host } => write!(f, "https://{host}"),
+            ProxyScheme::Http { auth: _auth, host, misc: _misc } => write!(f, "http://{host}"),
+            ProxyScheme::Https { auth: _auth, host, misc: _misc } => write!(f, "https://{host}"),
             #[cfg(feature = "socks")]
             ProxyScheme::Socks4 { addr, remote_dns } => {
                 let h = if *remote_dns { "a" } else { "" };
@@ -837,6 +888,16 @@ impl Intercept {
             Intercept::Custom(ref mut custom) => {
                 custom.auth = Some(header_value);
             }
+        }
+    }
+
+    fn set_custom_headers(&mut self, headers: HeaderMap) {
+        match self {
+            Intercept::All(ref mut s)
+            | Intercept::Http(ref mut s)
+            | Intercept::Https(ref mut s) => s.set_custom_headers(headers),
+            Intercept::System(_) => unimplemented!(),
+            Intercept::Custom(_) => unimplemented!()
         }
     }
 }
@@ -1269,9 +1330,10 @@ mod tests {
         let ps = "http://foo:bar@localhost:1239".into_proxy_scheme().unwrap();
 
         match ps {
-            ProxyScheme::Http { auth, host } => {
+            ProxyScheme::Http { auth, host, misc } => {
                 assert_eq!(auth.unwrap(), encode_basic_auth("foo", "bar"));
                 assert_eq!(host, "localhost:1239");
+                assert_eq!(format!("{:?}", misc), "None");
             }
             other => panic!("unexpected: {other:?}"),
         }
@@ -1282,9 +1344,10 @@ mod tests {
         let ps = "192.168.1.1:8888".into_proxy_scheme().unwrap();
 
         match ps {
-            ProxyScheme::Http { auth, host } => {
+            ProxyScheme::Http { auth, host, misc } => {
                 assert!(auth.is_none());
                 assert_eq!(host, "192.168.1.1:8888");
+                assert_eq!(format!("{:?}", misc), "None");
             }
             other => panic!("unexpected: {other:?}"),
         }
@@ -1296,9 +1359,10 @@ mod tests {
         let ps = "foo:bar@localhost:1239".into_proxy_scheme().unwrap();
 
         match ps {
-            ProxyScheme::Http { auth, host } => {
+            ProxyScheme::Http { auth, host, misc } => {
                 assert_eq!(auth.unwrap(), encode_basic_auth("foo", "bar"));
                 assert_eq!(host, "localhost:1239");
+                assert_eq!(format!("{:?}", misc), "None");
             }
             other => panic!("unexpected: {other:?}"),
         }
@@ -1726,6 +1790,7 @@ mod tests {
             intercept: Intercept::Http(ProxyScheme::Http {
                 auth: Some(HeaderValue::from_static("auth1")),
                 host: http::uri::Authority::from_static("authority"),
+                misc: None
             }),
             no_proxy: None,
         };
@@ -1739,6 +1804,7 @@ mod tests {
             intercept: Intercept::Http(ProxyScheme::Http {
                 auth: None,
                 host: http::uri::Authority::from_static("authority"),
+                misc: None
             }),
             no_proxy: None,
         };
@@ -1752,6 +1818,7 @@ mod tests {
             intercept: Intercept::Http(ProxyScheme::Https {
                 auth: Some(HeaderValue::from_static("auth2")),
                 host: http::uri::Authority::from_static("authority"),
+                misc: None
             }),
             no_proxy: None,
         };
@@ -1765,6 +1832,7 @@ mod tests {
             intercept: Intercept::All(ProxyScheme::Http {
                 auth: Some(HeaderValue::from_static("auth3")),
                 host: http::uri::Authority::from_static("authority"),
+                misc: None
             }),
             no_proxy: None,
         };
@@ -1778,6 +1846,7 @@ mod tests {
             intercept: Intercept::All(ProxyScheme::Https {
                 auth: Some(HeaderValue::from_static("auth4")),
                 host: http::uri::Authority::from_static("authority"),
+                misc: None
             }),
             no_proxy: None,
         };
@@ -1791,6 +1860,7 @@ mod tests {
             intercept: Intercept::All(ProxyScheme::Https {
                 auth: None,
                 host: http::uri::Authority::from_static("authority"),
+                misc: None
             }),
             no_proxy: None,
         };
@@ -1808,6 +1878,7 @@ mod tests {
                     ProxyScheme::Http {
                         auth: Some(HeaderValue::from_static("auth5")),
                         host: http::uri::Authority::from_static("authority"),
+                        misc: None
                     },
                 );
                 m
@@ -1828,6 +1899,7 @@ mod tests {
                     ProxyScheme::Https {
                         auth: Some(HeaderValue::from_static("auth6")),
                         host: http::uri::Authority::from_static("authority"),
+                        misc: None
                     },
                 );
                 m
