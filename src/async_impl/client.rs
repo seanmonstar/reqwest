@@ -2166,6 +2166,7 @@ impl Client {
         };
 
         self.proxy_auth(&uri, &mut headers);
+        self.proxy_custom_headers(&uri, &mut headers);
 
         let builder = hyper::Request::builder()
             .method(method.clone())
@@ -2240,6 +2241,17 @@ impl Client {
                     headers.insert(PROXY_AUTHORIZATION, header);
                 }
 
+                break;
+            }
+        }
+    }
+
+    fn proxy_custom_headers(&self, dst: &Uri, headers: &mut HeaderMap) {
+        for proxy in self.inner.proxies.iter() {
+            if proxy.is_match(dst) {
+                for (key, value) in proxy.http_custom_headers(dst).unwrap().iter() {
+                    headers.insert(key.clone(), value.clone());
+                }
                 break;
             }
         }
