@@ -286,8 +286,13 @@ impl Proxy {
 
         #[cfg(target_os = "windows")]
         {
-            let win_exceptions: String = get_windows_proxy_exceptions();
-            proxy.no_proxy = NoProxy::from_string(&win_exceptions);
+            // Only read from windows registry proxy settings if not available from an enviroment
+            // variable. This is in line with the stated behavior of both dotnot and nuget on
+            // windows. <https://github.com/seanmonstar/reqwest/issues/2599>
+            if proxy.no_proxy.is_none() {
+                let win_exceptions: String = get_windows_proxy_exceptions();
+                proxy.no_proxy = NoProxy::from_string(&win_exceptions);
+            }
         }
 
         proxy
