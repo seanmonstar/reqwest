@@ -365,8 +365,21 @@ impl Proxy {
         self
     }
 
-    /// Adds a Custom Headers to Proxy
+    /// Adds custom headers to this Proxy
     ///
+    /// # Example
+    /// ```
+    /// # extern crate reqwest;
+    /// # use reqwest::header::*;
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut headers = HeaderMap::new();
+    /// headers.insert(USER_AGENT, "reqwest".parse().unwrap();
+    /// let proxy = reqwest::Proxy::https("http://localhost:1234")?
+    ///     .headers(headers);
+    /// # Ok(())
+    /// # }
+    /// # fn main() {}
+    /// ```
     pub fn headers(mut self, headers: HeaderMap) -> Proxy {
         self.intercept.set_custom_headers(headers);
         self
