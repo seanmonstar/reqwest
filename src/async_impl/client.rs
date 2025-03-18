@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
-use std::{fmt, str};
+use std::{fmt, mem, str};
 
 use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
@@ -3068,7 +3068,7 @@ impl Future for PendingRequest {
             let res = Response::new(
                 res,
                 self.url.clone(),
-                self.urls.clone(),
+                mem::take(&mut self.urls),
                 self.client.accepts,
                 self.total_timeout.take(),
                 self.read_timeout,
