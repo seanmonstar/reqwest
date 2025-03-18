@@ -1,3 +1,9 @@
+## v0.12.15
+
+- Fix Windows to support both `ProxyOverride` and `NO_PROXY`.
+- Fix http3 to support streaming response bodies.
+- Fix http3 dependency from public API misuse.
+
 ## v0.12.14
 
 - Fix missing `fetch_mode_no_cors()`, marking as deprecated when not on WASM.
