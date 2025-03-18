@@ -3056,6 +3056,8 @@ impl Future for PendingRequest {
                             continue;
                         }
                         redirect::ActionKind::Stop => {
+                            // Remove the last url from the history as it is already in self.url
+                            self.as_mut().urls().pop();
                             debug!("redirect policy disallowed redirection to '{loc}'");
                         }
                         redirect::ActionKind::Error(err) => {
