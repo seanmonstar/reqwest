@@ -191,15 +191,11 @@ async fn test_custom_headers() {
     headers.insert(
         // reqwest::header::HeaderName::from_static("Proxy-Authorization"),
         reqwest::header::PROXY_AUTHORIZATION,
-        "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==".parse().unwrap()
+        "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==".parse().unwrap(),
     );
 
     let res = reqwest::Client::builder()
-        .proxy(
-            reqwest::Proxy::http(&proxy)
-                .unwrap()
-                .headers(headers),
-        )
+        .proxy(reqwest::Proxy::http(&proxy).unwrap().headers(headers))
         .build()
         .unwrap()
         .get(url)
