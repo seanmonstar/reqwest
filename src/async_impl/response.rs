@@ -526,5 +526,7 @@ mod tests {
 
         assert_eq!(response.status(), 200);
         assert_eq!(*response.url(), url);
+        assert!(response.history().is_empty());
+        assert_eq!(response.all_urls().collect::<Vec<_>>(), vec![&url]);
     }
 }
