@@ -2249,9 +2249,12 @@ impl Client {
     fn proxy_custom_headers(&self, dst: &Uri, headers: &mut HeaderMap) {
         for proxy in self.inner.proxies.iter() {
             if proxy.is_match(dst) {
-                for (key, value) in proxy.http_custom_headers(dst).unwrap().iter() {
-                    headers.insert(key.clone(), value.clone());
+                if let Some(iter) = proxy.http_custom_headers(dst) {
+                    iter.iter().for_each(|(key, value)| {
+                        headers.insert(key, value.clone());
+                    });
                 }
+
                 break;
             }
         }
