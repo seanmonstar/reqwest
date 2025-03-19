@@ -529,7 +529,7 @@ impl ConnectorService {
                         port,
                         self.user_agent.clone(),
                         auth,
-                        misc
+                        misc,
                     )
                     .await?;
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
@@ -565,7 +565,8 @@ impl ConnectorService {
                     log::trace!("tunneling HTTPS over proxy");
                     let maybe_server_name = ServerName::try_from(host.as_str().to_owned())
                         .map_err(|_| "Invalid Server Name");
-                    let tunneled = tunnel(conn, host, port, self.user_agent.clone(), auth, misc).await?;
+                    let tunneled =
+                        tunnel(conn, host, port, self.user_agent.clone(), auth, misc).await?;
                     let server_name = maybe_server_name?;
                     let io = RustlsConnector::from(tls)
                         .connect(server_name, TokioIo::new(tunneled))
@@ -1576,7 +1577,7 @@ mod tests {
                 port,
                 ua(),
                 Some(proxy::encode_basic_auth("Aladdin", "open sesame")),
-                None
+                None,
             )
             .await
         };

@@ -378,7 +378,7 @@ impl Proxy {
     /// # use reqwest::header::*;
     /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut headers = HeaderMap::new();
-    /// headers.insert(USER_AGENT, "reqwest".parse().unwrap();
+    /// headers.insert(USER_AGENT, "reqwest".parse().unwrap());
     /// let proxy = reqwest::Proxy::https("http://localhost:1234")?
     ///     .headers(headers);
     /// # Ok(())
@@ -422,9 +422,9 @@ impl Proxy {
             Intercept::System(system) => system
                 .get("http")
                 .and_then(|s| s.maybe_http_custom_headers().cloned()),
-            Intercept::Custom(custom) => {
-                custom.call(uri).and_then(|s| s.maybe_http_custom_headers().cloned())
-            }
+            Intercept::Custom(custom) => custom
+                .call(uri)
+                .and_then(|s| s.maybe_http_custom_headers().cloned()),
             Intercept::Https(_) => None,
         }
     }
@@ -621,7 +621,7 @@ impl ProxyScheme {
         Ok(ProxyScheme::Http {
             auth: None,
             host: host.parse().map_err(crate::error::builder)?,
-            misc: None
+            misc: None,
         })
     }
 
@@ -630,7 +630,7 @@ impl ProxyScheme {
         Ok(ProxyScheme::Https {
             auth: None,
             host: host.parse().map_err(crate::error::builder)?,
-            misc: None
+            misc: None,
         })
     }
 
@@ -855,8 +855,16 @@ impl ProxyScheme {
 impl fmt::Debug for ProxyScheme {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ProxyScheme::Http { auth: _auth, host, misc: _misc } => write!(f, "http://{host}"),
-            ProxyScheme::Https { auth: _auth, host, misc: _misc } => write!(f, "https://{host}"),
+            ProxyScheme::Http {
+                auth: _auth,
+                host,
+                misc: _misc,
+            } => write!(f, "http://{host}"),
+            ProxyScheme::Https {
+                auth: _auth,
+                host,
+                misc: _misc,
+            } => write!(f, "https://{host}"),
             #[cfg(feature = "socks")]
             ProxyScheme::Socks4 { addr, remote_dns } => {
                 let h = if *remote_dns { "a" } else { "" };
@@ -918,7 +926,7 @@ impl Intercept {
             | Intercept::Http(ref mut s)
             | Intercept::Https(ref mut s) => s.set_custom_headers(headers),
             Intercept::System(_) => unimplemented!(),
-            Intercept::Custom(_) => unimplemented!()
+            Intercept::Custom(_) => unimplemented!(),
         }
     }
 }
@@ -1823,7 +1831,7 @@ mod tests {
             intercept: Intercept::Http(ProxyScheme::Http {
                 auth: Some(HeaderValue::from_static("auth1")),
                 host: http::uri::Authority::from_static("authority"),
-                misc: None
+                misc: None,
             }),
             no_proxy: None,
         };
@@ -1837,7 +1845,7 @@ mod tests {
             intercept: Intercept::Http(ProxyScheme::Http {
                 auth: None,
                 host: http::uri::Authority::from_static("authority"),
-                misc: None
+                misc: None,
             }),
             no_proxy: None,
         };
@@ -1851,7 +1859,7 @@ mod tests {
             intercept: Intercept::Http(ProxyScheme::Https {
                 auth: Some(HeaderValue::from_static("auth2")),
                 host: http::uri::Authority::from_static("authority"),
-                misc: None
+                misc: None,
             }),
             no_proxy: None,
         };
@@ -1865,7 +1873,7 @@ mod tests {
             intercept: Intercept::All(ProxyScheme::Http {
                 auth: Some(HeaderValue::from_static("auth3")),
                 host: http::uri::Authority::from_static("authority"),
-                misc: None
+                misc: None,
             }),
             no_proxy: None,
         };
@@ -1879,7 +1887,7 @@ mod tests {
             intercept: Intercept::All(ProxyScheme::Https {
                 auth: Some(HeaderValue::from_static("auth4")),
                 host: http::uri::Authority::from_static("authority"),
-                misc: None
+                misc: None,
             }),
             no_proxy: None,
         };
@@ -1893,7 +1901,7 @@ mod tests {
             intercept: Intercept::All(ProxyScheme::Https {
                 auth: None,
                 host: http::uri::Authority::from_static("authority"),
-                misc: None
+                misc: None,
             }),
             no_proxy: None,
         };
@@ -1911,7 +1919,7 @@ mod tests {
                     ProxyScheme::Http {
                         auth: Some(HeaderValue::from_static("auth5")),
                         host: http::uri::Authority::from_static("authority"),
-                        misc: None
+                        misc: None,
                     },
                 );
                 m
@@ -1932,7 +1940,7 @@ mod tests {
                     ProxyScheme::Https {
                         auth: Some(HeaderValue::from_static("auth6")),
                         host: http::uri::Authority::from_static("authority"),
-                        misc: None
+                        misc: None,
                     },
                 );
                 m
