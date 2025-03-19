@@ -378,7 +378,7 @@ impl Proxy {
     /// # use reqwest::header::*;
     /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut headers = HeaderMap::new();
-    /// headers.insert(USER_AGENT, "reqwest".parse().unwrap();
+    /// headers.insert(USER_AGENT, "reqwest".parse().unwrap());
     /// let proxy = reqwest::Proxy::https("http://localhost:1234")?
     ///     .headers(headers);
     /// # Ok(())
