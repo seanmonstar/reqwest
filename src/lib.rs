@@ -264,6 +264,31 @@ macro_rules! if_hyper {
     )*}
 }
 
+/// Create a `http::HeaderMap` with the provided key-value pairs.
+/// The key-value pairs are separated by `=>`, and the pairs are separated by `,`.
+/// The key must be a reqwest::header variant, and the value must be a string.
+///
+/// ```rust
+/// use reqwest::headers;
+/// let headers = headers![
+///     reqwest::header::CONTENT_TYPE => "application/json",
+///     reqwest::header::USER_AGENT => "reqwest",
+/// ];
+/// ```
+#[macro_export]
+macro_rules! headers {
+    () => (
+        http::HeaderMap::new()
+    );
+    ($($key:expr => $value:expr),+ $(,)?) => ({
+        let mut headers = http::HeaderMap::new();
+        $(
+            headers.insert($key, $value.parse().unwrap());
+        )+
+        headers
+    });
+}
+
 pub use http::header;
 pub use http::Method;
 pub use http::{StatusCode, Version};

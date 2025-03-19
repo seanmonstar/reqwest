@@ -6,6 +6,7 @@ use support::server;
 use std::env;
 
 use once_cell::sync::Lazy;
+use reqwest::headers;
 use tokio::sync::Mutex;
 
 // serialize tests that read from / write to environment variables
@@ -187,12 +188,9 @@ async fn test_custom_headers() {
     });
 
     let proxy = format!("http://{}", server.addr());
-    let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert(
-        // reqwest::header::HeaderName::from_static("Proxy-Authorization"),
-        reqwest::header::PROXY_AUTHORIZATION,
-        "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==".parse().unwrap(),
-    );
+    let headers = headers![
+        reqwest::header::PROXY_AUTHORIZATION => "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+    ];
 
     let res = reqwest::Client::builder()
         .proxy(reqwest::Proxy::http(&proxy).unwrap().headers(headers))
