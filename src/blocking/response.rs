@@ -190,12 +190,10 @@ impl Response {
 
     /// Get the content length of the response, if it is known.
     ///
-    /// This value is not computed by parsing the `Content-Length` header of the
-    /// response, but by looking at the number of bytes actually streamed from
-    /// the server.
     ///
-    /// To read the value of the `Content-Length` header, use the
-    /// [`Response::headers`] method instead.
+    /// This value does not directly represents the value of the `Content-Length`
+    /// header, but rather the size of the response's body. To read the header's
+    /// value, please use the [`Response::headers`] method instead.
     ///
     /// Reasons it may not be known:
     ///
