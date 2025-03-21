@@ -14,7 +14,7 @@ use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
 #[cfg(feature = "http3")]
-use crate::async_impl::h3_client::connect::H3Connector;
+use crate::async_impl::h3_client::connect::{H3Connector, H3ClientConfig};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
 use crate::connect::{
@@ -176,6 +176,14 @@ struct Config {
     quic_receive_window: Option<VarInt>,
     #[cfg(feature = "http3")]
     quic_send_window: Option<u64>,
+    #[cfg(feature = "http3")]
+    h3_max_field_section_size: Option<u64>,
+    #[cfg(feature = "http3")]
+    h3_send_grease: Option<bool>,
+    #[cfg(feature = "http3")]
+    h3_enable_extended_connect: Option<bool>,
+    #[cfg(feature = "http3")]
+    h3_enable_datagram: Option<bool>,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
     dns_resolver: Option<Arc<dyn Resolve>>,
 }
@@ -280,6 +288,14 @@ impl ClientBuilder {
                 quic_receive_window: None,
                 #[cfg(feature = "http3")]
                 quic_send_window: None,
+                #[cfg(feature = "http3")]
+                h3_max_field_section_size: None,
+                #[cfg(feature = "http3")]
+                h3_send_grease: None,
+                #[cfg(feature = "http3")]
+                h3_enable_extended_connect: None,
+                #[cfg(feature = "http3")]
+                h3_enable_datagram: None,
                 dns_resolver: None,
             },
         }
@@ -343,6 +359,10 @@ impl ClientBuilder {
                  quic_stream_receive_window,
                  quic_receive_window,
                  quic_send_window,
+                 h3_max_field_section_size,
+                 h3_send_grease,
+                 h3_enable_extended_connect,
+                 h3_enable_datagram,
                  local_address,
                  http_version_pref: &HttpVersionPref| {
                     let mut transport_config = TransportConfig::default();
@@ -365,11 +385,30 @@ impl ClientBuilder {
                         transport_config.send_window(send_window);
                     }
 
+                    let mut h3_client_config = H3ClientConfig::default();
+
+                    if let Some(max_field_section_size) = h3_max_field_section_size {
+                        h3_client_config.max_field_section_size = Some(max_field_section_size);
+                    }
+
+                    if let Some(send_grease) = h3_send_grease {
+                        h3_client_config.send_grease = Some(send_grease);
+                    }
+
+                    if let Some(enable_extended_connect) = h3_enable_extended_connect {
+                        h3_client_config.enable_extended_connect = Some(enable_extended_connect);
+                    }
+
+                    if let Some(enable_datagram) = h3_enable_datagram {
+                        h3_client_config.enable_datagram = Some(enable_datagram);
+                    }
+
                     let res = H3Connector::new(
                         DynResolver::new(resolver),
                         tls,
                         local_address,
                         transport_config,
+                        h3_client_config,
                     );
 
                     match res {
@@ -492,6 +531,10 @@ impl ClientBuilder {
                             config.quic_stream_receive_window,
                             config.quic_receive_window,
                             config.quic_send_window,
+                            config.h3_max_field_section_size,
+                            config.h3_send_grease,
+                            config.h3_enable_extended_connect,
+                            config.h3_enable_datagram,
                             config.local_address,
                             &config.http_version_pref,
                         )?;
@@ -687,6 +730,10 @@ impl ClientBuilder {
                             config.quic_stream_receive_window,
                             config.quic_receive_window,
                             config.quic_send_window,
+                            config.h3_max_field_section_size,
+                            config.h3_send_grease,
+                            config.h3_enable_extended_connect,
+                            config.h3_enable_datagram,
                             config.local_address,
                             &config.http_version_pref,
                         )?;
@@ -1959,6 +2006,48 @@ impl ClientBuilder {
     #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
     pub fn http3_send_window(mut self, value: u64) -> ClientBuilder {
         self.config.quic_send_window = Some(value);
+        self
+    }
+
+    /// The MAX_FIELD_SECTION_SIZE in HTTP/3 refers to the maximum size of the dynamic table used in HPACK compression.
+    /// HPACK is the compression algorithm used in HTTP/3 to reduce the size of the header fields in HTTP requests and responses.
+    ///
+    /// In HTTP/3, the MAX_FIELD_SECTION_SIZE is set to 12.
+    /// This means that the dynamic table used for HPACK compression can have a maximum size of 2^12 bytes, which is 4KB.
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_max_field_section_size(mut self, value: u64) -> ClientBuilder {
+        self.config.h3_max_field_section_size = Some(value.try_into().unwrap());
+        self
+    }
+
+    /// Just like in HTTP/2, HTTP/3 also uses the concept of "grease"
+    /// to prevent potential interoperability issues in the future.
+    /// In HTTP/3, the concept of grease is used to ensure that the protocol can evolve
+    /// and accommodate future changes without breaking existing implementations.
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_send_grease(mut self, enabled: bool) -> ClientBuilder {
+        self.config.h3_send_grease = Some(enabled);
+        self
+    }
+
+    /// https://www.rfc-editor.org/info/rfc8441 defines an extended CONNECT method in Section 4,
+    /// enabled by the SETTINGS_ENABLE_CONNECT_PROTOCOL parameter.
+    /// That parameter is only defined for HTTP/2.
+    /// for extended CONNECT in HTTP/3; instead, the SETTINGS_ENABLE_WEBTRANSPORT setting implies that an endpoint supports extended CONNECT.
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_enable_extended_connect(mut self, enabled: bool) -> ClientBuilder {
+        self.config.h3_enable_extended_connect = Some(enabled);
+        self
+    }
+
+    /// Enable HTTP Datagrams, see https://datatracker.ietf.org/doc/rfc9297/ for details
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_enable_datagram(mut self, enabled: bool) -> ClientBuilder {
+        self.config.h3_enable_datagram = Some(enabled);
         self
     }
 
