@@ -180,8 +180,6 @@ struct Config {
     h3_max_field_section_size: Option<u64>,
     #[cfg(feature = "http3")]
     h3_send_grease: Option<bool>,
-    #[cfg(feature = "http3")]
-    h3_enable_datagram: Option<bool>,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
     dns_resolver: Option<Arc<dyn Resolve>>,
 }
@@ -290,8 +288,6 @@ impl ClientBuilder {
                 h3_max_field_section_size: None,
                 #[cfg(feature = "http3")]
                 h3_send_grease: None,
-                #[cfg(feature = "http3")]
-                h3_enable_datagram: None,
                 dns_resolver: None,
             },
         }
@@ -357,7 +353,6 @@ impl ClientBuilder {
                  quic_send_window,
                  h3_max_field_section_size,
                  h3_send_grease,
-                 h3_enable_datagram,
                  local_address,
                  http_version_pref: &HttpVersionPref| {
                     let mut transport_config = TransportConfig::default();
@@ -388,10 +383,6 @@ impl ClientBuilder {
 
                     if let Some(send_grease) = h3_send_grease {
                         h3_client_config.send_grease = Some(send_grease);
-                    }
-
-                    if let Some(enable_datagram) = h3_enable_datagram {
-                        h3_client_config.enable_datagram = Some(enable_datagram);
                     }
 
                     let res = H3Connector::new(
@@ -524,7 +515,6 @@ impl ClientBuilder {
                             config.quic_send_window,
                             config.h3_max_field_section_size,
                             config.h3_send_grease,
-                            config.h3_enable_datagram,
                             config.local_address,
                             &config.http_version_pref,
                         )?;
@@ -722,7 +712,6 @@ impl ClientBuilder {
                             config.quic_send_window,
                             config.h3_max_field_section_size,
                             config.h3_send_grease,
-                            config.h3_enable_datagram,
                             config.local_address,
                             &config.http_version_pref,
                         )?;
@@ -2029,20 +2018,6 @@ impl ClientBuilder {
     #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
     pub fn http3_send_grease(mut self, enabled: bool) -> ClientBuilder {
         self.config.h3_send_grease = Some(enabled);
-        self
-    }
-
-    /// Indicates that the client supports HTTP/3 datagrams
-    ///
-    /// See: <https://www.rfc-editor.org/rfc/rfc9297#section-2.1.1>
-    ///
-    /// Please see docs in [`Builder`] in [`h3`].
-    ///
-    /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.enable_datagram
-    #[cfg(feature = "http3")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
-    pub fn http3_enable_datagram(mut self, enabled: bool) -> ClientBuilder {
-        self.config.h3_enable_datagram = Some(enabled);
         self
     }
 

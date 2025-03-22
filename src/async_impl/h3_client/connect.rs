@@ -44,14 +44,6 @@ pub(crate) struct H3ClientConfig {
     /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.send_grease
     pub(crate) send_grease: Option<bool>,
 
-    /// Indicates that the client supports HTTP/3 datagrams
-    ///
-    /// See: <https://www.rfc-editor.org/rfc/rfc9297#section-2.1.1>
-    ///
-    /// Please see docs in [`Builder`] in [`h3`].
-    ///
-    /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.enable_datagram
-    pub(crate) enable_datagram: Option<bool>,
 }
 
 impl Default for H3ClientConfig {
@@ -59,7 +51,6 @@ impl Default for H3ClientConfig {
         Self {
             max_field_section_size: None,
             send_grease: None,
-            enable_datagram: None,
         }
     }
 }
@@ -132,7 +123,6 @@ impl H3Connector {
             match self.endpoint.connect(addr, server_name)?.await {
                 Ok(new_conn) => {
                     let quinn_conn = Connection::new(new_conn);
-
                     let mut h3_client_builder = h3::client::builder();
                     if let Some(max_field_section_size) = self.client_config.max_field_section_size {
                         h3_client_builder.max_field_section_size(max_field_section_size);
@@ -140,10 +130,6 @@ impl H3Connector {
                     if let Some(send_grease) = self.client_config.send_grease {
                         h3_client_builder.send_grease(send_grease);
                     }
-                    if let Some(enable_datagram) = self.client_config.enable_datagram {
-                        h3_client_builder.enable_datagram(enable_datagram);
-                    }
-
                     return Ok(h3_client_builder.build(quinn_conn).await?);
                 }
                 Err(e) => err = Some(e),
