@@ -1,8 +1,8 @@
 //! DNS resolution via the [hickory-resolver](https://github.com/hickory-dns/hickory-dns) crate
 
 use hickory_resolver::{
-    config::LookupIpStrategy, error::ResolveError, lookup_ip::LookupIpIntoIter, system_conf,
-    TokioAsyncResolver,
+    config::LookupIpStrategy, lookup_ip::LookupIpIntoIter, name_server::TokioConnectionProvider,
+    ResolveError, TokioResolver,
 };
 use once_cell::sync::OnceCell;
 
@@ -18,7 +18,7 @@ pub(crate) struct HickoryDnsResolver {
     /// Since we might not have been called in the context of a
     /// Tokio Runtime in initialization, so we must delay the actual
     /// construction of the resolver.
-    state: Arc<OnceCell<TokioAsyncResolver>>,
+    state: Arc<OnceCell<TokioResolver>>,
 }
 
 struct SocketAddrs {
@@ -55,10 +55,12 @@ impl Iterator for SocketAddrs {
 /// which reads from `/etc/resolve.conf`. The options are
 /// overridden to look up for both IPv4 and IPv6 addresses
 /// to work with "happy eyeballs" algorithm.
-fn new_resolver() -> Result<TokioAsyncResolver, HickoryDnsSystemConfError> {
-    let (config, mut opts) = system_conf::read_system_conf().map_err(HickoryDnsSystemConfError)?;
+fn new_resolver() -> Result<TokioResolver, HickoryDnsSystemConfError> {
+    let mut builder = TokioResolver::builder(TokioConnectionProvider::default())
+        .map_err(HickoryDnsSystemConfError)?;
+    let opts = builder.options_mut();
     opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
-    Ok(TokioAsyncResolver::tokio(config, opts))
+    Ok(builder.build())
 }
 
 impl fmt::Display for HickoryDnsSystemConfError {
