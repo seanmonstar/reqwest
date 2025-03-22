@@ -2005,7 +2005,7 @@ impl ClientBuilder {
 
     /// Enable whether to send HTTP/3 protocol grease on the connections.
     ///
-    /// Just like in HTTP/2, HTTP/3 also uses the concept of "grease"
+    /// HTTP/3 uses the concept of "grease"
     ///
     /// to prevent potential interoperability issues in the future.
     /// In HTTP/3, the concept of grease is used to ensure that the protocol can evolve
