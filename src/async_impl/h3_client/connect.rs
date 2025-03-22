@@ -43,7 +43,6 @@ pub(crate) struct H3ClientConfig {
     ///
     /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.send_grease
     pub(crate) send_grease: Option<bool>,
-
 }
 
 impl Default for H3ClientConfig {
@@ -124,7 +123,8 @@ impl H3Connector {
                 Ok(new_conn) => {
                     let quinn_conn = Connection::new(new_conn);
                     let mut h3_client_builder = h3::client::builder();
-                    if let Some(max_field_section_size) = self.client_config.max_field_section_size {
+                    if let Some(max_field_section_size) = self.client_config.max_field_section_size
+                    {
                         h3_client_builder.max_field_section_size(max_field_section_size);
                     }
                     if let Some(send_grease) = self.client_config.send_grease {
