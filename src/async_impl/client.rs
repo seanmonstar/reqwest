@@ -14,7 +14,7 @@ use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
 #[cfg(feature = "http3")]
-use crate::async_impl::h3_client::connect::H3Connector;
+use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
 use crate::connect::{
@@ -176,6 +176,10 @@ struct Config {
     quic_receive_window: Option<VarInt>,
     #[cfg(feature = "http3")]
     quic_send_window: Option<u64>,
+    #[cfg(feature = "http3")]
+    h3_max_field_section_size: Option<u64>,
+    #[cfg(feature = "http3")]
+    h3_send_grease: Option<bool>,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
     dns_resolver: Option<Arc<dyn Resolve>>,
 }
@@ -280,6 +284,10 @@ impl ClientBuilder {
                 quic_receive_window: None,
                 #[cfg(feature = "http3")]
                 quic_send_window: None,
+                #[cfg(feature = "http3")]
+                h3_max_field_section_size: None,
+                #[cfg(feature = "http3")]
+                h3_send_grease: None,
                 dns_resolver: None,
             },
         }
@@ -343,6 +351,8 @@ impl ClientBuilder {
                  quic_stream_receive_window,
                  quic_receive_window,
                  quic_send_window,
+                 h3_max_field_section_size,
+                 h3_send_grease,
                  local_address,
                  http_version_pref: &HttpVersionPref| {
                     let mut transport_config = TransportConfig::default();
@@ -365,11 +375,22 @@ impl ClientBuilder {
                         transport_config.send_window(send_window);
                     }
 
+                    let mut h3_client_config = H3ClientConfig::default();
+
+                    if let Some(max_field_section_size) = h3_max_field_section_size {
+                        h3_client_config.max_field_section_size = Some(max_field_section_size);
+                    }
+
+                    if let Some(send_grease) = h3_send_grease {
+                        h3_client_config.send_grease = Some(send_grease);
+                    }
+
                     let res = H3Connector::new(
                         DynResolver::new(resolver),
                         tls,
                         local_address,
                         transport_config,
+                        h3_client_config,
                     );
 
                     match res {
@@ -492,6 +513,8 @@ impl ClientBuilder {
                             config.quic_stream_receive_window,
                             config.quic_receive_window,
                             config.quic_send_window,
+                            config.h3_max_field_section_size,
+                            config.h3_send_grease,
                             config.local_address,
                             &config.http_version_pref,
                         )?;
@@ -687,6 +710,8 @@ impl ClientBuilder {
                             config.quic_stream_receive_window,
                             config.quic_receive_window,
                             config.quic_send_window,
+                            config.h3_max_field_section_size,
+                            config.h3_send_grease,
                             config.local_address,
                             &config.http_version_pref,
                         )?;
@@ -1959,6 +1984,40 @@ impl ClientBuilder {
     #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
     pub fn http3_send_window(mut self, value: u64) -> ClientBuilder {
         self.config.quic_send_window = Some(value);
+        self
+    }
+
+    /// Set the maximum HTTP/3 header size this client is willing to accept.
+    ///
+    /// See [header size constraints] section of the specification for details.
+    ///
+    /// [header size constraints]: https://www.rfc-editor.org/rfc/rfc9114.html#name-header-size-constraints
+    ///
+    /// Please see docs in [`Builder`] in [`h3`].
+    ///
+    /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.max_field_section_size
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_max_field_section_size(mut self, value: u64) -> ClientBuilder {
+        self.config.h3_max_field_section_size = Some(value.try_into().unwrap());
+        self
+    }
+
+    /// Enable whether to send HTTP/3 protocol grease on the connections.
+    ///
+    /// HTTP/3 uses the concept of "grease"
+    ///
+    /// to prevent potential interoperability issues in the future.
+    /// In HTTP/3, the concept of grease is used to ensure that the protocol can evolve
+    /// and accommodate future changes without breaking existing implementations.
+    ///
+    /// Please see docs in [`Builder`] in [`h3`].
+    ///
+    /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.send_grease
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_send_grease(mut self, enabled: bool) -> ClientBuilder {
+        self.config.h3_send_grease = Some(enabled);
         self
     }
 
