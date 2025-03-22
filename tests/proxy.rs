@@ -6,6 +6,7 @@ use support::server;
 use std::env;
 
 use once_cell::sync::Lazy;
+use reqwest::headers;
 use tokio::sync::Mutex;
 
 // serialize tests that read from / write to environment variables
@@ -169,6 +170,38 @@ async fn test_no_proxy() {
         .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_custom_headers() {
+    let url = "http://hyper.rs/prox";
+    let server = server::http(move |req| {
+        assert_eq!(req.method(), "GET");
+        assert_eq!(req.uri(), url);
+        assert_eq!(req.headers()["host"], "hyper.rs");
+        assert_eq!(
+            req.headers()["proxy-authorization"],
+            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="
+        );
+        async { http::Response::default() }
+    });
+
+    let proxy = format!("http://{}", server.addr());
+    let headers = headers![
+        reqwest::header::PROXY_AUTHORIZATION => "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+    ];
+
+    let res = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::http(&proxy).unwrap().headers(headers))
+        .build()
+        .unwrap()
+        .get(url)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
