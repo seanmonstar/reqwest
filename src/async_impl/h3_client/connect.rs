@@ -33,12 +33,6 @@ pub(crate) struct H3ClientConfig {
     /// and accommodate future changes without breaking existing implementations.
     pub(crate) send_grease: Option<bool>,
 
-    /// https://www.rfc-editor.org/info/rfc8441 defines an extended CONNECT method in Section 4,
-    /// enabled by the SETTINGS_ENABLE_CONNECT_PROTOCOL parameter.
-    /// That parameter is only defined for HTTP/2.
-    /// for extended CONNECT in HTTP/3; instead, the SETTINGS_ENABLE_WEBTRANSPORT setting implies that an endpoint supports extended CONNECT.
-    pub(crate) enable_extended_connect: Option<bool>,
-
     /// Enable HTTP Datagrams, see https://datatracker.ietf.org/doc/rfc9297/ for details
     pub(crate) enable_datagram: Option<bool>,
 }
@@ -48,7 +42,6 @@ impl Default for H3ClientConfig {
         Self {
             max_field_section_size: None,
             send_grease: None,
-            enable_extended_connect: None,
             enable_datagram: None,
         }
     }
@@ -129,9 +122,6 @@ impl H3Connector {
                     }
                     if let Some(send_grease) = self.client_config.send_grease {
                         h3_client_builder.send_grease(send_grease);
-                    }
-                    if let Some(enable_extended_connect) = self.client_config.enable_extended_connect {
-                        h3_client_builder.enable_extended_connect(enable_extended_connect);
                     }
                     if let Some(enable_datagram) = self.client_config.enable_datagram {
                         h3_client_builder.enable_datagram(enable_datagram);
