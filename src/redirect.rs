@@ -4,11 +4,17 @@
 //! maximum redirect chain of 10 hops. To customize this behavior, a
 //! `redirect::Policy` can be used with a `ClientBuilder`.
 
-use std::error::Error as StdError;
 use std::fmt;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::{error::Error as StdError, str::FromStr};
 
 use crate::header::{HeaderMap, AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, WWW_AUTHENTICATE};
+use http::Uri;
 use hyper::StatusCode;
+use tower_http::follow_redirect::policy::{
+    Action as TowerAction, Attempt as TowerAttempt, Policy as TowerPolicy,
+};
 
 use crate::Url;
 
@@ -97,10 +103,10 @@ impl Policy {
     /// [`Attempt`]: struct.Attempt.html
     pub fn custom<T>(policy: T) -> Self
     where
-        T: Fn(Attempt) -> Action + Send + Sync + 'static,
+        T: FnMut(Attempt) -> Action + Send + Sync + 'static,
     {
         Self {
-            inner: PolicyKind::Custom(Box::new(policy)),
+            inner: PolicyKind::Custom(Arc::new(Mutex::new(policy))),
         }
     }
 
@@ -126,7 +132,10 @@ impl Policy {
     /// ```
     pub fn redirect(&self, attempt: Attempt) -> Action {
         match self.inner {
-            PolicyKind::Custom(ref custom) => custom(attempt),
+            PolicyKind::Custom(ref custom) => {
+                let mut custom = custom.lock().unwrap();
+                custom(attempt)
+            }
             PolicyKind::Limit(max) => {
                 if attempt.previous.len() >= max {
                     attempt.error(TooManyRedirects)
@@ -148,7 +157,8 @@ impl Policy {
     }
 
     pub(crate) fn is_default(&self) -> bool {
-        matches!(self.inner, PolicyKind::Limit(10))
+        let _policy = Arc::new(Mutex::new(PolicyKind::Limit(10)));
+        matches!(&self.inner, _policy)
     }
 }
 
@@ -201,7 +211,7 @@ impl<'a> Attempt<'a> {
 }
 
 enum PolicyKind {
-    Custom(Box<dyn Fn(Attempt) -> Action + Send + Sync + 'static>),
+    Custom(Arc<Mutex<dyn FnMut(Attempt) -> Action + Send + Sync + 'static>>),
     Limit(usize),
     None,
 }
@@ -255,6 +265,31 @@ impl fmt::Display for TooManyRedirects {
 }
 
 impl StdError for TooManyRedirects {}
+
+/// Convert a `TowerPolicy` to a `Policy`.
+pub fn tower_policy(mut policy: impl TowerPolicy<(), ()>) -> impl FnMut(Attempt<'_>) -> Action {
+    move |attempt| {
+        let location = Uri::from_str(attempt.url().as_str()).unwrap();
+        let previous = Uri::from_str(attempt.previous().last().unwrap().as_str()).unwrap();
+        let tower_attempt = TowerAttempt::new(
+            StatusCode::from_u16(attempt.status().as_u16()).unwrap(),
+            &location,
+            &previous,
+        );
+
+        match policy.redirect(&tower_attempt) {
+            Ok(action) => match action {
+                TowerAction::Follow => Action {
+                    inner: ActionKind::Follow,
+                },
+                TowerAction::Stop => Action {
+                    inner: ActionKind::Stop,
+                },
+            },
+            Err(_) => unimplemented!(),
+        }
+    }
+}
 
 #[test]
 fn test_redirect_policy_limit() {
@@ -334,4 +369,37 @@ fn test_remove_sensitive_headers() {
 
     remove_sensitive_headers(&mut headers, &next, &prev);
     assert_eq!(headers, filtered_headers);
+}
+
+#[test]
+fn test_tower_policy_conversion() {
+    use tower_http::follow_redirect::policy::{FilterCredentials, Limited};
+
+    let policy = Policy::custom(tower_policy(FilterCredentials::new()));
+    let initial = Url::parse("https://example.com/old").unwrap();
+    let same_origin = Url::parse("http://example.com/new").unwrap();
+    match policy.check(StatusCode::FOUND, &same_origin, &[initial]) {
+        ActionKind::Follow => (),
+        other => panic!("unexpected {other:?}"),
+    }
+    let initial = Url::parse("https://example.com/old").unwrap();
+    let cross_origin = Url::parse("https://www.example.com/new").unwrap();
+    match policy.check(StatusCode::FOUND, &cross_origin, &[initial]) {
+        ActionKind::Follow => (),
+        other => panic!("unexpected {other:?}"),
+    }
+
+    let policy = Policy::custom(tower_policy(Limited::new(1)));
+    let a = Url::parse("http://a.com").unwrap();
+    let b = Url::parse("http://b.com").unwrap();
+    match policy.check(StatusCode::FOUND, &b, &[a]) {
+        ActionKind::Follow => (),
+        other => panic!("unexpected {other:?}"),
+    }
+    let b = Url::parse("http://b.com").unwrap();
+    let c = Url::parse("http://c.com").unwrap();
+    match policy.check(StatusCode::FOUND, &c, &[b]) {
+        ActionKind::Stop => (),
+        other => panic!("unexpected {other:?}"),
+    }
 }
