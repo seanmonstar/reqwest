@@ -165,7 +165,7 @@ impl Response {
 
     /// Get all the intermediate `Url`s traversed by redirects.
     #[inline]
-    pub fn history(&self) -> &Vec<Url> {
+    pub fn history(&self) -> &[Url] {
         self.inner.history()
     }
 
