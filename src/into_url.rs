@@ -63,7 +63,7 @@ impl<'a> IntoUrlSealed for &'a String {
     }
 }
 
-impl<'a> IntoUrlSealed for String {
+impl IntoUrlSealed for String {
     fn into_url(self) -> crate::Result<Url> {
         (&*self).into_url()
     }
@@ -74,27 +74,24 @@ impl<'a> IntoUrlSealed for String {
 }
 
 if_hyper! {
-    pub(crate) fn expect_uri(url: &Url) -> http::Uri {
+    pub(crate) fn try_uri(url: &Url) -> crate::Result<http::Uri> {
         url.as_str()
             .parse()
-            .expect("a parsed Url should always be a valid Uri")
-    }
-
-    pub(crate) fn try_uri(url: &Url) -> Option<http::Uri> {
-        url.as_str().parse().ok()
+            .map_err(|_| crate::error::url_invalid_uri(url.clone()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error;
 
     #[test]
     fn into_url_file_scheme() {
         let err = "file:///etc/hosts".into_url().unwrap_err();
         assert_eq!(
-            err.to_string(),
-            "builder error for url (file:///etc/hosts): URL scheme is not allowed"
+            err.source().unwrap().to_string(),
+            "URL scheme is not allowed"
         );
     }
 
@@ -102,8 +99,8 @@ mod tests {
     fn into_url_blob_scheme() {
         let err = "blob:https://example.com".into_url().unwrap_err();
         assert_eq!(
-            err.to_string(),
-            "builder error for url (blob:https://example.com): URL scheme is not allowed"
+            err.source().unwrap().to_string(),
+            "URL scheme is not allowed"
         );
     }
 

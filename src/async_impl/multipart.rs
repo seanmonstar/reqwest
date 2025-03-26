@@ -3,9 +3,16 @@ use std::borrow::Cow;
 use std::fmt;
 use std::pin::Pin;
 
+#[cfg(feature = "stream")]
+use std::io;
+#[cfg(feature = "stream")]
+use std::path::Path;
+
 use bytes::Bytes;
 use mime_guess::Mime;
 use percent_encoding::{self, AsciiSet, NON_ALPHANUMERIC};
+#[cfg(feature = "stream")]
+use tokio::fs::File;
 
 use futures_core::Stream;
 use futures_util::{future, stream, StreamExt};
@@ -82,6 +89,33 @@ impl Form {
         self.part(name, Part::text(value))
     }
 
+    /// Adds a file field.
+    ///
+    /// The path will be used to try to guess the filename and mime.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() -> std::io::Result<()> {
+    /// let form = reqwest::multipart::Form::new()
+    ///     .file("key", "/path/to/file").await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Errors when the file cannot be opened.
+    #[cfg(feature = "stream")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
+    pub async fn file<T, U>(self, name: T, path: U) -> io::Result<Form>
+    where
+        T: Into<Cow<'static, str>>,
+        U: AsRef<Path>,
+    {
+        Ok(self.part(name, Part::file(path).await?))
+    }
+
     /// Adds a customized Part.
     pub fn part<T>(self, name: T, part: Part) -> Form
     where
@@ -106,9 +140,21 @@ impl Form {
     }
 
     /// Consume this instance and transform into an instance of Body for use in a request.
-    pub(crate) fn stream(mut self) -> Body {
+    pub(crate) fn stream(self) -> Body {
         if self.inner.fields.is_empty() {
             return Body::empty();
+        }
+
+        Body::stream(self.into_stream())
+    }
+
+    /// Produce a stream of the bytes in this `Form`, consuming it.
+    pub fn into_stream(mut self) -> impl Stream<Item = Result<Bytes, crate::Error>> + Send + Sync {
+        if self.inner.fields.is_empty() {
+            let empty_stream: Pin<
+                Box<dyn Stream<Item = Result<Bytes, crate::Error>> + Send + Sync>,
+            > = Box::pin(futures_util::stream::empty());
+            return empty_stream;
         }
 
         // create initial part to init reduce chain
@@ -127,7 +173,7 @@ impl Form {
         let last = stream::once(future::ready(Ok(
             format!("--{}--\r\n", self.boundary()).into()
         )));
-        Body::stream(stream.chain(last))
+        Box::pin(stream.chain(last))
     }
 
     /// Generate a hyper::Body stream for a single Part instance of a Form request.
@@ -216,6 +262,35 @@ impl Part {
     /// length beforehand.
     pub fn stream_with_length<T: Into<Body>>(value: T, length: u64) -> Part {
         Part::new(value.into(), Some(length))
+    }
+
+    /// Makes a file parameter.
+    ///
+    /// # Errors
+    ///
+    /// Errors when the file cannot be opened.
+    #[cfg(feature = "stream")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
+    pub async fn file<T: AsRef<Path>>(path: T) -> io::Result<Part> {
+        let path = path.as_ref();
+        let file_name = path
+            .file_name()
+            .map(|filename| filename.to_string_lossy().into_owned());
+        let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+        let mime = mime_guess::from_ext(ext).first_or_octet_stream();
+        let file = File::open(path).await?;
+        let len = file.metadata().await.map(|m| m.len()).ok();
+        let field = match len {
+            Some(len) => Part::stream_with_length(file, len),
+            None => Part::stream(file),
+        }
+        .mime(mime);
+
+        Ok(if let Some(file_name) = file_name {
+            field.file_name(file_name)
+        } else {
+            field
+        })
     }
 
     fn new(value: Body, body_length: Option<u64>) -> Part {
@@ -354,7 +429,7 @@ impl<P: PartProps> FormParts<P> {
                 _ => return None,
             }
         }
-        // If there is a at least one field there is a special boundary for the very last field.
+        // If there is at least one field there is a special boundary for the very last field.
         if !self.fields.is_empty() {
             length += 2 + self.boundary().len() as u64 + 4
         }
@@ -520,7 +595,7 @@ fn gen_boundary() -> String {
     let c = random();
     let d = random();
 
-    format!("{:016x}-{:016x}-{:016x}-{:016x}", a, b, c, d)
+    format!("{a:016x}-{b:016x}-{c:016x}-{d:016x}")
 }
 
 #[cfg(test)]
@@ -597,7 +672,7 @@ mod tests {
             "START REAL\n{}\nEND REAL",
             std::str::from_utf8(&out).unwrap()
         );
-        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
+        println!("START EXPECTED\n{expected}\nEND EXPECTED");
         assert_eq!(std::str::from_utf8(&out).unwrap(), expected);
     }
 
@@ -629,7 +704,7 @@ mod tests {
             "START REAL\n{}\nEND REAL",
             std::str::from_utf8(&out).unwrap()
         );
-        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
+        println!("START EXPECTED\n{expected}\nEND EXPECTED");
         assert_eq!(std::str::from_utf8(&out).unwrap(), expected);
     }
 

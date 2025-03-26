@@ -4,11 +4,11 @@ use std::future::Future;
 #[cfg(feature = "multipart")]
 use std::io::Cursor;
 use std::io::{self, Read};
-use std::mem;
+use std::mem::{self, MaybeUninit};
 use std::ptr;
 
-use bytes::buf::UninitSlice;
 use bytes::Bytes;
+use futures_channel::mpsc;
 
 use crate::async_impl;
 
@@ -38,7 +38,7 @@ impl Body {
     /// ```rust
     /// # use std::fs::File;
     /// # use reqwest::blocking::Body;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let file = File::open("national_secrets.txt")?;
     /// let body = Body::new(file);
     /// # Ok(())
@@ -51,7 +51,7 @@ impl Body {
     ///
     /// ```rust
     /// # use reqwest::blocking::Body;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let s = "A stringy body";
     /// let body = Body::from(s);
     /// # Ok(())
@@ -70,7 +70,7 @@ impl Body {
     /// ```rust
     /// # use std::fs::File;
     /// # use reqwest::blocking::Body;
-    /// # fn run() -> Result<(), Box<std::error::Error>> {
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let file = File::open("a_large_file.txt")?;
     /// let file_size = file.metadata()?.len();
     /// let body = Body::sized(file, file_size);
@@ -133,12 +133,12 @@ impl Body {
     pub(crate) fn into_async(self) -> (Option<Sender>, async_impl::Body, Option<u64>) {
         match self.kind {
             Kind::Reader(read, len) => {
-                let (tx, rx) = hyper::Body::channel();
+                let (tx, rx) = mpsc::channel(0);
                 let tx = Sender {
                     body: (read, len),
                     tx,
                 };
-                (Some(tx), async_impl::Body::wrap(rx), len)
+                (Some(tx), async_impl::Body::stream(rx), len)
             }
             Kind::Bytes(chunk) => {
                 let len = chunk.len() as u64;
@@ -257,17 +257,30 @@ impl Read for Reader {
 
 pub(crate) struct Sender {
     body: (Box<dyn Read + Send>, Option<u64>),
-    tx: hyper::body::Sender,
+    tx: mpsc::Sender<Result<Bytes, Abort>>,
 }
+
+#[derive(Debug)]
+struct Abort;
+
+impl fmt::Display for Abort {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("abort request body")
+    }
+}
+
+impl std::error::Error for Abort {}
 
 async fn send_future(sender: Sender) -> Result<(), crate::Error> {
     use bytes::{BufMut, BytesMut};
+    use futures_util::SinkExt;
     use std::cmp;
 
     let con_len = sender.body.1;
     let cap = cmp::min(sender.body.1.unwrap_or(8192), 8192);
     let mut written = 0;
-    let mut buf = BytesMut::with_capacity(cap as usize);
+    let mut buf = BytesMut::zeroed(cap as usize);
+    buf.clear();
     let mut body = sender.body.0;
     // Put in an option so that it can be consumed on error to call abort()
     let mut tx = Some(sender.tx);
@@ -283,7 +296,7 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
         //
         // We need to know whether there is any data to send before
         // we check the transmission channel (with poll_ready below)
-        // because somestimes the receiver disappears as soon as is
+        // because sometimes the receiver disappears as soon as it
         // considers the data is completely transmitted, which may
         // be true.
         //
@@ -292,16 +305,19 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
         // This behaviour is questionable, but it exists and the
         // fact is that there is actually no remaining data to read.
         if buf.is_empty() {
-            if buf.remaining_mut() == 0 {
+            if buf.capacity() == buf.len() {
                 buf.reserve(8192);
                 // zero out the reserved memory
-                let uninit = buf.chunk_mut();
+                let uninit = buf.spare_capacity_mut();
+                let uninit_len = uninit.len();
                 unsafe {
-                    ptr::write_bytes(uninit.as_mut_ptr(), 0, uninit.len());
+                    ptr::write_bytes(uninit.as_mut_ptr().cast::<u8>(), 0, uninit_len);
                 }
             }
 
-            let bytes = unsafe { mem::transmute::<&mut UninitSlice, &mut [u8]>(buf.chunk_mut()) };
+            let bytes = unsafe {
+                mem::transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(buf.spare_capacity_mut())
+            };
             match body.read(bytes) {
                 Ok(0) => {
                     // The buffer was empty and nothing's left to
@@ -312,7 +328,11 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
                     buf.advance_mut(n);
                 },
                 Err(e) => {
-                    tx.take().expect("tx only taken on error").abort();
+                    let _ = tx
+                        .take()
+                        .expect("tx only taken on error")
+                        .clone()
+                        .try_send(Err(Abort));
                     return Err(crate::error::body(e));
                 }
             }
@@ -324,7 +344,7 @@ async fn send_future(sender: Sender) -> Result<(), crate::Error> {
         let buf_len = buf.len() as u64;
         tx.as_mut()
             .expect("tx only taken on error")
-            .send_data(buf.split().freeze())
+            .send(Ok(buf.split().freeze()))
             .await
             .map_err(crate::error::body)?;
 

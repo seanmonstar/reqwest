@@ -14,7 +14,7 @@ async fn main() -> Result<(), reqwest::Error> {
         "https://hyper.rs".into()
     };
 
-    eprintln!("Fetching {:?}...", url);
+    eprintln!("Fetching {url:?}...");
 
     // reqwest::get() is a convenience function.
     //
@@ -27,7 +27,7 @@ async fn main() -> Result<(), reqwest::Error> {
 
     let body = res.text().await?;
 
-    println!("{}", body);
+    println!("{body}");
 
     Ok(())
 }

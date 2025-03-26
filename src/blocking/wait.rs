@@ -1,6 +1,6 @@
 use std::future::Future;
 use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::task::{Context, Poll, Wake, Waker};
 use std::thread::{self, Thread};
 use std::time::Duration;
 
@@ -13,14 +13,14 @@ where
     enter();
 
     let deadline = timeout.map(|d| {
-        log::trace!("wait at most {:?}", d);
+        log::trace!("wait at most {d:?}");
         Instant::now() + d
     });
 
     let thread = ThreadWaker(thread::current());
     // Arc shouldn't be necessary, since `Thread` is reference counted internally,
     // but let's just stay safe for now.
-    let waker = futures_util::task::waker(Arc::new(thread));
+    let waker = Waker::from(Arc::new(thread));
     let mut cx = Context::from_waker(&waker);
 
     futures_util::pin_mut!(fut);
@@ -60,9 +60,13 @@ pub(crate) enum Waited<E> {
 
 struct ThreadWaker(Thread);
 
-impl futures_util::task::ArcWake for ThreadWaker {
-    fn wake_by_ref(arc_self: &Arc<Self>) {
-        arc_self.0.unpark();
+impl Wake for ThreadWaker {
+    fn wake(self: Arc<Self>) {
+        self.wake_by_ref();
+    }
+
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.0.unpark();
     }
 }
 

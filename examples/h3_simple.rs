@@ -7,18 +7,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
-    use http::Version;
-    use reqwest::{Client, IntoUrl, Response};
-
-    async fn get<T: IntoUrl + Clone>(url: T) -> reqwest::Result<Response> {
-        Client::builder()
-            .http3_prior_knowledge()
-            .build()?
-            .get(url)
-            .version(Version::HTTP_3)
-            .send()
-            .await
-    }
+    let client = reqwest::Client::builder().http3_prior_knowledge().build()?;
 
     // Some simple CLI args requirements...
     let url = match std::env::args().nth(1) {
@@ -29,16 +18,20 @@ async fn main() -> Result<(), reqwest::Error> {
         }
     };
 
-    eprintln!("Fetching {:?}...", url);
+    eprintln!("Fetching {url:?}...");
 
-    let res = get(url).await?;
+    let res = client
+        .get(url)
+        .version(http::Version::HTTP_3)
+        .send()
+        .await?;
 
     eprintln!("Response: {:?} {}", res.version(), res.status());
     eprintln!("Headers: {:#?}\n", res.headers());
 
     let body = res.text().await?;
 
-    println!("{}", body);
+    println!("{body}");
 
     Ok(())
 }

@@ -50,7 +50,7 @@ impl Error {
     /// if let Err(e) = response {
     ///     if e.is_redirect() {
     ///         if let Some(final_stop) = e.url() {
-    ///             println!("redirect loop at {}", final_stop);
+    ///             println!("redirect loop at {final_stop}");
     ///         }
     ///     }
     /// }
@@ -105,6 +105,11 @@ impl Error {
             if err.is::<TimedOut>() {
                 return true;
             }
+            if let Some(io) = err.downcast_ref::<io::Error>() {
+                if io.kind() == io::ErrorKind::TimedOut {
+                    return true;
+                }
+            }
             source = err.source();
         }
 
@@ -122,7 +127,7 @@ impl Error {
         let mut source = self.source();
 
         while let Some(err) = source {
-            if let Some(hyper_err) = err.downcast_ref::<hyper::Error>() {
+            if let Some(hyper_err) = err.downcast_ref::<hyper_util::client::legacy::Error>() {
                 if hyper_err.is_connect() {
                     return true;
                 }
@@ -160,6 +165,19 @@ impl Error {
     }
 }
 
+/// Converts from external types to reqwest's
+/// internal equivalents.
+///
+/// Currently only is used for `tower::timeout::error::Elapsed`.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn cast_to_internal_error(error: BoxError) -> BoxError {
+    if error.is::<tower::timeout::error::Elapsed>() {
+        Box::new(crate::error::TimedOut) as BoxError
+    } else {
+        error
+    }
+}
+
 impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut builder = f.debug_struct("reqwest::Error");
@@ -167,7 +185,7 @@ impl fmt::Debug for Error {
         builder.field("kind", &self.inner.kind);
 
         if let Some(ref url) = self.inner.url {
-            builder.field("url", url);
+            builder.field("url", &url.as_str());
         }
         if let Some(ref source) = self.inner.source {
             builder.field("source", source);
@@ -193,16 +211,12 @@ impl fmt::Display for Error {
                     debug_assert!(code.is_server_error());
                     "HTTP status server error"
                 };
-                write!(f, "{} ({})", prefix, code)?;
+                write!(f, "{prefix} ({code})")?;
             }
         };
 
         if let Some(url) = &self.inner.url {
-            write!(f, " for url ({})", url.as_str())?;
-        }
-
-        if let Some(e) = &self.inner.source {
-            write!(f, ": {}", e)?;
+            write!(f, " for url ({url})")?;
         }
 
         Ok(())
@@ -225,7 +239,7 @@ impl From<crate::error::Error> for wasm_bindgen::JsValue {
 #[cfg(target_arch = "wasm32")]
 impl From<crate::error::Error> for js_sys::Error {
     fn from(err: Error) -> js_sys::Error {
-        js_sys::Error::new(&format!("{}", err))
+        js_sys::Error::new(&format!("{err}"))
     }
 }
 
@@ -270,9 +284,13 @@ pub(crate) fn url_bad_scheme(url: Url) -> Error {
     Error::new(Kind::Builder, Some(BadScheme)).with_url(url)
 }
 
+pub(crate) fn url_invalid_uri(url: Url) -> Error {
+    Error::new(Kind::Builder, Some("Parsed Url is not a valid Uri")).with_url(url)
+}
+
 if_wasm! {
     pub(crate) fn wasm(js_val: wasm_bindgen::JsValue) -> BoxError {
-        format!("{:?}", js_val).into()
+        format!("{js_val:?}").into()
     }
 }
 
@@ -282,9 +300,15 @@ pub(crate) fn upgrade<E: Into<BoxError>>(e: E) -> Error {
 
 // io::Error helpers
 
-#[allow(unused)]
-pub(crate) fn into_io(e: Error) -> io::Error {
-    e.into_io()
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate",
+    feature = "blocking",
+))]
+pub(crate) fn into_io(e: BoxError) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, e)
 }
 
 #[allow(unused)]
@@ -357,7 +381,7 @@ mod tests {
         // It should have pulled out the original, not nested it...
         match err.inner.kind {
             Kind::Request => (),
-            _ => panic!("{:?}", err),
+            _ => panic!("{err:?}"),
         }
     }
 
@@ -367,7 +391,7 @@ mod tests {
         let err = super::decode_io(orig);
         match err.inner.kind {
             Kind::Decode => (),
-            _ => panic!("{:?}", err),
+            _ => panic!("{err:?}"),
         }
     }
 
