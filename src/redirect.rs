@@ -11,6 +11,10 @@ use crate::header::{HeaderMap, AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, WWW_A
 use hyper::StatusCode;
 
 use crate::Url;
+use tower_http::follow_redirect::policy::{
+    redirect_fn, Action as TowerAction, Attempt as TowerAttempt, Limited,
+    Policy as TowerPolicy,
+};
 
 /// A type that controls the policy on how to handle the following of redirects.
 ///
@@ -149,6 +153,44 @@ impl Policy {
 
     pub(crate) fn is_default(&self) -> bool {
         matches!(self.inner, PolicyKind::Limit(10))
+    }
+
+    pub(crate) fn into_tower_policy(
+        self,
+    ) -> Option<Box<dyn TowerPolicy<(), Box<dyn StdError + Send + Sync>> + Send + Sync>>
+where {
+        match self.inner {
+            PolicyKind::Custom(custom) => {
+                let t = redirect_fn(move |attemp: &TowerAttempt<'_>| -> Result<TowerAction, Box<dyn StdError + Send + Sync>> {
+                    Ok(match custom(Attempt {
+                        status: attemp.status(),
+                        next: &Url::parse(&attemp.location().to_string()).unwrap(),
+                        previous: &[Url::parse(&attemp.previous().to_string()).unwrap()],
+                    })
+                    .inner
+                    {
+                        ActionKind::Follow => TowerAction::Follow,
+                        ActionKind::Stop => TowerAction::Stop,
+                        ActionKind::Error(err) => return Err(err),
+                    })
+                });
+                Some(Box::new(t))
+            }
+            PolicyKind::Limit(max) => {
+                let mut policy = Limited::new(max);
+                let t = redirect_fn(move |attemp: &TowerAttempt<'_>| -> Result<TowerAction, Box<dyn StdError + Send + Sync>> {
+                    match <dyn TowerPolicy<(), Box<dyn StdError + Send + Sync>>>::redirect(&mut policy, attemp)
+                    {
+                        Ok(TowerAction::Follow) => Ok(TowerAction::Follow),
+                        Ok(TowerAction::Stop) =>  Err(Box::new(TooManyRedirects)),
+                        Err(err) =>  Err(err),
+                    }
+                });
+                Some(Box::new(t))
+            }
+
+            PolicyKind::None => None,
+        }
     }
 }
 

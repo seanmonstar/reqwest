@@ -405,7 +405,7 @@ async fn test_redirect_limit() {
     let res = client.get(&url).send().await.unwrap_err();
     assert_eq!(
         res.url().unwrap().as_str(),
-        format!("http://{}/redirect/2", server.addr()).as_str()
+        format!("http://{}/redirect/3", server.addr()).as_str()
     );
     assert!(res.is_redirect());
 }

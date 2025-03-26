@@ -3,7 +3,8 @@ use std::any::Any;
 use std::future::Future;
 use std::net::IpAddr;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
@@ -57,6 +58,9 @@ use quinn::VarInt;
 use tokio::time::Sleep;
 use tower::util::BoxCloneSyncServiceLayer;
 use tower::{Layer, Service};
+use tower_http::follow_redirect::policy::{
+    Action as TowerAction, Attempt as TowerAttempt, Policy as TowerPolicy,
+};
 
 type HyperResponseFuture = hyper_util::client::legacy::ResponseFuture;
 
@@ -795,6 +799,14 @@ impl ClientBuilder {
 
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
 
+        let redirect_policy_display = {
+            if config.redirect_policy.is_default() {
+                None
+            } else {
+                Some(format!("{:?}", &config.redirect_policy))
+            }
+        };
+
         Ok(Client {
             inner: Arc::new(ClientRef {
                 accepts: config.accepts,
@@ -811,13 +823,14 @@ impl ClientBuilder {
                 },
                 hyper: builder.build(connector_builder.build(config.connector_layers)),
                 headers: config.headers,
-                redirect_policy: config.redirect_policy,
+                redirect_policy: Mutex::new(config.redirect_policy.into_tower_policy()),
                 referer: config.referer,
                 read_timeout: config.read_timeout,
                 request_timeout: config.timeout,
                 proxies,
                 proxies_maybe_http_auth,
                 https_only: config.https_only,
+                redirect_policy_display,
             }),
         })
     }
@@ -2416,13 +2429,16 @@ struct ClientRef {
     hyper: HyperClient,
     #[cfg(feature = "http3")]
     h3_client: Option<H3Client>,
-    redirect_policy: redirect::Policy,
+    redirect_policy: Mutex<
+        Option<Box<dyn TowerPolicy<(), Box<dyn std::error::Error + Send + Sync>> + Send + Sync>>,
+    >,
     referer: bool,
     request_timeout: Option<Duration>,
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
     https_only: bool,
+    redirect_policy_display: Option<String>,
 }
 
 impl ClientRef {
@@ -2443,8 +2459,8 @@ impl ClientRef {
             f.field("proxies", &self.proxies);
         }
 
-        if !self.redirect_policy.is_default() {
-            f.field("redirect_policy", &self.redirect_policy);
+        if let Some(msg) = &self.redirect_policy_display {
+            f.field("redirect_policy", &msg);
         }
 
         if self.referer {
@@ -2769,47 +2785,51 @@ impl Future for PendingRequest {
                     }
                     let url = self.url.clone();
                     self.as_mut().urls().push(url);
-                    let action = self
-                        .client
-                        .redirect_policy
-                        .check(res.status(), &loc, &self.urls);
+                    let pervious = Uri::from_str(self.url.clone().as_str()).unwrap();
+                    let next = Uri::from_str(loc.as_str()).unwrap();
+                    let tower_attempt = TowerAttempt::new(res.status(), &next, &pervious);
+                    let client = self.client.clone();
+                    let mut tower_policy = client.redirect_policy.lock().unwrap();
+                    if let Some(tower_policy) = tower_policy.as_deref_mut() {
+                        match tower_policy.redirect(&tower_attempt) {
+                            Ok(TowerAction::Follow) => {
+                                debug!("redirecting '{}' to '{}'", self.url, loc);
 
-                    match action {
-                        redirect::ActionKind::Follow => {
-                            debug!("redirecting '{}' to '{}'", self.url, loc);
-
-                            if loc.scheme() != "http" && loc.scheme() != "https" {
-                                return Poll::Ready(Err(error::url_bad_scheme(loc)));
-                            }
-
-                            if self.client.https_only && loc.scheme() != "https" {
-                                return Poll::Ready(Err(error::redirect(
-                                    error::url_bad_scheme(loc.clone()),
-                                    loc,
-                                )));
-                            }
-
-                            self.url = loc;
-                            let mut headers =
-                                std::mem::replace(self.as_mut().headers(), HeaderMap::new());
-
-                            remove_sensitive_headers(&mut headers, &self.url, &self.urls);
-                            let uri = try_uri(&self.url)?;
-                            let body = match self.body {
-                                Some(Some(ref body)) => Body::reusable(body.clone()),
-                                _ => Body::empty(),
-                            };
-
-                            // Add cookies from the cookie store.
-                            #[cfg(feature = "cookies")]
-                            {
-                                if let Some(ref cookie_store) = self.client.cookie_store {
-                                    add_cookie_header(&mut headers, &**cookie_store, &self.url);
+                                if loc.scheme() != "http" && loc.scheme() != "https" {
+                                    return Poll::Ready(Err(error::url_bad_scheme(loc)));
                                 }
-                            }
 
-                            *self.as_mut().in_flight().get_mut() =
-                                match *self.as_mut().in_flight().as_ref() {
+                                if self.client.https_only && loc.scheme() != "https" {
+                                    return Poll::Ready(Err(error::redirect(
+                                        error::url_bad_scheme(loc.clone()),
+                                        loc,
+                                    )));
+                                }
+
+                                self.url = loc;
+                                let mut headers =
+                                    std::mem::replace(self.as_mut().headers(), HeaderMap::new());
+
+                                remove_sensitive_headers(&mut headers, &self.url, &self.urls);
+                                let uri = try_uri(&self.url)?;
+                                let body = match self.body {
+                                    Some(Some(ref body)) => Body::reusable(body.clone()),
+                                    _ => Body::empty(),
+                                };
+
+                                // Add cookies from the cookie store.
+                                #[cfg(feature = "cookies")]
+                                {
+                                    if let Some(ref cookie_store) = self.client.cookie_store {
+                                        add_cookie_header(&mut headers, &**cookie_store, &self.url);
+                                    }
+                                }
+
+                                *self.as_mut().in_flight().get_mut() = match *self
+                                    .as_mut()
+                                    .in_flight()
+                                    .as_ref()
+                                {
                                     #[cfg(feature = "http3")]
                                     ResponseFuture::H3(_) => {
                                         let mut req = hyper::Request::builder()
@@ -2820,9 +2840,9 @@ impl Future for PendingRequest {
                                         *req.headers_mut() = headers.clone();
                                         std::mem::swap(self.as_mut().headers(), &mut headers);
                                         ResponseFuture::H3(self.client.h3_client
-                        .as_ref()
-                        .expect("H3 client must exists, otherwise we can't have a h3 request here")
-                                            .request(req))
+                            .as_ref()
+                            .expect("H3 client must exists, otherwise we can't have a h3 request here")
+                                                .request(req))
                                     }
                                     _ => {
                                         let mut req = hyper::Request::builder()
@@ -2835,15 +2855,20 @@ impl Future for PendingRequest {
                                         ResponseFuture::Default(self.client.hyper.request(req))
                                     }
                                 };
-
-                            continue;
+                                continue;
+                            }
+                            Ok(TowerAction::Stop) => {
+                                debug!("redirect policy disallowed redirection to '{loc}'");
+                            }
+                            Err(err) => {
+                                return Poll::Ready(Err(crate::error::redirect(
+                                    err,
+                                    self.url.clone(),
+                                )));
+                            }
                         }
-                        redirect::ActionKind::Stop => {
-                            debug!("redirect policy disallowed redirection to '{loc}'");
-                        }
-                        redirect::ActionKind::Error(err) => {
-                            return Poll::Ready(Err(crate::error::redirect(err, self.url.clone())));
-                        }
+                    } else {
+                        debug!("redirect policy disallowed redirection to '{loc}'");
                     }
                 }
             }
