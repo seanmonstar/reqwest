@@ -13,6 +13,7 @@ fn test_response_text() {
     let url = format!("http://{}/text", server.addr());
     let res = reqwest::blocking::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
+    assert!(res.history().is_empty());
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.content_length(), Some(5));
 
@@ -55,6 +56,7 @@ fn test_response_non_utf_8_text() {
     let url = format!("http://{}/text", server.addr());
     let res = reqwest::blocking::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
+    assert!(res.history().is_empty());
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.content_length(), Some(4));
 
@@ -71,6 +73,7 @@ fn test_response_json() {
     let url = format!("http://{}/json", server.addr());
     let res = reqwest::blocking::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
+    assert!(res.history().is_empty());
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.content_length(), Some(7));
 
@@ -85,6 +88,7 @@ fn test_response_copy_to() {
     let url = format!("http://{}/1", server.addr());
     let mut res = reqwest::blocking::get(&url).unwrap();
     assert_eq!(res.url().as_str(), &url);
+    assert!(res.history().is_empty());
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 
     let mut dst = Vec::new();
@@ -100,6 +104,7 @@ fn test_get() {
     let res = reqwest::blocking::get(&url).unwrap();
 
     assert_eq!(res.url().as_str(), &url);
+    assert!(res.history().is_empty());
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.remote_addr(), Some(server.addr()));
 
@@ -126,6 +131,7 @@ fn test_post() {
         .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
+    assert!(res.history().is_empty());
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
@@ -155,6 +161,7 @@ fn test_post_form() {
         .expect("request send");
 
     assert_eq!(res.url().as_str(), &url);
+    assert!(res.history().is_empty());
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
@@ -217,6 +224,7 @@ fn test_default_headers() {
     let res = client.get(&url).send().unwrap();
 
     assert_eq!(res.url().as_str(), &url);
+    assert!(res.history().is_empty());
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
@@ -251,6 +259,7 @@ fn test_override_default_headers() {
         .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
+    assert!(res.history().is_empty());
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
@@ -276,6 +285,7 @@ fn test_appended_headers_not_overwritten() {
         .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
+    assert!(res.history().is_empty());
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 
     // make sure this also works with default headers
@@ -299,6 +309,7 @@ fn test_appended_headers_not_overwritten() {
         .unwrap();
 
     assert_eq!(res.url().as_str(), &url);
+    assert!(res.history().is_empty());
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
@@ -403,6 +414,7 @@ fn test_response_no_tls_info_for_http() {
 
     let res = client.get(&url).send().unwrap();
     assert_eq!(res.url().as_str(), &url);
+    assert!(res.history().is_empty());
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.content_length(), Some(5));
     let tls_info = res.extensions().get::<reqwest::tls::TlsInfo>();
