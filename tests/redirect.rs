@@ -376,3 +376,79 @@ async fn test_redirect_https_only_enforced_gh1312() {
     let err = res.unwrap_err();
     assert!(err.is_redirect());
 }
+
+#[tokio::test]
+async fn test_redirect_limit() {
+    let server = server::http(move |req| async move {
+        let i: i32 = req
+            .uri()
+            .path()
+            .rsplit('/')
+            .next()
+            .unwrap()
+            .parse::<i32>()
+            .unwrap();
+        assert!(req.uri().path().ends_with(&format!("/redirect/{i}")));
+        http::Response::builder()
+            .status(302)
+            .header("location", format!("/redirect/{}", i + 1))
+            .body(Body::default())
+            .unwrap()
+    });
+    let url = format!("http://{}/redirect/0", server.addr());
+
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(0))
+        .build()
+        .unwrap();
+    let res = client.get(&url).send().await.unwrap_err();
+    assert_eq!(
+        res.url().unwrap().as_str(),
+        format!("http://{}/redirect/0", server.addr()).as_str()
+    );
+    assert!(res.is_redirect());
+
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(3))
+        .build()
+        .unwrap();
+
+    let res = client.get(&url).send().await.unwrap_err();
+    assert_eq!(
+        res.url().unwrap().as_str(),
+        format!("http://{}/redirect/2", server.addr()).as_str()
+    );
+    assert!(res.is_redirect());
+}
+
+#[tokio::test]
+async fn test_redirect_custom() {
+    let server = server::http(move |req| async move {
+        assert!(req.uri().path().ends_with("/foo"));
+        http::Response::builder()
+            .status(302)
+            .header("location", "/should_not_be_called")
+            .body(Body::default())
+            .unwrap()
+    });
+
+    let url = format!("http://{}/foo", server.addr());
+
+    let res = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.url().path().ends_with("/should_not_be_called") {
+                attempt.stop()
+            } else {
+                attempt.follow()
+            }
+        }))
+        .build()
+        .unwrap()
+        .get(&url)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.url().as_str(), url);
+    assert_eq!(res.status(), reqwest::StatusCode::FOUND);
+}
