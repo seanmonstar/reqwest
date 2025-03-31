@@ -158,7 +158,18 @@ struct Config {
     #[cfg(feature = "http2")]
     http2_keep_alive_while_idle: bool,
     local_address: Option<IpAddr>,
-    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+    #[cfg(any(
+        target_os = "android",
+        target_os = "fuchsia",
+        target_os = "illumos",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "solaris",
+        target_os = "tvos",
+        target_os = "visionos",
+        target_os = "watchos",
+    ))]
     interface: Option<String>,
     nodelay: bool,
     #[cfg(feature = "cookies")]
@@ -262,7 +273,18 @@ impl ClientBuilder {
                 #[cfg(feature = "http2")]
                 http2_keep_alive_while_idle: false,
                 local_address: None,
-                #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+                #[cfg(any(
+                    target_os = "android",
+                    target_os = "fuchsia",
+                    target_os = "illumos",
+                    target_os = "ios",
+                    target_os = "linux",
+                    target_os = "macos",
+                    target_os = "solaris",
+                    target_os = "tvos",
+                    target_os = "visionos",
+                    target_os = "watchos",
+                ))]
                 interface: None,
                 nodelay: true,
                 hickory_dns: cfg!(feature = "hickory-dns"),
@@ -462,7 +484,14 @@ impl ClientBuilder {
                         #[cfg(any(
                             target_os = "android",
                             target_os = "fuchsia",
-                            target_os = "linux"
+                            target_os = "illumos",
+                            target_os = "ios",
+                            target_os = "linux",
+                            target_os = "macos",
+                            target_os = "solaris",
+                            target_os = "tvos",
+                            target_os = "visionos",
+                            target_os = "watchos",
                         ))]
                         config.interface.as_deref(),
                         config.nodelay,
@@ -506,7 +535,14 @@ impl ClientBuilder {
                         #[cfg(any(
                             target_os = "android",
                             target_os = "fuchsia",
-                            target_os = "linux"
+                            target_os = "illumos",
+                            target_os = "ios",
+                            target_os = "linux",
+                            target_os = "macos",
+                            target_os = "solaris",
+                            target_os = "tvos",
+                            target_os = "visionos",
+                            target_os = "watchos",
                         ))]
                         config.interface.as_deref(),
                         config.nodelay,
@@ -701,7 +737,14 @@ impl ClientBuilder {
                         #[cfg(any(
                             target_os = "android",
                             target_os = "fuchsia",
-                            target_os = "linux"
+                            target_os = "illumos",
+                            target_os = "ios",
+                            target_os = "linux",
+                            target_os = "macos",
+                            target_os = "solaris",
+                            target_os = "tvos",
+                            target_os = "visionos",
+                            target_os = "watchos",
                         ))]
                         config.interface.as_deref(),
                         config.nodelay,
@@ -721,7 +764,18 @@ impl ClientBuilder {
                 http,
                 proxies.clone(),
                 config.local_address,
-                #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+                #[cfg(any(
+                    target_os = "android",
+                    target_os = "fuchsia",
+                    target_os = "illumos",
+                    target_os = "ios",
+                    target_os = "linux",
+                    target_os = "macos",
+                    target_os = "solaris",
+                    target_os = "tvos",
+                    target_os = "visionos",
+                    target_os = "watchos",
+                ))]
                 config.interface.as_deref(),
                 config.nodelay,
             )
@@ -1403,7 +1457,23 @@ impl ClientBuilder {
         self
     }
 
-    /// Bind to an interface by `SO_BINDTODEVICE`.
+    /// Bind connections only on the specified network interface.
+    ///
+    /// This option is only available on the following operating systems:
+    ///
+    /// - Android
+    /// - Fuchsia
+    /// - Linux,
+    /// - macOS and macOS-like systems (iOS, tvOS, watchOS and visionOS)
+    /// - Solaris and illumos
+    ///
+    /// On Android, Linux, and Fuchsia, this uses the
+    /// [`SO_BINDTODEVICE`][man-7-socket] socket option. On macOS and macOS-like
+    /// systems, Solaris, and illumos, this instead uses he [`IP_BOUND_IF` and
+    /// `IPV6_BOUND_IF`][man-7p-ip] socket options (as appropriate).
+    ///
+    /// Note that connections will fail if the provided interface name is not a
+    /// network interface that currently exists when a connection is established.
     ///
     /// # Example
     ///
@@ -1415,7 +1485,21 @@ impl ClientBuilder {
     ///     .interface(interface)
     ///     .build().unwrap();
     /// ```
-    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+    ///
+    /// [man-7-socket]: https://man7.org/linux/man-pages/man7/socket.7.html
+    /// [man-7p-ip]: https://docs.oracle.com/cd/E86824_01/html/E54777/ip-7p.html
+    #[cfg(any(
+        target_os = "android",
+        target_os = "fuchsia",
+        target_os = "illumos",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "solaris",
+        target_os = "tvos",
+        target_os = "visionos",
+        target_os = "watchos",
+    ))]
     pub fn interface(mut self, interface: &str) -> ClientBuilder {
         self.config.interface = Some(interface.to_string());
         self
@@ -2355,7 +2439,18 @@ impl Config {
             f.field("local_address", v);
         }
 
-        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+        #[cfg(any(
+            target_os = "android",
+            target_os = "fuchsia",
+            target_os = "illumos",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "solaris",
+            target_os = "tvos",
+            target_os = "visionos",
+            target_os = "watchos",
+        ))]
         if let Some(ref v) = self.interface {
             f.field("interface", v);
         }

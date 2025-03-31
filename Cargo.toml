@@ -293,3 +293,6 @@ required-features = ["deflate", "stream"]
 name = "multipart"
 path = "tests/multipart.rs"
 required-features = ["multipart"]
+
+[patch.crates-io]
+hyper-util = { git = "https://github.com/hyperium/hyper-util", rev = "5831ace168fc243ce03b97b6f6f8a0de3aa68d17" }
