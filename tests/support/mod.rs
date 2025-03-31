@@ -3,6 +3,7 @@
 pub mod delay_layer;
 pub mod delay_server;
 pub mod error;
+pub mod not_tcp;
 pub mod server;
 
 // TODO: remove once done converting to new support server?
