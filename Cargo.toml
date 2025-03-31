@@ -119,7 +119,7 @@ encoding_rs = { version = "0.8", optional = true }
 http-body = "1"
 http-body-util = "0.1"
 hyper = { version = "1.1", features = ["http1", "client"] }
-hyper-util = { version = "0.1.10", features = ["http1", "client", "client-legacy", "tokio"] }
+hyper-util = { version = "0.1.11", features = ["http1", "client", "client-legacy", "tokio"] }
 h2 = { version = "0.4", optional = true }
 once_cell = "1.18"
 log = "0.4.17"
@@ -293,6 +293,3 @@ required-features = ["deflate", "stream"]
 name = "multipart"
 path = "tests/multipart.rs"
 required-features = ["multipart"]
-
-[patch.crates-io]
-hyper-util = { git = "https://github.com/hyperium/hyper-util", rev = "5831ace168fc243ce03b97b6f6f8a0de3aa68d17" }
