@@ -1,7 +1,9 @@
 #[cfg(feature = "__tls")]
 use http::header::HeaderValue;
 use http::uri::{Authority, Scheme};
-use http::{HeaderMap, Uri};
+#[cfg(feature = "__tls")]
+use http::HeaderMap;
+use http::Uri;
 use hyper::rt::{Read, ReadBufCursor, Write};
 use hyper_util::client::legacy::connect::{Connected, Connection};
 #[cfg(any(feature = "socks", feature = "__tls"))]
@@ -500,7 +502,7 @@ impl ConnectorService {
     ) -> Result<Conn, BoxError> {
         log::debug!("proxy({proxy_scheme:?}) intercepts '{dst:?}'");
 
-        let (proxy_dst, _auth, misc) = match proxy_scheme {
+        let (proxy_dst, _auth, _misc) = match proxy_scheme {
             ProxyScheme::Http { host, auth, misc } => (into_uri(Scheme::HTTP, host), auth, misc),
             ProxyScheme::Https { host, auth, misc } => (into_uri(Scheme::HTTPS, host), auth, misc),
             #[cfg(feature = "socks")]
@@ -511,6 +513,9 @@ impl ConnectorService {
 
         #[cfg(feature = "__tls")]
         let auth = _auth;
+
+        #[cfg(feature = "__tls")]
+        let misc = _misc;
 
         match &self.inner {
             #[cfg(feature = "default-tls")]
