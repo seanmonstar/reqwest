@@ -172,7 +172,7 @@ env_logger = "0.10"
 hyper = { version = "1.1.0", default-features = false, features = ["http1", "http2", "client", "server"] }
 hyper-util = { version = "0.1.10", features = ["http1", "http2", "client", "client-legacy", "server-auto", "tokio"] }
 serde = { version = "1.0", features = ["derive"] }
-libflate = "2.1"
+flate2 = "1.0.13"
 brotli_crate = { package = "brotli", version = "7.0.0" }
 zstd_crate = { package = "zstd", version = "0.13" }
 doc-comment = "0.3"
