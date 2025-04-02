@@ -163,6 +163,21 @@ impl Response {
         self.inner.url()
     }
 
+    /// Get all the intermediate `Url`s traversed by redirects.
+    #[inline]
+    pub fn history(&self) -> &[Url] {
+        self.inner.history()
+    }
+
+    /// Get all the `Url`s, in sequential order, that were requested,
+    /// including any redirects and the final url.
+    pub fn all_urls(&self) -> impl Iterator<Item = &Url> {
+        self.inner
+            .history()
+            .iter()
+            .chain(std::iter::once(self.url()))
+    }
+
     /// Get the remote address used to get this `Response`.
     ///
     /// # Example
