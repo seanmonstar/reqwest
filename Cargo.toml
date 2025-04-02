@@ -106,6 +106,7 @@ tower-service = "0.3"
 futures-core = { version = "0.3.28", default-features = false }
 futures-util = { version = "0.3.28", default-features = false }
 sync_wrapper = { version = "1.0", features = ["futures"] }
+tower-http = { git="https://github.com/firefantasy/tower-http.git", rev= "89599d88673bfae74a96ffa44e46df41661d36bc", default-features = false, features = ["follow-redirect"] }
 
 # Optional deps...
 
