@@ -148,7 +148,18 @@ where {
         mut http: HttpConnector,
         proxies: Arc<Vec<Proxy>>,
         local_addr: T,
-        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+        #[cfg(any(
+            target_os = "android",
+            target_os = "fuchsia",
+            target_os = "illumos",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "solaris",
+            target_os = "tvos",
+            target_os = "visionos",
+            target_os = "watchos",
+        ))]
         interface: Option<&str>,
         nodelay: bool,
     ) -> ConnectorBuilder
@@ -156,7 +167,18 @@ where {
         T: Into<Option<IpAddr>>,
     {
         http.set_local_address(local_addr.into());
-        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+        #[cfg(any(
+            target_os = "android",
+            target_os = "fuchsia",
+            target_os = "illumos",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "solaris",
+            target_os = "tvos",
+            target_os = "visionos",
+            target_os = "watchos",
+        ))]
         if let Some(interface) = interface {
             http.set_interface(interface.to_owned());
         }
@@ -177,7 +199,18 @@ where {
         proxies: Arc<Vec<Proxy>>,
         user_agent: Option<HeaderValue>,
         local_addr: T,
-        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+        #[cfg(any(
+            target_os = "android",
+            target_os = "fuchsia",
+            target_os = "illumos",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "solaris",
+            target_os = "tvos",
+            target_os = "visionos",
+            target_os = "watchos",
+        ))]
         interface: Option<&str>,
         nodelay: bool,
         tls_info: bool,
@@ -192,7 +225,18 @@ where {
             proxies,
             user_agent,
             local_addr,
-            #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+            #[cfg(any(
+                target_os = "android",
+                target_os = "fuchsia",
+                target_os = "illumos",
+                target_os = "ios",
+                target_os = "linux",
+                target_os = "macos",
+                target_os = "solaris",
+                target_os = "tvos",
+                target_os = "visionos",
+                target_os = "watchos",
+            ))]
             interface,
             nodelay,
             tls_info,
@@ -206,7 +250,18 @@ where {
         proxies: Arc<Vec<Proxy>>,
         user_agent: Option<HeaderValue>,
         local_addr: T,
-        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+        #[cfg(any(
+            target_os = "android",
+            target_os = "fuchsia",
+            target_os = "illumos",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "solaris",
+            target_os = "tvos",
+            target_os = "visionos",
+            target_os = "watchos",
+        ))]
         interface: Option<&str>,
         nodelay: bool,
         tls_info: bool,
@@ -215,7 +270,18 @@ where {
         T: Into<Option<IpAddr>>,
     {
         http.set_local_address(local_addr.into());
-        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+        #[cfg(any(
+            target_os = "android",
+            target_os = "fuchsia",
+            target_os = "illumos",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "solaris",
+            target_os = "tvos",
+            target_os = "visionos",
+            target_os = "watchos",
+        ))]
         if let Some(interface) = interface {
             http.set_interface(interface);
         }
@@ -240,7 +306,18 @@ where {
         proxies: Arc<Vec<Proxy>>,
         user_agent: Option<HeaderValue>,
         local_addr: T,
-        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+        #[cfg(any(
+            target_os = "android",
+            target_os = "fuchsia",
+            target_os = "illumos",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "solaris",
+            target_os = "tvos",
+            target_os = "visionos",
+            target_os = "watchos",
+        ))]
         interface: Option<&str>,
         nodelay: bool,
         tls_info: bool,
@@ -249,7 +326,18 @@ where {
         T: Into<Option<IpAddr>>,
     {
         http.set_local_address(local_addr.into());
-        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+        #[cfg(any(
+            target_os = "android",
+            target_os = "fuchsia",
+            target_os = "illumos",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "solaris",
+            target_os = "tvos",
+            target_os = "visionos",
+            target_os = "watchos",
+        ))]
         if let Some(interface) = interface {
             http.set_interface(interface.to_owned());
         }
