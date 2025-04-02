@@ -36,7 +36,7 @@ struct ConnectingLockInner {
 pub struct ConnectingLock(Option<ConnectingLockInner>);
 
 /// A waiter that allows subscribers to receive updates when a new connection is
-/// established or when the connection attempt fails. For example, whe
+/// established or when the connection attempt fails. For example, when
 /// connection lock is dropped due to an error.
 pub struct ConnectingWaiter {
     receiver: watch::Receiver<Option<PoolClient>>,
@@ -95,7 +95,7 @@ impl Pool {
         }
     }
 
-    /// Aqcuire a connecting lock. This is to ensure that we have only one HTTP3
+    /// Acquire a connecting lock. This is to ensure that we have only one HTTP3
     /// connection per host.
     pub fn connecting(&self, key: &Key) -> Connecting {
         let mut inner = self.inner.lock().unwrap();
@@ -165,7 +165,7 @@ impl Pool {
             notifier.send(Some(client.clone()))
         {
             // If there are no awaiters, the client is returned to us. As a
-            // micro optimisation, let's reuse it and avoid clonning.
+            // micro optimisation, let's reuse it and avoid cloning.
             unsent_client
         } else {
             client.clone()

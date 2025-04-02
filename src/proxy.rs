@@ -286,7 +286,7 @@ impl Proxy {
 
         #[cfg(target_os = "windows")]
         {
-            // Only read from windows registry proxy settings if not available from an enviroment
+            // Only read from windows registry proxy settings if not available from an environment
             // variable. This is in line with the stated behavior of both dotnot and nuget on
             // windows. <https://github.com/seanmonstar/reqwest/issues/2599>
             if proxy.no_proxy.is_none() {
