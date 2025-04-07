@@ -11,7 +11,7 @@ use crate::wasm::AbortGuard;
 use wasm_bindgen::JsCast;
 
 #[cfg(feature = "stream")]
-use futures_util::stream::StreamExt;
+use futures_util::stream::{self, StreamExt};
 
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
