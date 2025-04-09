@@ -2309,6 +2309,7 @@ impl Client {
         };
 
         self.proxy_auth(&uri, &mut headers);
+        self.proxy_custom_headers(&uri, &mut headers);
 
         let builder = hyper::Request::builder()
             .method(method.clone())
@@ -2381,6 +2382,20 @@ impl Client {
             if proxy.is_match(dst) {
                 if let Some(header) = proxy.http_basic_auth(dst) {
                     headers.insert(PROXY_AUTHORIZATION, header);
+                }
+
+                break;
+            }
+        }
+    }
+
+    fn proxy_custom_headers(&self, dst: &Uri, headers: &mut HeaderMap) {
+        for proxy in self.inner.proxies.iter() {
+            if proxy.is_match(dst) {
+                if let Some(iter) = proxy.http_custom_headers(dst) {
+                    iter.iter().for_each(|(key, value)| {
+                        headers.insert(key, value.clone());
+                    });
                 }
 
                 break;

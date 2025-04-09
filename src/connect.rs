@@ -1,6 +1,8 @@
 #[cfg(feature = "__tls")]
 use http::header::HeaderValue;
 use http::uri::{Authority, Scheme};
+#[cfg(feature = "__tls")]
+use http::HeaderMap;
 use http::Uri;
 use hyper::rt::{Read, ReadBufCursor, Write};
 use hyper_util::client::legacy::connect::{Connected, Connection};
@@ -588,9 +590,9 @@ impl ConnectorService {
     ) -> Result<Conn, BoxError> {
         log::debug!("proxy({proxy_scheme:?}) intercepts '{dst:?}'");
 
-        let (proxy_dst, _auth) = match proxy_scheme {
-            ProxyScheme::Http { host, auth } => (into_uri(Scheme::HTTP, host), auth),
-            ProxyScheme::Https { host, auth } => (into_uri(Scheme::HTTPS, host), auth),
+        let (proxy_dst, _auth, _misc) = match proxy_scheme {
+            ProxyScheme::Http { host, auth, misc } => (into_uri(Scheme::HTTP, host), auth, misc),
+            ProxyScheme::Https { host, auth, misc } => (into_uri(Scheme::HTTPS, host), auth, misc),
             #[cfg(feature = "socks")]
             ProxyScheme::Socks4 { .. } => return self.connect_socks(dst, proxy_scheme).await,
             #[cfg(feature = "socks")]
@@ -599,6 +601,9 @@ impl ConnectorService {
 
         #[cfg(feature = "__tls")]
         let auth = _auth;
+
+        #[cfg(feature = "__tls")]
+        let misc = _misc;
 
         match &self.inner {
             #[cfg(feature = "default-tls")]
@@ -617,6 +622,7 @@ impl ConnectorService {
                         port,
                         self.user_agent.clone(),
                         auth,
+                        misc,
                     )
                     .await?;
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
@@ -652,7 +658,8 @@ impl ConnectorService {
                     log::trace!("tunneling HTTPS over proxy");
                     let maybe_server_name = ServerName::try_from(host.as_str().to_owned())
                         .map_err(|_| "Invalid Server Name");
-                    let tunneled = tunnel(conn, host, port, self.user_agent.clone(), auth).await?;
+                    let tunneled =
+                        tunnel(conn, host, port, self.user_agent.clone(), auth, misc).await?;
                     let server_name = maybe_server_name?;
                     let io = RustlsConnector::from(tls)
                         .connect(server_name, TokioIo::new(tunneled))
@@ -939,6 +946,7 @@ async fn tunnel<T>(
     port: u16,
     user_agent: Option<HeaderValue>,
     auth: Option<HeaderValue>,
+    misc: Option<HeaderMap>,
 ) -> Result<T, BoxError>
 where
     T: Read + Write + Unpin,
@@ -967,6 +975,16 @@ where
         buf.extend_from_slice(b"Proxy-Authorization: ");
         buf.extend_from_slice(value.as_bytes());
         buf.extend_from_slice(b"\r\n");
+    }
+
+    if let Some(headers) = misc {
+        log::debug!("tunnel to {host}:{port} using headers");
+        headers.iter().for_each(|(key, value)| {
+            buf.extend_from_slice(key.as_str().as_bytes());
+            buf.extend_from_slice(b": ");
+            buf.extend_from_slice(value.as_bytes());
+            buf.extend_from_slice(b"\r\n");
+        });
     }
 
     // headers end
@@ -1564,7 +1582,7 @@ mod tests {
             let tcp = TokioIo::new(TcpStream::connect(&addr).await?);
             let host = addr.ip().to_string();
             let port = addr.port();
-            tunnel(tcp, host, port, ua(), None).await
+            tunnel(tcp, host, port, ua(), None, None).await
         };
 
         rt.block_on(f).unwrap();
@@ -1582,7 +1600,7 @@ mod tests {
             let tcp = TokioIo::new(TcpStream::connect(&addr).await?);
             let host = addr.ip().to_string();
             let port = addr.port();
-            tunnel(tcp, host, port, ua(), None).await
+            tunnel(tcp, host, port, ua(), None, None).await
         };
 
         rt.block_on(f).unwrap_err();
@@ -1600,7 +1618,7 @@ mod tests {
             let tcp = TokioIo::new(TcpStream::connect(&addr).await?);
             let host = addr.ip().to_string();
             let port = addr.port();
-            tunnel(tcp, host, port, ua(), None).await
+            tunnel(tcp, host, port, ua(), None, None).await
         };
 
         rt.block_on(f).unwrap_err();
@@ -1624,7 +1642,7 @@ mod tests {
             let tcp = TokioIo::new(TcpStream::connect(&addr).await?);
             let host = addr.ip().to_string();
             let port = addr.port();
-            tunnel(tcp, host, port, ua(), None).await
+            tunnel(tcp, host, port, ua(), None, None).await
         };
 
         let error = rt.block_on(f).unwrap_err();
@@ -1652,6 +1670,7 @@ mod tests {
                 port,
                 ua(),
                 Some(proxy::encode_basic_auth("Aladdin", "open sesame")),
+                None,
             )
             .await
         };
