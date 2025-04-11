@@ -65,7 +65,6 @@ async fn request_timeout() {
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 #[tokio::test]
 async fn connect_timeout() {
     let _ = env_logger::try_init();
@@ -335,6 +334,24 @@ fn timeout_blocking_request() {
 
     assert!(err.is_timeout());
     assert_eq!(err.url().map(|u| u.as_str()), Some(url.as_str()));
+}
+
+#[cfg(feature = "blocking")]
+#[test]
+fn connect_timeout_blocking_request() {
+    let _ = env_logger::try_init();
+
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_millis(100))
+        .build()
+        .unwrap();
+
+    // never returns
+    let url = "http://192.0.2.1:81/slow";
+
+    let err = client.get(url).send().unwrap_err();
+
+    assert!(err.is_timeout());
 }
 
 #[cfg(feature = "blocking")]

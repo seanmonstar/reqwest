@@ -7,7 +7,15 @@ use std::fmt;
 ))]
 use std::future::Future;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
+
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate"
+))]
+use futures_util::stream::Fuse;
 
 #[cfg(feature = "gzip")]
 use async_compression::tokio::bufread::GzipDecoder;
@@ -108,19 +116,19 @@ enum Inner {
 
     /// A `Gzip` decoder will uncompress the gzipped response content before returning it.
     #[cfg(feature = "gzip")]
-    Gzip(Pin<Box<FramedRead<GzipDecoder<PeekableIoStreamReader>, BytesCodec>>>),
+    Gzip(Pin<Box<Fuse<FramedRead<GzipDecoder<PeekableIoStreamReader>, BytesCodec>>>>),
 
     /// A `Brotli` decoder will uncompress the brotlied response content before returning it.
     #[cfg(feature = "brotli")]
-    Brotli(Pin<Box<FramedRead<BrotliDecoder<PeekableIoStreamReader>, BytesCodec>>>),
+    Brotli(Pin<Box<Fuse<FramedRead<BrotliDecoder<PeekableIoStreamReader>, BytesCodec>>>>),
 
     /// A `Zstd` decoder will uncompress the zstd compressed response content before returning it.
     #[cfg(feature = "zstd")]
-    Zstd(Pin<Box<FramedRead<ZstdDecoder<PeekableIoStreamReader>, BytesCodec>>>),
+    Zstd(Pin<Box<Fuse<FramedRead<ZstdDecoder<PeekableIoStreamReader>, BytesCodec>>>>),
 
     /// A `Deflate` decoder will uncompress the deflated response content before returning it.
     #[cfg(feature = "deflate")]
-    Deflate(Pin<Box<FramedRead<ZlibDecoder<PeekableIoStreamReader>, BytesCodec>>>),
+    Deflate(Pin<Box<Fuse<FramedRead<ZlibDecoder<PeekableIoStreamReader>, BytesCodec>>>>),
 
     /// A decoder that doesn't have a value yet.
     #[cfg(any(
@@ -356,43 +364,65 @@ impl HttpBody for Decoder {
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(crate::error::decode_io(e)))),
                 Poll::Pending => Poll::Pending,
             },
-            Inner::PlainText(ref mut body) => {
-                match futures_core::ready!(Pin::new(body).poll_frame(cx)) {
-                    Some(Ok(frame)) => Poll::Ready(Some(Ok(frame))),
-                    Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode(err)))),
-                    None => Poll::Ready(None),
-                }
-            }
+            Inner::PlainText(ref mut body) => match ready!(Pin::new(body).poll_frame(cx)) {
+                Some(Ok(frame)) => Poll::Ready(Some(Ok(frame))),
+                Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode(err)))),
+                None => Poll::Ready(None),
+            },
             #[cfg(feature = "gzip")]
             Inner::Gzip(ref mut decoder) => {
-                match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
+                match ready!(Pin::new(&mut *decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes.freeze())))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
-                    None => Poll::Ready(None),
+                    None => {
+                        // poll inner connection until EOF after gzip stream is finished
+                        poll_inner_should_be_empty(
+                            decoder.get_mut().get_mut().get_mut().get_mut(),
+                            cx,
+                        )
+                    }
                 }
             }
             #[cfg(feature = "brotli")]
             Inner::Brotli(ref mut decoder) => {
-                match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
+                match ready!(Pin::new(&mut *decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes.freeze())))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
-                    None => Poll::Ready(None),
+                    None => {
+                        // poll inner connection until EOF after brotli stream is finished
+                        poll_inner_should_be_empty(
+                            decoder.get_mut().get_mut().get_mut().get_mut(),
+                            cx,
+                        )
+                    }
                 }
             }
             #[cfg(feature = "zstd")]
             Inner::Zstd(ref mut decoder) => {
-                match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
+                match ready!(Pin::new(&mut *decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes.freeze())))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
-                    None => Poll::Ready(None),
+                    None => {
+                        // poll inner connection until EOF after zstd stream is finished
+                        poll_inner_should_be_empty(
+                            decoder.get_mut().get_mut().get_mut().get_mut(),
+                            cx,
+                        )
+                    }
                 }
             }
             #[cfg(feature = "deflate")]
             Inner::Deflate(ref mut decoder) => {
-                match futures_core::ready!(Pin::new(decoder).poll_next(cx)) {
+                match ready!(Pin::new(&mut *decoder).poll_next(cx)) {
                     Some(Ok(bytes)) => Poll::Ready(Some(Ok(Frame::data(bytes.freeze())))),
                     Some(Err(err)) => Poll::Ready(Some(Err(crate::error::decode_io(err)))),
-                    None => Poll::Ready(None),
+                    None => {
+                        // poll inner connection until EOF after deflate stream is finished
+                        poll_inner_should_be_empty(
+                            decoder.get_mut().get_mut().get_mut().get_mut(),
+                            cx,
+                        )
+                    }
                 }
             }
         }
@@ -409,6 +439,34 @@ impl HttpBody for Decoder {
                 feature = "deflate"
             ))]
             _ => http_body::SizeHint::default(),
+        }
+    }
+}
+
+#[cfg(any(
+    feature = "gzip",
+    feature = "zstd",
+    feature = "brotli",
+    feature = "deflate"
+))]
+fn poll_inner_should_be_empty(
+    inner: &mut PeekableIoStream,
+    cx: &mut Context,
+) -> Poll<Option<Result<Frame<Bytes>, crate::Error>>> {
+    // poll inner connection until EOF after deflate stream is finished
+    // loop in case of empty frames
+    let mut inner = Pin::new(inner);
+    loop {
+        match ready!(inner.as_mut().poll_next(cx)) {
+            // ignore any empty frames
+            Some(Ok(bytes)) if bytes.is_empty() => continue,
+            Some(Ok(_)) => {
+                return Poll::Ready(Some(Err(crate::error::decode(
+                    "there are extra bytes after body has been decompressed",
+                ))))
+            }
+            Some(Err(err)) => return Poll::Ready(Some(Err(crate::error::decode_io(err)))),
+            None => return Poll::Ready(None),
         }
     }
 }
@@ -437,17 +495,15 @@ impl Future for Pending {
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         use futures_util::StreamExt;
 
-        match futures_core::ready!(Pin::new(&mut self.0).poll_peek(cx)) {
+        match ready!(Pin::new(&mut self.0).poll_peek(cx)) {
             Some(Ok(_)) => {
                 // fallthrough
             }
             Some(Err(_e)) => {
                 // error was just a ref, so we need to really poll to move it
-                return Poll::Ready(Err(futures_core::ready!(
-                    Pin::new(&mut self.0).poll_next(cx)
-                )
-                .expect("just peeked Some")
-                .unwrap_err()));
+                return Poll::Ready(Err(ready!(Pin::new(&mut self.0).poll_next(cx))
+                    .expect("just peeked Some")
+                    .unwrap_err()));
             }
             None => return Poll::Ready(Ok(Inner::PlainText(empty()))),
         };
@@ -456,25 +512,41 @@ impl Future for Pending {
 
         match self.1 {
             #[cfg(feature = "brotli")]
-            DecoderType::Brotli => Poll::Ready(Ok(Inner::Brotli(Box::pin(FramedRead::new(
-                BrotliDecoder::new(StreamReader::new(_body)),
-                BytesCodec::new(),
-            ))))),
+            DecoderType::Brotli => Poll::Ready(Ok(Inner::Brotli(Box::pin(
+                FramedRead::new(
+                    BrotliDecoder::new(StreamReader::new(_body)),
+                    BytesCodec::new(),
+                )
+                .fuse(),
+            )))),
             #[cfg(feature = "zstd")]
-            DecoderType::Zstd => Poll::Ready(Ok(Inner::Zstd(Box::pin(FramedRead::new(
-                ZstdDecoder::new(StreamReader::new(_body)),
-                BytesCodec::new(),
-            ))))),
+            DecoderType::Zstd => Poll::Ready(Ok(Inner::Zstd(Box::pin(
+                FramedRead::new(
+                    {
+                        let mut d = ZstdDecoder::new(StreamReader::new(_body));
+                        d.multiple_members(true);
+                        d
+                    },
+                    BytesCodec::new(),
+                )
+                .fuse(),
+            )))),
             #[cfg(feature = "gzip")]
-            DecoderType::Gzip => Poll::Ready(Ok(Inner::Gzip(Box::pin(FramedRead::new(
-                GzipDecoder::new(StreamReader::new(_body)),
-                BytesCodec::new(),
-            ))))),
+            DecoderType::Gzip => Poll::Ready(Ok(Inner::Gzip(Box::pin(
+                FramedRead::new(
+                    GzipDecoder::new(StreamReader::new(_body)),
+                    BytesCodec::new(),
+                )
+                .fuse(),
+            )))),
             #[cfg(feature = "deflate")]
-            DecoderType::Deflate => Poll::Ready(Ok(Inner::Deflate(Box::pin(FramedRead::new(
-                ZlibDecoder::new(StreamReader::new(_body)),
-                BytesCodec::new(),
-            ))))),
+            DecoderType::Deflate => Poll::Ready(Ok(Inner::Deflate(Box::pin(
+                FramedRead::new(
+                    ZlibDecoder::new(StreamReader::new(_body)),
+                    BytesCodec::new(),
+                )
+                .fuse(),
+            )))),
         }
     }
 }
@@ -495,7 +567,7 @@ where
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         loop {
-            return match futures_core::ready!(Pin::new(&mut self.0).poll_frame(cx)) {
+            return match ready!(Pin::new(&mut self.0).poll_frame(cx)) {
                 Some(Ok(frame)) => {
                     // skip non-data frames
                     if let Ok(buf) = frame.into_data() {
@@ -529,7 +601,7 @@ impl Accepts {
     }
     */
 
-    pub(super) fn as_str(&self) -> Option<&'static str> {
+    pub(super) const fn as_str(&self) -> Option<&'static str> {
         match (
             self.is_gzip(),
             self.is_brotli(),
@@ -555,7 +627,7 @@ impl Accepts {
         }
     }
 
-    fn is_gzip(&self) -> bool {
+    const fn is_gzip(&self) -> bool {
         #[cfg(feature = "gzip")]
         {
             self.gzip
@@ -567,7 +639,7 @@ impl Accepts {
         }
     }
 
-    fn is_brotli(&self) -> bool {
+    const fn is_brotli(&self) -> bool {
         #[cfg(feature = "brotli")]
         {
             self.brotli
@@ -579,7 +651,7 @@ impl Accepts {
         }
     }
 
-    fn is_zstd(&self) -> bool {
+    const fn is_zstd(&self) -> bool {
         #[cfg(feature = "zstd")]
         {
             self.zstd
@@ -591,7 +663,7 @@ impl Accepts {
         }
     }
 
-    fn is_deflate(&self) -> bool {
+    const fn is_deflate(&self) -> bool {
         #[cfg(feature = "deflate")]
         {
             self.deflate

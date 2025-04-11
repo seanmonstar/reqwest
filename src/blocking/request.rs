@@ -128,6 +128,7 @@ impl Request {
             None
         };
         let mut req = Request::new(self.method().clone(), self.url().clone());
+        *req.timeout_mut() = self.timeout().copied();
         *req.headers_mut() = self.headers().clone();
         *req.version_mut() = self.version().clone();
         req.body = body;
@@ -454,10 +455,11 @@ impl RequestBuilder {
         if let Ok(ref mut req) = self.request {
             match serde_urlencoded::to_string(form) {
                 Ok(body) => {
-                    req.headers_mut().insert(
-                        CONTENT_TYPE,
-                        HeaderValue::from_static("application/x-www-form-urlencoded"),
-                    );
+                    req.headers_mut()
+                        .entry(CONTENT_TYPE)
+                        .or_insert(HeaderValue::from_static(
+                            "application/x-www-form-urlencoded",
+                        ));
                     *req.body_mut() = Some(body.into());
                 }
                 Err(err) => error = Some(crate::error::builder(err)),
@@ -614,7 +616,7 @@ impl RequestBuilder {
     /// # }
     /// ```
     ///
-    /// With a non-clonable body
+    /// With a non-cloneable body
     ///
     /// ```rust
     /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -688,7 +690,7 @@ mod tests {
     use serde_json;
     use serde_urlencoded;
     use std::collections::{BTreeMap, HashMap};
-    use std::convert::TryFrom;
+    use std::time::Duration;
 
     #[test]
     fn basic_get_request() {
@@ -1081,5 +1083,17 @@ mod tests {
         assert_eq!(req.url().as_str(), "https://localhost/");
         assert_eq!(req.headers()["authorization"], "Bearer Hold my bear");
         assert_eq!(req.headers()["authorization"].is_sensitive(), true);
+    }
+
+    #[test]
+    fn test_request_cloning() {
+        let mut request = Request::new(Method::GET, "https://example.com".try_into().unwrap());
+        *request.timeout_mut() = Some(Duration::from_secs(42));
+        *request.version_mut() = Version::HTTP_11;
+
+        let clone = request.try_clone().unwrap();
+        assert_eq!(request.version(), clone.version());
+        assert_eq!(request.headers(), clone.headers());
+        assert_eq!(request.timeout(), clone.timeout());
     }
 }

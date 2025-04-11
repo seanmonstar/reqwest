@@ -5,6 +5,12 @@ use support::server;
 
 use std::env;
 
+use once_cell::sync::Lazy;
+use tokio::sync::Mutex;
+
+// serialize tests that read from / write to environment variables
+static HTTP_PROXY_ENV_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
 #[tokio::test]
 async fn http_proxy() {
     let url = "http://hyper.rs/prox";
@@ -110,6 +116,9 @@ async fn system_http_proxy_basic_auth_parsed() {
         async { http::Response::default() }
     });
 
+    // avoid races with other tests that change "http_proxy"
+    let _env_lock = HTTP_PROXY_ENV_MUTEX.lock().await;
+
     // save system setting first.
     let system_proxy = env::var("http_proxy");
 
@@ -163,7 +172,6 @@ async fn test_no_proxy() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
-#[cfg_attr(not(feature = "__internal_proxy_sys_no_cache"), ignore)]
 #[tokio::test]
 async fn test_using_system_proxy() {
     let url = "http://not.a.real.sub.hyper.rs/prox";
@@ -175,8 +183,8 @@ async fn test_using_system_proxy() {
         async { http::Response::default() }
     });
 
-    // Note: we're relying on the `__internal_proxy_sys_no_cache` feature to
-    // check the environment every time.
+    // avoid races with other tests that change "http_proxy"
+    let _env_lock = HTTP_PROXY_ENV_MUTEX.lock().await;
 
     // save system setting first.
     let system_proxy = env::var("http_proxy");

@@ -27,6 +27,9 @@ pub trait Resolve: Send + Sync {
     ///  * It does not need a mutable reference to `self`.
     ///  * Since trait objects cannot make use of associated types, it requires
     ///    wrapping the returned `Future` and its contained `Iterator` with `Box`.
+    ///
+    /// Explicitly specified port in the URL will override any port in the resolved `SocketAddr`s.
+    /// Otherwise, port `0` will be replaced by the conventional port for the given scheme (e.g. 80 for http).
     fn resolve(&self, name: Name) -> Resolving;
 }
 
@@ -45,7 +48,7 @@ impl FromStr for Name {
     type Err = sealed::InvalidNameError;
 
     fn from_str(host: &str) -> Result<Self, Self::Err> {
-        HyperName::from_str(host.into())
+        HyperName::from_str(host)
             .map(Name)
             .map_err(|_| sealed::InvalidNameError { _ext: () })
     }
@@ -98,7 +101,7 @@ impl Resolve for DnsResolverWithOverrides {
         match self.overrides.get(name.as_str()) {
             Some(dest) => {
                 let addrs: Addrs = Box::new(dest.clone().into_iter());
-                Box::pin(futures_util::future::ready(Ok(addrs)))
+                Box::pin(std::future::ready(Ok(addrs)))
             }
             None => self.dns_resolver.resolve(name),
         }

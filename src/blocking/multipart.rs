@@ -148,8 +148,13 @@ impl Form {
         Reader::new(self)
     }
 
+    /// Produce a reader over the multipart form data.
+    pub fn into_reader(self) -> impl Read {
+        self.reader()
+    }
+
     // If predictable, computes the length the request will have
-    // The length should be preditable if only String and file fields have been added,
+    // The length should be predictable if only String and file fields have been added,
     // but not if a generic reader has been added;
     pub(crate) fn compute_length(&mut self) -> Option<u64> {
         self.inner.compute_length()
