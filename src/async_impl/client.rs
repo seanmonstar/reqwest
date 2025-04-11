@@ -968,6 +968,12 @@ impl ClientBuilder {
         self
     }
 
+    /// Sets the default headers for every request preserving order.
+    pub fn set_headers(mut self, headers: HeaderMap) -> ClientBuilder {
+        self.config.headers = headers;
+        self
+    }
+
     /// Enable a persistent cookie store for the client.
     ///
     /// Cookies received in responses will be preserved and included in
