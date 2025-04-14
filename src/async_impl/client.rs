@@ -188,6 +188,8 @@ struct Config {
     #[cfg(feature = "http3")]
     quic_send_window: Option<u64>,
     #[cfg(feature = "http3")]
+    quic_congestion_bbr: bool,
+    #[cfg(feature = "http3")]
     h3_max_field_section_size: Option<u64>,
     #[cfg(feature = "http3")]
     h3_send_grease: Option<bool>,
@@ -307,6 +309,8 @@ impl ClientBuilder {
                 #[cfg(feature = "http3")]
                 quic_send_window: None,
                 #[cfg(feature = "http3")]
+                quic_congestion_bbr: false,
+                #[cfg(feature = "http3")]
                 h3_max_field_section_size: None,
                 #[cfg(feature = "http3")]
                 h3_send_grease: None,
@@ -373,6 +377,7 @@ impl ClientBuilder {
                  quic_stream_receive_window,
                  quic_receive_window,
                  quic_send_window,
+                 quic_congestion_bbr,
                  h3_max_field_section_size,
                  h3_send_grease,
                  local_address,
@@ -395,6 +400,11 @@ impl ClientBuilder {
 
                     if let Some(send_window) = quic_send_window {
                         transport_config.send_window(send_window);
+                    }
+
+                    if quic_congestion_bbr {
+                        let factory = Arc::new(quinn::congestion::BbrConfig::default());
+                        transport_config.congestion_controller_factory(factory);
                     }
 
                     let mut h3_client_config = H3ClientConfig::default();
@@ -542,6 +552,7 @@ impl ClientBuilder {
                             config.quic_stream_receive_window,
                             config.quic_receive_window,
                             config.quic_send_window,
+                            config.quic_congestion_bbr,
                             config.h3_max_field_section_size,
                             config.h3_send_grease,
                             config.local_address,
@@ -746,6 +757,7 @@ impl ClientBuilder {
                             config.quic_stream_receive_window,
                             config.quic_receive_window,
                             config.quic_send_window,
+                            config.quic_congestion_bbr,
                             config.h3_max_field_section_size,
                             config.h3_send_grease,
                             config.local_address,
@@ -2068,6 +2080,20 @@ impl ClientBuilder {
     #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
     pub fn http3_send_window(mut self, value: u64) -> ClientBuilder {
         self.config.quic_send_window = Some(value);
+        self
+    }
+
+    /// Override the default congestion control algorithm to use [BBR]
+    ///
+    /// The current default congestion control algorithm is [CUBIC]. This method overrides the
+    /// default.
+    ///
+    /// [BBR]: https://datatracker.ietf.org/doc/html/draft-ietf-ccwg-bbr
+    /// [CUBIC]: https://datatracker.ietf.org/doc/html/rfc8312
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_congestion_bbr(mut self) -> ClientBuilder {
+        self.config.quic_congestion_bbr = true;
         self
     }
 
