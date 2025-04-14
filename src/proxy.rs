@@ -286,8 +286,13 @@ impl Proxy {
 
         #[cfg(target_os = "windows")]
         {
-            let win_exceptions: String = get_windows_proxy_exceptions();
-            proxy.no_proxy = NoProxy::from_string(&win_exceptions);
+            // Only read from windows registry proxy settings if not available from an environment
+            // variable. This is in line with the stated behavior of both dotnot and nuget on
+            // windows. <https://github.com/seanmonstar/reqwest/issues/2599>
+            if proxy.no_proxy.is_none() {
+                let win_exceptions: String = get_windows_proxy_exceptions();
+                proxy.no_proxy = NoProxy::from_string(&win_exceptions);
+            }
         }
 
         proxy
@@ -451,9 +456,12 @@ impl NoProxy {
     pub fn from_env() -> Option<NoProxy> {
         let raw = env::var("NO_PROXY")
             .or_else(|_| env::var("no_proxy"))
-            .unwrap_or_default();
+            .ok()?;
 
-        Self::from_string(&raw)
+        // Per the docs, this returns `None` if no environment variable is set. We can only reach
+        // here if an env var is set, so we return `Some(NoProxy::default)` if `from_string`
+        // returns None, which occurs with an empty string.
+        Some(Self::from_string(&raw).unwrap_or_default())
     }
 
     /// Returns a new no-proxy configuration based on a `no_proxy` string (or `None` if no variables
@@ -1624,6 +1632,18 @@ mod tests {
         // Manually construct this so we aren't use the cache
         let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
         p.no_proxy = NoProxy::from_env();
+
+        // everything should go through proxy, "effectively" nothing is in no_proxy
+        assert_eq!(intercepted_uri(&p, "http://hyper.rs"), target);
+
+        // Also test the behavior of `NO_PROXY` being an empty string.
+        env::set_var("NO_PROXY", "");
+
+        // Manually construct this so we aren't use the cache
+        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
+        p.no_proxy = NoProxy::from_env();
+        // In the case of an empty string `NoProxy::from_env()` should return `Some(..)`
+        assert!(p.no_proxy.is_some());
 
         // everything should go through proxy, "effectively" nothing is in no_proxy
         assert_eq!(intercepted_uri(&p, "http://hyper.rs"), target);
