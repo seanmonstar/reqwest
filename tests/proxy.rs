@@ -231,6 +231,7 @@ async fn http_over_http() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
+#[cfg(feature = "__tls")]
 #[tokio::test]
 async fn test_tls_info_not_present_to_http_proxy() {
     let url = "http://hyper.rs/prox";
