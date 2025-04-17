@@ -17,6 +17,8 @@ use super::Body;
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
+#[cfg(unix)]
+use crate::connect::uds::UnixSocketProvider;
 use crate::connect::{
     sealed::{Conn, Unnameable},
     BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
@@ -195,6 +197,9 @@ struct Config {
     h3_send_grease: Option<bool>,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
     dns_resolver: Option<Arc<dyn Resolve>>,
+
+    #[cfg(unix)]
+    unix_socket: Option<Arc<std::path::Path>>,
 }
 
 impl Default for ClientBuilder {
@@ -315,6 +320,8 @@ impl ClientBuilder {
                 #[cfg(feature = "http3")]
                 h3_send_grease: None,
                 dns_resolver: None,
+                #[cfg(unix)]
+                unix_socket: None,
             },
         }
     }
@@ -821,6 +828,12 @@ impl ClientBuilder {
         connector_builder.set_timeout(config.connect_timeout);
         connector_builder.set_verbose(config.connection_verbose);
         connector_builder.set_keepalive(config.tcp_keepalive);
+
+        // TODO: It'd be best to refactor this so the HttpConnector is never
+        // constructed at all. But there's a lot of code for all the different
+        // ways TLS can be configured...
+        #[cfg(unix)]
+        connector_builder.set_unix_socket(config.unix_socket);
 
         let mut builder =
             hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
@@ -1550,6 +1563,25 @@ impl ClientBuilder {
         D: Into<Option<Duration>>,
     {
         self.config.tcp_keepalive = val.into();
+        self
+    }
+
+    // Alt Transports
+
+    /// Set that all connections will use this Unix socket.
+    ///
+    /// If a request URI uses the `https` scheme, TLS will still be used over
+    /// the Unix socket.
+    ///
+    /// # Note
+    ///
+    /// This option is not compatible with any of the TCP or Proxy options.
+    /// Setting this will ignore all those options previously set.
+    ///
+    /// Likewise, DNS resolution will not be done on the domain name.
+    #[cfg(unix)]
+    pub fn unix_socket(mut self, path: impl UnixSocketProvider) -> ClientBuilder {
+        self.config.unix_socket = Some(path.reqwest_uds_path(crate::connect::uds::Internal).into());
         self
     }
 
@@ -2584,6 +2616,11 @@ impl Config {
             if self.tls_enable_early_data {
                 f.field("tls_enable_early_data", &true);
             }
+        }
+
+        #[cfg(unix)]
+        if let Some(ref p) = self.unix_socket {
+            f.field("unix_socket", p);
         }
     }
 }

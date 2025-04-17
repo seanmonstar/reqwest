@@ -4,7 +4,7 @@ use http::uri::{Authority, Scheme};
 use http::Uri;
 use hyper::rt::{Read, ReadBufCursor, Write};
 use hyper_util::client::legacy::connect::{Connected, Connection};
-#[cfg(any(feature = "socks", feature = "__tls"))]
+#[cfg(any(feature = "socks", feature = "__tls", unix))]
 use hyper_util::rt::TokioIo;
 #[cfg(feature = "default-tls")]
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
@@ -77,6 +77,8 @@ pub(crate) struct ConnectorBuilder {
     tls_info: bool,
     #[cfg(feature = "__tls")]
     user_agent: Option<HeaderValue>,
+    #[cfg(unix)]
+    unix_socket: Option<Arc<std::path::Path>>,
 }
 
 impl ConnectorBuilder {
@@ -94,7 +96,15 @@ where {
             #[cfg(feature = "__tls")]
             user_agent: self.user_agent,
             simple_timeout: None,
+            #[cfg(unix)]
+            unix_socket: self.unix_socket,
         };
+
+        #[cfg(unix)]
+        if base_service.unix_socket.is_some() && !base_service.proxies.is_empty() {
+            base_service.proxies = Default::default();
+            log::trace!("unix_socket() set, proxies are ignored");
+        }
 
         if layers.is_empty() {
             // we have no user-provided layers, only use concrete types
@@ -189,6 +199,8 @@ where {
             proxies,
             verbose: verbose::OFF,
             timeout: None,
+            #[cfg(unix)]
+            unix_socket: None,
         }
     }
 
@@ -296,6 +308,8 @@ where {
             tls_info,
             user_agent,
             timeout: None,
+            #[cfg(unix)]
+            unix_socket: None,
         }
     }
 
@@ -365,6 +379,8 @@ where {
             tls_info,
             user_agent,
             timeout: None,
+            #[cfg(unix)]
+            unix_socket: None,
         }
     }
 
@@ -386,6 +402,11 @@ where {
             Inner::Http(http) => http.set_keepalive(dur),
         }
     }
+
+    #[cfg(unix)]
+    pub(crate) fn set_unix_socket(&mut self, path: Option<Arc<std::path::Path>>) {
+        self.unix_socket = path;
+    }
 }
 
 #[allow(missing_debug_implementations)]
@@ -405,6 +426,9 @@ pub(crate) struct ConnectorService {
     tls_info: bool,
     #[cfg(feature = "__tls")]
     user_agent: Option<HeaderValue>,
+    /// If set, this always takes priority over TCP.
+    #[cfg(unix)]
+    unix_socket: Option<Arc<std::path::Path>>,
 }
 
 #[derive(Clone)]
@@ -581,6 +605,75 @@ impl ConnectorService {
         }
     }
 
+    /// Connect over Unix Domain Socket (or Windows?).
+    #[cfg(unix)]
+    async fn connect_local_transport(self, dst: Uri) -> Result<Conn, BoxError> {
+        let path = self
+            .unix_socket
+            .as_ref()
+            .expect("connect local must have socket path")
+            .clone();
+        let svc = tower::service_fn(move |_| {
+            let fut = tokio::net::UnixStream::connect(path.clone());
+            async move {
+                let io = fut.await?;
+                Ok::<_, std::io::Error>(TokioIo::new(io))
+            }
+        });
+        let is_proxy = false;
+        match self.inner {
+            #[cfg(not(feature = "__tls"))]
+            Inner::Http(..) => {
+                let mut svc = svc;
+                let io = svc.call(dst).await?;
+                Ok(Conn {
+                    inner: self.verbose.wrap(io),
+                    is_proxy,
+                    tls_info: false,
+                })
+            }
+            #[cfg(feature = "default-tls")]
+            Inner::DefaultTls(_, tls) => {
+                let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
+                let mut http = hyper_tls::HttpsConnector::from((svc, tls_connector));
+                let io = http.call(dst).await?;
+
+                if let hyper_tls::MaybeHttpsStream::Https(stream) = io {
+                    Ok(Conn {
+                        inner: self.verbose.wrap(NativeTlsConn { inner: stream }),
+                        is_proxy,
+                        tls_info: self.tls_info,
+                    })
+                } else {
+                    Ok(Conn {
+                        inner: self.verbose.wrap(io),
+                        is_proxy,
+                        tls_info: false,
+                    })
+                }
+            }
+            #[cfg(feature = "__rustls")]
+            Inner::RustlsTls { tls, .. } => {
+                let mut http = hyper_rustls::HttpsConnector::from((svc, tls.clone()));
+                let io = http.call(dst).await?;
+
+                if let hyper_rustls::MaybeHttpsStream::Https(stream) = io {
+                    Ok(Conn {
+                        inner: self.verbose.wrap(RustlsTlsConn { inner: stream }),
+                        is_proxy,
+                        tls_info: self.tls_info,
+                    })
+                } else {
+                    Ok(Conn {
+                        inner: self.verbose.wrap(io),
+                        is_proxy,
+                        tls_info: false,
+                    })
+                }
+            }
+        }
+    }
+
     async fn connect_via_proxy(
         self,
         dst: Uri,
@@ -712,6 +805,16 @@ impl Service<Uri> for ConnectorService {
     fn call(&mut self, dst: Uri) -> Self::Future {
         log::debug!("starting new connection: {dst:?}");
         let timeout = self.simple_timeout;
+
+        // Local transports (UDS) skip proxies
+        #[cfg(unix)]
+        if self.unix_socket.is_some() {
+            return Box::pin(with_timeout(
+                self.clone().connect_local_transport(dst),
+                timeout,
+            ));
+        }
+
         for prox in self.proxies.iter() {
             if let Some(proxy_scheme) = prox.intercept(&dst) {
                 return Box::pin(with_timeout(
@@ -734,16 +837,18 @@ trait TlsInfoFactory {
 }
 
 #[cfg(feature = "__tls")]
-impl TlsInfoFactory for tokio::net::TcpStream {
-    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        None
-    }
-}
-
-#[cfg(feature = "__tls")]
 impl<T: TlsInfoFactory> TlsInfoFactory for TokioIo<T> {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         self.inner().tls_info()
+    }
+}
+
+// ===== TcpStream =====
+
+#[cfg(feature = "__tls")]
+impl TlsInfoFactory for tokio::net::TcpStream {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        None
     }
 }
 
@@ -819,6 +924,102 @@ impl TlsInfoFactory
 
 #[cfg(feature = "__rustls")]
 impl TlsInfoFactory for hyper_rustls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        match self {
+            hyper_rustls::MaybeHttpsStream::Https(tls) => tls.tls_info(),
+            hyper_rustls::MaybeHttpsStream::Http(_) => None,
+        }
+    }
+}
+
+// ===== UnixStream =====
+
+#[cfg(feature = "__tls")]
+#[cfg(unix)]
+impl TlsInfoFactory for tokio::net::UnixStream {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        None
+    }
+}
+
+#[cfg(feature = "default-tls")]
+#[cfg(unix)]
+impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<TokioIo<tokio::net::UnixStream>>> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .peer_certificate()
+            .ok()
+            .flatten()
+            .and_then(|c| c.to_der().ok());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
+#[cfg(feature = "default-tls")]
+#[cfg(unix)]
+impl TlsInfoFactory
+    for tokio_native_tls::TlsStream<
+        TokioIo<hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::UnixStream>>>,
+    >
+{
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .peer_certificate()
+            .ok()
+            .flatten()
+            .and_then(|c| c.to_der().ok());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
+#[cfg(feature = "default-tls")]
+#[cfg(unix)]
+impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::UnixStream>> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        match self {
+            hyper_tls::MaybeHttpsStream::Https(tls) => tls.tls_info(),
+            hyper_tls::MaybeHttpsStream::Http(_) => None,
+        }
+    }
+}
+
+#[cfg(feature = "__rustls")]
+#[cfg(unix)]
+impl TlsInfoFactory for tokio_rustls::client::TlsStream<TokioIo<TokioIo<tokio::net::UnixStream>>> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .1
+            .peer_certificates()
+            .and_then(|certs| certs.first())
+            .map(|c| c.to_vec());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
+#[cfg(feature = "__rustls")]
+#[cfg(unix)]
+impl TlsInfoFactory
+    for tokio_rustls::client::TlsStream<
+        TokioIo<hyper_rustls::MaybeHttpsStream<TokioIo<tokio::net::UnixStream>>>,
+    >
+{
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .1
+            .peer_certificates()
+            .and_then(|certs| certs.first())
+            .map(|c| c.to_vec());
+        Some(crate::tls::TlsInfo { peer_certificate })
+    }
+}
+
+#[cfg(feature = "__rustls")]
+#[cfg(unix)]
+impl TlsInfoFactory for hyper_rustls::MaybeHttpsStream<TokioIo<tokio::net::UnixStream>> {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         match self {
             hyper_rustls::MaybeHttpsStream::Https(tls) => tls.tls_info(),
@@ -928,6 +1129,48 @@ pub(crate) mod sealed {
             Write::poll_shutdown(this.inner, cx)
         }
     }
+}
+
+// Some sealed things for UDS
+#[cfg(unix)]
+pub(crate) mod uds {
+    use std::path::Path;
+
+    /// A provider for Unix Domain Socket paths.
+    ///
+    /// This trait is sealed. This allows us expand the support in the future
+    /// by controlling who can implement the trait.
+    ///
+    /// It's available in the docs to see what type may be passed in.
+    #[cfg(unix)]
+    pub trait UnixSocketProvider {
+        #[doc(hidden)]
+        fn reqwest_uds_path(&self, _: Internal) -> &Path;
+    }
+
+    #[allow(missing_debug_implementations)]
+    pub struct Internal;
+
+    macro_rules! as_path {
+        ($($t:ty,)+) => {
+            $(
+                impl UnixSocketProvider for $t {
+                    #[doc(hidden)]
+                    fn reqwest_uds_path(&self, _: Internal) -> &Path {
+                        self.as_ref()
+                    }
+                }
+            )+
+        }
+    }
+
+    as_path![
+        String,
+        &'_ str,
+        &'_ Path,
+        std::path::PathBuf,
+        std::sync::Arc<Path>,
+    ];
 }
 
 pub(crate) type Connecting = Pin<Box<dyn Future<Output = Result<Conn, BoxError>> + Send>>;
@@ -1072,6 +1315,34 @@ mod native_tls_conn {
         }
     }
 
+    #[cfg(unix)]
+    impl Connection for NativeTlsConn<TokioIo<TokioIo<tokio::net::UnixStream>>> {
+        fn connected(&self) -> Connected {
+            let connected = Connected::new();
+            #[cfg(feature = "native-tls-alpn")]
+            match self.inner.inner().get_ref().negotiated_alpn().ok() {
+                Some(Some(alpn_protocol)) if alpn_protocol == b"h2" => connected.negotiated_h2(),
+                _ => connected,
+            }
+            #[cfg(not(feature = "native-tls-alpn"))]
+            connected
+        }
+    }
+
+    #[cfg(unix)]
+    impl Connection for NativeTlsConn<TokioIo<MaybeHttpsStream<TokioIo<tokio::net::UnixStream>>>> {
+        fn connected(&self) -> Connected {
+            let connected = Connected::new();
+            #[cfg(feature = "native-tls-alpn")]
+            match self.inner.inner().get_ref().negotiated_alpn().ok() {
+                Some(Some(alpn_protocol)) if alpn_protocol == b"h2" => connected.negotiated_h2(),
+                _ => connected,
+            }
+            #[cfg(not(feature = "native-tls-alpn"))]
+            connected
+        }
+    }
+
     impl<T: AsyncRead + AsyncWrite + Unpin> Read for NativeTlsConn<T> {
         fn poll_read(
             self: Pin<&mut Self>,
@@ -1172,6 +1443,40 @@ mod rustls_tls_conn {
         }
     }
     impl Connection for RustlsTlsConn<TokioIo<MaybeHttpsStream<TokioIo<TcpStream>>>> {
+        fn connected(&self) -> Connected {
+            if self.inner.inner().get_ref().1.alpn_protocol() == Some(b"h2") {
+                self.inner
+                    .inner()
+                    .get_ref()
+                    .0
+                    .inner()
+                    .connected()
+                    .negotiated_h2()
+            } else {
+                self.inner.inner().get_ref().0.inner().connected()
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    impl Connection for RustlsTlsConn<TokioIo<TokioIo<tokio::net::UnixStream>>> {
+        fn connected(&self) -> Connected {
+            if self.inner.inner().get_ref().1.alpn_protocol() == Some(b"h2") {
+                self.inner
+                    .inner()
+                    .get_ref()
+                    .0
+                    .inner()
+                    .connected()
+                    .negotiated_h2()
+            } else {
+                self.inner.inner().get_ref().0.inner().connected()
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    impl Connection for RustlsTlsConn<TokioIo<MaybeHttpsStream<TokioIo<tokio::net::UnixStream>>>> {
         fn connected(&self) -> Connected {
             if self.inner.inner().get_ref().1.alpn_protocol() == Some(b"h2") {
                 self.inner
