@@ -481,7 +481,7 @@ impl ConnectorService {
                     return Ok(Conn {
                         inner: self.verbose.wrap(RustlsTlsConn { inner: io }),
                         is_proxy: false,
-                        tls_info: false,
+                        tls_info: self.tls_info,
                     });
                 }
             }
@@ -492,7 +492,7 @@ impl ConnectorService {
         socks::connect(proxy, dst, dns).await.map(|tcp| Conn {
             inner: self.verbose.wrap(TokioIo::new(tcp)),
             is_proxy: false,
-            tls_info: false,
+            tls_info: self.tls_info,
         })
     }
 
@@ -628,7 +628,7 @@ impl ConnectorService {
                             inner: TokioIo::new(io),
                         }),
                         is_proxy: false,
-                        tls_info: false,
+                        tls_info: self.tls_info,
                     });
                 }
             }
@@ -663,7 +663,7 @@ impl ConnectorService {
                             inner: TokioIo::new(io),
                         }),
                         is_proxy: false,
-                        tls_info: false,
+                        tls_info: self.tls_info,
                     });
                 }
             }
