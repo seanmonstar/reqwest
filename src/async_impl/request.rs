@@ -24,7 +24,6 @@ pub struct Request {
     url: Url,
     headers: HeaderMap,
     body: Option<Body>,
-    timeout: Option<Duration>,
     version: Version,
     extensions: Extensions,
 }
@@ -47,7 +46,6 @@ impl Request {
             url,
             headers: HeaderMap::new(),
             body: None,
-            timeout: None,
             version: Version::default(),
             extensions: Extensions::new(),
         }
@@ -116,13 +114,16 @@ impl Request {
     /// Get the timeout.
     #[inline]
     pub fn timeout(&self) -> Option<&Duration> {
-        self.timeout.as_ref()
+        self.extensions
+            .get::<RequestConfig>()
+            .and_then(|cfg| cfg.request_timeout.as_ref())
     }
 
     /// Get a mutable reference to the timeout.
     #[inline]
     pub fn timeout_mut(&mut self) -> &mut Option<Duration> {
-        &mut self.timeout
+        let cfg = self.extensions.get_or_insert_default::<RequestConfig>();
+        &mut cfg.request_timeout
     }
 
     /// Get the http version.
@@ -154,23 +155,12 @@ impl Request {
         Some(req)
     }
 
-    pub(super) fn pieces(
-        self,
-    ) -> (
-        Method,
-        Url,
-        HeaderMap,
-        Option<Body>,
-        Option<Duration>,
-        Version,
-        Extensions,
-    ) {
+    pub(super) fn pieces(self) -> (Method, Url, HeaderMap, Option<Body>, Version, Extensions) {
         (
             self.method,
             self.url,
             self.headers,
             self.body,
-            self.timeout,
             self.version,
             self.extensions,
         )
@@ -638,7 +628,6 @@ where
             url,
             headers,
             body: Some(body.into()),
-            timeout: None,
             version,
             extensions,
         })
@@ -670,6 +659,15 @@ impl TryFrom<Request> for HttpRequest<Body> {
         *req.extensions_mut() = extensions;
         Ok(req)
     }
+}
+
+/// Configures the request.
+///
+/// This config will be stored in the request's extensions.
+#[derive(Default, Clone)]
+pub(crate) struct RequestConfig {
+    /// timeout for the whole request.
+    pub(crate) request_timeout: Option<Duration>,
 }
 
 #[cfg(test)]

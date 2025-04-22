@@ -10,7 +10,7 @@ use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
 use std::{fmt, str};
 
 use super::decoder::Accepts;
-use super::request::{Request, RequestBuilder};
+use super::request::{Request, RequestBuilder, RequestConfig};
 use super::response::Response;
 use super::Body;
 #[cfg(feature = "http3")]
@@ -44,7 +44,7 @@ use http::header::{
     CONTENT_TYPE, LOCATION, PROXY_AUTHORIZATION, RANGE, REFERER, TRANSFER_ENCODING, USER_AGENT,
 };
 use http::uri::Scheme;
-use http::Uri;
+use http::{Extensions, Uri};
 use hyper_util::client::legacy::connect::HttpConnector;
 use log::debug;
 #[cfg(feature = "default-tls")]
@@ -2285,7 +2285,7 @@ impl Client {
     }
 
     pub(super) fn execute_request(&self, req: Request) -> Pending {
-        let (method, url, mut headers, body, timeout, version, _extensions) = req.pieces();
+        let (method, url, mut headers, body, version, extensions) = req.pieces();
         if url.scheme() != "http" && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
         }
@@ -2355,8 +2355,9 @@ impl Client {
             }
         };
 
-        let total_timeout = timeout
-            .or(self.inner.request_timeout)
+        let total_timeout = self
+            .inner
+            .request_timeout(&extensions)
             .map(tokio::time::sleep)
             .map(Box::pin);
 
@@ -2640,6 +2641,14 @@ impl ClientRef {
         if let Some(ref d) = self.read_timeout {
             f.field("read_timeout", d);
         }
+    }
+
+    /// Returns the request timeout for this client, or the one set in the request
+    fn request_timeout(&self, request_extensions: &Extensions) -> Option<Duration> {
+        request_extensions
+            .get::<RequestConfig>()
+            .and_then(|cfg| cfg.request_timeout)
+            .or(self.request_timeout)
     }
 }
 
