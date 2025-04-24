@@ -29,6 +29,7 @@ use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolv
 use crate::error::{self, BoxError};
 use crate::into_url::try_uri;
 use crate::redirect::{self, remove_sensitive_headers};
+use crate::response::History;
 #[cfg(feature = "__rustls")]
 use crate::tls::CertificateRevocationList;
 #[cfg(feature = "__tls")]
@@ -2849,7 +2850,7 @@ impl Future for PendingRequest {
         }
 
         loop {
-            let res = match self.as_mut().in_flight().get_mut() {
+            let mut res = match self.as_mut().in_flight().get_mut() {
                 ResponseFuture::Default(r) => match Pin::new(r).poll(cx) {
                     Poll::Ready(Err(e)) => {
                         #[cfg(feature = "http2")]
@@ -3030,10 +3031,12 @@ impl Future for PendingRequest {
                 }
             }
 
+            res.extensions_mut()
+                .insert(History(mem::take(&mut self.urls)));
+
             let res = Response::new(
                 res,
                 self.url.clone(),
-                mem::take(&mut self.urls),
                 self.client.accepts,
                 self.total_timeout.take(),
                 self.read_timeout,

@@ -19,6 +19,7 @@ use super::decoder::{Accepts, Decoder};
 use crate::async_impl::body::ResponseBody;
 #[cfg(feature = "cookies")]
 use crate::cookie;
+use crate::response::History;
 
 #[cfg(feature = "charset")]
 use encoding_rs::{Encoding, UTF_8};
@@ -31,14 +32,12 @@ pub struct Response {
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
-    history: Vec<Url>,
 }
 
 impl Response {
     pub(super) fn new(
         res: hyper::Response<ResponseBody>,
         url: Url,
-        history: Vec<Url>,
         accepts: Accepts,
         total_timeout: Option<Pin<Box<Sleep>>>,
         read_timeout: Option<Duration>,
@@ -54,7 +53,6 @@ impl Response {
         Response {
             res,
             url: Box::new(url),
-            history,
         }
     }
 
@@ -122,14 +120,18 @@ impl Response {
     /// Get all the intermediate `Url`s traversed by redirects.
     #[inline]
     pub fn history(&self) -> &[Url] {
-        &self.history
+        &self
+            .extensions()
+            .get::<History>()
+            .map(|h| &h.0)
+            .expect("history extension")
     }
 
     /// Get all the `Url`s, in sequential order, that were requested,
     /// including any redirects and the final url.
     #[inline]
     pub fn all_urls(&self) -> impl Iterator<Item = &Url> {
-        self.history
+        self.history()
             .iter()
             .chain(std::iter::once(self.url.as_ref()))
     }
@@ -488,11 +490,11 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
             .remove::<ResponseUrl>()
             .unwrap_or_else(|| ResponseUrl(Url::parse("http://no.url.provided.local").unwrap()));
         let url = url.0;
+        parts.extensions.get_or_insert_default::<History>();
         let res = hyper::Response::from_parts(parts, decoder);
         Response {
             res,
             url: Box::new(url),
-            history: vec![],
         }
     }
 }
