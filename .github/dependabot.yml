@@ -9,9 +9,7 @@ updates:
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directories:
-      - "/"
-      - "/examples/wasm_github_fetch"
+    directory: "/"
     schedule:
       interval: "daily"
     # disable regular version updates, security updates are unaffected
