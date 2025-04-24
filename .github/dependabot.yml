@@ -1,6 +1,5 @@
 version: 2
 
-# Only enable cargo, turn off npm from wasm example
 updates:
   - package-ecosystem: "github-actions"
     # Workflow files stored in the
@@ -9,8 +8,14 @@ updates:
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/"
+    directories:
+      - "/"
+      - "/examples/wasm_github_fetch"
     schedule:
       interval: "daily"
     # disable regular version updates, security updates are unaffected
     open-pull-requests-limit: 0
+  - package-ecosystem: "npm"
+    directory: "/examples/wasm_github_fetch"
+    schedule:
+      interval: "monthly"
