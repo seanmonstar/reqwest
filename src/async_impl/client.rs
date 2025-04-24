@@ -134,6 +134,9 @@ struct Config {
     tls_info: bool,
     #[cfg(feature = "__tls")]
     tls: TlsBackend,
+    #[cfg(feature = "__rustls")]
+    rustls_config_callback:
+        Option<Box<dyn FnOnce(&rustls::ClientConfig) -> crate::Result<()> + Send + 'static>>,
     connector_layers: Vec<BoxedConnectorLayer>,
     http_version_pref: HttpVersionPref,
     http09_responses: bool,
@@ -255,6 +258,8 @@ impl ClientBuilder {
                 tls_info: false,
                 #[cfg(feature = "__tls")]
                 tls: TlsBackend::default(),
+                #[cfg(feature = "__rustls")]
+                rustls_config_callback: None,
                 connector_layers: Vec::new(),
                 http_version_pref: HttpVersionPref::All,
                 http09_responses: false,
@@ -328,7 +333,7 @@ impl ClientBuilder {
     /// This method fails if a TLS backend cannot be initialized, or the resolver
     /// cannot load the system configuration.
     pub fn build(self) -> crate::Result<Client> {
-        let config = self.config;
+        let mut config = self.config;
 
         if let Some(err) = config.error {
             return Err(err);
@@ -723,6 +728,11 @@ impl ClientBuilder {
                     };
 
                     tls.enable_sni = config.tls_sni;
+
+                    // Execute the rustls config callback if provided
+                    if let Some(callback) = config.rustls_config_callback.take() {
+                        callback(&tls)?;
+                    }
 
                     // ALPN protocol
                     match config.http_version_pref {
@@ -1854,6 +1864,44 @@ impl ClientBuilder {
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
     pub fn use_rustls_tls(mut self) -> ClientBuilder {
         self.config.tls = TlsBackend::Rustls;
+        self
+    }
+
+    /// Provides access to inspect the rustls configuration if the rustls TLS backend is being used.
+    /// The callback can return an error to abort client creation.
+    ///
+    /// This is useful for verifying the TLS configuration meets certain requirements
+    /// before proceeding with client creation.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Check if FIPS mode is enabled during client creation
+    /// let client = reqwest::Client::builder()
+    ///     .use_rustls_tls()
+    ///     .inspect_rustls_config(|config| {
+    ///         // Access the rustls config to check FIPS mode
+    ///         if !config.fips() {
+    ///             // Return an error if FIPS mode is not enabled
+    ///             return Err(format!("FIPS mode is required but not enabled").into());
+    ///         }
+    ///
+    ///         // FIPS mode is enabled, proceed with client creation
+    ///         Ok(())
+    ///     })
+    ///     .build()?;
+    /// ```
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `rustls-tls(-...)` feature to be enabled.
+    #[cfg(feature = "__rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    pub fn inspect_rustls_config<F>(mut self, callback: F) -> ClientBuilder
+    where
+        F: FnOnce(&rustls::ClientConfig) -> crate::Result<()> + Send + 'static,
+    {
+        self.config.rustls_config_callback = Some(Box::new(callback));
         self
     }
 
@@ -3099,5 +3147,56 @@ mod tests {
         let err = result.err().unwrap();
         assert!(err.is_builder());
         assert_eq!(url_str, err.url().unwrap().as_str());
+    }
+
+    #[cfg(feature = "__rustls")]
+    #[test]
+    fn rustls_config_callback_can_inspect_config() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        // Use an atomic bool to track that our callback was actually called
+        let callback_called = Arc::new(AtomicBool::new(false));
+        let callback_called_clone = callback_called.clone();
+
+        // Build a client with the callback
+        let client = crate::Client::builder()
+            .use_rustls_tls()
+            .inspect_rustls_config(move |config| {
+                // Verify we can access the config object
+                let _fips_mode = config.fips();
+
+                // Mark that our callback was called
+                callback_called.store(true, Ordering::SeqCst);
+
+                Ok(())
+            })
+            .build();
+
+        // Verify the client builds successfully
+        assert!(client.is_ok());
+
+        // Verify our callback was actually called
+        assert!(callback_called_clone.load(Ordering::SeqCst));
+    }
+
+    #[cfg(feature = "__rustls")]
+    #[test]
+    fn rustls_config_callback_can_return_error() {
+        // Build a client with a callback that returns an error
+        let client = crate::Client::builder()
+            .use_rustls_tls()
+            .inspect_rustls_config(|_config| {
+                // Return an error to test propagation
+                Err(crate::error::builder("test error"))
+            })
+            .build();
+
+        // Verify the client build fails
+        assert!(client.is_err());
+
+        // The error should be a builder error
+        let err = client.unwrap_err();
+        assert!(err.is_builder());
     }
 }
