@@ -333,7 +333,10 @@ impl ClientBuilder {
     /// This method fails if a TLS backend cannot be initialized, or the resolver
     /// cannot load the system configuration.
     pub fn build(self) -> crate::Result<Client> {
+        #[cfg(feature = "__rustls")]
         let mut config = self.config;
+        #[cfg(not(feature = "__rustls"))]
+        let config = self.config;
 
         if let Some(err) = config.error {
             return Err(err);
@@ -1876,6 +1879,8 @@ impl ClientBuilder {
     /// # Example
     ///
     /// ```ignore
+    /// use std::error::Error;
+    ///
     /// // Check if FIPS mode is enabled during client creation
     /// let client = reqwest::Client::builder()
     ///     .use_rustls_tls()
@@ -1883,7 +1888,7 @@ impl ClientBuilder {
     ///         // Access the rustls config to check FIPS mode
     ///         if !config.fips() {
     ///             // Return an error if FIPS mode is not enabled
-    ///             return Err(format!("FIPS mode is required but not enabled").into());
+    ///             return Err("FIPS mode is required but not enabled".into());
     ///         }
     ///
     ///         // FIPS mode is enabled, proceed with client creation
@@ -1897,11 +1902,14 @@ impl ClientBuilder {
     /// This requires the optional `rustls-tls(-...)` feature to be enabled.
     #[cfg(feature = "__rustls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
-    pub fn inspect_rustls_config<F>(mut self, callback: F) -> ClientBuilder
+    pub fn inspect_rustls_config<F, E>(mut self, callback: F) -> ClientBuilder
     where
-        F: FnOnce(&rustls::ClientConfig) -> crate::Result<()> + Send + 'static,
+        F: FnOnce(&rustls::ClientConfig) -> Result<(), E> + Send + 'static,
+        E: Into<Box<dyn std::error::Error + Send + Sync>> + 'static,
     {
-        self.config.rustls_config_callback = Some(Box::new(callback));
+        self.config.rustls_config_callback = Some(Box::new(|config| {
+            callback(config).map_err(|e| crate::error::builder(e.into()))
+        }));
         self
     }
 
@@ -3162,7 +3170,7 @@ mod tests {
         // Build a client with the callback
         let client = crate::Client::builder()
             .use_rustls_tls()
-            .inspect_rustls_config(move |config| {
+            .inspect_rustls_config(move |config| -> Result<(), String> {
                 // Verify we can access the config object
                 let _fips_mode = config.fips();
 
@@ -3187,8 +3195,8 @@ mod tests {
         let client = crate::Client::builder()
             .use_rustls_tls()
             .inspect_rustls_config(|_config| {
-                // Return an error to test propagation
-                Err(crate::error::builder("test error"))
+                // Return a simple string error to test propagation
+                Err("test error".to_string())
             })
             .build();
 
