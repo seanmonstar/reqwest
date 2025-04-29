@@ -17,6 +17,7 @@ use super::Body;
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
+use crate::config::{RequestConfig, RequestTimeout};
 use crate::connect::{
     sealed::{Conn, Unnameable},
     BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
@@ -905,7 +906,7 @@ impl ClientBuilder {
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
                 read_timeout: config.read_timeout,
-                request_timeout: config.timeout,
+                request_timeout: RequestConfig::new(config.timeout),
                 proxies,
                 proxies_maybe_http_auth,
                 https_only: config.https_only,
@@ -2285,7 +2286,7 @@ impl Client {
     }
 
     pub(super) fn execute_request(&self, req: Request) -> Pending {
-        let (method, url, mut headers, body, timeout, version, _extensions) = req.pieces();
+        let (method, url, mut headers, body, version, extensions) = req.pieces();
         if url.scheme() != "http" && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
         }
@@ -2355,8 +2356,11 @@ impl Client {
             }
         };
 
-        let total_timeout = timeout
-            .or(self.inner.request_timeout)
+        let total_timeout = self
+            .inner
+            .request_timeout
+            .fetch(&extensions)
+            .copied()
             .map(tokio::time::sleep)
             .map(Box::pin);
 
@@ -2598,7 +2602,7 @@ struct ClientRef {
     h3_client: Option<H3Client>,
     redirect_policy: redirect::Policy,
     referer: bool,
-    request_timeout: Option<Duration>,
+    request_timeout: RequestConfig<RequestTimeout>,
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
@@ -2633,9 +2637,7 @@ impl ClientRef {
 
         f.field("default_headers", &self.headers);
 
-        if let Some(ref d) = self.request_timeout {
-            f.field("timeout", d);
-        }
+        self.request_timeout.fmt_as_field(f);
 
         if let Some(ref d) = self.read_timeout {
             f.field("read_timeout", d);

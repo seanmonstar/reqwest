@@ -272,6 +272,10 @@ pub use url::Url;
 // universal mods
 #[macro_use]
 mod error;
+// TODO: remove `if_hyper` if wasm has been mirgated to new config system.
+if_hyper! {
+    mod config;
+}
 mod into_url;
 mod response;
 

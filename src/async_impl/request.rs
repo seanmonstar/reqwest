@@ -12,6 +12,7 @@ use super::client::{Client, Pending};
 #[cfg(feature = "multipart")]
 use super::multipart;
 use super::response::Response;
+use crate::config::{RequestConfig, RequestTimeout};
 #[cfg(feature = "multipart")]
 use crate::header::CONTENT_LENGTH;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
@@ -24,7 +25,6 @@ pub struct Request {
     url: Url,
     headers: HeaderMap,
     body: Option<Body>,
-    timeout: Option<Duration>,
     version: Version,
     extensions: Extensions,
 }
@@ -47,7 +47,6 @@ impl Request {
             url,
             headers: HeaderMap::new(),
             body: None,
-            timeout: None,
             version: Version::default(),
             extensions: Extensions::new(),
         }
@@ -116,13 +115,13 @@ impl Request {
     /// Get the timeout.
     #[inline]
     pub fn timeout(&self) -> Option<&Duration> {
-        self.timeout.as_ref()
+        RequestConfig::<RequestTimeout>::get(&self.extensions)
     }
 
     /// Get a mutable reference to the timeout.
     #[inline]
     pub fn timeout_mut(&mut self) -> &mut Option<Duration> {
-        &mut self.timeout
+        RequestConfig::<RequestTimeout>::get_mut(&mut self.extensions)
     }
 
     /// Get the http version.
@@ -154,23 +153,12 @@ impl Request {
         Some(req)
     }
 
-    pub(super) fn pieces(
-        self,
-    ) -> (
-        Method,
-        Url,
-        HeaderMap,
-        Option<Body>,
-        Option<Duration>,
-        Version,
-        Extensions,
-    ) {
+    pub(super) fn pieces(self) -> (Method, Url, HeaderMap, Option<Body>, Version, Extensions) {
         (
             self.method,
             self.url,
             self.headers,
             self.body,
-            self.timeout,
             self.version,
             self.extensions,
         )
@@ -638,7 +626,6 @@ where
             url,
             headers,
             body: Some(body.into()),
-            timeout: None,
             version,
             extensions,
         })
