@@ -62,6 +62,7 @@ where
             f.field(type_name::<T>(), v);
         }
     }
+
     /// Retrieve the value from the request-scoped configuration.
     ///
     /// If the request specifies a value, use that value; otherwise, attempt to retrieve it from the current instance (typically a client instance).
