@@ -24,6 +24,8 @@
 //! specifying the associated value type. Then use [`RequestConfig<T>`] in [`Extensions`]
 //! to set or retrieve config values for each key type in a uniform way.
 
+use std::any::type_name;
+use std::fmt::Debug;
 use std::time::Duration;
 
 use http::Extensions;
@@ -31,11 +33,11 @@ use http::Extensions;
 /// This trait is empty and is only used to associate a configuration key type with its
 /// corresponding value type.
 pub(crate) trait RequestConfigValue: Copy + Clone + 'static {
-    type Value: Clone + Send + Sync + 'static;
+    type Value: Clone + Debug + Send + Sync + 'static;
 }
 
 /// RequestConfig carries a request-scoped configuration value.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub(crate) struct RequestConfig<T: RequestConfigValue>(Option<T::Value>);
 
 impl<T: RequestConfigValue> Default for RequestConfig<T> {
@@ -52,6 +54,17 @@ where
         RequestConfig(v)
     }
 
+    /// format request config value as struct field.
+    ///
+    /// We provide this API directly to avoid leak internal value to callers.
+    pub(crate) fn fmt_as_field(&self, f: &mut std::fmt::DebugStruct<'_, '_>) {
+        if let Some(v) = &self.0 {
+            f.field(type_name::<T>(), v);
+        }
+    }
+    /// Retrieve the value from the request-scoped configuration.
+    ///
+    /// If the request specifies a value, use that value; otherwise, attempt to retrieve it from the current instance (typically a client instance).
     pub(crate) fn fetch<'client, 'request>(
         &'client self,
         ext: &'request Extensions,
@@ -64,14 +77,12 @@ where
             .or(self.0.as_ref())
     }
 
-    pub(crate) fn fetch_without_request(&self) -> Option<&T::Value> {
-        self.0.as_ref()
-    }
-
+    /// Retrieve the value from the request's Extensions.
     pub(crate) fn get(ext: &Extensions) -> Option<&T::Value> {
         ext.get::<RequestConfig<T>>().and_then(|v| v.0.as_ref())
     }
 
+    /// Retrieve the mutable value from the request's Extensions.
     pub(crate) fn get_mut(ext: &mut Extensions) -> &mut Option<T::Value> {
         let cfg = ext.get_or_insert_default::<RequestConfig<T>>();
         &mut cfg.0

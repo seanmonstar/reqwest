@@ -2637,9 +2637,7 @@ impl ClientRef {
 
         f.field("default_headers", &self.headers);
 
-        if let Some(ref d) = self.request_timeout.fetch_without_request() {
-            f.field("timeout", d);
-        }
+        self.request_timeout.fmt_as_field(f);
 
         if let Some(ref d) = self.read_timeout {
             f.field("read_timeout", d);
