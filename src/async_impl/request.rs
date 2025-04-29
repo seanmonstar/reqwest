@@ -12,6 +12,7 @@ use super::client::{Client, Pending};
 #[cfg(feature = "multipart")]
 use super::multipart;
 use super::response::Response;
+use crate::config::{RequestConfig, RequestTimeout};
 #[cfg(feature = "multipart")]
 use crate::header::CONTENT_LENGTH;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
@@ -114,16 +115,13 @@ impl Request {
     /// Get the timeout.
     #[inline]
     pub fn timeout(&self) -> Option<&Duration> {
-        self.extensions
-            .get::<RequestConfig>()
-            .and_then(|cfg| cfg.request_timeout.as_ref())
+        RequestConfig::<RequestTimeout>::get(&self.extensions)
     }
 
     /// Get a mutable reference to the timeout.
     #[inline]
     pub fn timeout_mut(&mut self) -> &mut Option<Duration> {
-        let cfg = self.extensions.get_or_insert_default::<RequestConfig>();
-        &mut cfg.request_timeout
+        RequestConfig::<RequestTimeout>::get_mut(&mut self.extensions)
     }
 
     /// Get the http version.
@@ -659,15 +657,6 @@ impl TryFrom<Request> for HttpRequest<Body> {
         *req.extensions_mut() = extensions;
         Ok(req)
     }
-}
-
-/// Configures the request.
-///
-/// This config will be stored in the request's extensions.
-#[derive(Default, Clone)]
-pub(crate) struct RequestConfig {
-    /// timeout for the whole request.
-    pub(crate) request_timeout: Option<Duration>,
 }
 
 #[cfg(test)]

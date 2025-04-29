@@ -272,6 +272,7 @@ pub use url::Url;
 // universal mods
 #[macro_use]
 mod error;
+mod config;
 mod into_url;
 mod response;
 

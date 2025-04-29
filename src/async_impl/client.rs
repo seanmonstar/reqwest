@@ -10,13 +10,14 @@ use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
 use std::{fmt, str};
 
 use super::decoder::Accepts;
-use super::request::{Request, RequestBuilder, RequestConfig};
+use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
+use crate::config::{RequestConfig, RequestTimeout};
 use crate::connect::{
     sealed::{Conn, Unnameable},
     BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
@@ -44,7 +45,7 @@ use http::header::{
     CONTENT_TYPE, LOCATION, PROXY_AUTHORIZATION, RANGE, REFERER, TRANSFER_ENCODING, USER_AGENT,
 };
 use http::uri::Scheme;
-use http::{Extensions, Uri};
+use http::Uri;
 use hyper_util::client::legacy::connect::HttpConnector;
 use log::debug;
 #[cfg(feature = "default-tls")]
@@ -905,7 +906,7 @@ impl ClientBuilder {
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
                 read_timeout: config.read_timeout,
-                request_timeout: config.timeout,
+                request_timeout: RequestConfig::new(config.timeout),
                 proxies,
                 proxies_maybe_http_auth,
                 https_only: config.https_only,
@@ -2357,7 +2358,9 @@ impl Client {
 
         let total_timeout = self
             .inner
-            .request_timeout(&extensions)
+            .request_timeout
+            .fetch(&extensions)
+            .copied()
             .map(tokio::time::sleep)
             .map(Box::pin);
 
@@ -2599,7 +2602,7 @@ struct ClientRef {
     h3_client: Option<H3Client>,
     redirect_policy: redirect::Policy,
     referer: bool,
-    request_timeout: Option<Duration>,
+    request_timeout: RequestConfig<RequestTimeout>,
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
@@ -2634,21 +2637,13 @@ impl ClientRef {
 
         f.field("default_headers", &self.headers);
 
-        if let Some(ref d) = self.request_timeout {
+        if let Some(ref d) = self.request_timeout.fetch_without_request() {
             f.field("timeout", d);
         }
 
         if let Some(ref d) = self.read_timeout {
             f.field("read_timeout", d);
         }
-    }
-
-    /// Returns the request timeout for this client, or the one set in the request
-    fn request_timeout(&self, request_extensions: &Extensions) -> Option<Duration> {
-        request_extensions
-            .get::<RequestConfig>()
-            .and_then(|cfg| cfg.request_timeout)
-            .or(self.request_timeout)
     }
 }
 
