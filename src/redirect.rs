@@ -4,13 +4,17 @@
 //! maximum redirect chain of 10 hops. To customize this behavior, a
 //! `redirect::Policy` can be used with a `ClientBuilder`.
 
-use std::error::Error as StdError;
 use std::fmt;
+use std::{error::Error as StdError, sync::Arc};
 
-use crate::header::{HeaderMap, AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, WWW_AUTHENTICATE};
+use crate::header::{AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, REFERER, WWW_AUTHENTICATE};
+use http::HeaderValue;
 use hyper::StatusCode;
 
-use crate::Url;
+use crate::{async_impl, Url};
+use tower_http::follow_redirect::policy::{
+    Action as TowerAction, Attempt as TowerAttempt, Policy as TowerPolicy,
+};
 
 /// A type that controls the policy on how to handle the following of redirects.
 ///
@@ -231,20 +235,6 @@ pub(crate) enum ActionKind {
     Error(Box<dyn StdError + Send + Sync>),
 }
 
-pub(crate) fn remove_sensitive_headers(headers: &mut HeaderMap, next: &Url, previous: &[Url]) {
-    if let Some(previous) = previous.last() {
-        let cross_host = next.host_str() != previous.host_str()
-            || next.port_or_known_default() != previous.port_or_known_default();
-        if cross_host {
-            headers.remove(AUTHORIZATION);
-            headers.remove(COOKIE);
-            headers.remove("cookie2");
-            headers.remove(PROXY_AUTHORIZATION);
-            headers.remove(WWW_AUTHENTICATE);
-        }
-    }
-}
-
 #[derive(Debug)]
 struct TooManyRedirects;
 
@@ -255,6 +245,107 @@ impl fmt::Display for TooManyRedirects {
 }
 
 impl StdError for TooManyRedirects {}
+
+#[derive(Clone)]
+pub(crate) struct TowerRedirectPolicy {
+    policy: Arc<Policy>,
+    cross_host: bool,
+    referer: bool,
+    referer_value: Option<HeaderValue>,
+    urls: Vec<Url>,
+    https_only: bool,
+}
+
+impl TowerRedirectPolicy {
+    pub(crate) fn new(policy: Policy) -> Self {
+        Self {
+            policy: Arc::new(policy),
+            cross_host: false,
+            referer: false,
+            referer_value: None,
+            urls: Vec::new(),
+            https_only: false,
+        }
+    }
+
+    pub(crate) fn with_referer(&mut self, referer: bool) -> &mut Self {
+        self.referer = referer;
+        self
+    }
+
+    pub(crate) fn with_https_only(&mut self, https_only: bool) -> &mut Self {
+        self.https_only = https_only;
+        self
+    }
+}
+
+fn make_referer(next: &Url, previous: &Url) -> Option<HeaderValue> {
+    if next.scheme() == "http" && previous.scheme() == "https" {
+        return None;
+    }
+
+    let mut referer = previous.clone();
+    let _ = referer.set_username("");
+    let _ = referer.set_password(None);
+    referer.set_fragment(None);
+    referer.as_str().parse().ok()
+}
+
+impl TowerPolicy<async_impl::body::Body, crate::Error> for TowerRedirectPolicy {
+    fn redirect(&mut self, attempt: &TowerAttempt<'_>) -> Result<TowerAction, crate::Error> {
+        let previous = attempt.previous();
+        let next = attempt.location();
+        self.cross_host = next.host() != previous.host() || next.port() != previous.port();
+        let previous_url =
+            Url::parse(&attempt.previous().to_string()).expect("Previous URL must be valid");
+
+        let next_url = match Url::parse(&attempt.location().to_string()) {
+            Ok(url) => url,
+            Err(e) => return Err(crate::error::builder(e)),
+        };
+
+        if next_url.scheme() != "http" && next_url.scheme() != "https" {
+            return Err(crate::error::url_bad_scheme(next_url));
+        }
+
+        if self.https_only && next_url.scheme() != "https" {
+            return Err(crate::error::redirect(
+                crate::error::url_bad_scheme(next_url.clone()),
+                next_url,
+            ));
+        }
+
+        self.urls.push(previous_url.clone());
+
+        if self.referer {
+            self.referer_value = make_referer(&next_url, &previous_url);
+        }
+
+        match self.policy.check(attempt.status(), &next_url, &self.urls) {
+            ActionKind::Follow => Ok(TowerAction::Follow),
+            ActionKind::Stop => Ok(TowerAction::Stop),
+            ActionKind::Error(e) => Err(crate::error::redirect(e, previous_url)),
+        }
+    }
+
+    fn on_request(&mut self, req: &mut http::Request<async_impl::body::Body>) {
+        if self.cross_host {
+            req.headers_mut().remove(AUTHORIZATION);
+            req.headers_mut().remove(COOKIE);
+            req.headers_mut().remove("cookie2");
+            req.headers_mut().remove(PROXY_AUTHORIZATION);
+            req.headers_mut().remove(WWW_AUTHENTICATE);
+        }
+        if let Some(v) = self.referer_value.as_ref() {
+            req.headers_mut().insert(REFERER, v.clone());
+        }
+    }
+
+    // This is must implemented to make 307 and 308 redirects work
+    fn clone_body(&self, body: &async_impl::body::Body) -> Option<async_impl::body::Body> {
+        body.try_clone()
+    }
+}
 
 #[test]
 fn test_redirect_policy_limit() {
@@ -310,28 +401,4 @@ fn test_redirect_policy_custom() {
         ActionKind::Stop => (),
         other => panic!("unexpected {other:?}"),
     }
-}
-
-#[test]
-fn test_remove_sensitive_headers() {
-    use hyper::header::{HeaderValue, ACCEPT, AUTHORIZATION, COOKIE};
-
-    let mut headers = HeaderMap::new();
-    headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
-    headers.insert(AUTHORIZATION, HeaderValue::from_static("let me in"));
-    headers.insert(COOKIE, HeaderValue::from_static("foo=bar"));
-
-    let next = Url::parse("http://initial-domain.com/path").unwrap();
-    let mut prev = vec![Url::parse("http://initial-domain.com/new_path").unwrap()];
-    let mut filtered_headers = headers.clone();
-
-    remove_sensitive_headers(&mut headers, &next, &prev);
-    assert_eq!(headers, filtered_headers);
-
-    prev.push(Url::parse("http://new-domain.com/path").unwrap());
-    filtered_headers.remove(AUTHORIZATION);
-    filtered_headers.remove(COOKIE);
-
-    remove_sensitive_headers(&mut headers, &next, &prev);
-    assert_eq!(headers, filtered_headers);
 }
