@@ -4,8 +4,8 @@
 //! maximum redirect chain of 10 hops. To customize this behavior, a
 //! `redirect::Policy` can be used with a `ClientBuilder`.
 
-use std::error::Error as StdError;
 use std::fmt;
+use std::{error::Error as StdError, sync::Arc};
 
 use crate::header::{HeaderMap, AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, WWW_AUTHENTICATE};
 use hyper::StatusCode;
@@ -21,6 +21,7 @@ use crate::Url;
 ///   the allowed maximum redirect hops in a chain.
 /// - `none` can be used to disable all redirect behavior.
 /// - `custom` can be used to create a customized policy.
+#[derive(Clone)]
 pub struct Policy {
     inner: PolicyKind,
 }
@@ -100,7 +101,7 @@ impl Policy {
         T: Fn(Attempt) -> Action + Send + Sync + 'static,
     {
         Self {
-            inner: PolicyKind::Custom(Box::new(policy)),
+            inner: PolicyKind::Custom(Arc::new(policy)),
         }
     }
 
@@ -200,8 +201,9 @@ impl<'a> Attempt<'a> {
     }
 }
 
+#[derive(Clone)]
 enum PolicyKind {
-    Custom(Box<dyn Fn(Attempt) -> Action + Send + Sync + 'static>),
+    Custom(Arc<dyn Fn(Attempt) -> Action + Send + Sync + 'static>),
     Limit(usize),
     None,
 }
