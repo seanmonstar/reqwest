@@ -196,6 +196,7 @@ struct Config {
     h3_send_grease: Option<bool>,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
     dns_resolver: Option<Arc<dyn Resolve>>,
+    error_for_status: bool,
 }
 
 impl Default for ClientBuilder {
@@ -316,6 +317,7 @@ impl ClientBuilder {
                 #[cfg(feature = "http3")]
                 h3_send_grease: None,
                 dns_resolver: None,
+                error_for_status: false,
             },
         }
     }
@@ -910,6 +912,7 @@ impl ClientBuilder {
                 proxies,
                 proxies_maybe_http_auth,
                 https_only: config.https_only,
+                error_for_status: config.error_for_status,
             }),
         })
     }
@@ -951,6 +954,7 @@ impl ClientBuilder {
         };
         self
     }
+
     /// Sets the default headers for every request.
     ///
     /// # Example
@@ -978,6 +982,14 @@ impl ClientBuilder {
         for (key, value) in headers.iter() {
             self.config.headers.insert(key, value.clone());
         }
+        self
+    }
+
+    /// Turns every response returned by the client into an error if the server returned an error. 
+    ///
+    /// Calls [`Response::error_for_status_ref`] on every `Response` returned by the client.
+    pub fn error_for_status(mut self, enable: bool) -> ClientBuilder {
+        self.config.error_for_status = enable;
         self
     }
 
@@ -2607,6 +2619,7 @@ struct ClientRef {
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
     https_only: bool,
+    error_for_status: bool,
 }
 
 impl ClientRef {
@@ -2641,6 +2654,9 @@ impl ClientRef {
 
         if let Some(ref d) = self.read_timeout {
             f.field("read_timeout", d);
+        }
+        if self.error_for_status {
+            f.field("error_for_status", &true);
         }
     }
 }
@@ -3037,6 +3053,11 @@ impl Future for PendingRequest {
                 self.total_timeout.take(),
                 self.read_timeout,
             );
+
+            if self.client.error_for_status {
+                res.error_for_status_ref()?;
+            }
+
             return Poll::Ready(Ok(res));
         }
     }
