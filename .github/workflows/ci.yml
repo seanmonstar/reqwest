@@ -243,9 +243,7 @@ jobs:
     name: linux / nightly
     needs: [style]
 
-    # Use Ubuntu 20.04 here, because latest (22.04) uses OpenSSL v3.
-    # Currently, OpenSSL v3 causes compile issues with openssl-sys
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -254,21 +252,18 @@ jobs:
       - name: Install rust
         uses: dtolnay/rust-toolchain@nightly
 
-      # - name: Build
-      #   run: cargo build
-
-      # - name: Test
-      #   run: cargo test --features __internal_proxy_sys_no_cache -- --test-threads=1
-
       - name: Check minimal versions
         env:
           RUSTFLAGS: --cfg reqwest_unstable
-        # Make sure proc-macro2 v1.0.60 is used
         # See https://github.com/rust-lang/rust/issues/113152
+        # We don't force a newer openssl, but a newer one is required for
+        # this CI runner, because of the version of Ubuntu.
         run: |
           cargo clean
           cargo update -Z minimal-versions
           cargo update -p proc-macro2 --precise 1.0.87
+          cargo update -p openssl-sys
+          cargo update -p openssl
           cargo check
           cargo check --all-features
 
@@ -300,6 +295,7 @@ jobs:
           cargo update -p idna_adapter --precise 1.1.0
           cargo update -p hashbrown@0.15.2 --precise 0.15.0
           cargo update -p native-tls --precise 0.2.13
+          cargo update -p once_cell --precise 1.20.3
 
       - uses: Swatinem/rust-cache@v2
 

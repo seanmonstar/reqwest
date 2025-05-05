@@ -14,9 +14,10 @@ use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
 #[cfg(feature = "http3")]
-use crate::async_impl::h3_client::connect::H3Connector;
+use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
+use crate::config::{RequestConfig, RequestTimeout};
 use crate::connect::{
     sealed::{Conn, Unnameable},
     BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
@@ -158,7 +159,18 @@ struct Config {
     #[cfg(feature = "http2")]
     http2_keep_alive_while_idle: bool,
     local_address: Option<IpAddr>,
-    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+    #[cfg(any(
+        target_os = "android",
+        target_os = "fuchsia",
+        target_os = "illumos",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "solaris",
+        target_os = "tvos",
+        target_os = "visionos",
+        target_os = "watchos",
+    ))]
     interface: Option<String>,
     nodelay: bool,
     #[cfg(feature = "cookies")]
@@ -176,6 +188,12 @@ struct Config {
     quic_receive_window: Option<VarInt>,
     #[cfg(feature = "http3")]
     quic_send_window: Option<u64>,
+    #[cfg(feature = "http3")]
+    quic_congestion_bbr: bool,
+    #[cfg(feature = "http3")]
+    h3_max_field_section_size: Option<u64>,
+    #[cfg(feature = "http3")]
+    h3_send_grease: Option<bool>,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
     dns_resolver: Option<Arc<dyn Resolve>>,
 }
@@ -262,7 +280,18 @@ impl ClientBuilder {
                 #[cfg(feature = "http2")]
                 http2_keep_alive_while_idle: false,
                 local_address: None,
-                #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+                #[cfg(any(
+                    target_os = "android",
+                    target_os = "fuchsia",
+                    target_os = "illumos",
+                    target_os = "ios",
+                    target_os = "linux",
+                    target_os = "macos",
+                    target_os = "solaris",
+                    target_os = "tvos",
+                    target_os = "visionos",
+                    target_os = "watchos",
+                ))]
                 interface: None,
                 nodelay: true,
                 hickory_dns: cfg!(feature = "hickory-dns"),
@@ -280,6 +309,12 @@ impl ClientBuilder {
                 quic_receive_window: None,
                 #[cfg(feature = "http3")]
                 quic_send_window: None,
+                #[cfg(feature = "http3")]
+                quic_congestion_bbr: false,
+                #[cfg(feature = "http3")]
+                h3_max_field_section_size: None,
+                #[cfg(feature = "http3")]
+                h3_send_grease: None,
                 dns_resolver: None,
             },
         }
@@ -343,6 +378,9 @@ impl ClientBuilder {
                  quic_stream_receive_window,
                  quic_receive_window,
                  quic_send_window,
+                 quic_congestion_bbr,
+                 h3_max_field_section_size,
+                 h3_send_grease,
                  local_address,
                  http_version_pref: &HttpVersionPref| {
                     let mut transport_config = TransportConfig::default();
@@ -365,11 +403,27 @@ impl ClientBuilder {
                         transport_config.send_window(send_window);
                     }
 
+                    if quic_congestion_bbr {
+                        let factory = Arc::new(quinn::congestion::BbrConfig::default());
+                        transport_config.congestion_controller_factory(factory);
+                    }
+
+                    let mut h3_client_config = H3ClientConfig::default();
+
+                    if let Some(max_field_section_size) = h3_max_field_section_size {
+                        h3_client_config.max_field_section_size = Some(max_field_section_size);
+                    }
+
+                    if let Some(send_grease) = h3_send_grease {
+                        h3_client_config.send_grease = Some(send_grease);
+                    }
+
                     let res = H3Connector::new(
                         DynResolver::new(resolver),
                         tls,
                         local_address,
                         transport_config,
+                        h3_client_config,
                     );
 
                     match res {
@@ -462,7 +516,14 @@ impl ClientBuilder {
                         #[cfg(any(
                             target_os = "android",
                             target_os = "fuchsia",
-                            target_os = "linux"
+                            target_os = "illumos",
+                            target_os = "ios",
+                            target_os = "linux",
+                            target_os = "macos",
+                            target_os = "solaris",
+                            target_os = "tvos",
+                            target_os = "visionos",
+                            target_os = "watchos",
                         ))]
                         config.interface.as_deref(),
                         config.nodelay,
@@ -492,6 +553,9 @@ impl ClientBuilder {
                             config.quic_stream_receive_window,
                             config.quic_receive_window,
                             config.quic_send_window,
+                            config.quic_congestion_bbr,
+                            config.h3_max_field_section_size,
+                            config.h3_send_grease,
                             config.local_address,
                             &config.http_version_pref,
                         )?;
@@ -506,7 +570,14 @@ impl ClientBuilder {
                         #[cfg(any(
                             target_os = "android",
                             target_os = "fuchsia",
-                            target_os = "linux"
+                            target_os = "illumos",
+                            target_os = "ios",
+                            target_os = "linux",
+                            target_os = "macos",
+                            target_os = "solaris",
+                            target_os = "tvos",
+                            target_os = "visionos",
+                            target_os = "watchos",
                         ))]
                         config.interface.as_deref(),
                         config.nodelay,
@@ -687,6 +758,9 @@ impl ClientBuilder {
                             config.quic_stream_receive_window,
                             config.quic_receive_window,
                             config.quic_send_window,
+                            config.quic_congestion_bbr,
+                            config.h3_max_field_section_size,
+                            config.h3_send_grease,
                             config.local_address,
                             &config.http_version_pref,
                         )?;
@@ -701,7 +775,14 @@ impl ClientBuilder {
                         #[cfg(any(
                             target_os = "android",
                             target_os = "fuchsia",
-                            target_os = "linux"
+                            target_os = "illumos",
+                            target_os = "ios",
+                            target_os = "linux",
+                            target_os = "macos",
+                            target_os = "solaris",
+                            target_os = "tvos",
+                            target_os = "visionos",
+                            target_os = "watchos",
                         ))]
                         config.interface.as_deref(),
                         config.nodelay,
@@ -721,7 +802,18 @@ impl ClientBuilder {
                 http,
                 proxies.clone(),
                 config.local_address,
-                #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+                #[cfg(any(
+                    target_os = "android",
+                    target_os = "fuchsia",
+                    target_os = "illumos",
+                    target_os = "ios",
+                    target_os = "linux",
+                    target_os = "macos",
+                    target_os = "solaris",
+                    target_os = "tvos",
+                    target_os = "visionos",
+                    target_os = "watchos",
+                ))]
                 config.interface.as_deref(),
                 config.nodelay,
             )
@@ -814,7 +906,7 @@ impl ClientBuilder {
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
                 read_timeout: config.read_timeout,
-                request_timeout: config.timeout,
+                request_timeout: RequestConfig::new(config.timeout),
                 proxies,
                 proxies_maybe_http_auth,
                 https_only: config.https_only,
@@ -1403,7 +1495,23 @@ impl ClientBuilder {
         self
     }
 
-    /// Bind to an interface by `SO_BINDTODEVICE`.
+    /// Bind connections only on the specified network interface.
+    ///
+    /// This option is only available on the following operating systems:
+    ///
+    /// - Android
+    /// - Fuchsia
+    /// - Linux,
+    /// - macOS and macOS-like systems (iOS, tvOS, watchOS and visionOS)
+    /// - Solaris and illumos
+    ///
+    /// On Android, Linux, and Fuchsia, this uses the
+    /// [`SO_BINDTODEVICE`][man-7-socket] socket option. On macOS and macOS-like
+    /// systems, Solaris, and illumos, this instead uses the [`IP_BOUND_IF` and
+    /// `IPV6_BOUND_IF`][man-7p-ip] socket options (as appropriate).
+    ///
+    /// Note that connections will fail if the provided interface name is not a
+    /// network interface that currently exists when a connection is established.
     ///
     /// # Example
     ///
@@ -1415,7 +1523,21 @@ impl ClientBuilder {
     ///     .interface(interface)
     ///     .build().unwrap();
     /// ```
-    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+    ///
+    /// [man-7-socket]: https://man7.org/linux/man-pages/man7/socket.7.html
+    /// [man-7p-ip]: https://docs.oracle.com/cd/E86824_01/html/E54777/ip-7p.html
+    #[cfg(any(
+        target_os = "android",
+        target_os = "fuchsia",
+        target_os = "illumos",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "solaris",
+        target_os = "tvos",
+        target_os = "visionos",
+        target_os = "watchos",
+    ))]
     pub fn interface(mut self, interface: &str) -> ClientBuilder {
         self.config.interface = Some(interface.to_string());
         self
@@ -1962,6 +2084,54 @@ impl ClientBuilder {
         self
     }
 
+    /// Override the default congestion control algorithm to use [BBR]
+    ///
+    /// The current default congestion control algorithm is [CUBIC]. This method overrides the
+    /// default.
+    ///
+    /// [BBR]: https://datatracker.ietf.org/doc/html/draft-ietf-ccwg-bbr
+    /// [CUBIC]: https://datatracker.ietf.org/doc/html/rfc8312
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_congestion_bbr(mut self) -> ClientBuilder {
+        self.config.quic_congestion_bbr = true;
+        self
+    }
+
+    /// Set the maximum HTTP/3 header size this client is willing to accept.
+    ///
+    /// See [header size constraints] section of the specification for details.
+    ///
+    /// [header size constraints]: https://www.rfc-editor.org/rfc/rfc9114.html#name-header-size-constraints
+    ///
+    /// Please see docs in [`Builder`] in [`h3`].
+    ///
+    /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.max_field_section_size
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_max_field_section_size(mut self, value: u64) -> ClientBuilder {
+        self.config.h3_max_field_section_size = Some(value.try_into().unwrap());
+        self
+    }
+
+    /// Enable whether to send HTTP/3 protocol grease on the connections.
+    ///
+    /// HTTP/3 uses the concept of "grease"
+    ///
+    /// to prevent potential interoperability issues in the future.
+    /// In HTTP/3, the concept of grease is used to ensure that the protocol can evolve
+    /// and accommodate future changes without breaking existing implementations.
+    ///
+    /// Please see docs in [`Builder`] in [`h3`].
+    ///
+    /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.send_grease
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_send_grease(mut self, enabled: bool) -> ClientBuilder {
+        self.config.h3_send_grease = Some(enabled);
+        self
+    }
+
     /// Adds a new Tower [`Layer`](https://docs.rs/tower/latest/tower/trait.Layer.html) to the
     /// base connector [`Service`](https://docs.rs/tower/latest/tower/trait.Service.html) which
     /// is responsible for connection establishment.
@@ -2116,7 +2286,7 @@ impl Client {
     }
 
     pub(super) fn execute_request(&self, req: Request) -> Pending {
-        let (method, url, mut headers, body, timeout, version) = req.pieces();
+        let (method, url, mut headers, body, version, extensions) = req.pieces();
         if url.scheme() != "http" && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
         }
@@ -2186,8 +2356,11 @@ impl Client {
             }
         };
 
-        let total_timeout = timeout
-            .or(self.inner.request_timeout)
+        let total_timeout = self
+            .inner
+            .request_timeout
+            .fetch(&extensions)
+            .copied()
             .map(tokio::time::sleep)
             .map(Box::pin);
 
@@ -2355,7 +2528,18 @@ impl Config {
             f.field("local_address", v);
         }
 
-        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+        #[cfg(any(
+            target_os = "android",
+            target_os = "fuchsia",
+            target_os = "illumos",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "solaris",
+            target_os = "tvos",
+            target_os = "visionos",
+            target_os = "watchos",
+        ))]
         if let Some(ref v) = self.interface {
             f.field("interface", v);
         }
@@ -2418,7 +2602,7 @@ struct ClientRef {
     h3_client: Option<H3Client>,
     redirect_policy: redirect::Policy,
     referer: bool,
-    request_timeout: Option<Duration>,
+    request_timeout: RequestConfig<RequestTimeout>,
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
@@ -2453,9 +2637,7 @@ impl ClientRef {
 
         f.field("default_headers", &self.headers);
 
-        if let Some(ref d) = self.request_timeout {
-            f.field("timeout", d);
-        }
+        self.request_timeout.fmt_as_field(f);
 
         if let Some(ref d) = self.read_timeout {
             f.field("read_timeout", d);

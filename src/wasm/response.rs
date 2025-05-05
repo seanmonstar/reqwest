@@ -11,7 +11,7 @@ use crate::wasm::AbortGuard;
 use wasm_bindgen::JsCast;
 
 #[cfg(feature = "stream")]
-use futures_util::stream::StreamExt;
+use futures_util::stream::{self, StreamExt};
 
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
@@ -135,24 +135,30 @@ impl Response {
     /// Convert the response into a `Stream` of `Bytes` from the body.
     #[cfg(feature = "stream")]
     pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
+        use futures_core::Stream;
+        use std::pin::Pin;
+
         let web_response = self.http.into_body();
         let abort = self._abort;
-        let body = web_response
-            .body()
-            .expect("could not create wasm byte stream");
-        let body = wasm_streams::ReadableStream::from_raw(body.unchecked_into());
-        Box::pin(body.into_stream().map(move |buf_js| {
-            // Keep the abort guard alive as long as this stream is.
-            let _abort = &abort;
-            let buffer = Uint8Array::new(
-                &buf_js
-                    .map_err(crate::error::wasm)
-                    .map_err(crate::error::decode)?,
-            );
-            let mut bytes = vec![0; buffer.length() as usize];
-            buffer.copy_to(&mut bytes);
-            Ok(bytes.into())
-        }))
+
+        if let Some(body) = web_response.body() {
+            let body = wasm_streams::ReadableStream::from_raw(body.unchecked_into());
+            Box::pin(body.into_stream().map(move |buf_js| {
+                // Keep the abort guard alive as long as this stream is.
+                let _abort = &abort;
+                let buffer = Uint8Array::new(
+                    &buf_js
+                        .map_err(crate::error::wasm)
+                        .map_err(crate::error::decode)?,
+                );
+                let mut bytes = vec![0; buffer.length() as usize];
+                buffer.copy_to(&mut bytes);
+                Ok(bytes.into())
+            })) as Pin<Box<dyn Stream<Item = crate::Result<Bytes>>>>
+        } else {
+            // If there's no body, return an empty stream.
+            Box::pin(stream::empty()) as Pin<Box<dyn Stream<Item = crate::Result<Bytes>>>>
+        }
     }
 
     // util methods
