@@ -175,6 +175,8 @@
 //! the usage is basically the same as the async api. Some of the features are disabled in wasm
 //! : [`tls`], [`cookie`], [`blocking`], as well as various `ClientBuilder` methods such as `timeout()` and `connector_layer()`.
 //!
+//! TLS and cookies are provided through the browser environment, so reqwest can issue TLS requests with cookies,
+//! but has limited configuration.
 //!
 //! ## Optional Features
 //!
