@@ -406,7 +406,7 @@ async fn test_redirect_limit_to_1() {
     // If the maxmium limit is 1, then the final uri should be /redirect/1
     assert_eq!(
         res.url().unwrap().as_str(),
-        format!("http://{}/redirect/0", server.addr()).as_str()
+        format!("http://{}/redirect/1", server.addr()).as_str()
     );
     assert!(res.is_redirect());
 }
