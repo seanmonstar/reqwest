@@ -282,6 +282,10 @@ jobs:
         with:
           toolchain: nightly
 
+      - name: Get MSRV package metadata
+        id: metadata
+        run: cargo metadata --no-deps --format-version 1 | jq -r '"msrv=" + .packages[0].rust_version' >> $GITHUB_OUTPUT
+
       - name: Install rust (${{ steps.metadata.outputs.msrv }})
         uses: dtolnay/rust-toolchain@master
         with:
