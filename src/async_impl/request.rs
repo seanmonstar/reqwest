@@ -12,10 +12,11 @@ use super::client::{Client, Pending};
 #[cfg(feature = "multipart")]
 use super::multipart;
 use super::response::Response;
-use crate::config::{RequestConfig, RequestTimeout};
+use crate::config::{self, RequestConfig};
 #[cfg(feature = "multipart")]
 use crate::header::CONTENT_LENGTH;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
+
 use crate::{Method, Url};
 use http::{request::Parts, Extensions, Request as HttpRequest, Version};
 
@@ -115,13 +116,13 @@ impl Request {
     /// Get the timeout.
     #[inline]
     pub fn timeout(&self) -> Option<&Duration> {
-        RequestConfig::<RequestTimeout>::get(&self.extensions)
+        RequestConfig::<config::RequestTimeout>::get(&self.extensions)
     }
 
     /// Get a mutable reference to the timeout.
     #[inline]
     pub fn timeout_mut(&mut self) -> &mut Option<Duration> {
-        RequestConfig::<RequestTimeout>::get_mut(&mut self.extensions)
+        RequestConfig::<config::RequestTimeout>::get_mut(&mut self.extensions)
     }
 
     /// Get the http version.
@@ -134,6 +135,126 @@ impl Request {
     #[inline]
     pub fn version_mut(&mut self) -> &mut Version {
         &mut self.version
+    }
+
+    /// Get the `gzip` option on this request.
+    #[inline]
+    pub fn gzip(&self) -> Option<&bool> {
+        #[cfg(feature = "gzip")]
+        {
+            RequestConfig::<config::Accepts>::get(&self.extensions).map(|v| &v.gzip)
+        }
+        #[cfg(not(feature = "gzip"))]
+        {
+            None
+        }
+    }
+
+    /// Set auto gzip decompression by checking the `Content-Encoding` response header.
+    ///
+    /// Refer to [`reqwest::ClientBuilder::gzip`] for more details.
+    #[inline]
+    pub fn gzip_mut(&mut self) -> Option<&mut bool> {
+        #[cfg(feature = "gzip")]
+        {
+            RequestConfig::<config::Accepts>::get_mut(&mut self.extensions)
+                .as_mut()
+                .map(|v| &mut v.gzip)
+        }
+        #[cfg(not(feature = "gzip"))]
+        {
+            None
+        }
+    }
+
+    /// Get the `brotli` option on this request.
+    #[inline]
+    pub fn brotli(&self) -> Option<&bool> {
+        #[cfg(feature = "brotli")]
+        {
+            RequestConfig::<config::Accepts>::get(&self.extensions).map(|v| &v.brotli)
+        }
+        #[cfg(not(feature = "brotli"))]
+        {
+            None
+        }
+    }
+
+    /// Set auto brotli decompression by checking the `Content-Encoding` response header.
+    ///
+    /// Refer to [`reqwest::ClientBuilder::brotli`] for more details.
+    #[inline]
+    pub fn brotli_mut(&mut self) -> Option<&mut bool> {
+        #[cfg(feature = "brotli")]
+        {
+            RequestConfig::<config::Accepts>::get_mut(&mut self.extensions)
+                .as_mut()
+                .map(|v| &mut v.brotli)
+        }
+        #[cfg(not(feature = "brotli"))]
+        {
+            None
+        }
+    }
+
+    /// Get the `zstd` option on this request.
+    #[inline]
+    pub fn zstd(&self) -> Option<&bool> {
+        #[cfg(feature = "zstd")]
+        {
+            RequestConfig::<config::Accepts>::get(&self.extensions).map(|v| &v.zstd)
+        }
+        #[cfg(not(feature = "zstd"))]
+        {
+            None
+        }
+    }
+
+    /// Set auto zstd decompression by checking the `Content-Encoding` response header.
+    ///
+    /// Refer to [`reqwest::ClientBuilder::zstd`] for more details.
+    #[inline]
+    pub fn zstd_mut(&mut self) -> Option<&mut bool> {
+        #[cfg(feature = "zstd")]
+        {
+            RequestConfig::<config::Accepts>::get_mut(&mut self.extensions)
+                .as_mut()
+                .map(|v| &mut v.zstd)
+        }
+        #[cfg(not(feature = "zstd"))]
+        {
+            None
+        }
+    }
+
+    /// Get the `deflate` option on this request.
+    #[inline]
+    pub fn deflate(&self) -> Option<&bool> {
+        #[cfg(feature = "deflate")]
+        {
+            RequestConfig::<config::Accepts>::get(&self.extensions).map(|v| &v.deflate)
+        }
+        #[cfg(not(feature = "deflate"))]
+        {
+            None
+        }
+    }
+
+    /// Enable auto deflate decompression by checking the `Content-Encoding` response header.
+    ///
+    /// Refer to [`reqwest::ClientBuilder::deflate`] for more details.
+    #[inline]
+    pub fn deflate_mut(&mut self) -> Option<&mut bool> {
+        #[cfg(feature = "deflate")]
+        {
+            RequestConfig::<config::Accepts>::get_mut(&mut self.extensions)
+                .as_mut()
+                .map(|v| &mut v.deflate)
+        }
+        #[cfg(not(feature = "deflate"))]
+        {
+            None
+        }
     }
 
     /// Attempt to clone the request.
