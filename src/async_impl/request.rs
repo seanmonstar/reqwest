@@ -152,7 +152,7 @@ impl Request {
 
     /// Set auto gzip decompression by checking the `Content-Encoding` response header.
     ///
-    /// Refer to [`reqwest::ClientBuilder::gzip`] for more details.
+    /// Refer to [`crate::ClientBuilder::gzip`] for more details.
     #[inline]
     pub fn gzip_mut(&mut self) -> Option<&mut bool> {
         #[cfg(feature = "gzip")]
@@ -182,7 +182,7 @@ impl Request {
 
     /// Set auto brotli decompression by checking the `Content-Encoding` response header.
     ///
-    /// Refer to [`reqwest::ClientBuilder::brotli`] for more details.
+    /// Refer to [`crate::ClientBuilder::brotli`] for more details.
     #[inline]
     pub fn brotli_mut(&mut self) -> Option<&mut bool> {
         #[cfg(feature = "brotli")]
@@ -212,7 +212,7 @@ impl Request {
 
     /// Set auto zstd decompression by checking the `Content-Encoding` response header.
     ///
-    /// Refer to [`reqwest::ClientBuilder::zstd`] for more details.
+    /// Refer to [`crate::ClientBuilder::zstd`] for more details.
     #[inline]
     pub fn zstd_mut(&mut self) -> Option<&mut bool> {
         #[cfg(feature = "zstd")]
@@ -242,7 +242,7 @@ impl Request {
 
     /// Enable auto deflate decompression by checking the `Content-Encoding` response header.
     ///
-    /// Refer to [`reqwest::ClientBuilder::deflate`] for more details.
+    /// Refer to [`crate::ClientBuilder::deflate`] for more details.
     #[inline]
     pub fn deflate_mut(&mut self) -> Option<&mut bool> {
         #[cfg(feature = "deflate")]
