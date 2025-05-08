@@ -3,7 +3,7 @@ use std::any::Any;
 use std::future::Future;
 use std::net::IpAddr;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
@@ -959,7 +959,7 @@ impl ClientBuilder {
             p
         };
 
-        let hyper = Mutex::new(FollowRedirect::with_policy(hyper_service, policy));
+        let hyper = FollowRedirect::with_policy(hyper_service, policy);
 
         Ok(Client {
             inner: Arc::new(ClientRef {
@@ -2426,7 +2426,7 @@ impl Client {
             _ => {
                 let mut req = builder.body(body).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
-                let mut hyper = self.inner.hyper.lock().unwrap();
+                let mut hyper = self.inner.hyper.clone();
                 ResponseFuture::Default(hyper.call(req))
             }
         };
@@ -2670,7 +2670,7 @@ struct ClientRef {
     #[cfg(feature = "cookies")]
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     headers: HeaderMap,
-    hyper: Mutex<FollowRedirect<HyperService, TowerRedirectPolicy>>,
+    hyper: FollowRedirect<HyperService, TowerRedirectPolicy>,
     #[cfg(feature = "http3")]
     h3_client: Option<H3Client>,
     referer: bool,
@@ -2822,7 +2822,7 @@ impl PendingRequest {
                     .body(body)
                     .expect("valid request parts");
                 *req.headers_mut() = self.headers.clone();
-                let mut hyper = self.client.hyper.lock().unwrap();
+                let mut hyper = self.client.hyper.clone();
                 ResponseFuture::Default(hyper.call(req))
             }
         };
