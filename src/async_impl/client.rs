@@ -1,5 +1,7 @@
 #[cfg(any(feature = "native-tls", feature = "__rustls",))]
 use std::any::Any;
+#[cfg(feature = "http2")]
+use std::error::Error;
 use std::future::Future;
 use std::net::IpAddr;
 use std::pin::Pin;
@@ -2919,9 +2921,14 @@ impl Future for PendingRequest {
                 ResponseFuture::Default(r) => match Pin::new(r).poll(cx) {
                     Poll::Ready(Err(e)) => {
                         #[cfg(feature = "http2")]
-                        if self.as_mut().retry_error(&e) {
-                            continue;
+                        if e.is_request() {
+                            if let Some(e) = e.source() {
+                                if self.as_mut().retry_error(e) {
+                                    continue;
+                                }
+                            }
                         }
+
                         return Poll::Ready(Err(e));
                     }
                     Poll::Ready(Ok(res)) => res.map(super::body::boxed),
