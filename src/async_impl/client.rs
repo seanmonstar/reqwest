@@ -2778,7 +2778,7 @@ fn is_retryable_error(err: &(dyn std::error::Error + 'static)) -> bool {
 
     #[cfg(feature = "http3")]
     if let Some(cause) = err.source() {
-        if let Some(err) = cause.downcast_ref::<h3::Error>() {
+        if let Some(err) = cause.downcast_ref::<h3::error::ConnectionError>() {
             debug!("determining if HTTP/3 error {err} can be retried");
             // TODO: Does h3 provide an API for checking the error?
             return err.to_string().as_str() == "timeout";

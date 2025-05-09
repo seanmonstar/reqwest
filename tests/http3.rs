@@ -155,6 +155,8 @@ async fn http3_test_concurrent_request() {
 async fn http3_test_reconnection() {
     use std::error::Error;
 
+    use h3::error::StreamError;
+
     let server = server::Http3::new().build(|_| async { http::Response::default() });
     let addr = server.addr();
 
@@ -189,11 +191,11 @@ async fn http3_test_reconnection() {
         .unwrap()
         .source()
         .unwrap()
-        .downcast_ref::<h3::Error>()
+        .downcast_ref::<StreamError>()
         .unwrap();
 
     // Why is it so hard to inspect h3 errors? :/
-    assert!(err.to_string().contains("timeout"));
+    assert!(err.to_string().contains("Timeout"));
 
     let server = server::Http3::new()
         .with_addr(addr)

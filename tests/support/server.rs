@@ -151,7 +151,11 @@ impl Http3 {
 
     pub fn build<F1, Fut>(self, func: F1) -> Server
     where
-        F1: Fn(http::Request<http_body_util::combinators::BoxBody<bytes::Bytes, h3::Error>>) -> Fut
+        F1: Fn(
+                http::Request<
+                    http_body_util::combinators::BoxBody<bytes::Bytes, h3::error::StreamError>,
+                >,
+            ) -> Fut
             + Clone
             + Send
             + 'static,
@@ -211,35 +215,37 @@ impl Http3 {
                                     let events_tx = events_tx.clone();
                                     let func = func.clone();
                                     tokio::spawn(async move {
-                                        while let Ok(Some((req, stream))) = h3_conn.accept().await {
+                                        while let Ok(Some(resolver)) = h3_conn.accept().await {
                                             let events_tx = events_tx.clone();
                                             let func = func.clone();
                                             tokio::spawn(async move {
-                                                let (mut tx, rx) = stream.split();
-                                                let body = futures_util::stream::unfold(rx, |mut rx| async move {
-                                                    match rx.recv_data().await {
-                                                        Ok(Some(mut buf)) => {
-                                                            Some((Ok(hyper::body::Frame::data(buf.copy_to_bytes(buf.remaining()))), rx))
-                                                        },
-                                                        Ok(None) => None,
-                                                        Err(err) => {
-                                                            Some((Err(err), rx))
+                                                if let Ok((req, stream)) = resolver.resolve_request().await {
+                                                    let (mut tx, rx) = stream.split();
+                                                    let body = futures_util::stream::unfold(rx, |mut rx| async move {
+                                                        match rx.recv_data().await {
+                                                            Ok(Some(mut buf)) => {
+                                                                Some((Ok(hyper::body::Frame::data(buf.copy_to_bytes(buf.remaining()))), rx))
+                                                            },
+                                                            Ok(None) => None,
+                                                            Err(err) => {
+                                                                Some((Err(err), rx))
+                                                            }
+                                                        }
+                                                    });
+                                                    let body = BodyExt::boxed(http_body_util::StreamBody::new(body));
+                                                    let resp = func(req.map(move |()| body)).await;
+                                                    let (parts, mut body) = resp.into_parts();
+                                                    let resp = http::Response::from_parts(parts, ());
+                                                    tx.send_response(resp).await.unwrap();
+
+                                                    while let Some(Ok(frame)) = body.frame().await {
+                                                        if let Ok(data) = frame.into_data() {
+                                                            tx.send_data(data).await.unwrap();
                                                         }
                                                     }
-                                                });
-                                                let body = BodyExt::boxed(http_body_util::StreamBody::new(body));
-                                                let resp = func(req.map(move |()| body)).await;
-                                                let (parts, mut body) = resp.into_parts();
-                                                let resp = http::Response::from_parts(parts, ());
-                                                tx.send_response(resp).await.unwrap();
-
-                                                while let Some(Ok(frame)) = body.frame().await {
-                                                    if let Ok(data) = frame.into_data() {
-                                                        tx.send_data(data).await.unwrap();
-                                                    }
+                                                    tx.finish().await.unwrap();
+                                                    events_tx.send(Event::ConnectionClosed).unwrap();
                                                 }
-                                                tx.finish().await.unwrap();
-                                                events_tx.send(Event::ConnectionClosed).unwrap();
                                             });
                                         }
                                     });
