@@ -325,8 +325,11 @@ fn _assert_impls() {
     assert_sync::<Client>();
     assert_clone::<Client>();
 
-    assert_send::<Request>();
-    assert_send::<RequestBuilder>();
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        assert_send::<Request>();
+        assert_send::<RequestBuilder>();
+    }
 
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -336,8 +339,11 @@ fn _assert_impls() {
     assert_send::<Error>();
     assert_sync::<Error>();
 
-    assert_send::<Body>();
-    assert_sync::<Body>();
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        assert_send::<Body>();
+        assert_sync::<Body>();
+    }
 }
 
 if_hyper! {

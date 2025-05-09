@@ -193,6 +193,14 @@ impl Part {
 
         let mut mime_type = self.metadata().mime.as_ref();
 
+        if let super::body::Single::Blob(blob) = single {
+            if let Some(file_name) = &self.metadata().file_name {
+                return form.append_with_blob_and_filename(name, blob, file_name);
+            } else {
+                return form.append_with_blob(name, blob);
+            }
+        }
+
         // The JS fetch API doesn't support file names and mime types for strings. So we do our best
         // effort to use `append_with_str` and fallback to `append_with_blob_*` if that's not
         // possible.
@@ -218,9 +226,9 @@ impl Part {
     fn blob(&self, mime_type: Option<&Mime>) -> crate::Result<web_sys::Blob> {
         use web_sys::Blob;
         use web_sys::BlobPropertyBag;
-        let mut properties = BlobPropertyBag::new();
+        let properties = BlobPropertyBag::new();
         if let Some(mime) = mime_type {
-            properties.type_(mime.as_ref());
+            properties.set_type(mime.as_ref());
         }
 
         let js_value = self
@@ -335,7 +343,7 @@ mod tests {
         use super::{Form, Part};
         use js_sys::Uint8Array;
         use wasm_bindgen::JsValue;
-        use web_sys::{File, FormData};
+        use web_sys::{BlobPropertyBag, File, FormData};
 
         let text_file_name = "test.txt";
         let text_file_type = "text/plain";
@@ -353,6 +361,21 @@ mod tests {
             .mime_str(binary_file_type)
             .expect("invalid mime type");
 
+        let blob_name = "blob";
+        let options = BlobPropertyBag::new();
+        let blob_type = "image/jpeg";
+        options.set_type(blob_type);
+        let blob_data = vec![0u8, 42];
+        let uint8_array: JsValue = js_sys::Uint8Array::from(blob_data.as_slice()).into();
+        let file_bits_array = js_sys::Array::of1(&uint8_array);
+        let blob =
+            web_sys::Blob::new_with_u8_array_sequence_and_options(&file_bits_array, &options)
+                .unwrap();
+        let blob_part = Part::stream(blob)
+            .file_name(blob_name)
+            .mime_str(blob_type)
+            .expect("invalid mime type");
+
         let string_name = "string";
         let string_content = "CONTENT";
         let string_part = Part::text(string_content);
@@ -362,15 +385,16 @@ mod tests {
         let form = Form::new()
             .part(text_name, text_part)
             .part(binary_name, binary_part)
-            .part(string_name, string_part);
+            .part(string_name, string_part)
+            .part(blob_name, blob_part);
 
-        let mut init = web_sys::RequestInit::new();
-        init.method("POST");
-        init.body(Some(
+        let init = web_sys::RequestInit::new();
+        init.set_method(http::Method::POST.as_str());
+        init.set_body(
             form.to_form_data()
                 .expect("could not convert to FormData")
                 .as_ref(),
-        ));
+        );
 
         let js_req = web_sys::Request::new_with_str_and_init("", &init)
             .expect("could not create JS request");
@@ -415,5 +439,11 @@ mod tests {
         let binary = Uint8Array::new(&array_buffer).to_vec();
 
         assert_eq!(binary, binary_content);
+
+        // check blob part
+        let blob_file = File::from(form_data.get(blob_name));
+        assert_eq!(blob_file.name(), blob_name);
+        assert_eq!(blob_file.type_(), blob_type);
+        assert_eq!(blob_file.size() as u64, blob_data.len() as u64);
     }
 }
