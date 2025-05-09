@@ -19,6 +19,7 @@ use super::decoder::{Accepts, Decoder};
 use crate::async_impl::body::ResponseBody;
 #[cfg(feature = "cookies")]
 use crate::cookie;
+use crate::response::History;
 
 #[cfg(feature = "charset")]
 use encoding_rs::{Encoding, UTF_8};
@@ -114,6 +115,25 @@ impl Response {
     #[inline]
     pub fn url(&self) -> &Url {
         &self.url
+    }
+
+    /// Get all the intermediate `Url`s traversed by redirects.
+    #[inline]
+    pub fn history(&self) -> &[Url] {
+        &self
+            .extensions()
+            .get::<History>()
+            .map(|h| &h.0)
+            .expect("history extension")
+    }
+
+    /// Get all the `Url`s, in sequential order, that were requested,
+    /// including any redirects and the final url.
+    #[inline]
+    pub fn all_urls(&self) -> impl Iterator<Item = &Url> {
+        self.history()
+            .iter()
+            .chain(std::iter::once(self.url.as_ref()))
     }
 
     /// Get the remote address used to get this `Response`.
@@ -470,6 +490,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
             .remove::<ResponseUrl>()
             .unwrap_or_else(|| ResponseUrl(Url::parse("http://no.url.provided.local").unwrap()));
         let url = url.0;
+        parts.extensions.get_or_insert_default::<History>();
         let res = hyper::Response::from_parts(parts, decoder);
         Response {
             res,
@@ -507,5 +528,7 @@ mod tests {
 
         assert_eq!(response.status(), 200);
         assert_eq!(*response.url(), url);
+        assert!(response.history().is_empty());
+        assert_eq!(response.all_urls().collect::<Vec<_>>(), vec![&url]);
     }
 }
