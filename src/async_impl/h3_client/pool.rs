@@ -209,7 +209,7 @@ impl PoolClient {
     ) -> Result<Response<ResponseBody>, BoxError> {
         use hyper::body::Body as _;
 
-        let (head, req_body) = req.into_parts();
+        let (head, mut req_body) = req.into_parts();
         let mut req = Request::from_parts(head, ());
 
         if let Some(n) = req_body.size_hint().exact() {
@@ -221,11 +221,17 @@ impl PoolClient {
 
         let mut stream = self.inner.send_request(req).await?;
 
-        match req_body.as_bytes() {
-            Some(b) if !b.is_empty() => {
-                stream.send_data(Bytes::copy_from_slice(b)).await?;
+        let mut req_body = Pin::new(&mut req_body);
+        loop {
+            match std::future::poll_fn(|cx| req_body.as_mut().poll_frame(cx)).await {
+                Some(Ok(frame)) => {
+                    if let Ok(b) = frame.into_data() {
+                        stream.send_data(Bytes::copy_from_slice(&b)).await?;
+                    }
+                }
+                Some(Err(e)) => Err(e)?,
+                None => break,
             }
-            _ => {}
         }
 
         stream.finish().await?;
