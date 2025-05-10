@@ -61,7 +61,7 @@ use tokio_util::io::StreamReader;
 use super::body::ResponseBody;
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct Accepts {
+pub(crate) struct Accepts {
     #[cfg(feature = "gzip")]
     pub(super) gzip: bool,
     #[cfg(feature = "brotli")]

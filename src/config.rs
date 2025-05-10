@@ -78,6 +78,17 @@ where
             .or(self.0.as_ref())
     }
 
+    /// Retrieve the owned value from the request-scoped configuration.
+    ///
+    /// If the request specifies a value, use that value; otherwise, attempt to retrieve it from the current instance (typically a client instance).
+    ///
+    /// This owned version of `fetch` can consume the config value directly to avoid extra clone.
+    pub(crate) fn fetch_owned<'request>(self, ext: &Extensions) -> Option<T::Value> {
+        ext.get::<RequestConfig<T>>()
+            .and_then(|v| v.0.clone())
+            .or(self.0)
+    }
+
     /// Retrieve the value from the request's Extensions.
     pub(crate) fn get(ext: &Extensions) -> Option<&T::Value> {
         ext.get::<RequestConfig<T>>().and_then(|v| v.0.as_ref())
@@ -107,4 +118,11 @@ pub(crate) struct RequestTimeout;
 
 impl RequestConfigValue for RequestTimeout {
     type Value = Duration;
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct Accepts;
+
+impl RequestConfigValue for Accepts {
+    type Value = crate::async_impl::decoder::Accepts;
 }
