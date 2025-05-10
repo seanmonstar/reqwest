@@ -17,7 +17,7 @@ use super::Body;
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
-use crate::config::{RequestConfig, RequestTimeout};
+use crate::config::{RequestConfig, TotalTimeout};
 use crate::connect::{
     sealed::{Conn, Unnameable},
     BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
@@ -906,7 +906,7 @@ impl ClientBuilder {
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
                 read_timeout: config.read_timeout,
-                request_timeout: RequestConfig::new(config.timeout),
+                total_timeout: RequestConfig::new(config.timeout),
                 proxies,
                 proxies_maybe_http_auth,
                 https_only: config.https_only,
@@ -2358,7 +2358,7 @@ impl Client {
 
         let total_timeout = self
             .inner
-            .request_timeout
+            .total_timeout
             .fetch(&extensions)
             .copied()
             .map(tokio::time::sleep)
@@ -2602,7 +2602,7 @@ struct ClientRef {
     h3_client: Option<H3Client>,
     redirect_policy: redirect::Policy,
     referer: bool,
-    request_timeout: RequestConfig<RequestTimeout>,
+    total_timeout: RequestConfig<TotalTimeout>,
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
@@ -2637,7 +2637,7 @@ impl ClientRef {
 
         f.field("default_headers", &self.headers);
 
-        self.request_timeout.fmt_as_field(f);
+        self.total_timeout.fmt_as_field(f);
 
         if let Some(ref d) = self.read_timeout {
             f.field("read_timeout", d);

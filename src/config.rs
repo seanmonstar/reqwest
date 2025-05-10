@@ -103,8 +103,8 @@ where
 // ================================
 
 #[derive(Clone, Copy)]
-pub(crate) struct RequestTimeout;
+pub(crate) struct TotalTimeout;
 
-impl RequestConfigValue for RequestTimeout {
+impl RequestConfigValue for TotalTimeout {
     type Value = Duration;
 }
