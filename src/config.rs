@@ -30,6 +30,8 @@ use std::time::Duration;
 
 use http::Extensions;
 
+use crate::redirect;
+
 /// This trait is empty and is only used to associate a configuration key type with its
 /// corresponding value type.
 pub(crate) trait RequestConfigValue: Copy + Clone + 'static {
@@ -60,6 +62,21 @@ where
     pub(crate) fn fmt_as_field(&self, f: &mut std::fmt::DebugStruct<'_, '_>) {
         if let Some(v) = &self.0 {
             f.field(type_name::<T>(), v);
+        }
+    }
+
+    /// format request config value as struct field while condition met.
+    ///
+    /// We provide this API directly to avoid leak internal value to callers.
+    pub(crate) fn fmt_as_field_when(
+        &self,
+        f: &mut std::fmt::DebugStruct<'_, '_>,
+        condition: impl Fn(T::Value) -> bool,
+    ) {
+        if let Some(v) = &self.0 {
+            if condition(v.clone()) {
+                f.field(type_name::<T>(), v);
+            }
         }
     }
 
@@ -107,4 +124,11 @@ pub(crate) struct RequestTimeout;
 
 impl RequestConfigValue for RequestTimeout {
     type Value = Duration;
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct RedirectPolicy;
+
+impl RequestConfigValue for RedirectPolicy {
+    type Value = redirect::Policy;
 }
