@@ -143,7 +143,7 @@ hyper-rustls = { version = "0.27.0", default-features = false, optional = true, 
 rustls = { version = "0.23.4", optional = true, default-features = false, features = ["std", "tls12"] }
 rustls-pki-types = { version = "1.1.0", features = ["alloc"] ,optional = true }
 tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["tls12"] }
-webpki-roots = { version = "0.26.0", optional = true }
+webpki-roots = { version = "1.0.0", optional = true }
 rustls-native-certs = { version = "0.8.0", optional = true }
 
 ## cookies
@@ -158,7 +158,7 @@ tokio-util = { version = "0.7.9", default-features = false, features = ["codec",
 tokio-socks = { version = "0.5.2", optional = true }
 
 ## hickory-dns
-hickory-resolver = { version = "0.24", optional = true, features = ["tokio-runtime"] }
+hickory-resolver = { version = "0.25", optional = true, features = ["tokio"] }
 
 # HTTP/3 experimental support
 h3 = { version = "0.0.8", optional = true }
@@ -168,12 +168,12 @@ slab = { version = "0.4.9", optional = true } # just to get minimal versions wor
 futures-channel = { version = "0.3", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-env_logger = "0.10"
+env_logger = "0.11"
 hyper = { version = "1.1.0", default-features = false, features = ["http1", "http2", "client", "server"] }
 hyper-util = { version = "0.1.10", features = ["http1", "http2", "client", "client-legacy", "server-auto", "tokio"] }
 serde = { version = "1.0", features = ["derive"] }
 flate2 = "1.0.13"
-brotli_crate = { package = "brotli", version = "7.0.0" }
+brotli_crate = { package = "brotli", version = "8.0.0" }
 zstd_crate = { package = "zstd", version = "0.13" }
 doc-comment = "0.3"
 tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
@@ -181,7 +181,7 @@ futures-util = { version = "0.3.28", default-features = false, features = ["std"
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-registry = "0.4"
+windows-registry = "0.5"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 system-configuration = { version = "0.6.0", optional = true }
