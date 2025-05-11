@@ -221,7 +221,7 @@ impl PoolClient {
 
         let (mut send, mut recv) = self.inner.send_request(req).await?.split();
 
-        let (tx, rx) = oneshot::channel::<Result<(), BoxError>>();
+        let (tx, mut rx) = oneshot::channel::<Result<(), BoxError>>();
         tokio::spawn(async move {
             let mut req_body = Pin::new(&mut req_body);
             loop {
@@ -257,11 +257,14 @@ impl PoolClient {
             let _ = tx.send(Ok(()));
         });
 
-        let resp = recv.recv_response().await?;
-
-        let resp_body = crate::async_impl::body::boxed(Incoming::new(recv, resp.headers(), rx));
-
-        Ok(resp.map(|_| resp_body))
+        tokio::select! {
+            Ok(Err(e)) = &mut rx => Err(e),
+            resp = recv.recv_response() => {
+                let resp = resp?;
+                let resp_body = crate::async_impl::body::boxed(Incoming::new(recv, resp.headers(), rx));
+                Ok(resp.map(|_| resp_body))
+            }
+        }
     }
 }
 
