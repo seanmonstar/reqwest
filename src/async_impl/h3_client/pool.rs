@@ -6,7 +6,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::Duration;
-use tokio::sync::watch;
+use tokio::sync::{oneshot, watch};
 use tokio::time::Instant;
 
 use crate::async_impl::body::ResponseBody;
@@ -17,7 +17,7 @@ use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::uri::{Authority, Scheme};
 use http::{Request, Response, Uri};
-use log::trace;
+use log::{error, trace};
 
 pub(super) type Key = (Scheme, Authority);
 
@@ -219,26 +219,47 @@ impl PoolClient {
             }
         }
 
-        let mut stream = self.inner.send_request(req).await?;
+        let (mut send, mut recv) = self.inner.send_request(req).await?.split();
 
-        let mut req_body = Pin::new(&mut req_body);
-        loop {
-            match std::future::poll_fn(|cx| req_body.as_mut().poll_frame(cx)).await {
-                Some(Ok(frame)) => {
-                    if let Ok(b) = frame.into_data() {
-                        stream.send_data(Bytes::copy_from_slice(&b)).await?;
+        let (tx, rx) = oneshot::channel::<Result<(), BoxError>>();
+        tokio::spawn(async move {
+            let mut req_body = Pin::new(&mut req_body);
+            loop {
+                match std::future::poll_fn(|cx| req_body.as_mut().poll_frame(cx)).await {
+                    Some(Ok(frame)) => {
+                        if let Ok(b) = frame.into_data() {
+                            if let Err(e) = send.send_data(Bytes::copy_from_slice(&b)).await {
+                                if let Err(e) = tx.send(Err(e.into())) {
+                                    error!("Failed to communicate send.send_data() error: {e:?}");
+                                }
+                                return;
+                            }
+                        }
                     }
+                    Some(Err(e)) => {
+                        if let Err(e) = tx.send(Err(e.into())) {
+                            error!("Failed to communicate req_body read error: {e:?}");
+                        }
+                        return;
+                    }
+
+                    None => break,
                 }
-                Some(Err(e)) => Err(e)?,
-                None => break,
             }
-        }
 
-        stream.finish().await?;
+            if let Err(e) = send.finish().await {
+                if let Err(e) = tx.send(Err(e.into())) {
+                    error!("Failed to communicate send.finish read error: {e:?}");
+                }
+                return;
+            }
 
-        let resp = stream.recv_response().await?;
+            let _ = tx.send(Ok(()));
+        });
 
-        let resp_body = crate::async_impl::body::boxed(Incoming::new(stream, resp.headers()));
+        let resp = recv.recv_response().await?;
+
+        let resp_body = crate::async_impl::body::boxed(Incoming::new(recv, resp.headers(), rx));
 
         Ok(resp.map(|_| resp_body))
     }
@@ -277,16 +298,22 @@ impl PoolConnection {
 struct Incoming<S, B> {
     inner: h3::client::RequestStream<S, B>,
     content_length: Option<u64>,
+    send_rx: oneshot::Receiver<Result<(), BoxError>>,
 }
 
 impl<S, B> Incoming<S, B> {
-    fn new(stream: h3::client::RequestStream<S, B>, headers: &http::header::HeaderMap) -> Self {
+    fn new(
+        stream: h3::client::RequestStream<S, B>,
+        headers: &http::header::HeaderMap,
+        send_rx: oneshot::Receiver<Result<(), BoxError>>,
+    ) -> Self {
         Self {
             inner: stream,
             content_length: headers
                 .get(http::header::CONTENT_LENGTH)
                 .and_then(|h| h.to_str().ok())
                 .and_then(|v| v.parse().ok()),
+            send_rx,
         }
     }
 }
@@ -302,6 +329,10 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context,
     ) -> Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        if let Ok(Err(e)) = self.send_rx.try_recv() {
+            return Poll::Ready(Some(Err(crate::error::body(e))));
+        }
+
         match futures_core::ready!(self.inner.poll_recv_data(cx)) {
             Ok(Some(mut b)) => Poll::Ready(Some(Ok(hyper::body::Frame::data(
                 b.copy_to_bytes(b.remaining()),
