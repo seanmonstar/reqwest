@@ -410,3 +410,35 @@ async fn test_redirect_limit_to_1() {
     );
     assert!(res.is_redirect());
 }
+
+#[tokio::test]
+async fn test_redirect_custom() {
+    let server = server::http(move |req| async move {
+        assert!(req.uri().path().ends_with("/foo"));
+        http::Response::builder()
+            .status(302)
+            .header("location", "/should_not_be_called")
+            .body(Body::default())
+            .unwrap()
+    });
+
+    let url = format!("http://{}/foo", server.addr());
+
+    let res = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.url().path().ends_with("/should_not_be_called") {
+                attempt.stop()
+            } else {
+                attempt.follow()
+            }
+        }))
+        .build()
+        .unwrap()
+        .get(&url)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.url().as_str(), url);
+    assert_eq!(res.status(), reqwest::StatusCode::FOUND);
+}

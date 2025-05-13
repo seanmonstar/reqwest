@@ -87,3 +87,14 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
         }
     }
 }
+
+#[cfg(feature = "cookies")]
+pub(crate) fn add_cookie_header(
+    headers: &mut HeaderMap,
+    cookie_store: &dyn crate::cookie::CookieStore,
+    url: &url::Url,
+) {
+    if let Some(header) = cookie_store.cookies(url) {
+        headers.insert(crate::header::COOKIE, header);
+    }
+}
