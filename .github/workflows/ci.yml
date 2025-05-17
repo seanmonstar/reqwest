@@ -215,7 +215,7 @@ jobs:
           toolchain: 'stable'
 
       - name: Check
-        run: cargo test --features http3
+        run: cargo test --features http3,stream
         env:
           RUSTFLAGS: --cfg reqwest_unstable
           RUSTDOCFLAGS: --cfg reqwest_unstable
