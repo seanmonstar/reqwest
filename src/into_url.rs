@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use url::Url;
 
 /// A trait to try to convert some type into a `Url`.
@@ -8,6 +10,7 @@ pub trait IntoUrl: IntoUrlSealed {}
 
 impl IntoUrl for Url {}
 impl IntoUrl for String {}
+impl<'a> IntoUrl for Cow<'a, str> {}
 impl<'a> IntoUrl for &'a str {}
 impl<'a> IntoUrl for &'a String {}
 
@@ -73,6 +76,19 @@ impl IntoUrlSealed for String {
     }
 }
 
+impl<'a> IntoUrlSealed for Cow<'a, str> {
+    fn into_url(self) -> crate::Result<Url> {
+        match self {
+            Cow::Borrowed(b) => b.into_url(),
+            Cow::Owned(o) => o.into_url(),
+        }
+    }
+
+    fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
 if_hyper! {
     pub(crate) fn try_uri(url: &Url) -> crate::Result<http::Uri> {
         url.as_str()
@@ -102,6 +118,18 @@ mod tests {
             err.source().unwrap().to_string(),
             "URL scheme is not allowed"
         );
+    }
+
+    #[test]
+    fn into_url_cow() {
+        let s = "http://example.com";
+        let borrowed: Cow<'_, str> = Cow::Borrowed(s);
+        let u = borrowed.into_url().unwrap();
+        assert_eq!(u.as_str(), "http://example.com/");
+
+        let owned: Cow<str> = Cow::Owned(s.to_string());
+        let u = owned.into_url().unwrap();
+        assert_eq!(u.as_str(), "http://example.com/");
     }
 
     if_wasm! {
