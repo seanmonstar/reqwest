@@ -579,6 +579,26 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.tcp_keepalive(val))
     }
 
+    /// Set that all sockets have `SO_KEEPALIVE` set with the supplied interval.
+    ///
+    /// If `None`, the option will not be set.
+    pub fn tcp_keepalive_interval<D>(self, val: D) -> ClientBuilder
+    where
+        D: Into<Option<Duration>>,
+    {
+        self.with_inner(move |inner| inner.tcp_keepalive_interval(val))
+    }
+
+    /// Set that all sockets have `SO_KEEPALIVE` set with the supplied retry count.
+    ///
+    /// If `None`, the option will not be set.
+    pub fn tcp_keepalive_retries<C>(self, retries: C) -> ClientBuilder
+    where
+        C: Into<Option<u32>>,
+    {
+        self.with_inner(move |inner| inner.tcp_keepalive_retries(retries))
+    }
+
     // TLS options
 
     /// Add a custom root certificate.
