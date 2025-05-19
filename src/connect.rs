@@ -1,6 +1,7 @@
 #[cfg(feature = "__tls")]
 use http::header::HeaderValue;
-use http::uri::{Authority, Scheme};
+#[cfg(feature = "__tls")]
+use http::uri::Scheme;
 use http::Uri;
 use hyper::rt::{Read, ReadBufCursor, Write};
 use hyper_util::client::legacy::connect::{Connected, Connection};
@@ -27,7 +28,7 @@ use self::native_tls_conn::NativeTlsConn;
 use self::rustls_tls_conn::RustlsTlsConn;
 use crate::dns::DynResolver;
 use crate::error::{cast_to_internal_error, BoxError};
-use crate::proxy::{Proxy, ProxyScheme};
+use crate::proxy::{Intercepted, Matcher as ProxyMatcher};
 use sealed::{Conn, Unnameable};
 
 pub(crate) type HttpConnector = hyper_util::client::legacy::connect::HttpConnector<DynResolver>;
@@ -68,7 +69,7 @@ pub(crate) type BoxedConnectorLayer =
 
 pub(crate) struct ConnectorBuilder {
     inner: Inner,
-    proxies: Arc<Vec<Proxy>>,
+    proxies: Arc<Vec<ProxyMatcher>>,
     verbose: verbose::Wrapper,
     timeout: Option<Duration>,
     #[cfg(feature = "__tls")]
@@ -77,6 +78,8 @@ pub(crate) struct ConnectorBuilder {
     tls_info: bool,
     #[cfg(feature = "__tls")]
     user_agent: Option<HeaderValue>,
+    #[cfg(feature = "socks")]
+    resolver: Option<DynResolver>,
 }
 
 impl ConnectorBuilder {
@@ -94,6 +97,8 @@ where {
             #[cfg(feature = "__tls")]
             user_agent: self.user_agent,
             simple_timeout: None,
+            #[cfg(feature = "socks")]
+            resolver: self.resolver.unwrap_or_else(DynResolver::gai),
         };
 
         if layers.is_empty() {
@@ -146,7 +151,7 @@ where {
     #[cfg(not(feature = "__tls"))]
     pub(crate) fn new<T>(
         mut http: HttpConnector,
-        proxies: Arc<Vec<Proxy>>,
+        proxies: Arc<Vec<ProxyMatcher>>,
         local_addr: T,
         #[cfg(any(
             target_os = "android",
@@ -189,6 +194,8 @@ where {
             proxies,
             verbose: verbose::OFF,
             timeout: None,
+            #[cfg(feature = "socks")]
+            resolver: None,
         }
     }
 
@@ -196,7 +203,7 @@ where {
     pub(crate) fn new_default_tls<T>(
         http: HttpConnector,
         tls: TlsConnectorBuilder,
-        proxies: Arc<Vec<Proxy>>,
+        proxies: Arc<Vec<ProxyMatcher>>,
         user_agent: Option<HeaderValue>,
         local_addr: T,
         #[cfg(any(
@@ -247,7 +254,7 @@ where {
     pub(crate) fn from_built_default_tls<T>(
         mut http: HttpConnector,
         tls: TlsConnector,
-        proxies: Arc<Vec<Proxy>>,
+        proxies: Arc<Vec<ProxyMatcher>>,
         user_agent: Option<HeaderValue>,
         local_addr: T,
         #[cfg(any(
@@ -296,6 +303,8 @@ where {
             tls_info,
             user_agent,
             timeout: None,
+            #[cfg(feature = "socks")]
+            resolver: None,
         }
     }
 
@@ -303,7 +312,7 @@ where {
     pub(crate) fn new_rustls_tls<T>(
         mut http: HttpConnector,
         tls: rustls::ClientConfig,
-        proxies: Arc<Vec<Proxy>>,
+        proxies: Arc<Vec<ProxyMatcher>>,
         user_agent: Option<HeaderValue>,
         local_addr: T,
         #[cfg(any(
@@ -365,6 +374,8 @@ where {
             tls_info,
             user_agent,
             timeout: None,
+            #[cfg(feature = "socks")]
+            resolver: None,
         }
     }
 
@@ -408,13 +419,18 @@ where {
             Inner::Http(http) => http.set_keepalive_retries(retries),
         }
     }
+
+    #[cfg(feature = "socks")]
+    pub(crate) fn set_socks_resolver(&mut self, resolver: DynResolver) {
+        self.resolver = Some(resolver);
+    }
 }
 
 #[allow(missing_debug_implementations)]
 #[derive(Clone)]
 pub(crate) struct ConnectorService {
     inner: Inner,
-    proxies: Arc<Vec<Proxy>>,
+    proxies: Arc<Vec<ProxyMatcher>>,
     verbose: verbose::Wrapper,
     /// When there is a single timeout layer and no other layers,
     /// we embed it directly inside our base Service::call().
@@ -427,6 +443,8 @@ pub(crate) struct ConnectorService {
     tls_info: bool,
     #[cfg(feature = "__tls")]
     user_agent: Option<HeaderValue>,
+    #[cfg(feature = "socks")]
+    resolver: DynResolver,
 }
 
 #[derive(Clone)]
@@ -445,21 +463,11 @@ enum Inner {
 
 impl ConnectorService {
     #[cfg(feature = "socks")]
-    async fn connect_socks(&self, dst: Uri, proxy: ProxyScheme) -> Result<Conn, BoxError> {
-        let dns = match proxy {
-            ProxyScheme::Socks4 {
-                remote_dns: false, ..
-            } => socks::DnsResolve::Local,
-            ProxyScheme::Socks4 {
-                remote_dns: true, ..
-            } => socks::DnsResolve::Proxy,
-            ProxyScheme::Socks5 {
-                remote_dns: false, ..
-            } => socks::DnsResolve::Local,
-            ProxyScheme::Socks5 {
-                remote_dns: true, ..
-            } => socks::DnsResolve::Proxy,
-            ProxyScheme::Http { .. } | ProxyScheme::Https { .. } => {
+    async fn connect_socks(&self, dst: Uri, proxy: Intercepted) -> Result<Conn, BoxError> {
+        let dns = match proxy.uri().scheme_str() {
+            Some("socks4") | Some("socks5") => socks::DnsResolve::Local,
+            Some("socks4h") | Some("socks5h") => socks::DnsResolve::Proxy,
+            _ => {
                 unreachable!("connect_socks is only called for socks proxies");
             }
         };
@@ -469,7 +477,7 @@ impl ConnectorService {
             Inner::DefaultTls(_http, tls) => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     let host = dst.host().ok_or("no host in url")?.to_string();
-                    let conn = socks::connect(proxy, dst, dns).await?;
+                    let conn = socks::connect(proxy, dst, dns, &self.resolver).await?;
                     let conn = TokioIo::new(conn);
                     let conn = TokioIo::new(conn);
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
@@ -490,7 +498,7 @@ impl ConnectorService {
 
                     let tls = tls.clone();
                     let host = dst.host().ok_or("no host in url")?.to_string();
-                    let conn = socks::connect(proxy, dst, dns).await?;
+                    let conn = socks::connect(proxy, dst, dns, &self.resolver).await?;
                     let conn = TokioIo::new(conn);
                     let conn = TokioIo::new(conn);
                     let server_name =
@@ -511,11 +519,13 @@ impl ConnectorService {
             Inner::Http(_) => (),
         }
 
-        socks::connect(proxy, dst, dns).await.map(|tcp| Conn {
-            inner: self.verbose.wrap(TokioIo::new(tcp)),
-            is_proxy: false,
-            tls_info: false,
-        })
+        socks::connect(proxy, dst, dns, &self.resolver)
+            .await
+            .map(|tcp| Conn {
+                inner: self.verbose.wrap(TokioIo::new(tcp)),
+                is_proxy: false,
+                tls_info: false,
+            })
     }
 
     async fn connect_with_maybe_proxy(self, dst: Uri, is_proxy: bool) -> Result<Conn, BoxError> {
@@ -603,24 +613,20 @@ impl ConnectorService {
         }
     }
 
-    async fn connect_via_proxy(
-        self,
-        dst: Uri,
-        proxy_scheme: ProxyScheme,
-    ) -> Result<Conn, BoxError> {
-        log::debug!("proxy({proxy_scheme:?}) intercepts '{dst:?}'");
+    async fn connect_via_proxy(self, dst: Uri, proxy: Intercepted) -> Result<Conn, BoxError> {
+        log::debug!("proxy({proxy:?}) intercepts '{dst:?}'");
 
-        let (proxy_dst, _auth) = match proxy_scheme {
-            ProxyScheme::Http { host, auth } => (into_uri(Scheme::HTTP, host), auth),
-            ProxyScheme::Https { host, auth } => (into_uri(Scheme::HTTPS, host), auth),
-            #[cfg(feature = "socks")]
-            ProxyScheme::Socks4 { .. } => return self.connect_socks(dst, proxy_scheme).await,
-            #[cfg(feature = "socks")]
-            ProxyScheme::Socks5 { .. } => return self.connect_socks(dst, proxy_scheme).await,
-        };
+        #[cfg(feature = "socks")]
+        match proxy.uri().scheme_str().ok_or("proxy scheme expected")? {
+            "socks4" | "socks4h" | "socks5" | "socks5h" => {
+                return self.connect_socks(dst, proxy).await
+            }
+            _ => (),
+        }
 
+        let proxy_dst = proxy.uri().clone();
         #[cfg(feature = "__tls")]
-        let auth = _auth;
+        let auth = proxy.basic_auth().cloned();
 
         match &self.inner {
             #[cfg(feature = "default-tls")]
@@ -697,16 +703,6 @@ impl ConnectorService {
     }
 }
 
-fn into_uri(scheme: Scheme, host: Authority) -> Uri {
-    // TODO: Should the `http` crate get `From<(Scheme, Authority)> for Uri`?
-    http::Uri::builder()
-        .scheme(scheme)
-        .authority(host)
-        .path_and_query(http::uri::PathAndQuery::from_static("/"))
-        .build()
-        .expect("scheme and authority is valid Uri")
-}
-
 async fn with_timeout<T, F>(f: F, timeout: Option<Duration>) -> Result<T, BoxError>
 where
     F: Future<Output = Result<T, BoxError>>,
@@ -735,9 +731,9 @@ impl Service<Uri> for ConnectorService {
         log::debug!("starting new connection: {dst:?}");
         let timeout = self.simple_timeout;
         for prox in self.proxies.iter() {
-            if let Some(proxy_scheme) = prox.intercept(&dst) {
+            if let Some(intercepted) = prox.intercept(&dst) {
                 return Box::pin(with_timeout(
-                    self.clone().connect_via_proxy(dst, proxy_scheme),
+                    self.clone().connect_via_proxy(dst, intercepted),
                     timeout,
                 ));
             }
@@ -1278,7 +1274,7 @@ mod socks {
     use tokio_socks::tcp::{Socks4Stream, Socks5Stream};
 
     use super::{BoxError, Scheme};
-    use crate::proxy::ProxyScheme;
+    use crate::proxy::Intercepted;
 
     pub(super) enum DnsResolve {
         Local,
@@ -1286,14 +1282,15 @@ mod socks {
     }
 
     pub(super) async fn connect(
-        proxy: ProxyScheme,
+        proxy: Intercepted,
         dst: Uri,
-        dns: DnsResolve,
+        dns_mode: DnsResolve,
+        resolver: &crate::dns::DynResolver,
     ) -> Result<TcpStream, BoxError> {
         let https = dst.scheme() == Some(&Scheme::HTTPS);
         let original_host = dst
             .host()
-            .ok_or(io::Error::new(io::ErrorKind::Other, "no host in url"))?;
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "no host in url"))?;
         let mut host = original_host.to_owned();
         let port = match dst.port() {
             Some(p) => p.as_u16(),
@@ -1301,22 +1298,29 @@ mod socks {
             _ => 80u16,
         };
 
-        if let DnsResolve::Local = dns {
-            let maybe_new_target = tokio::net::lookup_host((host.as_str(), port)).await?.next();
+        if let DnsResolve::Local = dns_mode {
+            let maybe_new_target = resolver.http_resolve(&dst).await?.next();
             if let Some(new_target) = maybe_new_target {
                 host = new_target.ip().to_string();
             }
         }
 
-        match proxy {
-            ProxyScheme::Socks4 { addr, .. } => {
+        let addr = resolver
+            .http_resolve(proxy.uri())
+            .await?
+            .next()
+            .ok_or("proxy dns resolve is empty")?;
+
+        // TODO: can `Scheme::from_static()` be const fn, compare with a SOCKS5 constant?
+        match proxy.uri().scheme_str() {
+            Some("socks4") | Some("socks4h") => {
                 let stream = Socks4Stream::connect(addr, (host.as_str(), port))
                     .await
                     .map_err(|e| format!("socks connect error: {e}"))?;
                 Ok(stream.into_inner())
             }
-            ProxyScheme::Socks5 { addr, ref auth, .. } => {
-                let stream = if let Some((username, password)) = auth {
+            Some("socks5") | Some("socks5h") => {
+                let stream = if let Some((username, password)) = proxy.raw_auth() {
                     Socks5Stream::connect_with_password(
                         addr,
                         (host.as_str(), port),
