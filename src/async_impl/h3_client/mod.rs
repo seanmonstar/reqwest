@@ -15,6 +15,7 @@ use std::future::{self, Future};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use sync_wrapper::SyncWrapper;
 
 #[derive(Clone)]
 pub(crate) struct H3Client {
@@ -77,24 +78,24 @@ impl H3Client {
             Ok(s) => s,
             Err(e) => {
                 return H3ResponseFuture {
-                    inner: Box::pin(future::ready(Err(e))),
+                    inner: SyncWrapper::new(Box::pin(future::ready(Err(e)))),
                 }
             }
         };
         H3ResponseFuture {
-            inner: Box::pin(self.clone().send_request(pool_key, req)),
+            inner: SyncWrapper::new(Box::pin(self.clone().send_request(pool_key, req))),
         }
     }
 }
 
 pub(crate) struct H3ResponseFuture {
-    inner: Pin<Box<dyn Future<Output = Result<Response<ResponseBody>, Error>> + Send>>,
+    inner: SyncWrapper<Pin<Box<dyn Future<Output = Result<Response<ResponseBody>, Error>> + Send>>>,
 }
 
 impl Future for H3ResponseFuture {
     type Output = Result<Response<ResponseBody>, Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.inner.as_mut().poll(cx)
+        self.inner.get_mut().as_mut().poll(cx)
     }
 }
