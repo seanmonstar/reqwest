@@ -81,7 +81,7 @@ socks = ["dep:tokio-socks"]
 macos-system-configuration = ["dep:system-configuration"]
 
 # Experimental HTTP/3 client.
-http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "dep:slab", "dep:futures-channel"]
+http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "dep:slab", "dep:futures-channel", "tokio/macros"]
 
 
 # Internal (PRIVATE!) features used to aid testing.
@@ -125,7 +125,7 @@ once_cell = "1.18"
 log = "0.4.17"
 mime = "0.3.16"
 percent-encoding = "2.3"
-tokio = { version = "1.0", default-features = false, features = ["net", "time", "macros"] }
+tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
 tower = { version = "0.5.2", default-features = false, features = ["timeout", "util"] }
 pin-project-lite = "0.2.11"
 ipnet = "2.3"
