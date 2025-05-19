@@ -145,10 +145,9 @@ impl Pool {
     ) -> PoolClient {
         let (close_tx, close_rx) = std::sync::mpsc::channel();
         tokio::spawn(async move {
-            if let Err(e) = future::poll_fn(|cx| driver.poll_close(cx)).await {
-                trace!("poll_close returned error {e:?}");
-                close_tx.send(e).ok();
-            }
+            let e = future::poll_fn(|cx| driver.poll_close(cx)).await;
+            trace!("poll_close returned error {e:?}");
+            close_tx.send(e).ok();
         });
 
         let mut inner = self.inner.lock().unwrap();
@@ -241,13 +240,13 @@ impl PoolClient {
 
 pub struct PoolConnection {
     // This receives errors from polling h3 driver.
-    close_rx: Receiver<h3::Error>,
+    close_rx: Receiver<h3::error::ConnectionError>,
     client: PoolClient,
     idle_timeout: Instant,
 }
 
 impl PoolConnection {
-    pub fn new(client: PoolClient, close_rx: Receiver<h3::Error>) -> Self {
+    pub fn new(client: PoolClient, close_rx: Receiver<h3::error::ConnectionError>) -> Self {
         Self {
             close_rx,
             client,

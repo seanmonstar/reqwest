@@ -128,7 +128,8 @@ impl Policy {
         match self.inner {
             PolicyKind::Custom(ref custom) => custom(attempt),
             PolicyKind::Limit(max) => {
-                if attempt.previous.len() >= max {
+                // The first URL in the previous is the initial URL and not a redirection. It needs to be excluded.
+                if attempt.previous.len() > max {
                     attempt.error(TooManyRedirects)
                 } else {
                     attempt.follow()
@@ -260,7 +261,7 @@ impl StdError for TooManyRedirects {}
 fn test_redirect_policy_limit() {
     let policy = Policy::default();
     let next = Url::parse("http://x.y/z").unwrap();
-    let mut previous = (0..9)
+    let mut previous = (0..=9)
         .map(|i| Url::parse(&format!("http://a.b/c/{i}")).unwrap())
         .collect::<Vec<_>>();
 

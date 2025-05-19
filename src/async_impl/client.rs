@@ -17,6 +17,7 @@ use super::Body;
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
+use crate::config::{RequestConfig, RequestTimeout};
 use crate::connect::{
     sealed::{Conn, Unnameable},
     BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
@@ -188,6 +189,8 @@ struct Config {
     #[cfg(feature = "http3")]
     quic_send_window: Option<u64>,
     #[cfg(feature = "http3")]
+    quic_congestion_bbr: bool,
+    #[cfg(feature = "http3")]
     h3_max_field_section_size: Option<u64>,
     #[cfg(feature = "http3")]
     h3_send_grease: Option<bool>,
@@ -307,6 +310,8 @@ impl ClientBuilder {
                 #[cfg(feature = "http3")]
                 quic_send_window: None,
                 #[cfg(feature = "http3")]
+                quic_congestion_bbr: false,
+                #[cfg(feature = "http3")]
                 h3_max_field_section_size: None,
                 #[cfg(feature = "http3")]
                 h3_send_grease: None,
@@ -373,6 +378,7 @@ impl ClientBuilder {
                  quic_stream_receive_window,
                  quic_receive_window,
                  quic_send_window,
+                 quic_congestion_bbr,
                  h3_max_field_section_size,
                  h3_send_grease,
                  local_address,
@@ -395,6 +401,11 @@ impl ClientBuilder {
 
                     if let Some(send_window) = quic_send_window {
                         transport_config.send_window(send_window);
+                    }
+
+                    if quic_congestion_bbr {
+                        let factory = Arc::new(quinn::congestion::BbrConfig::default());
+                        transport_config.congestion_controller_factory(factory);
                     }
 
                     let mut h3_client_config = H3ClientConfig::default();
@@ -542,6 +553,7 @@ impl ClientBuilder {
                             config.quic_stream_receive_window,
                             config.quic_receive_window,
                             config.quic_send_window,
+                            config.quic_congestion_bbr,
                             config.h3_max_field_section_size,
                             config.h3_send_grease,
                             config.local_address,
@@ -746,6 +758,7 @@ impl ClientBuilder {
                             config.quic_stream_receive_window,
                             config.quic_receive_window,
                             config.quic_send_window,
+                            config.quic_congestion_bbr,
                             config.h3_max_field_section_size,
                             config.h3_send_grease,
                             config.local_address,
@@ -893,7 +906,7 @@ impl ClientBuilder {
                 redirect_policy: config.redirect_policy,
                 referer: config.referer,
                 read_timeout: config.read_timeout,
-                request_timeout: config.timeout,
+                request_timeout: RequestConfig::new(config.timeout),
                 proxies,
                 proxies_maybe_http_auth,
                 https_only: config.https_only,
@@ -2071,6 +2084,20 @@ impl ClientBuilder {
         self
     }
 
+    /// Override the default congestion control algorithm to use [BBR]
+    ///
+    /// The current default congestion control algorithm is [CUBIC]. This method overrides the
+    /// default.
+    ///
+    /// [BBR]: https://datatracker.ietf.org/doc/html/draft-ietf-ccwg-bbr
+    /// [CUBIC]: https://datatracker.ietf.org/doc/html/rfc8312
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_congestion_bbr(mut self) -> ClientBuilder {
+        self.config.quic_congestion_bbr = true;
+        self
+    }
+
     /// Set the maximum HTTP/3 header size this client is willing to accept.
     ///
     /// See [header size constraints] section of the specification for details.
@@ -2259,7 +2286,7 @@ impl Client {
     }
 
     pub(super) fn execute_request(&self, req: Request) -> Pending {
-        let (method, url, mut headers, body, timeout, version) = req.pieces();
+        let (method, url, mut headers, body, version, extensions) = req.pieces();
         if url.scheme() != "http" && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
         }
@@ -2329,8 +2356,11 @@ impl Client {
             }
         };
 
-        let total_timeout = timeout
-            .or(self.inner.request_timeout)
+        let total_timeout = self
+            .inner
+            .request_timeout
+            .fetch(&extensions)
+            .copied()
             .map(tokio::time::sleep)
             .map(Box::pin);
 
@@ -2572,7 +2602,7 @@ struct ClientRef {
     h3_client: Option<H3Client>,
     redirect_policy: redirect::Policy,
     referer: bool,
-    request_timeout: Option<Duration>,
+    request_timeout: RequestConfig<RequestTimeout>,
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<Proxy>>,
     proxies_maybe_http_auth: bool,
@@ -2607,9 +2637,7 @@ impl ClientRef {
 
         f.field("default_headers", &self.headers);
 
-        if let Some(ref d) = self.request_timeout {
-            f.field("timeout", d);
-        }
+        self.request_timeout.fmt_as_field(f);
 
         if let Some(ref d) = self.read_timeout {
             f.field("read_timeout", d);
@@ -2750,7 +2778,7 @@ fn is_retryable_error(err: &(dyn std::error::Error + 'static)) -> bool {
 
     #[cfg(feature = "http3")]
     if let Some(cause) = err.source() {
-        if let Some(err) = cause.downcast_ref::<h3::Error>() {
+        if let Some(err) = cause.downcast_ref::<h3::error::ConnectionError>() {
             debug!("determining if HTTP/3 error {err} can be retried");
             // TODO: Does h3 provide an API for checking the error?
             return err.to_string().as_str() == "timeout";
