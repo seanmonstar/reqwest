@@ -95,10 +95,13 @@ where
                     let mut builder =
                         hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
                     apply_config(&mut builder);
+                    let mut tasks = tokio::task::JoinSet::new();
+                    let graceful = hyper_util::server::graceful::GracefulShutdown::new();
 
                     loop {
                         tokio::select! {
                             _ = &mut shutdown_rx => {
+                                graceful.shutdown().await;
                                 break;
                             }
                             accepted = listener.accept() => {
@@ -110,10 +113,22 @@ where
                                 });
                                 let builder = builder.clone();
                                 let events_tx = events_tx.clone();
-                                tokio::spawn(async move {
-                                    let _ = builder.serve_connection_with_upgrades(hyper_util::rt::TokioIo::new(io), svc).await;
+                                let watcher = graceful.watcher();
+
+                                tasks.spawn(async move {
+                                    let conn = builder.serve_connection_with_upgrades(hyper_util::rt::TokioIo::new(io), svc);
+                                    let _ = watcher.watch(conn).await;
                                     let _ = events_tx.send(Event::ConnectionClosed);
                                 });
+                            }
+                        }
+                    }
+
+                    // try to drain
+                    while let Some(result) = tasks.join_next().await {
+                        if let Err(e) = result {
+                            if e.is_panic() {
+                                std::panic::resume_unwind(e.into_panic());
                             }
                         }
                     }
