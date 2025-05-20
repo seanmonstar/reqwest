@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
-use std::{fmt, str};
+use std::{fmt, mem, str};
 
 use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
@@ -31,6 +31,7 @@ use crate::error::{self, BoxError};
 use crate::into_url::try_uri;
 use crate::proxy::Matcher as ProxyMatcher;
 use crate::redirect::{self, remove_sensitive_headers};
+use crate::response::History;
 #[cfg(feature = "__rustls")]
 use crate::tls::CertificateRevocationList;
 #[cfg(feature = "__tls")]
@@ -2888,7 +2889,7 @@ impl Future for PendingRequest {
         }
 
         loop {
-            let res = match self.as_mut().in_flight().get_mut() {
+            let mut res = match self.as_mut().in_flight().get_mut() {
                 ResponseFuture::Default(r) => match Pin::new(r).poll(cx) {
                     Poll::Ready(Err(e)) => {
                         #[cfg(feature = "http2")]
@@ -3058,6 +3059,8 @@ impl Future for PendingRequest {
                             continue;
                         }
                         redirect::ActionKind::Stop => {
+                            // Remove the last url from the history as it is already in self.url
+                            self.as_mut().urls().pop();
                             debug!("redirect policy disallowed redirection to '{loc}'");
                         }
                         redirect::ActionKind::Error(err) => {
@@ -3065,6 +3068,11 @@ impl Future for PendingRequest {
                         }
                     }
                 }
+            }
+
+            if !self.urls.is_empty() {
+                res.extensions_mut()
+                    .insert(History(mem::take(&mut self.urls)));
             }
 
             let res = Response::new(
