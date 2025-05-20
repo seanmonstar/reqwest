@@ -173,7 +173,7 @@ futures-channel = { version = "0.3", optional = true }
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.10"
 hyper = { version = "1.1.0", default-features = false, features = ["http1", "http2", "client", "server"] }
-hyper-util = { version = "0.1.12", features = ["http1", "http2", "client", "client-legacy", "server-auto", "tokio"] }
+hyper-util = { version = "0.1.12", features = ["http1", "http2", "client", "client-legacy", "server-auto", "server-graceful", "tokio"] }
 serde = { version = "1.0", features = ["derive"] }
 flate2 = "1.0.13"
 brotli_crate = { package = "brotli", version = "7.0.0" }
@@ -181,7 +181,6 @@ zstd_crate = { package = "zstd", version = "0.13" }
 doc-comment = "0.3"
 tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
 futures-util = { version = "0.3.28", default-features = false, features = ["std", "alloc"] }
-rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 # wasm
 

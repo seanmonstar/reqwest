@@ -1494,13 +1494,14 @@ impl ClientBuilder {
     /// # Example
     ///
     /// ```
-    /// # #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    /// # let _ = rustls::crypto::ring::default_provider().install_default();
+    /// # fn doc() -> Result<(), reqwest::Error> {
     /// use std::net::IpAddr;
     /// let local_addr = IpAddr::from([12, 4, 1, 8]);
     /// let client = reqwest::Client::builder()
     ///     .local_address(local_addr)
-    ///     .build().unwrap();
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn local_address<T>(mut self, addr: T) -> ClientBuilder
     where
@@ -1531,12 +1532,13 @@ impl ClientBuilder {
     /// # Example
     ///
     /// ```
-    /// # #[cfg(all(feature = "__rustls", not(feature = "__rustls-ring")))]
-    /// # let _ = rustls::crypto::ring::default_provider().install_default();
+    /// # fn doc() -> Result<(), reqwest::Error> {
     /// let interface = "lo";
     /// let client = reqwest::Client::builder()
     ///     .interface(interface)
-    ///     .build().unwrap();
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// [man-7-socket]: https://man7.org/linux/man-pages/man7/socket.7.html
