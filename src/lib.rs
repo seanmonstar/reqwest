@@ -210,6 +210,8 @@
 //! - **socks**: Provides SOCKS5 proxy support.
 //! - **hickory-dns**: Enables a hickory-dns async resolver instead of default
 //!   threadpool using `getaddrinfo`.
+//! - **system-proxy** *(enabled by default)*: Use Windows and macOS system
+//!   proxy settings automatically.
 //!
 //! ## Unstable Features
 //!

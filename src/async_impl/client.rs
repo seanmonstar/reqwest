@@ -29,6 +29,7 @@ use crate::dns::hickory::HickoryDnsResolver;
 use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
 use crate::error::{self, BoxError};
 use crate::into_url::try_uri;
+use crate::proxy::Matcher as ProxyMatcher;
 use crate::redirect::{self, remove_sensitive_headers};
 #[cfg(feature = "__rustls")]
 use crate::tls::CertificateRevocationList;
@@ -39,6 +40,7 @@ use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
+
 use bytes::Bytes;
 use http::header::{
     Entry, HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_LENGTH,
@@ -109,9 +111,11 @@ struct Config {
     pool_idle_timeout: Option<Duration>,
     pool_max_idle_per_host: usize,
     tcp_keepalive: Option<Duration>,
+    tcp_keepalive_interval: Option<Duration>,
+    tcp_keepalive_retries: Option<u32>,
     #[cfg(any(feature = "native-tls", feature = "__rustls"))]
     identity: Option<Identity>,
-    proxies: Vec<Proxy>,
+    proxies: Vec<ProxyMatcher>,
     auto_sys_proxy: bool,
     redirect_policy: redirect::Policy,
     referer: bool,
@@ -230,6 +234,8 @@ impl ClientBuilder {
                 // TODO: Re-enable default duration once hyper's HttpConnector is fixed
                 // to no longer error when an option fails.
                 tcp_keepalive: None, //Some(Duration::from_secs(60)),
+                tcp_keepalive_interval: None,
+                tcp_keepalive_retries: None,
                 proxies: Vec::new(),
                 auto_sys_proxy: true,
                 redirect_policy: redirect::Policy::default(),
@@ -337,7 +343,7 @@ impl ClientBuilder {
 
         let mut proxies = config.proxies;
         if config.auto_sys_proxy {
-            proxies.push(Proxy::system());
+            proxies.push(ProxyMatcher::system());
         }
         let proxies = Arc::new(proxies);
 
@@ -345,12 +351,7 @@ impl ClientBuilder {
         #[cfg(feature = "http3")]
         let mut h3_connector = None;
 
-        let mut connector_builder = {
-            #[cfg(feature = "__tls")]
-            fn user_agent(headers: &HeaderMap) -> Option<HeaderValue> {
-                headers.get(USER_AGENT).cloned()
-            }
-
+        let resolver = {
             let mut resolver: Arc<dyn Resolve> = match config.hickory_dns {
                 false => Arc::new(GaiResolver::new()),
                 #[cfg(feature = "hickory-dns")]
@@ -367,7 +368,16 @@ impl ClientBuilder {
                     config.dns_overrides,
                 ));
             }
-            let mut http = HttpConnector::new_with_resolver(DynResolver::new(resolver.clone()));
+            DynResolver::new(resolver)
+        };
+
+        let mut connector_builder = {
+            #[cfg(feature = "__tls")]
+            fn user_agent(headers: &HeaderMap) -> Option<HeaderValue> {
+                headers.get(USER_AGENT).cloned()
+            }
+
+            let mut http = HttpConnector::new_with_resolver(resolver.clone());
             http.set_connect_timeout(config.connect_timeout);
 
             #[cfg(all(feature = "http3", feature = "__rustls"))]
@@ -419,7 +429,7 @@ impl ClientBuilder {
                     }
 
                     let res = H3Connector::new(
-                        DynResolver::new(resolver),
+                        resolver,
                         tls,
                         local_address,
                         transport_config,
@@ -547,7 +557,7 @@ impl ClientBuilder {
                     #[cfg(feature = "http3")]
                     {
                         h3_connector = build_h3_connector(
-                            resolver,
+                            resolver.clone(),
                             conn.clone(),
                             config.quic_max_idle_timeout,
                             config.quic_stream_receive_window,
@@ -752,7 +762,7 @@ impl ClientBuilder {
                         tls.enable_early_data = config.tls_enable_early_data;
 
                         h3_connector = build_h3_connector(
-                            resolver,
+                            resolver.clone(),
                             tls.clone(),
                             config.quic_max_idle_timeout,
                             config.quic_stream_receive_window,
@@ -822,6 +832,11 @@ impl ClientBuilder {
         connector_builder.set_timeout(config.connect_timeout);
         connector_builder.set_verbose(config.connection_verbose);
         connector_builder.set_keepalive(config.tcp_keepalive);
+        connector_builder.set_keepalive_interval(config.tcp_keepalive_interval);
+        connector_builder.set_keepalive_retries(config.tcp_keepalive_retries);
+
+        #[cfg(feature = "socks")]
+        connector_builder.set_socks_resolver(resolver);
 
         let mut builder =
             hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
@@ -1215,7 +1230,7 @@ impl ClientBuilder {
     ///
     /// Adding a proxy will disable the automatic usage of the "system" proxy.
     pub fn proxy(mut self, proxy: Proxy) -> ClientBuilder {
-        self.config.proxies.push(proxy);
+        self.config.proxies.push(proxy.into_matcher());
         self.config.auto_sys_proxy = false;
         self
     }
@@ -1551,6 +1566,28 @@ impl ClientBuilder {
         D: Into<Option<Duration>>,
     {
         self.config.tcp_keepalive = val.into();
+        self
+    }
+
+    /// Set that all sockets have `SO_KEEPALIVE` set with the supplied interval.
+    ///
+    /// If `None`, the option will not be set.
+    pub fn tcp_keepalive_interval<D>(mut self, val: D) -> ClientBuilder
+    where
+        D: Into<Option<Duration>>,
+    {
+        self.config.tcp_keepalive_interval = val.into();
+        self
+    }
+
+    /// Set that all sockets have `SO_KEEPALIVE` set with the supplied retry count.
+    ///
+    /// If `None`, the option will not be set.
+    pub fn tcp_keepalive_retries<C>(mut self, retries: C) -> ClientBuilder
+    where
+        C: Into<Option<u32>>,
+    {
+        self.config.tcp_keepalive_retries = retries.into();
         self
     }
 
@@ -2408,13 +2445,11 @@ impl Client {
         }
 
         for proxy in self.inner.proxies.iter() {
-            if proxy.is_match(dst) {
-                if let Some(header) = proxy.http_basic_auth(dst) {
-                    headers.insert(PROXY_AUTHORIZATION, header);
-                }
-
-                break;
+            if let Some(header) = proxy.http_non_tunnel_basic_auth(dst) {
+                headers.insert(PROXY_AUTHORIZATION, header);
             }
+
+            break;
         }
     }
 }
@@ -2604,7 +2639,7 @@ struct ClientRef {
     referer: bool,
     request_timeout: RequestConfig<RequestTimeout>,
     read_timeout: Option<Duration>,
-    proxies: Arc<Vec<Proxy>>,
+    proxies: Arc<Vec<ProxyMatcher>>,
     proxies_maybe_http_auth: bool,
     https_only: bool,
 }

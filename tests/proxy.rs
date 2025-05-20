@@ -110,7 +110,7 @@ async fn system_http_proxy_basic_auth_parsed() {
         assert_eq!(req.headers()["host"], "hyper.rs");
         assert_eq!(
             req.headers()["proxy-authorization"],
-            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="
+            "Basic QWxhZGRpbjpvcGVuc2VzYW1l"
         );
 
         async { http::Response::default() }
@@ -125,7 +125,7 @@ async fn system_http_proxy_basic_auth_parsed() {
     // set-up http proxy.
     env::set_var(
         "http_proxy",
-        format!("http://Aladdin:open sesame@{}", server.addr()),
+        format!("http://Aladdin:opensesame@{}", server.addr()),
     );
 
     let res = reqwest::Client::builder()
