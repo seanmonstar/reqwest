@@ -3068,8 +3068,10 @@ impl Future for PendingRequest {
                 }
             }
 
-            res.extensions_mut()
-                .insert(History(mem::take(&mut self.urls)));
+            if !self.urls.is_empty() {
+                res.extensions_mut()
+                    .insert(History(mem::take(&mut self.urls)));
+            }
 
             let res = Response::new(
                 res,

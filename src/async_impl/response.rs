@@ -120,11 +120,7 @@ impl Response {
     /// Get all the intermediate `Url`s traversed by redirects.
     #[inline]
     pub fn history(&self) -> &[Url] {
-        &self
-            .extensions()
-            .get::<History>()
-            .map(|h| &h.0)
-            .expect("history extension")
+        self.extensions().get::<History>().map_or(&[], |h| &h.0)
     }
 
     /// Get all the `Url`s, in sequential order, that were requested,
@@ -490,7 +486,6 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
             .remove::<ResponseUrl>()
             .unwrap_or_else(|| ResponseUrl(Url::parse("http://no.url.provided.local").unwrap()));
         let url = url.0;
-        parts.extensions.get_or_insert_default::<History>();
         let res = hyper::Response::from_parts(parts, decoder);
         Response {
             res,
