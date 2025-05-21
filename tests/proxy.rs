@@ -174,11 +174,11 @@ async fn test_no_proxy() {
 
 #[tokio::test]
 async fn test_custom_headers() {
-    let url = "http://hyper.rs/prox";
+    let url = "http://hyper.rs.local/prox";
     let server = server::http(move |req| {
         assert_eq!(req.method(), "GET");
         assert_eq!(req.uri(), url);
-        assert_eq!(req.headers()["host"], "hyper.rs");
+        assert_eq!(req.headers()["host"], "hyper.rs.local");
         assert_eq!(
             req.headers()["proxy-authorization"],
             "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="

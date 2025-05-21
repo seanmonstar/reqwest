@@ -901,6 +901,8 @@ impl ClientBuilder {
         }
 
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
+        let proxies_maybe_http_custom_headers =
+            proxies.iter().any(|p| p.maybe_has_http_custom_headers());
 
         Ok(Client {
             inner: Arc::new(ClientRef {
@@ -924,6 +926,7 @@ impl ClientBuilder {
                 request_timeout: RequestConfig::new(config.timeout),
                 proxies,
                 proxies_maybe_http_auth,
+                proxies_maybe_http_custom_headers,
                 https_only: config.https_only,
             }),
         })
@@ -2457,16 +2460,22 @@ impl Client {
     }
 
     fn proxy_custom_headers(&self, dst: &Uri, headers: &mut HeaderMap) {
-        for proxy in self.inner.proxies.iter() {
-            if proxy.is_match(dst) {
-                if let Some(iter) = proxy.http_custom_headers(dst) {
-                    iter.iter().for_each(|(key, value)| {
-                        headers.insert(key, value.clone());
-                    });
-                }
+        if !self.inner.proxies_maybe_http_custom_headers {
+            return;
+        }
 
-                break;
+        if dst.scheme() != Some(&Scheme::HTTP) {
+            return;
+        }
+
+        for proxy in self.inner.proxies.iter() {
+            if let Some(iter) = proxy.http_non_tunnel_custom_headers(dst) {
+                iter.iter().for_each(|(key, value)| {
+                    headers.insert(key, value.clone());
+                });
             }
+
+            break;
         }
     }
 }
@@ -2658,6 +2667,7 @@ struct ClientRef {
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<ProxyMatcher>>,
     proxies_maybe_http_auth: bool,
+    proxies_maybe_http_custom_headers: bool,
     https_only: bool,
 }
 

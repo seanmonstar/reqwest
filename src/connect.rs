@@ -616,7 +616,6 @@ impl ConnectorService {
     async fn connect_via_proxy(self, dst: Uri, proxy: Intercepted) -> Result<Conn, BoxError> {
         log::debug!("proxy({proxy:?}) intercepts '{dst:?}'");
 
-
         #[cfg(feature = "socks")]
         match proxy.uri().scheme_str().ok_or("proxy scheme expected")? {
             "socks4" | "socks4h" | "socks5" | "socks5h" => {
@@ -630,7 +629,7 @@ impl ConnectorService {
         let auth = proxy.basic_auth().cloned();
 
         #[cfg(feature = "__tls")]
-        let misc = _misc;
+        let misc = proxy.custom_headers().clone();
 
         match &self.inner {
             #[cfg(feature = "default-tls")]
@@ -650,6 +649,10 @@ impl ConnectorService {
                         let mut headers = http::HeaderMap::new();
                         headers.insert(http::header::USER_AGENT, ua);
                         tunnel = tunnel.with_headers(headers);
+                    }
+                    // Note that custom headers may override the user agent header.
+                    if let Some(custom_headers) = misc {
+                        tunnel = tunnel.with_headers(custom_headers.clone());
                     }
                     // We don't wrap this again in an HttpsConnector since that uses Maybe,
                     // and we know this is definitely HTTPS.
@@ -686,6 +689,9 @@ impl ConnectorService {
                         hyper_util::client::legacy::connect::proxy::Tunnel::new(proxy_dst, inner);
                     if let Some(auth) = auth {
                         tunnel = tunnel.with_auth(auth);
+                    }
+                    if let Some(custom_headers) = misc {
+                        tunnel = tunnel.with_headers(custom_headers.clone());
                     }
                     if let Some(ua) = self.user_agent {
                         let mut headers = http::HeaderMap::new();
