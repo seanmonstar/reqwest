@@ -6,7 +6,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::Duration;
-use tokio::sync::watch;
+use tokio::sync::{oneshot, watch};
 use tokio::time::Instant;
 
 use crate::async_impl::body::ResponseBody;
@@ -17,7 +17,7 @@ use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::uri::{Authority, Scheme};
 use http::{Request, Response, Uri};
-use log::trace;
+use log::{error, trace};
 
 pub(super) type Key = (Scheme, Authority);
 
@@ -36,7 +36,7 @@ struct ConnectingLockInner {
 pub struct ConnectingLock(Option<ConnectingLockInner>);
 
 /// A waiter that allows subscribers to receive updates when a new connection is
-/// established or when the connection attempt fails. For example, whe
+/// established or when the connection attempt fails. For example, when
 /// connection lock is dropped due to an error.
 pub struct ConnectingWaiter {
     receiver: watch::Receiver<Option<PoolClient>>,
@@ -95,7 +95,7 @@ impl Pool {
         }
     }
 
-    /// Aqcuire a connecting lock. This is to ensure that we have only one HTTP3
+    /// Acquire a connecting lock. This is to ensure that we have only one HTTP3
     /// connection per host.
     pub fn connecting(&self, key: &Key) -> Connecting {
         let mut inner = self.inner.lock().unwrap();
@@ -145,10 +145,9 @@ impl Pool {
     ) -> PoolClient {
         let (close_tx, close_rx) = std::sync::mpsc::channel();
         tokio::spawn(async move {
-            if let Err(e) = future::poll_fn(|cx| driver.poll_close(cx)).await {
-                trace!("poll_close returned error {e:?}");
-                close_tx.send(e).ok();
-            }
+            let e = future::poll_fn(|cx| driver.poll_close(cx)).await;
+            trace!("poll_close returned error {e:?}");
+            close_tx.send(e).ok();
         });
 
         let mut inner = self.inner.lock().unwrap();
@@ -165,7 +164,7 @@ impl Pool {
             notifier.send(Some(client.clone()))
         {
             // If there are no awaiters, the client is returned to us. As a
-            // micro optimisation, let's reuse it and avoid clonning.
+            // micro optimisation, let's reuse it and avoid cloning.
             unsent_client
         } else {
             client.clone()
@@ -210,7 +209,7 @@ impl PoolClient {
     ) -> Result<Response<ResponseBody>, BoxError> {
         use hyper::body::Body as _;
 
-        let (head, req_body) = req.into_parts();
+        let (head, mut req_body) = req.into_parts();
         let mut req = Request::from_parts(head, ());
 
         if let Some(n) = req_body.size_hint().exact() {
@@ -220,34 +219,64 @@ impl PoolClient {
             }
         }
 
-        let mut stream = self.inner.send_request(req).await?;
+        let (mut send, mut recv) = self.inner.send_request(req).await?.split();
 
-        match req_body.as_bytes() {
-            Some(b) if !b.is_empty() => {
-                stream.send_data(Bytes::copy_from_slice(b)).await?;
+        let (tx, mut rx) = oneshot::channel::<Result<(), BoxError>>();
+        tokio::spawn(async move {
+            let mut req_body = Pin::new(&mut req_body);
+            loop {
+                match std::future::poll_fn(|cx| req_body.as_mut().poll_frame(cx)).await {
+                    Some(Ok(frame)) => {
+                        if let Ok(b) = frame.into_data() {
+                            if let Err(e) = send.send_data(Bytes::copy_from_slice(&b)).await {
+                                if let Err(e) = tx.send(Err(e.into())) {
+                                    error!("Failed to communicate send.send_data() error: {e:?}");
+                                }
+                                return;
+                            }
+                        }
+                    }
+                    Some(Err(e)) => {
+                        if let Err(e) = tx.send(Err(e.into())) {
+                            error!("Failed to communicate req_body read error: {e:?}");
+                        }
+                        return;
+                    }
+
+                    None => break,
+                }
             }
-            _ => {}
+
+            if let Err(e) = send.finish().await {
+                if let Err(e) = tx.send(Err(e.into())) {
+                    error!("Failed to communicate send.finish read error: {e:?}");
+                }
+                return;
+            }
+
+            let _ = tx.send(Ok(()));
+        });
+
+        tokio::select! {
+            Ok(Err(e)) = &mut rx => Err(e),
+            resp = recv.recv_response() => {
+                let resp = resp?;
+                let resp_body = crate::async_impl::body::boxed(Incoming::new(recv, resp.headers(), rx));
+                Ok(resp.map(|_| resp_body))
+            }
         }
-
-        stream.finish().await?;
-
-        let resp = stream.recv_response().await?;
-
-        let resp_body = crate::async_impl::body::boxed(Incoming::new(stream, resp.headers()));
-
-        Ok(resp.map(|_| resp_body))
     }
 }
 
 pub struct PoolConnection {
     // This receives errors from polling h3 driver.
-    close_rx: Receiver<h3::Error>,
+    close_rx: Receiver<h3::error::ConnectionError>,
     client: PoolClient,
     idle_timeout: Instant,
 }
 
 impl PoolConnection {
-    pub fn new(client: PoolClient, close_rx: Receiver<h3::Error>) -> Self {
+    pub fn new(client: PoolClient, close_rx: Receiver<h3::error::ConnectionError>) -> Self {
         Self {
             close_rx,
             client,
@@ -272,16 +301,22 @@ impl PoolConnection {
 struct Incoming<S, B> {
     inner: h3::client::RequestStream<S, B>,
     content_length: Option<u64>,
+    send_rx: oneshot::Receiver<Result<(), BoxError>>,
 }
 
 impl<S, B> Incoming<S, B> {
-    fn new(stream: h3::client::RequestStream<S, B>, headers: &http::header::HeaderMap) -> Self {
+    fn new(
+        stream: h3::client::RequestStream<S, B>,
+        headers: &http::header::HeaderMap,
+        send_rx: oneshot::Receiver<Result<(), BoxError>>,
+    ) -> Self {
         Self {
             inner: stream,
             content_length: headers
                 .get(http::header::CONTENT_LENGTH)
                 .and_then(|h| h.to_str().ok())
                 .and_then(|v| v.parse().ok()),
+            send_rx,
         }
     }
 }
@@ -297,6 +332,10 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context,
     ) -> Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        if let Ok(Err(e)) = self.send_rx.try_recv() {
+            return Poll::Ready(Some(Err(crate::error::body(e))));
+        }
+
         match futures_core::ready!(self.inner.poll_recv_data(cx)) {
             Ok(Some(mut b)) => Poll::Ready(Some(Ok(hyper::body::Frame::data(
                 b.copy_to_bytes(b.remaining()),

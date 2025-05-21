@@ -12,11 +12,12 @@ use super::client::{Client, Pending};
 #[cfg(feature = "multipart")]
 use super::multipart;
 use super::response::Response;
+use crate::config::{RequestConfig, RequestTimeout};
 #[cfg(feature = "multipart")]
 use crate::header::CONTENT_LENGTH;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 use crate::{Method, Url};
-use http::{request::Parts, Request as HttpRequest, Version};
+use http::{request::Parts, Extensions, Request as HttpRequest, Version};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -24,8 +25,8 @@ pub struct Request {
     url: Url,
     headers: HeaderMap,
     body: Option<Body>,
-    timeout: Option<Duration>,
     version: Version,
+    extensions: Extensions,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -46,8 +47,8 @@ impl Request {
             url,
             headers: HeaderMap::new(),
             body: None,
-            timeout: None,
             version: Version::default(),
+            extensions: Extensions::new(),
         }
     }
 
@@ -99,16 +100,28 @@ impl Request {
         &mut self.body
     }
 
+    /// Get the extensions.
+    #[inline]
+    pub(crate) fn extensions(&self) -> &Extensions {
+        &self.extensions
+    }
+
+    /// Get a mutable reference to the extensions.
+    #[inline]
+    pub(crate) fn extensions_mut(&mut self) -> &mut Extensions {
+        &mut self.extensions
+    }
+
     /// Get the timeout.
     #[inline]
     pub fn timeout(&self) -> Option<&Duration> {
-        self.timeout.as_ref()
+        RequestConfig::<RequestTimeout>::get(&self.extensions)
     }
 
     /// Get a mutable reference to the timeout.
     #[inline]
     pub fn timeout_mut(&mut self) -> &mut Option<Duration> {
-        &mut self.timeout
+        RequestConfig::<RequestTimeout>::get_mut(&mut self.extensions)
     }
 
     /// Get the http version.
@@ -135,27 +148,19 @@ impl Request {
         *req.timeout_mut() = self.timeout().copied();
         *req.headers_mut() = self.headers().clone();
         *req.version_mut() = self.version();
+        *req.extensions_mut() = self.extensions().clone();
         req.body = body;
         Some(req)
     }
 
-    pub(super) fn pieces(
-        self,
-    ) -> (
-        Method,
-        Url,
-        HeaderMap,
-        Option<Body>,
-        Option<Duration>,
-        Version,
-    ) {
+    pub(super) fn pieces(self) -> (Method, Url, HeaderMap, Option<Body>, Version, Extensions) {
         (
             self.method,
             self.url,
             self.headers,
             self.body,
-            self.timeout,
             self.version,
+            self.extensions,
         )
     }
 }
@@ -612,6 +617,7 @@ where
             uri,
             headers,
             version,
+            extensions,
             ..
         } = parts;
         let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
@@ -620,8 +626,8 @@ where
             url,
             headers,
             body: Some(body.into()),
-            timeout: None,
             version,
+            extensions,
         })
     }
 }
@@ -636,6 +642,7 @@ impl TryFrom<Request> for HttpRequest<Body> {
             headers,
             body,
             version,
+            extensions,
             ..
         } = req;
 
@@ -647,6 +654,7 @@ impl TryFrom<Request> for HttpRequest<Body> {
             .map_err(crate::error::builder)?;
 
         *req.headers_mut() = headers;
+        *req.extensions_mut() = extensions;
         Ok(req)
     }
 }

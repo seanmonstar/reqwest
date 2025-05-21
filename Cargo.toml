@@ -27,7 +27,7 @@ features = [
 ]
 
 [features]
-default = ["default-tls", "charset", "http2", "macos-system-configuration"]
+default = ["default-tls", "charset", "http2", "system-proxy"]
 
 # Note: this doesn't enable the 'native-tls' feature, which adds specific
 # functionality for it.
@@ -78,10 +78,13 @@ stream = ["tokio/fs", "dep:tokio-util", "dep:wasm-streams"]
 socks = ["dep:tokio-socks"]
 
 # Use the system's proxy configuration.
-macos-system-configuration = ["dep:system-configuration"]
+system-proxy = ["hyper-util/client-proxy-system"]
+
+# Deprecated, switch to system-proxy.
+macos-system-configuration = ["system-proxy"]
 
 # Experimental HTTP/3 client.
-http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "dep:slab", "dep:futures-channel"]
+http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "dep:slab", "dep:futures-channel", "tokio/macros"]
 
 
 # Internal (PRIVATE!) features used to aid testing.
@@ -97,7 +100,7 @@ __rustls-ring = ["hyper-rustls?/ring", "tokio-rustls?/ring", "rustls?/ring", "qu
 
 [dependencies]
 base64 = "0.22"
-http = "1"
+http = "1.1"
 url = "2.4"
 bytes = "1.2"
 serde = "1.0"
@@ -119,7 +122,7 @@ encoding_rs = { version = "0.8", optional = true }
 http-body = "1"
 http-body-util = "0.1"
 hyper = { version = "1.1", features = ["http1", "client"] }
-hyper-util = { version = "0.1.10", features = ["http1", "client", "client-legacy", "tokio"] }
+hyper-util = { version = "0.1.12", features = ["http1", "client", "client-legacy", "client-proxy", "tokio"] }
 h2 = { version = "0.4", optional = true }
 once_cell = "1.18"
 log = "0.4.17"
@@ -161,8 +164,8 @@ tokio-socks = { version = "0.5.2", optional = true }
 hickory-resolver = { version = "0.24", optional = true, features = ["tokio-runtime"] }
 
 # HTTP/3 experimental support
-h3 = { version = "0.0.7", optional = true }
-h3-quinn = { version = "0.0.9", optional = true }
+h3 = { version = "0.0.8", optional = true }
+h3-quinn = { version = "0.0.10", optional = true }
 quinn = { version = "0.11.1", default-features = false, features = ["rustls", "runtime-tokio"], optional = true }
 slab = { version = "0.4.9", optional = true } # just to get minimal versions working with quinn
 futures-channel = { version = "0.3", optional = true }
@@ -170,21 +173,14 @@ futures-channel = { version = "0.3", optional = true }
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.10"
 hyper = { version = "1.1.0", default-features = false, features = ["http1", "http2", "client", "server"] }
-hyper-util = { version = "0.1.10", features = ["http1", "http2", "client", "client-legacy", "server-auto", "tokio"] }
+hyper-util = { version = "0.1.12", features = ["http1", "http2", "client", "client-legacy", "server-auto", "server-graceful", "tokio"] }
 serde = { version = "1.0", features = ["derive"] }
-libflate = "2.1"
-brotli_crate = { package = "brotli", version = "6.0.0" }
+flate2 = "1.0.13"
+brotli_crate = { package = "brotli", version = "7.0.0" }
 zstd_crate = { package = "zstd", version = "0.13" }
 doc-comment = "0.3"
 tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
 futures-util = { version = "0.3.28", default-features = false, features = ["std", "alloc"] }
-rustls = { version = "0.23", default-features = false, features = ["ring"] }
-
-[target.'cfg(windows)'.dependencies]
-windows-registry = "0.4"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-system-configuration = { version = "0.6.0", optional = true }
 
 # wasm
 
