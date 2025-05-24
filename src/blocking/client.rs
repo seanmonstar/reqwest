@@ -6,12 +6,14 @@ use std::future::Future;
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::task::ready;
 use std::thread;
 use std::time::Duration;
 
 use http::header::HeaderValue;
 use log::{error, trace};
+use once_cell::sync::Lazy;
 use tokio::sync::{mpsc, oneshot};
 use tower::Layer;
 use tower::Service;
@@ -32,7 +34,28 @@ use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
 use crate::{async_impl, header, redirect, IntoUrl, Method, Proxy};
-
+///enum which indicate the type of next client
+#[derive(Debug)]
+pub enum ClientType{
+        /// mark the default type asycn client
+        DefaultAsync,
+        /// mark the blocking type client 
+        Blocking
+}
+/// Context which describes the current blocking instance status
+#[derive(Debug)]
+pub struct Context {
+    pub clients_count: i64,
+    pub next_type:ClientType
+}
+impl Context {
+    pub fn new() -> Self {
+        Self { clients_count: 0 ,next_type:ClientType::DefaultAsync}
+    }
+}
+///worldwide blocking clients context which contains status of blocking clients
+///status including  instance count ...
+pub static BLOCKING_CLIENT_CONTEXT: Lazy<Mutex<Context>> = Lazy::new(|| Mutex::new(Context::new()));
 /// A `Client` to make Requests with.
 ///
 /// The Client has various configuration values to tweak, but the defaults
@@ -111,7 +134,14 @@ impl ClientBuilder {
     /// This method panics if called from within an async runtime. See docs on
     /// [`reqwest::blocking`][crate::blocking] for details.
     pub fn build(self) -> crate::Result<Client> {
-        ClientHandle::new(self).map(|handle| Client { inner: handle })
+        {
+        let mut mutex_guard = BLOCKING_CLIENT_CONTEXT.lock().unwrap();
+        mutex_guard.next_type=ClientType::Blocking;
+        let client_handle = ClientHandle::new(self).map(|handle| Client { inner: handle });
+        mutex_guard.clients_count += 1;
+        mutex_guard.next_type=ClientType::DefaultAsync;
+        client_handle
+        }
     }
 
     // Higher-level options
@@ -1191,6 +1221,10 @@ struct InnerClientHandle {
 
 impl Drop for InnerClientHandle {
     fn drop(&mut self) {
+        {
+            let mut mutex_guard = BLOCKING_CLIENT_CONTEXT.lock().unwrap();
+            mutex_guard.clients_count -= 1;
+        }
         let id = self
             .thread
             .as_ref()
