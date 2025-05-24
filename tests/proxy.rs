@@ -173,6 +173,41 @@ async fn test_no_proxy() {
 }
 
 #[tokio::test]
+async fn test_custom_headers() {
+    let url = "http://hyper.rs.local/prox";
+    let server = server::http(move |req| {
+        assert_eq!(req.method(), "GET");
+        assert_eq!(req.uri(), url);
+        assert_eq!(req.headers()["host"], "hyper.rs.local");
+        assert_eq!(
+            req.headers()["proxy-authorization"],
+            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="
+        );
+        async { http::Response::default() }
+    });
+
+    let proxy = format!("http://{}", server.addr());
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        // reqwest::header::HeaderName::from_static("Proxy-Authorization"),
+        reqwest::header::PROXY_AUTHORIZATION,
+        "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==".parse().unwrap(),
+    );
+
+    let res = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::http(&proxy).unwrap().headers(headers))
+        .build()
+        .unwrap()
+        .get(url)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.url().as_str(), url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
+#[tokio::test]
 async fn test_using_system_proxy() {
     let url = "http://not.a.real.sub.hyper.rs.local/prox";
     let server = server::http(move |req| {
