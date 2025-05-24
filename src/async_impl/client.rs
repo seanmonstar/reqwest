@@ -17,6 +17,7 @@ use super::Body;
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
+#[cfg(feature = "blocking")]
 use crate::blocking::{ClientType, BLOCKING_CLIENT_CONTEXT};
 use crate::config::{RequestConfig, RequestTimeout};
 use crate::connect::{
@@ -335,6 +336,7 @@ impl ClientBuilder {
     /// This method fails if a TLS backend cannot be initialized, or the resolver
     /// cannot load the system configuration.
     pub fn build(self) -> crate::Result<Client> {
+        #[cfg(feature = "blocking")]
         {
             let mutex_guard = BLOCKING_CLIENT_CONTEXT.lock().unwrap();
             let blocking_client_count = mutex_guard.clients_count;
