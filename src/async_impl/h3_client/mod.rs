@@ -9,10 +9,9 @@ use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
 use crate::error::{BoxError, Error, Kind};
 use crate::{error, Body};
 use connect::H3Connector;
-use futures_util::future;
 use http::{Request, Response};
 use log::trace;
-use std::future::Future;
+use std::future::{self, Future};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -78,7 +77,7 @@ impl H3Client {
             Ok(s) => s,
             Err(e) => {
                 return H3ResponseFuture {
-                    inner: Box::pin(future::err(e)),
+                    inner: Box::pin(future::ready(Err(e))),
                 }
             }
         };

@@ -6,7 +6,7 @@ use std::future::Future;
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::task::ready;
+use std::task::{ready, Poll};
 use std::thread;
 use std::time::Duration;
 
@@ -1322,8 +1322,6 @@ async fn forward<F>(fut: F, mut tx: OneshotResponse)
 where
     F: Future<Output = crate::Result<async_impl::Response>>,
 {
-    use std::task::Poll;
-
     futures_util::pin_mut!(fut);
 
     // "select" on the sender being canceled, and the future completing
