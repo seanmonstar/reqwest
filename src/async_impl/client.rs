@@ -17,7 +17,7 @@ use super::Body;
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
-use crate::config::{RequestConfig, RequestTimeout};
+use crate::config::{self, RequestConfig};
 use crate::connect::{
     sealed::{Conn, Unnameable},
     BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
@@ -47,7 +47,7 @@ use http::header::{
     CONTENT_TYPE, LOCATION, PROXY_AUTHORIZATION, RANGE, REFERER, TRANSFER_ENCODING, USER_AGENT,
 };
 use http::uri::Scheme;
-use http::Uri;
+use http::{Extensions, Uri};
 use hyper_util::client::legacy::connect::HttpConnector;
 use log::debug;
 #[cfg(feature = "default-tls")]
@@ -904,7 +904,7 @@ impl ClientBuilder {
 
         Ok(Client {
             inner: Arc::new(ClientRef {
-                accepts: config.accepts,
+                accepts: RequestConfig::new(Some(config.accepts)),
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store,
                 // Use match instead of map since config is partially moved,
@@ -2353,7 +2353,12 @@ impl Client {
             }
         }
 
-        let accept_encoding = self.inner.accepts.as_str();
+        let accept_encoding = self
+            .inner
+            .accepts
+            .fetch(&extensions)
+            .expect("accepts must be set in the client ref")
+            .as_str();
 
         if let Some(accept_encoding) = accept_encoding {
             if !headers.contains_key(ACCEPT_ENCODING) && !headers.contains_key(RANGE) {
@@ -2415,6 +2420,7 @@ impl Client {
                 url,
                 headers,
                 body: reusable,
+                extensions,
 
                 urls: Vec::new(),
 
@@ -2630,7 +2636,7 @@ impl Config {
 }
 
 struct ClientRef {
-    accepts: Accepts,
+    accepts: RequestConfig<config::Accepts>,
     #[cfg(feature = "cookies")]
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     headers: HeaderMap,
@@ -2639,7 +2645,7 @@ struct ClientRef {
     h3_client: Option<H3Client>,
     redirect_policy: redirect::Policy,
     referer: bool,
-    request_timeout: RequestConfig<RequestTimeout>,
+    request_timeout: RequestConfig<config::RequestTimeout>,
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<ProxyMatcher>>,
     proxies_maybe_http_auth: bool,
@@ -2658,7 +2664,7 @@ impl ClientRef {
             }
         }
 
-        f.field("accepts", &self.accepts);
+        self.accepts.fmt_as_field(f);
 
         if !self.proxies.is_empty() {
             f.field("proxies", &self.proxies);
@@ -2700,6 +2706,7 @@ pin_project! {
         url: Url,
         headers: HeaderMap,
         body: Option<Option<Bytes>>,
+        extensions: Extensions,
 
         urls: Vec<Url>,
 
@@ -3070,7 +3077,10 @@ impl Future for PendingRequest {
             let res = Response::new(
                 res,
                 self.url.clone(),
-                self.client.accepts,
+                self.client
+                    .accepts
+                    .fetch_owned(&self.extensions)
+                    .expect("accepts must has been set"),
                 self.total_timeout.take(),
                 self.read_timeout,
             );
