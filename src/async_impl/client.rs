@@ -17,6 +17,7 @@ use super::Body;
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
+use crate::blocking::{ClientType, BLOCKING_CLIENT_CONTEXT};
 use crate::config::{RequestConfig, RequestTimeout};
 use crate::connect::{
     sealed::{Conn, Unnameable},
@@ -60,7 +61,6 @@ use quinn::VarInt;
 use tokio::time::Sleep;
 use tower::util::BoxCloneSyncServiceLayer;
 use tower::{Layer, Service};
-
 type HyperResponseFuture = hyper_util::client::legacy::ResponseFuture;
 
 /// An asynchronous `Client` to make Requests with.
@@ -335,6 +335,22 @@ impl ClientBuilder {
     /// This method fails if a TLS backend cannot be initialized, or the resolver
     /// cannot load the system configuration.
     pub fn build(self) -> crate::Result<Client> {
+        {
+            let mutex_guard = BLOCKING_CLIENT_CONTEXT.lock().unwrap();
+            let blocking_client_count = mutex_guard.clients_count;
+            match &mutex_guard.next_type {
+                ClientType::DefaultAsync => {
+                    if blocking_client_count != 0 {
+                        panic!(
+                    "exist {} blocking clients,consider dropping them before building an async one",
+                    blocking_client_count
+                        );
+                    }
+                }
+                ClientType::Blocking => {}
+            };
+        }
+
         let config = self.config;
 
         if let Some(err) = config.error {
