@@ -1,4 +1,3 @@
-use futures_util::future::FutureExt;
 use hyper_util::client::legacy::connect::dns::GaiResolver as HyperGaiResolver;
 use tower_service::Service;
 
@@ -22,11 +21,12 @@ impl Default for GaiResolver {
 
 impl Resolve for GaiResolver {
     fn resolve(&self, name: Name) -> Resolving {
-        let this = &mut self.0.clone();
-        Box::pin(this.call(name.0).map(|result| {
-            result
-                .map(|addrs| -> Addrs { Box::new(addrs) })
-                .map_err(|err| -> BoxError { Box::new(err) })
-        }))
+        let mut this = self.0.clone();
+        Box::pin(async move {
+            this.call(name.0)
+                .await
+                .map(|addrs| Box::new(addrs) as Addrs)
+                .map_err(|err| Box::new(err) as BoxError)
+        })
     }
 }

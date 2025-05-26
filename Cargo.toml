@@ -51,29 +51,29 @@ rustls-tls-manual-roots = ["rustls-tls-manual-roots-no-provider", "__rustls-ring
 rustls-tls-webpki-roots = ["rustls-tls-webpki-roots-no-provider", "__rustls-ring"]
 rustls-tls-native-roots = ["rustls-tls-native-roots-no-provider", "__rustls-ring"]
 
-blocking = ["dep:futures-channel", "futures-channel?/sink", "futures-util/io", "futures-util/sink", "tokio/sync"]
+blocking = ["dep:futures-channel", "futures-channel?/sink", "dep:futures-util", "futures-util?/io", "futures-util?/sink", "tokio/sync"]
 
 charset = ["dep:encoding_rs"]
 
 cookies = ["dep:cookie_crate", "dep:cookie_store"]
 
-gzip = ["dep:async-compression", "async-compression?/gzip", "dep:tokio-util"]
+gzip = ["dep:async-compression", "async-compression?/gzip", "dep:futures-util", "dep:tokio-util"]
 
-brotli = ["dep:async-compression", "async-compression?/brotli", "dep:tokio-util"]
+brotli = ["dep:async-compression", "async-compression?/brotli", "dep:futures-util", "dep:tokio-util"]
 
-zstd = ["dep:async-compression", "async-compression?/zstd", "dep:tokio-util"]
+zstd = ["dep:async-compression", "async-compression?/zstd", "dep:futures-util", "dep:tokio-util"]
 
-deflate = ["dep:async-compression", "async-compression?/zlib", "dep:tokio-util"]
+deflate = ["dep:async-compression", "async-compression?/zlib", "dep:futures-util", "dep:tokio-util"]
 
 json = ["dep:serde_json"]
 
-multipart = ["dep:mime_guess"]
+multipart = ["dep:mime_guess", "dep:futures-util"]
 
 # Deprecated, remove this feature while bumping minor versions.
 trust-dns = []
 hickory-dns = ["dep:hickory-resolver"]
 
-stream = ["tokio/fs", "dep:tokio-util", "dep:wasm-streams"]
+stream = ["tokio/fs", "dep:futures-util", "dep:tokio-util", "dep:wasm-streams"]
 
 socks = ["dep:tokio-socks"]
 
@@ -107,7 +107,7 @@ serde = "1.0"
 serde_urlencoded = "0.7.1"
 tower-service = "0.3"
 futures-core = { version = "0.3.28", default-features = false }
-futures-util = { version = "0.3.28", default-features = false }
+futures-util = { version = "0.3.28", default-features = false, optional = true }
 sync_wrapper = { version = "1.0", features = ["futures"] }
 
 # Optional deps...
