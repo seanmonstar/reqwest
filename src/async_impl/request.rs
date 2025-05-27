@@ -12,11 +12,11 @@ use super::client::{Client, Pending};
 #[cfg(feature = "multipart")]
 use super::multipart;
 use super::response::Response;
-use crate::config::{RequestConfig, RequestTimeout};
+use crate::config::{self, RequestConfig};
 #[cfg(feature = "multipart")]
 use crate::header::CONTENT_LENGTH;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
-use crate::{Method, Url};
+use crate::{redirect, Method, Url};
 use http::{request::Parts, Extensions, Request as HttpRequest, Version};
 
 /// A request which can be executed with `Client::execute()`.
@@ -62,6 +62,18 @@ impl Request {
     #[inline]
     pub fn method_mut(&mut self) -> &mut Method {
         &mut self.method
+    }
+
+    /// Get the http version.
+    #[inline]
+    pub fn version(&self) -> Version {
+        self.version
+    }
+
+    /// Get a mutable reference to the http version.
+    #[inline]
+    pub fn version_mut(&mut self) -> &mut Version {
+        &mut self.version
     }
 
     /// Get the url.
@@ -115,25 +127,25 @@ impl Request {
     /// Get the timeout.
     #[inline]
     pub fn timeout(&self) -> Option<&Duration> {
-        RequestConfig::<RequestTimeout>::get(&self.extensions)
+        RequestConfig::<config::RequestTimeout>::get(&self.extensions)
     }
 
     /// Get a mutable reference to the timeout.
     #[inline]
     pub fn timeout_mut(&mut self) -> &mut Option<Duration> {
-        RequestConfig::<RequestTimeout>::get_mut(&mut self.extensions)
+        RequestConfig::<config::RequestTimeout>::get_mut(&mut self.extensions)
     }
 
-    /// Get the http version.
+    /// Get the redirect policy.
     #[inline]
-    pub fn version(&self) -> Version {
-        self.version
+    pub fn redirect(&self) -> Option<&redirect::Policy> {
+        RequestConfig::<config::RedirectPolicy>::get(&self.extensions)
     }
 
-    /// Get a mutable reference to the http version.
+    /// Get a mutable reference to the redirect policy.
     #[inline]
-    pub fn version_mut(&mut self) -> &mut Version {
-        &mut self.version
+    pub fn redirect_mut(&mut self) -> &mut Option<redirect::Policy> {
+        RequestConfig::<config::RedirectPolicy>::get_mut(&mut self.extensions)
     }
 
     /// Attempt to clone the request.

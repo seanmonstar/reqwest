@@ -17,7 +17,7 @@ use super::Body;
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
-use crate::config::{RequestConfig, RequestTimeout};
+use crate::config::{self, RequestConfig};
 use crate::connect::{
     sealed::{Conn, Unnameable},
     BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
@@ -47,7 +47,7 @@ use http::header::{
     CONTENT_TYPE, LOCATION, PROXY_AUTHORIZATION, RANGE, REFERER, TRANSFER_ENCODING, USER_AGENT,
 };
 use http::uri::Scheme;
-use http::Uri;
+use http::{Extensions, Uri};
 use hyper_util::client::legacy::connect::HttpConnector;
 use log::debug;
 #[cfg(feature = "default-tls")]
@@ -918,7 +918,7 @@ impl ClientBuilder {
                 },
                 hyper: builder.build(connector_builder.build(config.connector_layers)),
                 headers: config.headers,
-                redirect_policy: config.redirect_policy,
+                redirect_policy: RequestConfig::new(Some(config.redirect_policy)),
                 referer: config.referer,
                 read_timeout: config.read_timeout,
                 request_timeout: RequestConfig::new(config.timeout),
@@ -2414,6 +2414,7 @@ impl Client {
                 method,
                 url,
                 headers,
+                extensions,
                 body: reusable,
 
                 urls: Vec::new(),
@@ -2637,9 +2638,9 @@ struct ClientRef {
     hyper: HyperClient,
     #[cfg(feature = "http3")]
     h3_client: Option<H3Client>,
-    redirect_policy: redirect::Policy,
+    redirect_policy: RequestConfig<config::RedirectPolicy>,
     referer: bool,
-    request_timeout: RequestConfig<RequestTimeout>,
+    request_timeout: RequestConfig<config::RequestTimeout>,
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<ProxyMatcher>>,
     proxies_maybe_http_auth: bool,
@@ -2664,9 +2665,8 @@ impl ClientRef {
             f.field("proxies", &self.proxies);
         }
 
-        if !self.redirect_policy.is_default() {
-            f.field("redirect_policy", &self.redirect_policy);
-        }
+        self.redirect_policy
+            .fmt_as_field_when(f, |v| !v.is_default());
 
         if self.referer {
             f.field("referer", &true);
@@ -2699,6 +2699,7 @@ pin_project! {
         method: Method,
         url: Url,
         headers: HeaderMap,
+        extensions: Extensions,
         body: Option<Option<Bytes>>,
 
         urls: Vec<Url>,
@@ -2991,6 +2992,9 @@ impl Future for PendingRequest {
                     let action = self
                         .client
                         .redirect_policy
+                        .fetch(&self.extensions)
+                        // unwrap-safety: redirect_policy must exist.
+                        .unwrap()
                         .check(res.status(), &loc, &self.urls);
 
                     match action {
