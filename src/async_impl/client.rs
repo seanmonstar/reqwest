@@ -1,5 +1,7 @@
 #[cfg(any(feature = "native-tls", feature = "__rustls",))]
 use std::any::Any;
+#[cfg(feature = "http2")]
+use std::error::Error;
 use std::future::Future;
 use std::net::IpAddr;
 use std::pin::Pin;
@@ -16,7 +18,7 @@ use super::Body;
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
-use crate::async_impl::h3_client::{H3Client, H3ResponseFuture};
+use crate::async_impl::h3_client::H3Client;
 use crate::config::{RequestConfig, RequestTimeout};
 use crate::connect::{
     sealed::{Conn, Unnameable},
@@ -30,7 +32,7 @@ use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolv
 use crate::error::{self, BoxError};
 use crate::into_url::try_uri;
 use crate::proxy::Matcher as ProxyMatcher;
-use crate::redirect::{self, remove_sensitive_headers};
+use crate::redirect::{self, TowerRedirectPolicy};
 #[cfg(feature = "__rustls")]
 use crate::tls::CertificateRevocationList;
 #[cfg(feature = "__tls")]
@@ -39,17 +41,15 @@ use crate::tls::{self, TlsBackend};
 use crate::Certificate;
 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
 use crate::Identity;
-use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
+use crate::{IntoUrl, Method, Proxy, Url};
 
 use bytes::Bytes;
 use http::header::{
-    Entry, HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_LENGTH,
-    CONTENT_TYPE, LOCATION, PROXY_AUTHORIZATION, RANGE, REFERER, TRANSFER_ENCODING, USER_AGENT,
+    Entry, HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, PROXY_AUTHORIZATION, RANGE, USER_AGENT,
 };
 use http::uri::Scheme;
 use http::Uri;
 use hyper_util::client::legacy::connect::HttpConnector;
-use log::debug;
 #[cfg(feature = "default-tls")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
@@ -60,8 +60,7 @@ use quinn::VarInt;
 use tokio::time::Sleep;
 use tower::util::BoxCloneSyncServiceLayer;
 use tower::{Layer, Service};
-
-type HyperResponseFuture = hyper_util::client::legacy::ResponseFuture;
+use tower_http::follow_redirect::FollowRedirect;
 
 /// An asynchronous `Client` to make Requests with.
 ///
@@ -94,6 +93,61 @@ enum HttpVersionPref {
     #[cfg(feature = "http3")]
     Http3,
     All,
+}
+
+#[derive(Clone)]
+struct HyperService {
+    #[cfg(feature = "cookies")]
+    cookie_store: Option<Arc<dyn cookie::CookieStore>>,
+    hyper: HyperClient,
+}
+
+impl Service<hyper::Request<crate::async_impl::body::Body>> for HyperService {
+    type Error = crate::Error;
+    type Response = http::Response<hyper::body::Incoming>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.hyper.poll_ready(cx).map_err(crate::error::request)
+    }
+
+    #[cfg(not(feature = "cookies"))]
+    fn call(&mut self, req: hyper::Request<crate::async_impl::body::Body>) -> Self::Future {
+        let clone = self.hyper.clone();
+        let mut inner = std::mem::replace(&mut self.hyper, clone);
+        Box::pin(async move { inner.call(req).await.map_err(crate::error::request) })
+    }
+
+    #[cfg(feature = "cookies")]
+    fn call(&mut self, mut req: hyper::Request<crate::async_impl::body::Body>) -> Self::Future {
+        let clone = self.hyper.clone();
+        let mut inner = std::mem::replace(&mut self.hyper, clone);
+        let url = Url::parse(req.uri().to_string().as_str()).expect("invalid URL");
+
+        if let Some(cookie_store) = self.cookie_store.as_ref() {
+            if req.headers().get(crate::header::COOKIE).is_none() {
+                let headers = req.headers_mut();
+                crate::util::add_cookie_header(headers, &**cookie_store, &url);
+            }
+        }
+
+        let cookie_store = self.cookie_store.clone();
+        Box::pin(async move {
+            let res = inner.call(req).await.map_err(crate::error::request);
+
+            if let Some(ref cookie_store) = cookie_store {
+                if let Ok(res) = &res {
+                    let mut cookies =
+                        cookie::extract_response_cookie_headers(res.headers()).peekable();
+                    if cookies.peek().is_some() {
+                        cookie_store.set_cookies(&mut cookies, &url);
+                    }
+                }
+            }
+
+            res
+        })
+    }
 }
 
 struct Config {
@@ -902,29 +956,59 @@ impl ClientBuilder {
 
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
 
+        let redirect_policy_desc = if config.redirect_policy.is_default() {
+            None
+        } else {
+            Some(format!("{:?}", &config.redirect_policy))
+        };
+
+        let hyper_client = builder.build(connector_builder.build(config.connector_layers));
+        let hyper_service = HyperService {
+            #[cfg(feature = "cookies")]
+            cookie_store: config.cookie_store.clone(),
+            hyper: hyper_client,
+        };
+
+        let policy = {
+            let mut p = TowerRedirectPolicy::new(config.redirect_policy);
+            p.with_referer(config.referer)
+                .with_https_only(config.https_only);
+            p
+        };
+
+        let hyper = FollowRedirect::with_policy(hyper_service, policy.clone());
+
         Ok(Client {
             inner: Arc::new(ClientRef {
                 accepts: config.accepts,
                 #[cfg(feature = "cookies")]
-                cookie_store: config.cookie_store,
+                cookie_store: config.cookie_store.clone(),
                 // Use match instead of map since config is partially moved,
                 // and it cannot be used in closure
                 #[cfg(feature = "http3")]
                 h3_client: match h3_connector {
                     Some(h3_connector) => {
-                        Some(H3Client::new(h3_connector, config.pool_idle_timeout))
+                        #[cfg(not(feature = "cookies"))]
+                        let h3_service = H3Client::new(h3_connector, config.pool_idle_timeout);
+                        #[cfg(feature = "cookies")]
+                        let h3_service = H3Client::new(
+                            h3_connector,
+                            config.pool_idle_timeout,
+                            config.cookie_store,
+                        );
+                        Some(FollowRedirect::with_policy(h3_service, policy))
                     }
                     None => None,
                 },
-                hyper: builder.build(connector_builder.build(config.connector_layers)),
                 headers: config.headers,
-                redirect_policy: config.redirect_policy,
                 referer: config.referer,
                 read_timeout: config.read_timeout,
                 request_timeout: RequestConfig::new(config.timeout),
+                hyper,
                 proxies,
                 proxies_maybe_http_auth,
                 https_only: config.https_only,
+                redirect_policy_desc,
             }),
         })
     }
@@ -2343,16 +2427,6 @@ impl Client {
             }
         }
 
-        // Add cookies from the cookie store.
-        #[cfg(feature = "cookies")]
-        {
-            if let Some(cookie_store) = self.inner.cookie_store.as_ref() {
-                if headers.get(crate::header::COOKIE).is_none() {
-                    add_cookie_header(&mut headers, &**cookie_store, &url);
-                }
-            }
-        }
-
         let accept_encoding = self.inner.accepts.as_str();
 
         if let Some(accept_encoding) = accept_encoding {
@@ -2386,12 +2460,14 @@ impl Client {
             http::Version::HTTP_3 if self.inner.h3_client.is_some() => {
                 let mut req = builder.body(body).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
-                ResponseFuture::H3(self.inner.h3_client.as_ref().unwrap().request(req))
+                let mut h3 = self.inner.h3_client.as_ref().unwrap().clone();
+                ResponseFuture::H3(h3.call(req))
             }
             _ => {
                 let mut req = builder.body(body).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
-                ResponseFuture::Default(self.inner.hyper.request(req))
+                let mut hyper = self.inner.hyper.clone();
+                ResponseFuture::Default(hyper.call(req))
             }
         };
 
@@ -2415,8 +2491,6 @@ impl Client {
                 url,
                 headers,
                 body: reusable,
-
-                urls: Vec::new(),
 
                 retry_count: 0,
 
@@ -2634,16 +2708,16 @@ struct ClientRef {
     #[cfg(feature = "cookies")]
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     headers: HeaderMap,
-    hyper: HyperClient,
+    hyper: FollowRedirect<HyperService, TowerRedirectPolicy>,
     #[cfg(feature = "http3")]
-    h3_client: Option<H3Client>,
-    redirect_policy: redirect::Policy,
+    h3_client: Option<FollowRedirect<H3Client, TowerRedirectPolicy>>,
     referer: bool,
     request_timeout: RequestConfig<RequestTimeout>,
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<ProxyMatcher>>,
     proxies_maybe_http_auth: bool,
     https_only: bool,
+    redirect_policy_desc: Option<String>,
 }
 
 impl ClientRef {
@@ -2664,8 +2738,8 @@ impl ClientRef {
             f.field("proxies", &self.proxies);
         }
 
-        if !self.redirect_policy.is_default() {
-            f.field("redirect_policy", &self.redirect_policy);
+        if let Some(s) = &self.redirect_policy_desc {
+            f.field("redirect_policy", s);
         }
 
         if self.referer {
@@ -2701,8 +2775,6 @@ pin_project! {
         headers: HeaderMap,
         body: Option<Option<Bytes>>,
 
-        urls: Vec<Url>,
-
         retry_count: usize,
 
         client: Arc<ClientRef>,
@@ -2718,9 +2790,9 @@ pin_project! {
 }
 
 enum ResponseFuture {
-    Default(HyperResponseFuture),
+    Default(tower_http::follow_redirect::ResponseFuture<HyperService, Body, TowerRedirectPolicy>),
     #[cfg(feature = "http3")]
-    H3(H3ResponseFuture),
+    H3(tower_http::follow_redirect::ResponseFuture<H3Client, Body, TowerRedirectPolicy>),
 }
 
 impl PendingRequest {
@@ -2736,14 +2808,6 @@ impl PendingRequest {
         self.project().read_timeout_fut
     }
 
-    fn urls(self: Pin<&mut Self>) -> &mut Vec<Url> {
-        self.project().urls
-    }
-
-    fn headers(self: Pin<&mut Self>) -> &mut HeaderMap {
-        self.project().headers
-    }
-
     #[cfg(any(feature = "http2", feature = "http3"))]
     fn retry_error(mut self: Pin<&mut Self>, err: &(dyn std::error::Error + 'static)) -> bool {
         use log::trace;
@@ -2757,7 +2821,7 @@ impl PendingRequest {
         let body = match self.body {
             Some(Some(ref body)) => Body::reusable(body.clone()),
             Some(None) => {
-                debug!("error was retryable, but body not reusable");
+                log::debug!("error was retryable, but body not reusable");
                 return false;
             }
             None => Body::empty(),
@@ -2781,13 +2845,13 @@ impl PendingRequest {
                     .body(body)
                     .expect("valid request parts");
                 *req.headers_mut() = self.headers.clone();
-                ResponseFuture::H3(
-                    self.client
-                        .h3_client
-                        .as_ref()
-                        .expect("H3 client must exists, otherwise we can't have a h3 request here")
-                        .request(req),
-                )
+                let mut h3 = self
+                    .client
+                    .h3_client
+                    .as_ref()
+                    .expect("H3 client must exists, otherwise we can't have a h3 request here")
+                    .clone();
+                ResponseFuture::H3(h3.call(req))
             }
             _ => {
                 let mut req = hyper::Request::builder()
@@ -2796,7 +2860,8 @@ impl PendingRequest {
                     .body(body)
                     .expect("valid request parts");
                 *req.headers_mut() = self.headers.clone();
-                ResponseFuture::Default(self.client.hyper.request(req))
+                let mut hyper = self.client.hyper.clone();
+                ResponseFuture::Default(hyper.call(req))
             }
         };
 
@@ -2816,7 +2881,7 @@ fn is_retryable_error(err: &(dyn std::error::Error + 'static)) -> bool {
     #[cfg(feature = "http3")]
     if let Some(cause) = err.source() {
         if let Some(err) = cause.downcast_ref::<h3::error::ConnectionError>() {
-            debug!("determining if HTTP/3 error {err} can be retried");
+            log::debug!("determining if HTTP/3 error {err} can be retried");
             // TODO: Does h3 provide an API for checking the error?
             return err.to_string().as_str() == "timeout";
         }
@@ -2892,12 +2957,15 @@ impl Future for PendingRequest {
                 ResponseFuture::Default(r) => match Pin::new(r).poll(cx) {
                     Poll::Ready(Err(e)) => {
                         #[cfg(feature = "http2")]
-                        if self.as_mut().retry_error(&e) {
-                            continue;
+                        if e.is_request() {
+                            if let Some(e) = e.source() {
+                                if self.as_mut().retry_error(e) {
+                                    continue;
+                                }
+                            }
                         }
-                        return Poll::Ready(Err(
-                            crate::error::request(e).with_url(self.url.clone())
-                        ));
+
+                        return Poll::Ready(Err(e));
                     }
                     Poll::Ready(Ok(res)) => res.map(super::body::boxed),
                     Poll::Pending => return Poll::Pending,
@@ -2921,151 +2989,21 @@ impl Future for PendingRequest {
             {
                 if let Some(ref cookie_store) = self.client.cookie_store {
                     let mut cookies =
-                        cookie::extract_response_cookie_headers(&res.headers()).peekable();
+                        cookie::extract_response_cookie_headers(res.headers()).peekable();
                     if cookies.peek().is_some() {
                         cookie_store.set_cookies(&mut cookies, &self.url);
                     }
                 }
             }
-            let should_redirect = match res.status() {
-                StatusCode::MOVED_PERMANENTLY | StatusCode::FOUND | StatusCode::SEE_OTHER => {
-                    self.body = None;
-                    for header in &[
-                        TRANSFER_ENCODING,
-                        CONTENT_ENCODING,
-                        CONTENT_TYPE,
-                        CONTENT_LENGTH,
-                    ] {
-                        self.headers.remove(header);
-                    }
-
-                    match self.method {
-                        Method::GET | Method::HEAD => {}
-                        _ => {
-                            self.method = Method::GET;
-                        }
-                    }
-                    true
+            if let Some(url) = &res
+                .extensions()
+                .get::<tower_http::follow_redirect::RequestUri>()
+            {
+                self.url = match Url::parse(&url.0.to_string()) {
+                    Ok(url) => url,
+                    Err(e) => return Poll::Ready(Err(crate::error::decode(e))),
                 }
-                StatusCode::TEMPORARY_REDIRECT | StatusCode::PERMANENT_REDIRECT => {
-                    match self.body {
-                        Some(Some(_)) | None => true,
-                        Some(None) => false,
-                    }
-                }
-                _ => false,
             };
-            if should_redirect {
-                let loc = res.headers().get(LOCATION).and_then(|val| {
-                    let loc = (|| -> Option<Url> {
-                        // Some sites may send a UTF-8 Location header,
-                        // even though we're supposed to treat those bytes
-                        // as opaque, we'll check specifically for utf8.
-                        self.url.join(str::from_utf8(val.as_bytes()).ok()?).ok()
-                    })();
-
-                    // Check that the `url` is also a valid `http::Uri`.
-                    //
-                    // If not, just log it and skip the redirect.
-                    let loc = loc.and_then(|url| {
-                        if try_uri(&url).is_ok() {
-                            Some(url)
-                        } else {
-                            None
-                        }
-                    });
-
-                    if loc.is_none() {
-                        debug!("Location header had invalid URI: {val:?}");
-                    }
-                    loc
-                });
-                if let Some(loc) = loc {
-                    if self.client.referer {
-                        if let Some(referer) = make_referer(&loc, &self.url) {
-                            self.headers.insert(REFERER, referer);
-                        }
-                    }
-                    let url = self.url.clone();
-                    self.as_mut().urls().push(url);
-                    let action = self
-                        .client
-                        .redirect_policy
-                        .check(res.status(), &loc, &self.urls);
-
-                    match action {
-                        redirect::ActionKind::Follow => {
-                            debug!("redirecting '{}' to '{}'", self.url, loc);
-
-                            if loc.scheme() != "http" && loc.scheme() != "https" {
-                                return Poll::Ready(Err(error::url_bad_scheme(loc)));
-                            }
-
-                            if self.client.https_only && loc.scheme() != "https" {
-                                return Poll::Ready(Err(error::redirect(
-                                    error::url_bad_scheme(loc.clone()),
-                                    loc,
-                                )));
-                            }
-
-                            self.url = loc;
-                            let mut headers =
-                                std::mem::replace(self.as_mut().headers(), HeaderMap::new());
-
-                            remove_sensitive_headers(&mut headers, &self.url, &self.urls);
-                            let uri = try_uri(&self.url)?;
-                            let body = match self.body {
-                                Some(Some(ref body)) => Body::reusable(body.clone()),
-                                _ => Body::empty(),
-                            };
-
-                            // Add cookies from the cookie store.
-                            #[cfg(feature = "cookies")]
-                            {
-                                if let Some(ref cookie_store) = self.client.cookie_store {
-                                    add_cookie_header(&mut headers, &**cookie_store, &self.url);
-                                }
-                            }
-
-                            *self.as_mut().in_flight().get_mut() =
-                                match *self.as_mut().in_flight().as_ref() {
-                                    #[cfg(feature = "http3")]
-                                    ResponseFuture::H3(_) => {
-                                        let mut req = hyper::Request::builder()
-                                            .method(self.method.clone())
-                                            .uri(uri.clone())
-                                            .body(body)
-                                            .expect("valid request parts");
-                                        *req.headers_mut() = headers.clone();
-                                        std::mem::swap(self.as_mut().headers(), &mut headers);
-                                        ResponseFuture::H3(self.client.h3_client
-                        .as_ref()
-                        .expect("H3 client must exists, otherwise we can't have a h3 request here")
-                                            .request(req))
-                                    }
-                                    _ => {
-                                        let mut req = hyper::Request::builder()
-                                            .method(self.method.clone())
-                                            .uri(uri.clone())
-                                            .body(body)
-                                            .expect("valid request parts");
-                                        *req.headers_mut() = headers.clone();
-                                        std::mem::swap(self.as_mut().headers(), &mut headers);
-                                        ResponseFuture::Default(self.client.hyper.request(req))
-                                    }
-                                };
-
-                            continue;
-                        }
-                        redirect::ActionKind::Stop => {
-                            debug!("redirect policy disallowed redirection to '{loc}'");
-                        }
-                        redirect::ActionKind::Error(err) => {
-                            return Poll::Ready(Err(crate::error::redirect(err, self.url.clone())));
-                        }
-                    }
-                }
-            }
 
             let res = Response::new(
                 res,
@@ -3089,25 +3027,6 @@ impl fmt::Debug for Pending {
                 .finish(),
             PendingInner::Error(ref err) => f.debug_struct("Pending").field("error", err).finish(),
         }
-    }
-}
-
-fn make_referer(next: &Url, previous: &Url) -> Option<HeaderValue> {
-    if next.scheme() == "http" && previous.scheme() == "https" {
-        return None;
-    }
-
-    let mut referer = previous.clone();
-    let _ = referer.set_username("");
-    let _ = referer.set_password(None);
-    referer.set_fragment(None);
-    referer.as_str().parse().ok()
-}
-
-#[cfg(feature = "cookies")]
-fn add_cookie_header(headers: &mut HeaderMap, cookie_store: &dyn cookie::CookieStore, url: &Url) {
-    if let Some(header) = cookie_store.cookies(url) {
-        headers.insert(crate::header::COOKIE, header);
     }
 }
 
