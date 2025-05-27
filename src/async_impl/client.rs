@@ -955,6 +955,8 @@ impl ClientBuilder {
         }
 
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
+        let proxies_maybe_http_custom_headers =
+            proxies.iter().any(|p| p.maybe_has_http_custom_headers());
 
         let redirect_policy_desc = if config.redirect_policy.is_default() {
             None
@@ -1007,6 +1009,7 @@ impl ClientBuilder {
                 hyper,
                 proxies,
                 proxies_maybe_http_auth,
+                proxies_maybe_http_custom_headers,
                 https_only: config.https_only,
                 redirect_policy_desc,
             }),
@@ -2449,6 +2452,7 @@ impl Client {
         };
 
         self.proxy_auth(&uri, &mut headers);
+        self.proxy_custom_headers(&uri, &mut headers);
 
         let builder = hyper::Request::builder()
             .method(method.clone())
@@ -2523,6 +2527,26 @@ impl Client {
         for proxy in self.inner.proxies.iter() {
             if let Some(header) = proxy.http_non_tunnel_basic_auth(dst) {
                 headers.insert(PROXY_AUTHORIZATION, header);
+            }
+
+            break;
+        }
+    }
+
+    fn proxy_custom_headers(&self, dst: &Uri, headers: &mut HeaderMap) {
+        if !self.inner.proxies_maybe_http_custom_headers {
+            return;
+        }
+
+        if dst.scheme() != Some(&Scheme::HTTP) {
+            return;
+        }
+
+        for proxy in self.inner.proxies.iter() {
+            if let Some(iter) = proxy.http_non_tunnel_custom_headers(dst) {
+                iter.iter().for_each(|(key, value)| {
+                    headers.insert(key, value.clone());
+                });
             }
 
             break;
@@ -2716,6 +2740,7 @@ struct ClientRef {
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<ProxyMatcher>>,
     proxies_maybe_http_auth: bool,
+    proxies_maybe_http_custom_headers: bool,
     https_only: bool,
     redirect_policy_desc: Option<String>,
 }
