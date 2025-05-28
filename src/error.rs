@@ -213,6 +213,15 @@ impl fmt::Display for Error {
                 };
                 write!(f, "{prefix} ({code})")?;
             }
+            Kind::StatusReason(ref code, ref reason) => {
+                let prefix = if code.is_client_error() {
+                    "HTTP status client error"
+                } else {
+                    debug_assert!(code.is_server_error());
+                    "HTTP status server error"
+                };
+                write!(f, "{prefix} ({reason})")?;
+            }
         };
 
         if let Some(url) = &self.inner.url {
@@ -249,6 +258,7 @@ pub(crate) enum Kind {
     Request,
     Redirect,
     Status(StatusCode),
+    StatusReason(StatusCode, String),
     Body,
     Decode,
     Upgrade,
@@ -278,6 +288,10 @@ pub(crate) fn redirect<E: Into<BoxError>>(e: E, url: Url) -> Error {
 
 pub(crate) fn status_code(url: Url, status: StatusCode) -> Error {
     Error::new(Kind::Status(status), None::<Error>).with_url(url)
+}
+
+pub(crate) fn status_reason(url: Url, status: StatusCode, reason: String) -> Error {
+    Error::new(Kind::StatusReason(status, reason), None::<Error>).with_url(url)
 }
 
 pub(crate) fn url_bad_scheme(url: Url) -> Error {
