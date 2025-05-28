@@ -220,7 +220,7 @@ impl fmt::Display for Error {
                     debug_assert!(code.is_server_error());
                     "HTTP status server error"
                 };
-                write!(f, "{prefix} ({reason})")?;
+                write!(f, "{prefix} ({} {reason})", code.as_str())?;
             }
         };
 
