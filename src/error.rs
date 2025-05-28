@@ -204,6 +204,17 @@ impl fmt::Display for Error {
             Kind::Decode => f.write_str("error decoding response body")?,
             Kind::Redirect => f.write_str("error following redirect")?,
             Kind::Upgrade => f.write_str("error upgrading connection")?,
+            #[cfg(target_arch = "wasm32")]
+            Kind::Status(ref code) => {
+                let prefix = if code.is_client_error() {
+                    "HTTP status client error"
+                } else {
+                    debug_assert!(code.is_server_error());
+                    "HTTP status server error"
+                };
+                write!(f, "{prefix} ({code})")?;
+            }
+            #[cfg(not(target_arch = "wasm32"))]
             Kind::Status(ref code, ref reason) => {
                 let prefix = if code.is_client_error() {
                     "HTTP status client error"
@@ -257,7 +268,10 @@ pub(crate) enum Kind {
     Builder,
     Request,
     Redirect,
+    #[cfg(not(target_arch = "wasm32"))]
     Status(StatusCode, Option<hyper::ext::ReasonPhrase>),
+    #[cfg(target_arch = "wasm32")]
+    Status(StatusCode),
     Body,
     Decode,
     Upgrade,
@@ -288,9 +302,17 @@ pub(crate) fn redirect<E: Into<BoxError>>(e: E, url: Url) -> Error {
 pub(crate) fn status_code(
     url: Url,
     status: StatusCode,
-    reason: Option<hyper::ext::ReasonPhrase>,
+    #[cfg(not(target_arch = "wasm32"))] reason: Option<hyper::ext::ReasonPhrase>,
 ) -> Error {
-    Error::new(Kind::Status(status, reason), None::<Error>).with_url(url)
+    Error::new(
+        Kind::Status(
+            status,
+            #[cfg(not(target_arch = "wasm32"))]
+            reason,
+        ),
+        None::<Error>,
+    )
+    .with_url(url)
 }
 
 pub(crate) fn url_bad_scheme(url: Url) -> Error {
