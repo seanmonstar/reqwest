@@ -1,3 +1,7 @@
+## v0.12.17
+
+- Fix compilation on macOS.
+
 ## v0.12.16
 
 - Add `ClientBuilder::http3_congestion_bbr()` to enable BBR congestion control.
