@@ -94,7 +94,7 @@ impl Error {
 
     /// Returns true if the error is from `Response::error_for_status`.
     pub fn is_status(&self) -> bool {
-        matches!(self.inner.kind, Kind::Status(_))
+        matches!(self.inner.kind, Kind::Status(_, _))
     }
 
     /// Returns true if the error is related to a timeout.
@@ -152,7 +152,7 @@ impl Error {
     /// Returns the status code, if the error was generated from a response.
     pub fn status(&self) -> Option<StatusCode> {
         match self.inner.kind {
-            Kind::Status(code) => Some(code),
+            Kind::Status(code, _) => Some(code),
             _ => None,
         }
     }
@@ -204,23 +204,23 @@ impl fmt::Display for Error {
             Kind::Decode => f.write_str("error decoding response body")?,
             Kind::Redirect => f.write_str("error following redirect")?,
             Kind::Upgrade => f.write_str("error upgrading connection")?,
-            Kind::Status(ref code) => {
+            Kind::Status(ref code, ref reason) => {
                 let prefix = if code.is_client_error() {
                     "HTTP status client error"
                 } else {
                     debug_assert!(code.is_server_error());
                     "HTTP status server error"
                 };
-                write!(f, "{prefix} ({code})")?;
-            }
-            Kind::StatusReason(ref code, ref reason) => {
-                let prefix = if code.is_client_error() {
-                    "HTTP status client error"
+                if let Some(reason) = reason {
+                    write!(
+                        f,
+                        "{prefix} ({} {})",
+                        code.as_str(),
+                        String::from_utf8_lossy(reason.as_bytes())
+                    )?;
                 } else {
-                    debug_assert!(code.is_server_error());
-                    "HTTP status server error"
-                };
-                write!(f, "{prefix} ({} {reason})", code.as_str())?;
+                    write!(f, "{prefix} ({code})")?;
+                }
             }
         };
 
@@ -257,8 +257,7 @@ pub(crate) enum Kind {
     Builder,
     Request,
     Redirect,
-    Status(StatusCode),
-    StatusReason(StatusCode, String),
+    Status(StatusCode, Option<hyper::ext::ReasonPhrase>),
     Body,
     Decode,
     Upgrade,
@@ -286,12 +285,12 @@ pub(crate) fn redirect<E: Into<BoxError>>(e: E, url: Url) -> Error {
     Error::new(Kind::Redirect, Some(e)).with_url(url)
 }
 
-pub(crate) fn status_code(url: Url, status: StatusCode) -> Error {
-    Error::new(Kind::Status(status), None::<Error>).with_url(url)
-}
-
-pub(crate) fn status_reason(url: Url, status: StatusCode, reason: String) -> Error {
-    Error::new(Kind::StatusReason(status, reason), None::<Error>).with_url(url)
+pub(crate) fn status_code(
+    url: Url,
+    status: StatusCode,
+    reason: Option<hyper::ext::ReasonPhrase>,
+) -> Error {
+    Error::new(Kind::Status(status, reason), None::<Error>).with_url(url)
 }
 
 pub(crate) fn url_bad_scheme(url: Url) -> Error {
