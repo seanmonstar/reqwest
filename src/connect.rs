@@ -1,6 +1,7 @@
 #[cfg(feature = "__tls")]
 use http::header::HeaderValue;
-use http::uri::{Authority, Scheme};
+#[cfg(feature = "__tls")]
+use http::uri::Scheme;
 use http::Uri;
 use hyper::rt::{Read, ReadBufCursor, Write};
 use hyper_util::client::legacy::connect::{Connected, Connection};
@@ -27,7 +28,7 @@ use self::native_tls_conn::NativeTlsConn;
 use self::rustls_tls_conn::RustlsTlsConn;
 use crate::dns::DynResolver;
 use crate::error::{cast_to_internal_error, BoxError};
-use crate::proxy::{Proxy, ProxyScheme};
+use crate::proxy::{Intercepted, Matcher as ProxyMatcher};
 use sealed::{Conn, Unnameable};
 
 pub(crate) type HttpConnector = hyper_util::client::legacy::connect::HttpConnector<DynResolver>;
@@ -68,7 +69,7 @@ pub(crate) type BoxedConnectorLayer =
 
 pub(crate) struct ConnectorBuilder {
     inner: Inner,
-    proxies: Arc<Vec<Proxy>>,
+    proxies: Arc<Vec<ProxyMatcher>>,
     verbose: verbose::Wrapper,
     timeout: Option<Duration>,
     #[cfg(feature = "__tls")]
@@ -77,6 +78,8 @@ pub(crate) struct ConnectorBuilder {
     tls_info: bool,
     #[cfg(feature = "__tls")]
     user_agent: Option<HeaderValue>,
+    #[cfg(feature = "socks")]
+    resolver: Option<DynResolver>,
 }
 
 impl ConnectorBuilder {
@@ -94,6 +97,8 @@ where {
             #[cfg(feature = "__tls")]
             user_agent: self.user_agent,
             simple_timeout: None,
+            #[cfg(feature = "socks")]
+            resolver: self.resolver.unwrap_or_else(DynResolver::gai),
         };
 
         if layers.is_empty() {
@@ -146,7 +151,7 @@ where {
     #[cfg(not(feature = "__tls"))]
     pub(crate) fn new<T>(
         mut http: HttpConnector,
-        proxies: Arc<Vec<Proxy>>,
+        proxies: Arc<Vec<ProxyMatcher>>,
         local_addr: T,
         #[cfg(any(
             target_os = "android",
@@ -189,6 +194,8 @@ where {
             proxies,
             verbose: verbose::OFF,
             timeout: None,
+            #[cfg(feature = "socks")]
+            resolver: None,
         }
     }
 
@@ -196,7 +203,7 @@ where {
     pub(crate) fn new_default_tls<T>(
         http: HttpConnector,
         tls: TlsConnectorBuilder,
-        proxies: Arc<Vec<Proxy>>,
+        proxies: Arc<Vec<ProxyMatcher>>,
         user_agent: Option<HeaderValue>,
         local_addr: T,
         #[cfg(any(
@@ -247,7 +254,7 @@ where {
     pub(crate) fn from_built_default_tls<T>(
         mut http: HttpConnector,
         tls: TlsConnector,
-        proxies: Arc<Vec<Proxy>>,
+        proxies: Arc<Vec<ProxyMatcher>>,
         user_agent: Option<HeaderValue>,
         local_addr: T,
         #[cfg(any(
@@ -296,6 +303,8 @@ where {
             tls_info,
             user_agent,
             timeout: None,
+            #[cfg(feature = "socks")]
+            resolver: None,
         }
     }
 
@@ -303,7 +312,7 @@ where {
     pub(crate) fn new_rustls_tls<T>(
         mut http: HttpConnector,
         tls: rustls::ClientConfig,
-        proxies: Arc<Vec<Proxy>>,
+        proxies: Arc<Vec<ProxyMatcher>>,
         user_agent: Option<HeaderValue>,
         local_addr: T,
         #[cfg(any(
@@ -365,6 +374,8 @@ where {
             tls_info,
             user_agent,
             timeout: None,
+            #[cfg(feature = "socks")]
+            resolver: None,
         }
     }
 
@@ -386,13 +397,40 @@ where {
             Inner::Http(http) => http.set_keepalive(dur),
         }
     }
+
+    pub(crate) fn set_keepalive_interval(&mut self, dur: Option<Duration>) {
+        match &mut self.inner {
+            #[cfg(feature = "default-tls")]
+            Inner::DefaultTls(http, _tls) => http.set_keepalive_interval(dur),
+            #[cfg(feature = "__rustls")]
+            Inner::RustlsTls { http, .. } => http.set_keepalive_interval(dur),
+            #[cfg(not(feature = "__tls"))]
+            Inner::Http(http) => http.set_keepalive_interval(dur),
+        }
+    }
+
+    pub(crate) fn set_keepalive_retries(&mut self, retries: Option<u32>) {
+        match &mut self.inner {
+            #[cfg(feature = "default-tls")]
+            Inner::DefaultTls(http, _tls) => http.set_keepalive_retries(retries),
+            #[cfg(feature = "__rustls")]
+            Inner::RustlsTls { http, .. } => http.set_keepalive_retries(retries),
+            #[cfg(not(feature = "__tls"))]
+            Inner::Http(http) => http.set_keepalive_retries(retries),
+        }
+    }
+
+    #[cfg(feature = "socks")]
+    pub(crate) fn set_socks_resolver(&mut self, resolver: DynResolver) {
+        self.resolver = Some(resolver);
+    }
 }
 
 #[allow(missing_debug_implementations)]
 #[derive(Clone)]
 pub(crate) struct ConnectorService {
     inner: Inner,
-    proxies: Arc<Vec<Proxy>>,
+    proxies: Arc<Vec<ProxyMatcher>>,
     verbose: verbose::Wrapper,
     /// When there is a single timeout layer and no other layers,
     /// we embed it directly inside our base Service::call().
@@ -405,6 +443,8 @@ pub(crate) struct ConnectorService {
     tls_info: bool,
     #[cfg(feature = "__tls")]
     user_agent: Option<HeaderValue>,
+    #[cfg(feature = "socks")]
+    resolver: DynResolver,
 }
 
 #[derive(Clone)]
@@ -423,21 +463,11 @@ enum Inner {
 
 impl ConnectorService {
     #[cfg(feature = "socks")]
-    async fn connect_socks(&self, dst: Uri, proxy: ProxyScheme) -> Result<Conn, BoxError> {
-        let dns = match proxy {
-            ProxyScheme::Socks4 {
-                remote_dns: false, ..
-            } => socks::DnsResolve::Local,
-            ProxyScheme::Socks4 {
-                remote_dns: true, ..
-            } => socks::DnsResolve::Proxy,
-            ProxyScheme::Socks5 {
-                remote_dns: false, ..
-            } => socks::DnsResolve::Local,
-            ProxyScheme::Socks5 {
-                remote_dns: true, ..
-            } => socks::DnsResolve::Proxy,
-            ProxyScheme::Http { .. } | ProxyScheme::Https { .. } => {
+    async fn connect_socks(&self, dst: Uri, proxy: Intercepted) -> Result<Conn, BoxError> {
+        let dns = match proxy.uri().scheme_str() {
+            Some("socks4") | Some("socks5") => socks::DnsResolve::Local,
+            Some("socks4h") | Some("socks5h") => socks::DnsResolve::Proxy,
+            _ => {
                 unreachable!("connect_socks is only called for socks proxies");
             }
         };
@@ -447,7 +477,7 @@ impl ConnectorService {
             Inner::DefaultTls(_http, tls) => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     let host = dst.host().ok_or("no host in url")?.to_string();
-                    let conn = socks::connect(proxy, dst, dns).await?;
+                    let conn = socks::connect(proxy, dst, dns, &self.resolver).await?;
                     let conn = TokioIo::new(conn);
                     let conn = TokioIo::new(conn);
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
@@ -468,7 +498,7 @@ impl ConnectorService {
 
                     let tls = tls.clone();
                     let host = dst.host().ok_or("no host in url")?.to_string();
-                    let conn = socks::connect(proxy, dst, dns).await?;
+                    let conn = socks::connect(proxy, dst, dns, &self.resolver).await?;
                     let conn = TokioIo::new(conn);
                     let conn = TokioIo::new(conn);
                     let server_name =
@@ -489,11 +519,13 @@ impl ConnectorService {
             Inner::Http(_) => (),
         }
 
-        socks::connect(proxy, dst, dns).await.map(|tcp| Conn {
-            inner: self.verbose.wrap(TokioIo::new(tcp)),
-            is_proxy: false,
-            tls_info: false,
-        })
+        socks::connect(proxy, dst, dns, &self.resolver)
+            .await
+            .map(|tcp| Conn {
+                inner: self.verbose.wrap(TokioIo::new(tcp)),
+                is_proxy: false,
+                tls_info: false,
+            })
     }
 
     async fn connect_with_maybe_proxy(self, dst: Uri, is_proxy: bool) -> Result<Conn, BoxError> {
@@ -581,47 +613,53 @@ impl ConnectorService {
         }
     }
 
-    async fn connect_via_proxy(
-        self,
-        dst: Uri,
-        proxy_scheme: ProxyScheme,
-    ) -> Result<Conn, BoxError> {
-        log::debug!("proxy({proxy_scheme:?}) intercepts '{dst:?}'");
+    async fn connect_via_proxy(self, dst: Uri, proxy: Intercepted) -> Result<Conn, BoxError> {
+        log::debug!("proxy({proxy:?}) intercepts '{dst:?}'");
 
-        let (proxy_dst, _auth) = match proxy_scheme {
-            ProxyScheme::Http { host, auth } => (into_uri(Scheme::HTTP, host), auth),
-            ProxyScheme::Https { host, auth } => (into_uri(Scheme::HTTPS, host), auth),
-            #[cfg(feature = "socks")]
-            ProxyScheme::Socks4 { .. } => return self.connect_socks(dst, proxy_scheme).await,
-            #[cfg(feature = "socks")]
-            ProxyScheme::Socks5 { .. } => return self.connect_socks(dst, proxy_scheme).await,
-        };
+        #[cfg(feature = "socks")]
+        match proxy.uri().scheme_str().ok_or("proxy scheme expected")? {
+            "socks4" | "socks4h" | "socks5" | "socks5h" => {
+                return self.connect_socks(dst, proxy).await
+            }
+            _ => (),
+        }
+
+        let proxy_dst = proxy.uri().clone();
+        #[cfg(feature = "__tls")]
+        let auth = proxy.basic_auth().cloned();
 
         #[cfg(feature = "__tls")]
-        let auth = _auth;
+        let misc = proxy.custom_headers().clone();
 
         match &self.inner {
             #[cfg(feature = "default-tls")]
             Inner::DefaultTls(http, tls) => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
-                    let host = dst.host().to_owned();
-                    let port = dst.port().map(|p| p.as_u16()).unwrap_or(443);
-                    let http = http.clone();
-                    let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
-                    let mut http = hyper_tls::HttpsConnector::from((http, tls_connector));
-                    let conn = http.call(proxy_dst).await?;
                     log::trace!("tunneling HTTPS over proxy");
-                    let tunneled = tunnel(
-                        conn,
-                        host.ok_or("no host in url")?.to_string(),
-                        port,
-                        self.user_agent.clone(),
-                        auth,
-                    )
-                    .await?;
+                    let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
+                    let inner =
+                        hyper_tls::HttpsConnector::from((http.clone(), tls_connector.clone()));
+                    // TODO: we could cache constructing this
+                    let mut tunnel =
+                        hyper_util::client::legacy::connect::proxy::Tunnel::new(proxy_dst, inner);
+                    if let Some(auth) = auth {
+                        tunnel = tunnel.with_auth(auth);
+                    }
+                    if let Some(ua) = self.user_agent {
+                        let mut headers = http::HeaderMap::new();
+                        headers.insert(http::header::USER_AGENT, ua);
+                        tunnel = tunnel.with_headers(headers);
+                    }
+                    // Note that custom headers may override the user agent header.
+                    if let Some(custom_headers) = misc {
+                        tunnel = tunnel.with_headers(custom_headers.clone());
+                    }
+                    // We don't wrap this again in an HttpsConnector since that uses Maybe,
+                    // and we know this is definitely HTTPS.
+                    let tunneled = tunnel.call(dst.clone()).await?;
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                     let io = tls_connector
-                        .connect(host.ok_or("no host in url")?, TokioIo::new(tunneled))
+                        .connect(dst.host().ok_or("no host in url")?, TokioIo::new(tunneled))
                         .await?;
                     return Ok(Conn {
                         inner: self.verbose.wrap(NativeTlsConn {
@@ -643,18 +681,30 @@ impl ConnectorService {
                     use std::convert::TryFrom;
                     use tokio_rustls::TlsConnector as RustlsConnector;
 
-                    let host = dst.host().ok_or("no host in url")?.to_string();
-                    let port = dst.port().map(|r| r.as_u16()).unwrap_or(443);
-                    let http = http.clone();
-                    let mut http = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
-                    let tls = tls.clone();
-                    let conn = http.call(proxy_dst).await?;
                     log::trace!("tunneling HTTPS over proxy");
-                    let maybe_server_name = ServerName::try_from(host.as_str().to_owned())
-                        .map_err(|_| "Invalid Server Name");
-                    let tunneled = tunnel(conn, host, port, self.user_agent.clone(), auth).await?;
-                    let server_name = maybe_server_name?;
-                    let io = RustlsConnector::from(tls)
+                    let http = http.clone();
+                    let inner = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
+                    // TODO: we could cache constructing this
+                    let mut tunnel =
+                        hyper_util::client::legacy::connect::proxy::Tunnel::new(proxy_dst, inner);
+                    if let Some(auth) = auth {
+                        tunnel = tunnel.with_auth(auth);
+                    }
+                    if let Some(custom_headers) = misc {
+                        tunnel = tunnel.with_headers(custom_headers.clone());
+                    }
+                    if let Some(ua) = self.user_agent {
+                        let mut headers = http::HeaderMap::new();
+                        headers.insert(http::header::USER_AGENT, ua);
+                        tunnel = tunnel.with_headers(headers);
+                    }
+                    // We don't wrap this again in an HttpsConnector since that uses Maybe,
+                    // and we know this is definitely HTTPS.
+                    let tunneled = tunnel.call(dst.clone()).await?;
+                    let host = dst.host().ok_or("no host in url")?.to_string();
+                    let server_name = ServerName::try_from(host.as_str().to_owned())
+                        .map_err(|_| "Invalid Server Name")?;
+                    let io = RustlsConnector::from(tls.clone())
                         .connect(server_name, TokioIo::new(tunneled))
                         .await?;
 
@@ -673,16 +723,6 @@ impl ConnectorService {
 
         self.connect_with_maybe_proxy(proxy_dst, true).await
     }
-}
-
-fn into_uri(scheme: Scheme, host: Authority) -> Uri {
-    // TODO: Should the `http` crate get `From<(Scheme, Authority)> for Uri`?
-    http::Uri::builder()
-        .scheme(scheme)
-        .authority(host)
-        .path_and_query(http::uri::PathAndQuery::from_static("/"))
-        .build()
-        .expect("scheme and authority is valid Uri")
 }
 
 async fn with_timeout<T, F>(f: F, timeout: Option<Duration>) -> Result<T, BoxError>
@@ -713,9 +753,9 @@ impl Service<Uri> for ConnectorService {
         log::debug!("starting new connection: {dst:?}");
         let timeout = self.simple_timeout;
         for prox in self.proxies.iter() {
-            if let Some(proxy_scheme) = prox.intercept(&dst) {
+            if let Some(intercepted) = prox.intercept(&dst) {
                 return Box::pin(with_timeout(
-                    self.clone().connect_via_proxy(dst, proxy_scheme),
+                    self.clone().connect_via_proxy(dst, intercepted),
                     timeout,
                 ));
             }
@@ -931,83 +971,6 @@ pub(crate) mod sealed {
 }
 
 pub(crate) type Connecting = Pin<Box<dyn Future<Output = Result<Conn, BoxError>> + Send>>;
-
-#[cfg(feature = "__tls")]
-async fn tunnel<T>(
-    mut conn: T,
-    host: String,
-    port: u16,
-    user_agent: Option<HeaderValue>,
-    auth: Option<HeaderValue>,
-) -> Result<T, BoxError>
-where
-    T: Read + Write + Unpin,
-{
-    use hyper_util::rt::TokioIo;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-    let mut buf = format!(
-        "\
-         CONNECT {host}:{port} HTTP/1.1\r\n\
-         Host: {host}:{port}\r\n\
-         "
-    )
-    .into_bytes();
-
-    // user-agent
-    if let Some(user_agent) = user_agent {
-        buf.extend_from_slice(b"User-Agent: ");
-        buf.extend_from_slice(user_agent.as_bytes());
-        buf.extend_from_slice(b"\r\n");
-    }
-
-    // proxy-authorization
-    if let Some(value) = auth {
-        log::debug!("tunnel to {host}:{port} using basic auth");
-        buf.extend_from_slice(b"Proxy-Authorization: ");
-        buf.extend_from_slice(value.as_bytes());
-        buf.extend_from_slice(b"\r\n");
-    }
-
-    // headers end
-    buf.extend_from_slice(b"\r\n");
-
-    let mut tokio_conn = TokioIo::new(&mut conn);
-
-    tokio_conn.write_all(&buf).await?;
-
-    let mut buf = [0; 8192];
-    let mut pos = 0;
-
-    loop {
-        let n = tokio_conn.read(&mut buf[pos..]).await?;
-
-        if n == 0 {
-            return Err(tunnel_eof());
-        }
-        pos += n;
-
-        let recvd = &buf[..pos];
-        if recvd.starts_with(b"HTTP/1.1 200") || recvd.starts_with(b"HTTP/1.0 200") {
-            if recvd.ends_with(b"\r\n\r\n") {
-                return Ok(conn);
-            }
-            if pos == buf.len() {
-                return Err("proxy headers too long for tunnel".into());
-            }
-        // else read more
-        } else if recvd.starts_with(b"HTTP/1.1 407") {
-            return Err("proxy authentication required".into());
-        } else {
-            return Err("unsuccessful tunnel".into());
-        }
-    }
-}
-
-#[cfg(feature = "__tls")]
-fn tunnel_eof() -> BoxError {
-    "unexpected eof while tunneling".into()
-}
 
 #[cfg(feature = "default-tls")]
 mod native_tls_conn {
@@ -1256,7 +1219,7 @@ mod socks {
     use tokio_socks::tcp::{Socks4Stream, Socks5Stream};
 
     use super::{BoxError, Scheme};
-    use crate::proxy::ProxyScheme;
+    use crate::proxy::Intercepted;
 
     pub(super) enum DnsResolve {
         Local,
@@ -1264,14 +1227,15 @@ mod socks {
     }
 
     pub(super) async fn connect(
-        proxy: ProxyScheme,
+        proxy: Intercepted,
         dst: Uri,
-        dns: DnsResolve,
+        dns_mode: DnsResolve,
+        resolver: &crate::dns::DynResolver,
     ) -> Result<TcpStream, BoxError> {
         let https = dst.scheme() == Some(&Scheme::HTTPS);
         let original_host = dst
             .host()
-            .ok_or(io::Error::new(io::ErrorKind::Other, "no host in url"))?;
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "no host in url"))?;
         let mut host = original_host.to_owned();
         let port = match dst.port() {
             Some(p) => p.as_u16(),
@@ -1279,22 +1243,29 @@ mod socks {
             _ => 80u16,
         };
 
-        if let DnsResolve::Local = dns {
-            let maybe_new_target = tokio::net::lookup_host((host.as_str(), port)).await?.next();
+        if let DnsResolve::Local = dns_mode {
+            let maybe_new_target = resolver.http_resolve(&dst).await?.next();
             if let Some(new_target) = maybe_new_target {
                 host = new_target.ip().to_string();
             }
         }
 
-        match proxy {
-            ProxyScheme::Socks4 { addr, .. } => {
+        let addr = resolver
+            .http_resolve(proxy.uri())
+            .await?
+            .next()
+            .ok_or("proxy dns resolve is empty")?;
+
+        // TODO: can `Scheme::from_static()` be const fn, compare with a SOCKS5 constant?
+        match proxy.uri().scheme_str() {
+            Some("socks4") | Some("socks4h") => {
                 let stream = Socks4Stream::connect(addr, (host.as_str(), port))
                     .await
                     .map_err(|e| format!("socks connect error: {e}"))?;
                 Ok(stream.into_inner())
             }
-            ProxyScheme::Socks5 { addr, ref auth, .. } => {
-                let stream = if let Some((username, password)) = auth {
+            Some("socks5") | Some("socks5h") => {
+                let stream = if let Some((username, password)) = proxy.raw_auth() {
                     Socks5Stream::connect_with_password(
                         addr,
                         (host.as_str(), port),
@@ -1490,172 +1461,5 @@ mod verbose {
             }
             Ok(())
         }
-    }
-}
-
-#[cfg(feature = "__tls")]
-#[cfg(test)]
-mod tests {
-    use super::tunnel;
-    use crate::proxy;
-    use hyper_util::rt::TokioIo;
-    use std::io::{Read, Write};
-    use std::net::TcpListener;
-    use std::thread;
-    use tokio::net::TcpStream;
-    use tokio::runtime;
-
-    static TUNNEL_UA: &str = "tunnel-test/x.y";
-    static TUNNEL_OK: &[u8] = b"\
-        HTTP/1.1 200 OK\r\n\
-        \r\n\
-    ";
-
-    macro_rules! mock_tunnel {
-        () => {{
-            mock_tunnel!(TUNNEL_OK)
-        }};
-        ($write:expr) => {{
-            mock_tunnel!($write, "")
-        }};
-        ($write:expr, $auth:expr) => {{
-            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-            let addr = listener.local_addr().unwrap();
-            let connect_expected = format!(
-                "\
-                 CONNECT {0}:{1} HTTP/1.1\r\n\
-                 Host: {0}:{1}\r\n\
-                 User-Agent: {2}\r\n\
-                 {3}\
-                 \r\n\
-                 ",
-                addr.ip(),
-                addr.port(),
-                TUNNEL_UA,
-                $auth
-            )
-            .into_bytes();
-
-            thread::spawn(move || {
-                let (mut sock, _) = listener.accept().unwrap();
-                let mut buf = [0u8; 4096];
-                let n = sock.read(&mut buf).unwrap();
-                assert_eq!(&buf[..n], &connect_expected[..]);
-
-                sock.write_all($write).unwrap();
-            });
-            addr
-        }};
-    }
-
-    fn ua() -> Option<http::header::HeaderValue> {
-        Some(http::header::HeaderValue::from_static(TUNNEL_UA))
-    }
-
-    #[test]
-    fn test_tunnel() {
-        let addr = mock_tunnel!();
-
-        let rt = runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("new rt");
-        let f = async move {
-            let tcp = TokioIo::new(TcpStream::connect(&addr).await?);
-            let host = addr.ip().to_string();
-            let port = addr.port();
-            tunnel(tcp, host, port, ua(), None).await
-        };
-
-        rt.block_on(f).unwrap();
-    }
-
-    #[test]
-    fn test_tunnel_eof() {
-        let addr = mock_tunnel!(b"HTTP/1.1 200 OK");
-
-        let rt = runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("new rt");
-        let f = async move {
-            let tcp = TokioIo::new(TcpStream::connect(&addr).await?);
-            let host = addr.ip().to_string();
-            let port = addr.port();
-            tunnel(tcp, host, port, ua(), None).await
-        };
-
-        rt.block_on(f).unwrap_err();
-    }
-
-    #[test]
-    fn test_tunnel_non_http_response() {
-        let addr = mock_tunnel!(b"foo bar baz hallo");
-
-        let rt = runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("new rt");
-        let f = async move {
-            let tcp = TokioIo::new(TcpStream::connect(&addr).await?);
-            let host = addr.ip().to_string();
-            let port = addr.port();
-            tunnel(tcp, host, port, ua(), None).await
-        };
-
-        rt.block_on(f).unwrap_err();
-    }
-
-    #[test]
-    fn test_tunnel_proxy_unauthorized() {
-        let addr = mock_tunnel!(
-            b"\
-            HTTP/1.1 407 Proxy Authentication Required\r\n\
-            Proxy-Authenticate: Basic realm=\"nope\"\r\n\
-            \r\n\
-        "
-        );
-
-        let rt = runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("new rt");
-        let f = async move {
-            let tcp = TokioIo::new(TcpStream::connect(&addr).await?);
-            let host = addr.ip().to_string();
-            let port = addr.port();
-            tunnel(tcp, host, port, ua(), None).await
-        };
-
-        let error = rt.block_on(f).unwrap_err();
-        assert_eq!(error.to_string(), "proxy authentication required");
-    }
-
-    #[test]
-    fn test_tunnel_basic_auth() {
-        let addr = mock_tunnel!(
-            TUNNEL_OK,
-            "Proxy-Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==\r\n"
-        );
-
-        let rt = runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("new rt");
-        let f = async move {
-            let tcp = TokioIo::new(TcpStream::connect(&addr).await?);
-            let host = addr.ip().to_string();
-            let port = addr.port();
-            tunnel(
-                tcp,
-                host,
-                port,
-                ua(),
-                Some(proxy::encode_basic_auth("Aladdin", "open sesame")),
-            )
-            .await
-        };
-
-        rt.block_on(f).unwrap();
     }
 }

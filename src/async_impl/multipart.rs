@@ -601,8 +601,9 @@ fn gen_boundary() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::stream;
     use futures_util::TryStreamExt;
-    use futures_util::{future, stream};
+    use std::future;
     use tokio::{self, runtime};
 
     #[test]

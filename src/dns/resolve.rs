@@ -63,6 +63,41 @@ impl DynResolver {
     pub(crate) fn new(resolver: Arc<dyn Resolve>) -> Self {
         Self { resolver }
     }
+
+    #[cfg(feature = "socks")]
+    pub(crate) fn gai() -> Self {
+        Self::new(Arc::new(super::gai::GaiResolver::new()))
+    }
+
+    /// Resolve an HTTP host and port, not just a domain name.
+    ///
+    /// This does the same thing that hyper-util's HttpConnector does, before
+    /// calling out to its underlying DNS resolver.
+    #[cfg(feature = "socks")]
+    pub(crate) async fn http_resolve(
+        &self,
+        target: &http::Uri,
+    ) -> Result<impl Iterator<Item = std::net::SocketAddr>, BoxError> {
+        let host = target.host().ok_or("missing host")?;
+        let port = target
+            .port_u16()
+            .unwrap_or_else(|| match target.scheme_str() {
+                Some("https") => 443,
+                Some("socks4") | Some("socks4h") | Some("socks5") | Some("socks5h") => 1080,
+                _ => 80,
+            });
+
+        let explicit_port = target.port().is_some();
+
+        let addrs = self.resolver.resolve(host.parse()?).await?;
+
+        Ok(addrs.map(move |mut addr| {
+            if explicit_port || addr.port() == 0 {
+                addr.set_port(port);
+            }
+            addr
+        }))
+    }
 }
 
 impl Service<HyperName> for DynResolver {

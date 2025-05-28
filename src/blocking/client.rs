@@ -6,7 +6,7 @@ use std::future::Future;
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::task::ready;
+use std::task::{ready, Poll};
 use std::thread;
 use std::time::Duration;
 
@@ -577,6 +577,26 @@ impl ClientBuilder {
         D: Into<Option<Duration>>,
     {
         self.with_inner(move |inner| inner.tcp_keepalive(val))
+    }
+
+    /// Set that all sockets have `SO_KEEPALIVE` set with the supplied interval.
+    ///
+    /// If `None`, the option will not be set.
+    pub fn tcp_keepalive_interval<D>(self, val: D) -> ClientBuilder
+    where
+        D: Into<Option<Duration>>,
+    {
+        self.with_inner(move |inner| inner.tcp_keepalive_interval(val))
+    }
+
+    /// Set that all sockets have `SO_KEEPALIVE` set with the supplied retry count.
+    ///
+    /// If `None`, the option will not be set.
+    pub fn tcp_keepalive_retries<C>(self, retries: C) -> ClientBuilder
+    where
+        C: Into<Option<u32>>,
+    {
+        self.with_inner(move |inner| inner.tcp_keepalive_retries(retries))
     }
 
     // TLS options
@@ -1302,8 +1322,6 @@ async fn forward<F>(fut: F, mut tx: OneshotResponse)
 where
     F: Future<Output = crate::Result<async_impl::Response>>,
 {
-    use std::task::Poll;
-
     futures_util::pin_mut!(fut);
 
     // "select" on the sender being canceled, and the future completing

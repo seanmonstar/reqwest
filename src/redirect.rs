@@ -4,13 +4,17 @@
 //! maximum redirect chain of 10 hops. To customize this behavior, a
 //! `redirect::Policy` can be used with a `ClientBuilder`.
 
-use std::error::Error as StdError;
 use std::fmt;
+use std::{error::Error as StdError, sync::Arc};
 
-use crate::header::{HeaderMap, AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, WWW_AUTHENTICATE};
+use crate::header::{AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, REFERER, WWW_AUTHENTICATE};
+use http::{HeaderMap, HeaderValue};
 use hyper::StatusCode;
 
-use crate::Url;
+use crate::{async_impl, Url};
+use tower_http::follow_redirect::policy::{
+    Action as TowerAction, Attempt as TowerAttempt, Policy as TowerPolicy,
+};
 
 /// A type that controls the policy on how to handle the following of redirects.
 ///
@@ -128,7 +132,8 @@ impl Policy {
         match self.inner {
             PolicyKind::Custom(ref custom) => custom(attempt),
             PolicyKind::Limit(max) => {
-                if attempt.previous.len() >= max {
+                // The first URL in the previous is the initial URL and not a redirection. It needs to be excluded.
+                if attempt.previous.len() > max {
                     attempt.error(TooManyRedirects)
                 } else {
                     attempt.follow()
@@ -256,11 +261,101 @@ impl fmt::Display for TooManyRedirects {
 
 impl StdError for TooManyRedirects {}
 
+#[derive(Clone)]
+pub(crate) struct TowerRedirectPolicy {
+    policy: Arc<Policy>,
+    referer: bool,
+    urls: Vec<Url>,
+    https_only: bool,
+}
+
+impl TowerRedirectPolicy {
+    pub(crate) fn new(policy: Policy) -> Self {
+        Self {
+            policy: Arc::new(policy),
+            referer: false,
+            urls: Vec::new(),
+            https_only: false,
+        }
+    }
+
+    pub(crate) fn with_referer(&mut self, referer: bool) -> &mut Self {
+        self.referer = referer;
+        self
+    }
+
+    pub(crate) fn with_https_only(&mut self, https_only: bool) -> &mut Self {
+        self.https_only = https_only;
+        self
+    }
+}
+
+fn make_referer(next: &Url, previous: &Url) -> Option<HeaderValue> {
+    if next.scheme() == "http" && previous.scheme() == "https" {
+        return None;
+    }
+
+    let mut referer = previous.clone();
+    let _ = referer.set_username("");
+    let _ = referer.set_password(None);
+    referer.set_fragment(None);
+    referer.as_str().parse().ok()
+}
+
+impl TowerPolicy<async_impl::body::Body, crate::Error> for TowerRedirectPolicy {
+    fn redirect(&mut self, attempt: &TowerAttempt<'_>) -> Result<TowerAction, crate::Error> {
+        let previous_url =
+            Url::parse(&attempt.previous().to_string()).expect("Previous URL must be valid");
+
+        let next_url = match Url::parse(&attempt.location().to_string()) {
+            Ok(url) => url,
+            Err(e) => return Err(crate::error::builder(e)),
+        };
+
+        if next_url.scheme() != "http" && next_url.scheme() != "https" {
+            return Err(crate::error::url_bad_scheme(next_url));
+        }
+
+        if self.https_only && next_url.scheme() != "https" {
+            return Err(crate::error::redirect(
+                crate::error::url_bad_scheme(next_url.clone()),
+                next_url,
+            ));
+        }
+
+        self.urls.push(previous_url.clone());
+
+        match self.policy.check(attempt.status(), &next_url, &self.urls) {
+            ActionKind::Follow => Ok(TowerAction::Follow),
+            ActionKind::Stop => Ok(TowerAction::Stop),
+            ActionKind::Error(e) => Err(crate::error::redirect(e, previous_url)),
+        }
+    }
+
+    fn on_request(&mut self, req: &mut http::Request<async_impl::body::Body>) {
+        if let Ok(next_url) = Url::parse(&req.uri().to_string()) {
+            remove_sensitive_headers(req.headers_mut(), &next_url, &self.urls);
+            if self.referer {
+                if let Some(previous_url) = self.urls.last() {
+                    if let Some(v) = make_referer(&next_url, previous_url) {
+                        req.headers_mut().insert(REFERER, v);
+                    }
+                }
+            }
+        };
+    }
+
+    // This is must implemented to make 307 and 308 redirects work
+    fn clone_body(&self, body: &async_impl::body::Body) -> Option<async_impl::body::Body> {
+        body.try_clone()
+    }
+}
+
 #[test]
 fn test_redirect_policy_limit() {
     let policy = Policy::default();
     let next = Url::parse("http://x.y/z").unwrap();
-    let mut previous = (0..9)
+    let mut previous = (0..=9)
         .map(|i| Url::parse(&format!("http://a.b/c/{i}")).unwrap())
         .collect::<Vec<_>>();
 
