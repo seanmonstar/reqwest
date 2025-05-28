@@ -387,7 +387,11 @@ impl Response {
         let status = self.status();
         if status.is_client_error() || status.is_server_error() {
             if let Some(reason) = self.extensions().get::<hyper::ext::ReasonPhrase>().cloned() {
-                Err(crate::error::status_reason(*self.url, status, String::from_utf8_lossy(reason.as_bytes()).to_string()))
+                Err(crate::error::status_reason(
+                    *self.url,
+                    status,
+                    String::from_utf8_lossy(reason.as_bytes()).to_string(),
+                ))
             } else {
                 Err(crate::error::status_code(*self.url, status))
             }
@@ -421,7 +425,11 @@ impl Response {
         let status = self.status();
         if status.is_client_error() || status.is_server_error() {
             if let Some(reason) = self.extensions().get::<hyper::ext::ReasonPhrase>() {
-                Err(crate::error::status_reason(*self.url.clone(), status, String::from_utf8_lossy(reason.as_bytes()).to_string()))
+                Err(crate::error::status_reason(
+                    *self.url.clone(),
+                    status,
+                    String::from_utf8_lossy(reason.as_bytes()).to_string(),
+                ))
             } else {
                 Err(crate::error::status_code(*self.url.clone(), status))
             }
