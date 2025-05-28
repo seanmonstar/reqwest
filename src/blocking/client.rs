@@ -564,7 +564,18 @@ impl ClientBuilder {
     ///     .interface(interface)
     ///     .build().unwrap();
     /// ```
-    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+    #[cfg(any(
+        target_os = "android",
+        target_os = "fuchsia",
+        target_os = "illumos",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "solaris",
+        target_os = "tvos",
+        target_os = "visionos",
+        target_os = "watchos",
+    ))]
     pub fn interface(self, interface: &str) -> ClientBuilder {
         self.with_inner(move |inner| inner.interface(interface))
     }
