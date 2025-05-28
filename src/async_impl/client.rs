@@ -601,7 +601,18 @@ impl ClientBuilder {
                     proxies.clone(),
                     user_agent(&config.headers),
                     config.local_address,
-                    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+                    #[cfg(any(
+                        target_os = "android",
+                        target_os = "fuchsia",
+                        target_os = "illumos",
+                        target_os = "ios",
+                        target_os = "linux",
+                        target_os = "macos",
+                        target_os = "solaris",
+                        target_os = "tvos",
+                        target_os = "visionos",
+                        target_os = "watchos",
+                    ))]
                     config.interface.as_deref(),
                     config.nodelay,
                     config.tls_info,
