@@ -1,3 +1,7 @@
+## v0.12.18
+
+- Fix compilation when `socks` enabled without TLS.
+
 ## v0.12.17
 
 - Fix compilation on macOS.
