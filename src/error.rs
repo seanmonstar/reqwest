@@ -93,6 +93,7 @@ impl Error {
     }
 
     /// Returns true if the error is from `Response::error_for_status`.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn is_status(&self) -> bool {
         matches!(self.inner.kind, Kind::Status(_, _))
     }
@@ -152,6 +153,9 @@ impl Error {
     /// Returns the status code, if the error was generated from a response.
     pub fn status(&self) -> Option<StatusCode> {
         match self.inner.kind {
+            #[cfg(target_arch = "wasm32")]
+            Kind::Status(code) => Some(code),
+            #[cfg(not(target_arch = "wasm32"))]
             Kind::Status(code, _) => Some(code),
             _ => None,
         }
