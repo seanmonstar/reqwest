@@ -1214,11 +1214,12 @@ mod rustls_tls_conn {
 mod socks {
     use std::io;
 
+    use http::uri::Scheme;
     use http::Uri;
     use tokio::net::TcpStream;
     use tokio_socks::tcp::{Socks4Stream, Socks5Stream};
 
-    use super::{BoxError, Scheme};
+    use super::BoxError;
     use crate::proxy::Intercepted;
 
     pub(super) enum DnsResolve {
