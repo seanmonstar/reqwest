@@ -102,6 +102,7 @@ pub(crate) fn add_cookie_header(
 
 pub(crate) struct Escape<'a>(&'a [u8]);
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<'a> Escape<'a> {
     pub(crate) fn new(bytes: &'a [u8]) -> Self {
         Escape(bytes)
