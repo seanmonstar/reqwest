@@ -3,6 +3,7 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 
+use crate::util::Escape;
 use crate::{StatusCode, Url};
 
 /// A `Result` alias where the `Err` case is `reqwest::Error`.
@@ -231,7 +232,7 @@ impl fmt::Display for Error {
                         f,
                         "{prefix} ({} {})",
                         code.as_str(),
-                        String::from_utf8_lossy(reason.as_bytes())
+                        Escape::new(reason.as_bytes())
                     )?;
                 } else {
                     write!(f, "{prefix} ({code})")?;
