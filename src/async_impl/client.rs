@@ -25,7 +25,7 @@ use crate::connect::{
     BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
 };
 #[cfg(feature = "cookies")]
-use crate::cookie;
+use crate::cookie::CookieService;
 #[cfg(feature = "hickory-dns")]
 use crate::dns::hickory::HickoryDnsResolver;
 use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
@@ -98,7 +98,7 @@ enum HttpVersionPref {
 #[derive(Clone)]
 struct HyperService {
     #[cfg(feature = "cookies")]
-    cookie_store: Option<Arc<dyn cookie::CookieStore>>,
+    cookie_service: Option<Arc<CookieService>>,
     hyper: HyperClient,
 }
 
@@ -124,27 +124,20 @@ impl Service<hyper::Request<crate::async_impl::body::Body>> for HyperService {
         let mut inner = std::mem::replace(&mut self.hyper, clone);
         let url = Url::parse(req.uri().to_string().as_str()).expect("invalid URL");
 
-        if let Some(cookie_store) = self.cookie_store.as_ref() {
+        if let Some(cookie_service) = self.cookie_service.as_ref() {
             if req.headers().get(crate::header::COOKIE).is_none() {
                 let headers = req.headers_mut();
-                crate::util::add_cookie_header(headers, &**cookie_store, &url);
+                crate::util::add_cookie_header(headers, cookie_service.cookie_store(), &url);
             }
         }
 
-        let cookie_store = self.cookie_store.clone();
+        let cookie_service = self.cookie_service.as_ref().expect("no cookie service").clone();
+        
         Box::pin(async move {
-            let res = inner.call(req).await.map_err(crate::error::request);
-
-            if let Some(ref cookie_store) = cookie_store {
-                if let Ok(res) = &res {
-                    let mut cookies =
-                        cookie::extract_response_cookie_headers(res.headers()).peekable();
-                    if cookies.peek().is_some() {
-                        cookie_store.set_cookies(&mut cookies, &url);
-                    }
-                }
-            }
-
+                let res = inner.call(req).await.map_err(crate::error::request);
+           if let Ok(ref response)=res{
+                cookie_service.set_cookies_from_response_headers(response.headers(), &url).await.unwrap();
+           }
             res
         })
     }
@@ -232,7 +225,7 @@ struct Config {
     interface: Option<String>,
     nodelay: bool,
     #[cfg(feature = "cookies")]
-    cookie_store: Option<Arc<dyn cookie::CookieStore>>,
+    cookie_service: Option<Arc<CookieService>>,
     hickory_dns: bool,
     error: Option<crate::Error>,
     https_only: bool,
@@ -356,7 +349,7 @@ impl ClientBuilder {
                 nodelay: true,
                 hickory_dns: cfg!(feature = "hickory-dns"),
                 #[cfg(feature = "cookies")]
-                cookie_store: None,
+                cookie_service: None,
                 https_only: false,
                 dns_overrides: HashMap::new(),
                 #[cfg(feature = "http3")]
@@ -978,7 +971,7 @@ impl ClientBuilder {
         let hyper_client = builder.build(connector_builder.build(config.connector_layers));
         let hyper_service = HyperService {
             #[cfg(feature = "cookies")]
-            cookie_store: config.cookie_store.clone(),
+            cookie_service: config.cookie_service.clone(),
             hyper: hyper_client,
         };
 
@@ -995,7 +988,7 @@ impl ClientBuilder {
             inner: Arc::new(ClientRef {
                 accepts: config.accepts,
                 #[cfg(feature = "cookies")]
-                cookie_store: config.cookie_store.clone(),
+                cookie_service: config.cookie_service.clone(),
                 // Use match instead of map since config is partially moved,
                 // and it cannot be used in closure
                 #[cfg(feature = "http3")]
@@ -1007,7 +1000,7 @@ impl ClientBuilder {
                         let h3_service = H3Client::new(
                             h3_connector,
                             config.pool_idle_timeout,
-                            config.cookie_store,
+                            config.cookie_service,
                         );
                         Some(FollowRedirect::with_policy(h3_service, policy))
                     }
@@ -1111,34 +1104,13 @@ impl ClientBuilder {
     #[cfg(feature = "cookies")]
     #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
     pub fn cookie_store(mut self, enable: bool) -> ClientBuilder {
-        if enable {
-            self.cookie_provider(Arc::new(cookie::Jar::default()))
-        } else {
-            self.config.cookie_store = None;
-            self
-        }
-    }
+        use crate::cookie::COOKIE_SERVICE;
 
-    /// Set the persistent cookie store for the client.
-    ///
-    /// Cookies received in responses will be passed to this store, and
-    /// additional requests will query this store for cookies.
-    ///
-    /// By default, no cookie store is used. It is **not** necessary to also call
-    /// [cookie_store(true)](crate::ClientBuilder::cookie_store) if [cookie_provider(my_cookie_store)](crate::ClientBuilder::cookie_provider) is used; calling
-    /// [cookie_store(true)](crate::ClientBuilder::cookie_store) _after_ [cookie_provider(my_cookie_store)](crate::ClientBuilder::cookie_provider) will result
-    /// in the provided `my_cookie_store` being **overridden** with a default implementation.
-    ///
-    /// # Optional
-    ///
-    /// This requires the optional `cookies` feature to be enabled.
-    #[cfg(feature = "cookies")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
-    pub fn cookie_provider<C: cookie::CookieStore + 'static>(
-        mut self,
-        cookie_store: Arc<C>,
-    ) -> ClientBuilder {
-        self.config.cookie_store = Some(cookie_store as _);
+        if enable {
+            self.config.cookie_service=Some(COOKIE_SERVICE.clone());
+        } else {
+            self.config.cookie_service= None;
+        }
         self
     }
 
@@ -2616,8 +2588,8 @@ impl Config {
 
         #[cfg(feature = "cookies")]
         {
-            if let Some(_) = self.cookie_store {
-                f.field("cookie_store", &true);
+            if let Some(_) = self.cookie_service {
+                f.field("cookie_service", &true);
             }
         }
 
@@ -2741,7 +2713,7 @@ impl Config {
 struct ClientRef {
     accepts: Accepts,
     #[cfg(feature = "cookies")]
-    cookie_store: Option<Arc<dyn cookie::CookieStore>>,
+    cookie_service: Option<Arc<CookieService>>,
     headers: HeaderMap,
     hyper: FollowRedirect<HyperService, TowerRedirectPolicy>,
     #[cfg(feature = "http3")]
@@ -2763,8 +2735,8 @@ impl ClientRef {
 
         #[cfg(feature = "cookies")]
         {
-            if let Some(_) = self.cookie_store {
-                f.field("cookie_store", &true);
+            if let Some(_) = self.cookie_service {
+                f.field("cookie_service", &true);
             }
         }
 
@@ -3023,13 +2995,10 @@ impl Future for PendingRequest {
 
             #[cfg(feature = "cookies")]
             {
-                if let Some(ref cookie_store) = self.client.cookie_store {
-                    let mut cookies =
-                        cookie::extract_response_cookie_headers(res.headers()).peekable();
-                    if cookies.peek().is_some() {
-                        cookie_store.set_cookies(&mut cookies, &self.url);
-                    }
-                }
+                let cookie_service=self.client.cookie_service.as_ref().unwrap().clone();
+                tokio::runtime::Handle::current().block_on(async {
+                        cookie_service.set_cookies_from_response_headers(&self.headers, &self.url).await.unwrap();
+                });
             }
             if let Some(url) = &res
                 .extensions()

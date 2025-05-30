@@ -7,7 +7,7 @@ mod pool;
 use crate::async_impl::body::ResponseBody;
 use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
 #[cfg(feature = "cookies")]
-use crate::cookie;
+use crate::cookie::CookieService;
 use crate::error::{BoxError, Error, Kind};
 use crate::{error, Body};
 use connect::H3Connector;
@@ -27,7 +27,7 @@ pub(crate) struct H3Client {
     pool: Pool,
     connector: H3Connector,
     #[cfg(feature = "cookies")]
-    cookie_store: Option<Arc<dyn cookie::CookieStore>>,
+    cookie_service: Option<Arc<CookieService>>,
 }
 
 impl H3Client {
@@ -43,12 +43,12 @@ impl H3Client {
     pub fn new(
         connector: H3Connector,
         pool_timeout: Option<Duration>,
-        cookie_store: Option<Arc<dyn cookie::CookieStore>>,
+        cookie_service: Option<Arc<CookieService>>,
     ) -> Self {
         H3Client {
             pool: Pool::new(pool_timeout),
             connector,
-            cookie_store,
+            cookie_service,
         }
     }
 
@@ -107,10 +107,10 @@ impl H3Client {
         };
 
         let url = url::Url::parse(req.uri().to_string().as_str()).unwrap();
-        if let Some(cookie_store) = self.cookie_store.as_ref() {
+        if let Some(cookie_service) = self.cookie_service.as_ref() {
             if req.headers().get(crate::header::COOKIE).is_none() {
                 let headers = req.headers_mut();
-                crate::util::add_cookie_header(headers, &**cookie_store, &url);
+                crate::util::add_cookie_header(headers, cookie_service.cookie_store(), &url);
             }
         }
 
@@ -119,12 +119,11 @@ impl H3Client {
             .await
             .map_err(|e| Error::new(Kind::Request, Some(e)));
 
-        if let Some(ref cookie_store) = self.cookie_store {
+        if let Some(ref cookie_service) = self.cookie_service {
             if let Ok(res) = &res {
-                let mut cookies = cookie::extract_response_cookie_headers(res.headers()).peekable();
-                if cookies.peek().is_some() {
-                    cookie_store.set_cookies(&mut cookies, &url);
-                }
+                tokio::runtime::Handle::current().block_on(async move{
+                        cookie_service.set_cookies_from_response_headers(res.headers(), &url).await.unwrap();
+                });
             }
         }
 
