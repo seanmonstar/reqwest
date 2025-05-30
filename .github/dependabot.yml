@@ -12,5 +12,7 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    # only tell us if there's a new 'breaking' change we could upgrade to
+    versioning-strategy: increase-if-necessary
     # disable regular version updates, security updates are unaffected
-    open-pull-requests-limit: 0
+    # open-pull-requests-limit: 0
