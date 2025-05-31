@@ -8,6 +8,7 @@ use std::fmt;
 use std::{error::Error as StdError, sync::Arc};
 
 use crate::header::{AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, REFERER, WWW_AUTHENTICATE};
+use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, TRANSFER_ENCODING};
 use http::{HeaderMap, HeaderValue};
 use hyper::StatusCode;
 
@@ -340,6 +341,16 @@ impl TowerPolicy<async_impl::body::Body, crate::Error> for TowerRedirectPolicy {
                     if let Some(v) = make_referer(&next_url, previous_url) {
                         req.headers_mut().insert(REFERER, v);
                     }
+                }
+            }
+            if req.method() == http::Method::GET {
+                for header in &[
+                    CONTENT_TYPE,
+                    CONTENT_LENGTH,
+                    CONTENT_ENCODING,
+                    TRANSFER_ENCODING,
+                ] {
+                    req.headers_mut().remove(header);
                 }
             }
         };
