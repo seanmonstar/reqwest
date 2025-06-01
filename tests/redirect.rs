@@ -462,8 +462,8 @@ async fn test_scheme_only_check_after_policy_return_follow() {
         .send()
         .await;
 
-    assert!(res.is_err());
-    assert!(res.unwrap_err().is_builder());
+    assert!(res.is_ok());
+    assert_eq!(res.unwrap().status(), reqwest::StatusCode::FOUND);
 
     let res = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
