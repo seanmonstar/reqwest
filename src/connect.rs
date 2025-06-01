@@ -330,6 +330,7 @@ where {
         interface: Option<&str>,
         nodelay: bool,
         tls_info: bool,
+        server_name_resolver: Arc<dyn hyper_rustls::ResolveServerName + Send + Sync>,
     ) -> ConnectorBuilder
     where
         T: Into<Option<IpAddr>>,
@@ -367,6 +368,7 @@ where {
                 http,
                 tls,
                 tls_proxy,
+                server_name_resolver,
             },
             proxies,
             verbose: verbose::OFF,
@@ -458,6 +460,7 @@ enum Inner {
         http: HttpConnector,
         tls: Arc<rustls::ClientConfig>,
         tls_proxy: Arc<rustls::ClientConfig>,
+        server_name_resolver: Arc<dyn hyper_rustls::ResolveServerName + Send + Sync>,
     },
 }
 
@@ -579,7 +582,7 @@ impl ConnectorService {
                 }
             }
             #[cfg(feature = "__rustls")]
-            Inner::RustlsTls { http, tls, .. } => {
+            Inner::RustlsTls { http, tls, server_name_resolver, .. } => {
                 let mut http = http.clone();
 
                 // Disable Nagle's algorithm for TLS handshake
@@ -589,7 +592,7 @@ impl ConnectorService {
                     http.set_nodelay(true);
                 }
 
-                let mut http = hyper_rustls::HttpsConnector::from((http, tls.clone()));
+                let mut http = hyper_rustls::HttpsConnector::from((http, tls.clone(), server_name_resolver));
                 let io = http.call(dst).await?;
 
                 if let hyper_rustls::MaybeHttpsStream::Https(stream) = io {
@@ -675,10 +678,9 @@ impl ConnectorService {
                 http,
                 tls,
                 tls_proxy,
+                server_name_resolver: name_resolver,
             } => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
-                    use rustls_pki_types::ServerName;
-                    use std::convert::TryFrom;
                     use tokio_rustls::TlsConnector as RustlsConnector;
 
                     log::trace!("tunneling HTTPS over proxy");
@@ -701,9 +703,8 @@ impl ConnectorService {
                     // We don't wrap this again in an HttpsConnector since that uses Maybe,
                     // and we know this is definitely HTTPS.
                     let tunneled = tunnel.call(dst.clone()).await?;
-                    let host = dst.host().ok_or("no host in url")?.to_string();
-                    let server_name = ServerName::try_from(host.as_str().to_owned())
-                        .map_err(|_| "Invalid Server Name")?;
+
+                    let server_name = name_resolver.resolve(&dst)?;
                     let io = RustlsConnector::from(tls.clone())
                         .connect(server_name, TokioIo::new(tunneled))
                         .await?;

@@ -287,6 +287,10 @@ pub use self::error::{Error, Result};
 pub use self::into_url::IntoUrl;
 pub use self::response::ResponseBuilderExt;
 
+#[cfg(feature = "__rustls")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+pub use hyper_rustls::ResolveServerName;
+
 /// Shortcut method to quickly make a `GET` request.
 ///
 /// See also the methods on the [`reqwest::Response`](./struct.Response.html)

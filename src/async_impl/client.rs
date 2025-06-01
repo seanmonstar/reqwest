@@ -185,6 +185,8 @@ struct Config {
     tls_built_in_certs_native: bool,
     #[cfg(feature = "__rustls")]
     crls: Vec<CertificateRevocationList>,
+    #[cfg(feature = "__rustls")]
+    server_name_resolver: Arc<dyn hyper_rustls::ResolveServerName + Send + Sync>,
     #[cfg(feature = "__tls")]
     min_tls_version: Option<tls::Version>,
     #[cfg(feature = "__tls")]
@@ -308,6 +310,8 @@ impl ClientBuilder {
                 identity: None,
                 #[cfg(feature = "__rustls")]
                 crls: vec![],
+                #[cfg(feature = "__rustls")]
+                server_name_resolver: Arc::new(hyper_rustls::DefaultServerNameResolver::default()),
                 #[cfg(feature = "__tls")]
                 min_tls_version: None,
                 #[cfg(feature = "__tls")]
@@ -657,6 +661,7 @@ impl ClientBuilder {
                         config.interface.as_deref(),
                         config.nodelay,
                         config.tls_info,
+                        config.server_name_resolver,
                     )
                 }
                 #[cfg(feature = "__rustls")]
@@ -862,6 +867,7 @@ impl ClientBuilder {
                         config.interface.as_deref(),
                         config.nodelay,
                         config.tls_info,
+                        config.server_name_resolver,
                     )
                 }
                 #[cfg(any(feature = "native-tls", feature = "__rustls",))]
@@ -1688,6 +1694,16 @@ impl ClientBuilder {
         C: Into<Option<u32>>,
     {
         self.config.tcp_keepalive_retries = retries.into();
+        self
+    }
+
+    /// Sets the server name resolver. Defaults to `hyper_rustls::DefaultServerNameResolver`
+    ///
+    /// This requires the `rustls-tls(-...)` Cargo feature enabled.
+    #[cfg(feature = "__rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    pub fn with_server_name_resolver(mut self, server_name_resolver: Arc<dyn hyper_rustls::ResolveServerName + Send + Sync>) -> ClientBuilder {
+        self.config.server_name_resolver = server_name_resolver;
         self
     }
 
