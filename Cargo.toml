@@ -130,8 +130,7 @@ mime = "0.3.16"
 percent-encoding = "2.3"
 tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
 tower = { version = "0.5.2", default-features = false, features = ["timeout", "util"] }
-# Pin to 0.6.4 to prove test `test_redirect_301_302_303_empty_payload_headers` logic, needs to update in next fix commit
-tower-http = { version = "=0.6.4", default-features = false, features = ["follow-redirect"] }
+tower-http = { version = "0.6.5", default-features = false, features = ["follow-redirect"] }
 pin-project-lite = "0.2.11"
 ipnet = "2.3"
 
