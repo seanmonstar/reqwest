@@ -3,6 +3,7 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 
+use crate::util::Escape;
 use crate::{StatusCode, Url};
 
 /// A `Result` alias where the `Err` case is `reqwest::Error`.
@@ -93,8 +94,9 @@ impl Error {
     }
 
     /// Returns true if the error is from `Response::error_for_status`.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn is_status(&self) -> bool {
-        matches!(self.inner.kind, Kind::Status(_))
+        matches!(self.inner.kind, Kind::Status(_, _))
     }
 
     /// Returns true if the error is related to a timeout.
@@ -152,7 +154,10 @@ impl Error {
     /// Returns the status code, if the error was generated from a response.
     pub fn status(&self) -> Option<StatusCode> {
         match self.inner.kind {
+            #[cfg(target_arch = "wasm32")]
             Kind::Status(code) => Some(code),
+            #[cfg(not(target_arch = "wasm32"))]
+            Kind::Status(code, _) => Some(code),
             _ => None,
         }
     }
@@ -204,6 +209,7 @@ impl fmt::Display for Error {
             Kind::Decode => f.write_str("error decoding response body")?,
             Kind::Redirect => f.write_str("error following redirect")?,
             Kind::Upgrade => f.write_str("error upgrading connection")?,
+            #[cfg(target_arch = "wasm32")]
             Kind::Status(ref code) => {
                 let prefix = if code.is_client_error() {
                     "HTTP status client error"
@@ -212,6 +218,25 @@ impl fmt::Display for Error {
                     "HTTP status server error"
                 };
                 write!(f, "{prefix} ({code})")?;
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            Kind::Status(ref code, ref reason) => {
+                let prefix = if code.is_client_error() {
+                    "HTTP status client error"
+                } else {
+                    debug_assert!(code.is_server_error());
+                    "HTTP status server error"
+                };
+                if let Some(reason) = reason {
+                    write!(
+                        f,
+                        "{prefix} ({} {})",
+                        code.as_str(),
+                        Escape::new(reason.as_bytes())
+                    )?;
+                } else {
+                    write!(f, "{prefix} ({code})")?;
+                }
             }
         };
 
@@ -248,6 +273,9 @@ pub(crate) enum Kind {
     Builder,
     Request,
     Redirect,
+    #[cfg(not(target_arch = "wasm32"))]
+    Status(StatusCode, Option<hyper::ext::ReasonPhrase>),
+    #[cfg(target_arch = "wasm32")]
     Status(StatusCode),
     Body,
     Decode,
@@ -276,8 +304,20 @@ pub(crate) fn redirect<E: Into<BoxError>>(e: E, url: Url) -> Error {
     Error::new(Kind::Redirect, Some(e)).with_url(url)
 }
 
-pub(crate) fn status_code(url: Url, status: StatusCode) -> Error {
-    Error::new(Kind::Status(status), None::<Error>).with_url(url)
+pub(crate) fn status_code(
+    url: Url,
+    status: StatusCode,
+    #[cfg(not(target_arch = "wasm32"))] reason: Option<hyper::ext::ReasonPhrase>,
+) -> Error {
+    Error::new(
+        Kind::Status(
+            status,
+            #[cfg(not(target_arch = "wasm32"))]
+            reason,
+        ),
+        None::<Error>,
+    )
+    .with_url(url)
 }
 
 pub(crate) fn url_bad_scheme(url: Url) -> Error {

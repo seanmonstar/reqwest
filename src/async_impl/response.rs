@@ -390,8 +390,9 @@ impl Response {
     /// ```
     pub fn error_for_status(self) -> crate::Result<Self> {
         let status = self.status();
+        let reason = self.extensions().get::<hyper::ext::ReasonPhrase>().cloned();
         if status.is_client_error() || status.is_server_error() {
-            Err(crate::error::status_code(*self.url, status))
+            Err(crate::error::status_code(*self.url, status, reason))
         } else {
             Ok(self)
         }
@@ -420,8 +421,9 @@ impl Response {
     /// ```
     pub fn error_for_status_ref(&self) -> crate::Result<&Self> {
         let status = self.status();
+        let reason = self.extensions().get::<hyper::ext::ReasonPhrase>().cloned();
         if status.is_client_error() || status.is_server_error() {
-            Err(crate::error::status_code(*self.url.clone(), status))
+            Err(crate::error::status_code(*self.url.clone(), status, reason))
         } else {
             Ok(self)
         }

@@ -2,13 +2,14 @@
 #![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
 mod support;
 
-use support::server;
+use support::server::{self, low_level_with_response};
 
 use http::header::{CONTENT_LENGTH, CONTENT_TYPE, TRANSFER_ENCODING};
 #[cfg(feature = "json")]
 use std::collections::HashMap;
 
 use reqwest::Client;
+use tokio::io::AsyncWriteExt;
 
 #[tokio::test]
 async fn auto_headers() {
@@ -563,4 +564,32 @@ async fn close_connection_after_idle_timeout() {
         .events()
         .iter()
         .any(|e| matches!(e, server::Event::ConnectionClosed)));
+}
+
+#[tokio::test]
+async fn http1_reason_phrase() {
+    let server = server::low_level_with_response(|_raw_request, client_socket| {
+        Box::new(async move {
+            client_socket
+                .write_all(b"HTTP/1.1 418 I'm not a teapot\r\nContent-Length: 0\r\n\r\n")
+                .await
+                .expect("response write_all failed");
+        })
+    });
+
+    let client = Client::new();
+
+    let res = client
+        .get(&format!("http://{}", server.addr()))
+        .send()
+        .await
+        .expect("Failed to get");
+
+    assert_eq!(
+        res.error_for_status().unwrap_err().to_string(),
+        format!(
+            "HTTP status client error (418 I'm not a teapot) for url (http://{}/)",
+            server.addr()
+        )
+    );
 }
