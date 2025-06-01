@@ -478,3 +478,66 @@ async fn test_scheme_only_check_after_policy_return_follow() {
     assert!(res.is_err());
     assert!(res.unwrap_err().is_builder());
 }
+
+#[tokio::test]
+async fn test_redirect_301_302_303_empty_payload_headers() {
+    let client = reqwest::Client::new();
+    let codes = [301u16, 302, 303];
+    for &code in &codes {
+        let redirect = server::http(move |mut req| async move {
+            if req.method() == "POST" {
+                let data = req
+                    .body_mut()
+                    .frame()
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .into_data()
+                    .unwrap();
+
+                assert_eq!(&*data, b"Hello");
+                if req.headers().get(reqwest::header::CONTENT_LENGTH).is_some() {
+                    assert_eq!(req.headers()[reqwest::header::CONTENT_LENGTH], "5");
+                }
+                assert_eq!(req.uri(), &*format!("/{code}"));
+
+                http::Response::builder()
+                    .header("location", "/dst")
+                    .header("server", "test-dst")
+                    .status(code)
+                    .body(Body::default())
+                    .unwrap()
+            } else {
+                assert_eq!(req.method(), "GET");
+                assert!(req.headers().get(reqwest::header::CONTENT_TYPE).is_some());
+                assert!(req.headers().get(reqwest::header::CONTENT_LENGTH).is_some());
+                assert!(req
+                    .headers()
+                    .get(reqwest::header::CONTENT_ENCODING)
+                    .is_some());
+                http::Response::builder()
+                    .header("server", "test-dst")
+                    .body(Body::default())
+                    .unwrap()
+            }
+        });
+
+        let url = format!("http://{}/{}", redirect.addr(), code);
+        let dst = format!("http://{}/{}", redirect.addr(), "dst");
+        let res = client
+            .post(&url)
+            .body("Hello")
+            .header(reqwest::header::CONTENT_TYPE, "text/plain")
+            .header(reqwest::header::CONTENT_LENGTH, "5")
+            .header(reqwest::header::CONTENT_ENCODING, "identity")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.url().as_str(), dst);
+        assert_eq!(res.status(), 200);
+        assert_eq!(
+            res.headers().get(reqwest::header::SERVER).unwrap(),
+            &"test-dst"
+        );
+    }
+}
