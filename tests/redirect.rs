@@ -442,3 +442,39 @@ async fn test_redirect_custom() {
     assert_eq!(res.url().as_str(), url);
     assert_eq!(res.status(), reqwest::StatusCode::FOUND);
 }
+
+#[tokio::test]
+async fn test_scheme_only_check_after_policy_return_follow() {
+    let server = server::http(move |_| async move {
+        http::Response::builder()
+            .status(302)
+            .header("location", "htt://www.yikes.com/")
+            .body(Body::default())
+            .unwrap()
+    });
+
+    let url = format!("http://{}/yikes", server.addr());
+    let res = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::custom(|attempt| attempt.stop()))
+        .build()
+        .unwrap()
+        .get(&url)
+        .send()
+        .await;
+
+    assert!(res.is_ok());
+    assert_eq!(res.unwrap().status(), reqwest::StatusCode::FOUND);
+
+    let res = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            attempt.follow()
+        }))
+        .build()
+        .unwrap()
+        .get(&url)
+        .send()
+        .await;
+
+    assert!(res.is_err());
+    assert!(res.unwrap_err().is_builder());
+}
