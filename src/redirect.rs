@@ -312,21 +312,22 @@ impl TowerPolicy<async_impl::body::Body, crate::Error> for TowerRedirectPolicy {
             Err(e) => return Err(crate::error::builder(e)),
         };
 
-        if next_url.scheme() != "http" && next_url.scheme() != "https" {
-            return Err(crate::error::url_bad_scheme(next_url));
-        }
-
-        if self.https_only && next_url.scheme() != "https" {
-            return Err(crate::error::redirect(
-                crate::error::url_bad_scheme(next_url.clone()),
-                next_url,
-            ));
-        }
-
         self.urls.push(previous_url.clone());
 
         match self.policy.check(attempt.status(), &next_url, &self.urls) {
-            ActionKind::Follow => Ok(TowerAction::Follow),
+            ActionKind::Follow => {
+                if next_url.scheme() != "http" && next_url.scheme() != "https" {
+                    return Err(crate::error::url_bad_scheme(next_url));
+                }
+
+                if self.https_only && next_url.scheme() != "https" {
+                    return Err(crate::error::redirect(
+                        crate::error::url_bad_scheme(next_url.clone()),
+                        next_url,
+                    ));
+                }
+                Ok(TowerAction::Follow)
+            }
             ActionKind::Stop => Ok(TowerAction::Stop),
             ActionKind::Error(e) => Err(crate::error::redirect(e, previous_url)),
         }

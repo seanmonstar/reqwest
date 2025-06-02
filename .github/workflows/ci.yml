@@ -361,6 +361,9 @@ jobs:
       - name: Check
         run: cargo check --target wasm32-unknown-unknown
 
+      - name: Check cookies
+        run: cargo check --target wasm32-unknown-unknown --features cookies
+
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
