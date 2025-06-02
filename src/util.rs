@@ -90,6 +90,7 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
 }
 
 #[cfg(feature = "cookies")]
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn add_cookie_header(
     headers: &mut HeaderMap,
     cookie_store: &dyn crate::cookie::CookieStore,
