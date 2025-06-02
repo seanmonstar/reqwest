@@ -6,8 +6,8 @@ mod pool;
 
 use crate::async_impl::body::ResponseBody;
 use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
-#[cfg(feature = "cookies")]
-use crate::cookie::CookieService;
+
+use crate::cookie::Jar;
 use crate::error::{BoxError, Error, Kind};
 use crate::{error, Body};
 use connect::H3Connector;
@@ -27,7 +27,7 @@ pub(crate) struct H3Client {
     pool: Pool,
     connector: H3Connector,
     #[cfg(feature = "cookies")]
-    cookie_service: Option<Arc<CookieService>>,
+    cookie_store: Option<Arc<Jar>>,
 }
 
 impl H3Client {
@@ -43,12 +43,11 @@ impl H3Client {
     pub fn new(
         connector: H3Connector,
         pool_timeout: Option<Duration>,
-        cookie_service: Option<Arc<CookieService>>,
     ) -> Self {
         H3Client {
             pool: Pool::new(pool_timeout),
             connector,
-            cookie_service,
+            cookie_store:Some(Arc::new(Jar::default())),
         }
     }
 
@@ -79,7 +78,6 @@ impl H3Client {
         Ok(self.pool.new_connection(lock, driver, tx))
     }
 
-    #[cfg(not(feature = "cookies"))]
     async fn send_request(
         mut self,
         key: Key,
@@ -93,41 +91,6 @@ impl H3Client {
             .send_request(req)
             .await
             .map_err(|e| Error::new(Kind::Request, Some(e)))
-    }
-
-    #[cfg(feature = "cookies")]
-    async fn send_request(
-        mut self,
-        key: Key,
-        mut req: Request<Body>,
-    ) -> Result<Response<ResponseBody>, Error> {
-        let mut pooled = match self.get_pooled_client(key).await {
-            Ok(client) => client,
-            Err(e) => return Err(error::request(e)),
-        };
-
-        let url = url::Url::parse(req.uri().to_string().as_str()).unwrap();
-        if let Some(cookie_service) = self.cookie_service.as_ref() {
-            if req.headers().get(crate::header::COOKIE).is_none() {
-                let headers = req.headers_mut();
-                crate::util::add_cookie_header(headers, cookie_service.cookie_store(), &url);
-            }
-        }
-
-        let res = pooled
-            .send_request(req)
-            .await
-            .map_err(|e| Error::new(Kind::Request, Some(e)));
-
-        if let Some(ref cookie_service) = self.cookie_service {
-            if let Ok(res) = &res {
-                tokio::runtime::Handle::current().block_on(async move{
-                        cookie_service.set_cookies_from_response_headers(res.headers(), &url).await.unwrap();
-                });
-            }
-        }
-
-        res
     }
 
     pub fn request(&self, mut req: Request<Body>) -> H3ResponseFuture {

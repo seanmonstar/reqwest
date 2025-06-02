@@ -1,14 +1,20 @@
 //! HTTP Cookies
 
+use std::convert::TryInto;
 use std::fmt;
-use std::sync::RwLock;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
-use std::{convert::TryInto, sync::Arc};
 
+use crate::async_impl::body::ResponseBody;
+use crate::error::Kind;
 use crate::header::{HeaderValue, SET_COOKIE};
+use crate::{Body, Error};
 use bytes::Bytes;
-use http::HeaderMap;
-use once_cell::sync::Lazy;
+use http::{HeaderMap, Request, Response};
+use tower::Service;
+use url::Url;
 
 /// Actions for a persistent cookie store providing session support.
 pub trait CookieStore: Send + Sync {
@@ -32,7 +38,11 @@ pub struct Cookie<'a>(cookie_crate::Cookie<'a>);
 /// [reqwest_cookie_store crate](https://crates.io/crates/reqwest_cookie_store).
 #[derive(Debug, Default)]
 pub struct Jar(RwLock<cookie_store::CookieStore>);
-
+impl Clone for Jar{
+    fn clone(&self) -> Self {
+        Self(RwLock::new(self.0.write().unwrap().clone()))
+    }
+}
 // ===== impl Cookie =====
 
 impl<'a> Cookie<'a> {
@@ -149,6 +159,38 @@ impl Jar {
             .into_iter();
         self.0.write().unwrap().store_response_cookies(cookies, url);
     }
+    /// private
+    async fn extract_response_cookie_headers<'a>(
+        &self,
+        headers: &'a hyper::HeaderMap,
+    ) -> impl Iterator<Item = &'a HeaderValue> + 'a {
+        headers.get_all(SET_COOKIE).iter()
+    }
+    /// extract response cookie
+    pub async fn extract_response_cookies<'a>(
+        headers: &'a hyper::HeaderMap,
+    ) -> impl Iterator<Item = Result<Cookie<'a>, CookieParseError>> + 'a {
+        headers
+            .get_all(SET_COOKIE)
+            .iter()
+            .map(|value| Cookie::parse(value))
+    }
+
+    /// set cookies from response
+    async fn set_cookies_from_response_headers(
+        &self,
+        headers: &HeaderMap<HeaderValue>,
+        url: &url::Url,
+    ) -> crate::Result<()> {
+        let mut cookies = self
+            .extract_response_cookie_headers(headers)
+            .await
+            .peekable();
+        if cookies.peek().is_some() {
+            self.set_cookies(&mut cookies, &url);
+        }
+        Ok(())
+    }
 }
 
 impl CookieStore for Jar {
@@ -176,68 +218,91 @@ impl CookieStore for Jar {
         HeaderValue::from_maybe_shared(Bytes::from(s)).ok()
     }
 }
-/// a service for the async client and h3 client to manage cookie
+/// a service enables an async client or h3 client to manage cookies
 #[derive(Debug)]
-pub struct CookieService {
-    request_jar: Jar,
+pub struct CookiesEnabledService<S>
+where
+    S: Service<Request<Body>, Response = http::Response<ResponseBody>, Error = crate::error::Error>+Clone,
+    S::Future: Sync + Send + 'static,
+{
+    store: Arc<Jar>,
+    inner_service: S,
 }
-impl CookieService {
+impl<
+        S: Service<
+            Request<Body>,
+            Response = http::Response<ResponseBody>,
+            Error = crate::error::Error,
+            Future: Sync + Send + 'static,
+        >+Clone,
+    > CookiesEnabledService<S>
+{
     /// create a CookieService
-    pub fn new() -> Self {
+    pub fn new(service: S, cookie_store: Arc<Jar>) -> Self {
         Self {
-            request_jar: Jar::default(),
+            store: cookie_store,
+            inner_service: service,
         }
-    }
-    /// private
-    async fn extract_response_cookie_headers<'a>(
-        &self,
-        headers: &'a hyper::HeaderMap,
-    ) -> impl Iterator<Item = &'a HeaderValue> + 'a {
-        headers.get_all(SET_COOKIE).iter()
-    }
-    /// extract response cookie
-    pub(crate) async fn extract_response_cookies<'a>(
-        &self,
-        headers: &'a hyper::HeaderMap,
-    ) -> impl Iterator<Item = Result<Cookie<'a>, CookieParseError>> + 'a {
-        headers
-            .get_all(SET_COOKIE)
-            .iter()
-            .map(|value| Cookie::parse(value))
-    }
-    
-    /// set cookies from response
-    pub async fn set_cookies_from_response_headers(
-        &self,
-        headers: &HeaderMap<HeaderValue>,
-        url: &url::Url,
-    ) -> crate::Result<()> {
-        let mut cookies = self
-            .extract_response_cookie_headers(headers)
-            .await
-            .peekable();
-        if cookies.peek().is_some() {
-            self.set_cookies(&mut cookies, &url).unwrap();
-        }
-        Ok(())
-    }
-    /// read cookies of a specific url
-    pub fn cookies(&self, url: &url::Url) -> Option<HeaderValue> {
-        self.request_jar.cookies(url)
-    }
-    ///set cookie for a specific url
-    pub fn set_cookies(
-        &self,
-        cookie_headers: &mut dyn Iterator<Item = &HeaderValue>,
-        url: &url::Url,
-    ) -> Result<(), ()> {
-        self.request_jar.set_cookies(cookie_headers, url);
-        Ok(())
-    }
-    ///get the inner cookie_store sync fn!!!
-    pub fn cookie_store(&self) -> &dyn CookieStore {
-        &self.request_jar
     }
 }
-///a service to handle cookie store and read
-pub static COOKIE_SERVICE: Lazy<Arc<CookieService>> = Lazy::new(|| Arc::new(CookieService::new()));
+impl<
+        S: Service<
+            Request<Body>,
+            Response = http::Response<ResponseBody>,
+            Error = crate::error::Error,
+            Future: Sync + Send + 'static,
+        >+Clone,
+    > Service<Request<Body>> for CookiesEnabledService<S>
+{
+    type Response = Response<ResponseBody>;
+
+    type Error = Error;
+
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
+
+    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
+        // check and add cookies to the request header
+        let url = Url::parse(req.uri().to_string().as_str()).expect("invalid URL");
+        let headers = req.headers_mut();
+        crate::util::add_cookie_header(headers, self.store.as_ref(), &url);
+        // call the inner service's call fn
+        let inner_response_future = self.inner_service.call(req);
+
+        let store = self.store.clone();
+        // store the cookies from response
+        Box::pin(async move {
+            let response = inner_response_future.await;
+            if let Ok(res) = response {
+                store
+                    .set_cookies_from_response_headers(res.headers(), &url)
+                    .await
+                    .expect("error set cookies from response");
+                return Ok(res);
+            }
+            Err(Error::new(
+                Kind::Body,
+                Some("error extract response in cookie service"),
+            ))
+        })
+    }
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner_service.poll_ready(cx)
+    }
+}
+impl<
+        S: Service<
+            Request<Body>,
+            Response = http::Response<ResponseBody>,
+            Error = crate::error::Error,
+            Future: Sync + Send + 'static,
+        >+Clone,
+    > Clone for CookiesEnabledService<S>
+{
+    fn clone(&self) -> Self {
+        Self { store: Arc::new((*self.store).clone()), inner_service: self.inner_service.clone() }
+    }
+}

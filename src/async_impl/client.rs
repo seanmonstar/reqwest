@@ -11,6 +11,7 @@ use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
 use std::{fmt, str};
 
+use super::body::ResponseBody;
 use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
@@ -24,8 +25,7 @@ use crate::connect::{
     sealed::{Conn, Unnameable},
     BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
 };
-#[cfg(feature = "cookies")]
-use crate::cookie::CookieService;
+use crate::cookie::{CookiesEnabledService, Jar};
 #[cfg(feature = "hickory-dns")]
 use crate::dns::hickory::HickoryDnsResolver;
 use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
@@ -49,6 +49,8 @@ use http::header::{
 };
 use http::uri::Scheme;
 use http::Uri;
+use http_body_util::combinators::BoxBody;
+use http_body_util::BodyExt;
 use hyper_util::client::legacy::connect::HttpConnector;
 #[cfg(feature = "default-tls")]
 use native_tls_crate::TlsConnector;
@@ -98,47 +100,38 @@ enum HttpVersionPref {
 #[derive(Clone)]
 struct HyperService {
     #[cfg(feature = "cookies")]
-    cookie_service: Option<Arc<CookieService>>,
+    cookie_store: Option<Arc<Jar>>,
     hyper: HyperClient,
 }
 
 impl Service<hyper::Request<crate::async_impl::body::Body>> for HyperService {
     type Error = crate::Error;
-    type Response = http::Response<hyper::body::Incoming>;
+    type Response = http::Response<ResponseBody>;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.hyper.poll_ready(cx).map_err(crate::error::request)
     }
 
-    #[cfg(not(feature = "cookies"))]
     fn call(&mut self, req: hyper::Request<crate::async_impl::body::Body>) -> Self::Future {
         let clone = self.hyper.clone();
         let mut inner = std::mem::replace(&mut self.hyper, clone);
-        Box::pin(async move { inner.call(req).await.map_err(crate::error::request) })
-    }
-
-    #[cfg(feature = "cookies")]
-    fn call(&mut self, mut req: hyper::Request<crate::async_impl::body::Body>) -> Self::Future {
-        let clone = self.hyper.clone();
-        let mut inner = std::mem::replace(&mut self.hyper, clone);
-        let url = Url::parse(req.uri().to_string().as_str()).expect("invalid URL");
-
-        if let Some(cookie_service) = self.cookie_service.as_ref() {
-            if req.headers().get(crate::header::COOKIE).is_none() {
-                let headers = req.headers_mut();
-                crate::util::add_cookie_header(headers, cookie_service.cookie_store(), &url);
-            }
-        }
-
-        let cookie_service = self.cookie_service.as_ref().expect("no cookie service").clone();
-        
         Box::pin(async move {
-                let res = inner.call(req).await.map_err(crate::error::request);
-           if let Ok(ref response)=res{
-                cookie_service.set_cookies_from_response_headers(response.headers(), &url).await.unwrap();
-           }
-            res
+            let fu = inner.call(req).await;
+            if let Ok(res) = fu {
+                let parts_and_body = res.into_parts();
+                let response = http::Response::from_parts(
+                    parts_and_body.0,
+                    BoxBody::new(parts_and_body.1.map_err(|e| {
+                        Box::new(e) as Box<dyn std::error::Error + Send + Sync + 'static>
+                    })),
+                );
+                return Ok(response);
+            }
+            Err(crate::Error::new(
+                error::Kind::Body,
+                Some("error extract response in hyperservice"),
+            ))
         })
     }
 }
@@ -225,7 +218,7 @@ struct Config {
     interface: Option<String>,
     nodelay: bool,
     #[cfg(feature = "cookies")]
-    cookie_service: Option<Arc<CookieService>>,
+    cookie_store: Option<Arc<Jar>>,
     hickory_dns: bool,
     error: Option<crate::Error>,
     https_only: bool,
@@ -349,7 +342,7 @@ impl ClientBuilder {
                 nodelay: true,
                 hickory_dns: cfg!(feature = "hickory-dns"),
                 #[cfg(feature = "cookies")]
-                cookie_service: None,
+                cookie_store: None,
                 https_only: false,
                 dns_overrides: HashMap::new(),
                 #[cfg(feature = "http3")]
@@ -971,8 +964,13 @@ impl ClientBuilder {
         let hyper_client = builder.build(connector_builder.build(config.connector_layers));
         let hyper_service = HyperService {
             #[cfg(feature = "cookies")]
-            cookie_service: config.cookie_service.clone(),
+            cookie_store: config.cookie_store.clone(),
             hyper: hyper_client,
+        };
+        #[cfg(feature = "cookies")]
+        let hyper_service ={
+        let store= hyper_service.cookie_store.as_ref().unwrap().clone();
+            CookiesEnabledService::new(hyper_service,store)
         };
 
         let policy = {
@@ -988,7 +986,7 @@ impl ClientBuilder {
             inner: Arc::new(ClientRef {
                 accepts: config.accepts,
                 #[cfg(feature = "cookies")]
-                cookie_service: config.cookie_service.clone(),
+                cookie_store: config.cookie_store.clone(),
                 // Use match instead of map since config is partially moved,
                 // and it cannot be used in closure
                 #[cfg(feature = "http3")]
@@ -999,8 +997,7 @@ impl ClientBuilder {
                         #[cfg(feature = "cookies")]
                         let h3_service = H3Client::new(
                             h3_connector,
-                            config.pool_idle_timeout,
-                            config.cookie_service,
+                            config.pool_idle_timeout
                         );
                         Some(FollowRedirect::with_policy(h3_service, policy))
                     }
@@ -1104,12 +1101,12 @@ impl ClientBuilder {
     #[cfg(feature = "cookies")]
     #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
     pub fn cookie_store(mut self, enable: bool) -> ClientBuilder {
-        use crate::cookie::COOKIE_SERVICE;
+        use crate::cookie::Jar;
 
         if enable {
-            self.config.cookie_service=Some(COOKIE_SERVICE.clone());
+            self.config.cookie_store = Some(Arc::new(Jar::default()));
         } else {
-            self.config.cookie_service= None;
+            self.config.cookie_store = None;
         }
         self
     }
@@ -2453,8 +2450,16 @@ impl Client {
             _ => {
                 let mut req = builder.body(body).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
+                #[cfg(not(feature="cookies"))]
+                {
                 let mut hyper = self.inner.hyper.clone();
                 ResponseFuture::Default(hyper.call(req))
+                }
+                #[cfg(feature="cookies")]
+                {
+                let mut hyper = self.inner.hyper.clone();
+                ResponseFuture::CookiesEnabledHyper(hyper.call(req))
+                }
             }
         };
 
@@ -2588,8 +2593,8 @@ impl Config {
 
         #[cfg(feature = "cookies")]
         {
-            if let Some(_) = self.cookie_service {
-                f.field("cookie_service", &true);
+            if let Some(_) = self.cookie_store {
+                f.field("cookie_store", &true);
             }
         }
 
@@ -2713,9 +2718,12 @@ impl Config {
 struct ClientRef {
     accepts: Accepts,
     #[cfg(feature = "cookies")]
-    cookie_service: Option<Arc<CookieService>>,
+    cookie_store: Option<Arc<Jar>>,
     headers: HeaderMap,
+    #[cfg(not(feature="cookies"))]
     hyper: FollowRedirect<HyperService, TowerRedirectPolicy>,
+    #[cfg(feature="cookies")]
+    hyper:FollowRedirect<CookiesEnabledService<HyperService>, TowerRedirectPolicy>,
     #[cfg(feature = "http3")]
     h3_client: Option<FollowRedirect<H3Client, TowerRedirectPolicy>>,
     referer: bool,
@@ -2735,8 +2743,8 @@ impl ClientRef {
 
         #[cfg(feature = "cookies")]
         {
-            if let Some(_) = self.cookie_service {
-                f.field("cookie_service", &true);
+            if let Some(_) = self.cookie_store {
+                f.field("cookie_store", &true);
             }
         }
 
@@ -2801,6 +2809,10 @@ enum ResponseFuture {
     Default(tower_http::follow_redirect::ResponseFuture<HyperService, Body, TowerRedirectPolicy>),
     #[cfg(feature = "http3")]
     H3(tower_http::follow_redirect::ResponseFuture<H3Client, Body, TowerRedirectPolicy>),
+    #[cfg(feature="cookies")]
+    CookiesEnabledHyper(tower_http::follow_redirect::ResponseFuture<CookiesEnabledService<HyperService>, Body, TowerRedirectPolicy>),
+    #[cfg(all(feature="cookies",feature="http3"))]
+    CookiesEnabledH3(tower_http::follow_redirect::ResponseFuture<CookiesEnabledService<H3Client>, Body, TowerRedirectPolicy>)
 }
 
 impl PendingRequest {
@@ -2868,8 +2880,16 @@ impl PendingRequest {
                     .body(body)
                     .expect("valid request parts");
                 *req.headers_mut() = self.headers.clone();
+                #[cfg(not(feature="cookies"))]
+                {
                 let mut hyper = self.client.hyper.clone();
                 ResponseFuture::Default(hyper.call(req))
+                }
+                #[cfg(feature="cookies")]
+                {
+                let mut hyper = self.client.hyper.clone();
+                ResponseFuture::CookiesEnabledHyper(hyper.call(req))
+                }
             }
         };
 
@@ -2963,43 +2983,63 @@ impl Future for PendingRequest {
         loop {
             let res = match self.as_mut().in_flight().get_mut() {
                 ResponseFuture::Default(r) => match Pin::new(r).poll(cx) {
-                    Poll::Ready(Err(e)) => {
-                        #[cfg(feature = "http2")]
-                        if e.is_request() {
-                            if let Some(e) = e.source() {
-                                if self.as_mut().retry_error(e) {
-                                    continue;
+                                Poll::Ready(Err(e)) => {
+                                    #[cfg(feature = "http2")]
+                                    if e.is_request() {
+                                        if let Some(e) = e.source() {
+                                            if self.as_mut().retry_error(e) {
+                                                continue;
+                                            }
+                                        }
+                                    }
+
+                                    return Poll::Ready(Err(e));
                                 }
-                            }
-                        }
-
-                        return Poll::Ready(Err(e));
-                    }
-                    Poll::Ready(Ok(res)) => res.map(super::body::boxed),
-                    Poll::Pending => return Poll::Pending,
-                },
+                                Poll::Ready(Ok(res)) => res.map(super::body::boxed),
+                                Poll::Pending => return Poll::Pending,
+                            },
                 #[cfg(feature = "http3")]
-                ResponseFuture::H3(r) => match Pin::new(r).poll(cx) {
-                    Poll::Ready(Err(e)) => {
-                        if self.as_mut().retry_error(&e) {
-                            continue;
-                        }
-                        return Poll::Ready(Err(
-                            crate::error::request(e).with_url(self.url.clone())
-                        ));
-                    }
-                    Poll::Ready(Ok(res)) => res,
-                    Poll::Pending => return Poll::Pending,
-                },
-            };
+                            ResponseFuture::H3(r) => match Pin::new(r).poll(cx) {
+                                Poll::Ready(Err(e)) => {
+                                    if self.as_mut().retry_error(&e) {
+                                        continue;
+                                    }
+                                    return Poll::Ready(Err(
+                                        crate::error::request(e).with_url(self.url.clone())
+                                    ));
+                                }
+                                Poll::Ready(Ok(res)) => res,
+                                Poll::Pending => return Poll::Pending,
+                            },
+                            ResponseFuture::CookiesEnabledHyper(r)=>match Pin::new(r).poll(cx) {
+                                Poll::Ready(Err(e)) => {
+                                    #[cfg(feature = "http2")]
+                                    if e.is_request() {
+                                        if let Some(e) = e.source() {
+                                            if self.as_mut().retry_error(e) {
+                                                continue;
+                                            }
+                                        }
+                                    }
 
-            #[cfg(feature = "cookies")]
-            {
-                let cookie_service=self.client.cookie_service.as_ref().unwrap().clone();
-                tokio::runtime::Handle::current().block_on(async {
-                        cookie_service.set_cookies_from_response_headers(&self.headers, &self.url).await.unwrap();
-                });
-            }
+                                    return Poll::Ready(Err(e));
+                                }
+                                Poll::Ready(Ok(res)) => res.map(super::body::boxed),
+                                Poll::Pending => return Poll::Pending,
+                        },
+                        ResponseFuture::CookiesEnabledH3(r)=> match Pin::new(r).poll(cx) {
+                                Poll::Ready(Err(e)) => {
+                                    if self.as_mut().retry_error(&e) {
+                                        continue;
+                                    }
+                                    return Poll::Ready(Err(
+                                        crate::error::request(e).with_url(self.url.clone())
+                                    ));
+                                }
+                                Poll::Ready(Ok(res)) => res,
+                                Poll::Pending => return Poll::Pending,
+                            },
+            };
             if let Some(url) = &res
                 .extensions()
                 .get::<tower_http::follow_redirect::RequestUri>()

@@ -107,10 +107,10 @@ impl Response {
     #[cfg(feature = "cookies")]
     #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
     pub fn cookies<'a>(&'a self) -> impl Iterator<Item = cookie::Cookie<'a>> + 'a {
+        use crate::cookie::Jar;
 
-        use crate::cookie::COOKIE_SERVICE;
         tokio::runtime::Handle::current().block_on(async {
-                COOKIE_SERVICE.extract_response_cookies(self.res.headers()).await.filter_map(Result::ok)
+          Jar::extract_response_cookies(self.res.headers()).await.filter_map(Result::ok)
         })
         
     }
