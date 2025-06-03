@@ -2,6 +2,8 @@
 use super::multipart::Form;
 /// dox
 use bytes::Bytes;
+#[cfg(feature = "stream")]
+use http_body_util::combinators::BoxBody;
 use js_sys::Uint8Array;
 use std::{borrow::Cow, fmt};
 use wasm_bindgen::JsValue;
@@ -19,6 +21,8 @@ pub struct Body {
 
 enum Inner {
     Single(Single),
+    #[cfg(feature = "stream")]
+    Streaming(BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>),
     /// MultipartForm holds a multipart/form-data body.
     #[cfg(feature = "multipart")]
     MultipartForm(Form),
@@ -66,14 +70,83 @@ impl Body {
     pub fn as_bytes(&self) -> Option<&[u8]> {
         match &self.inner {
             Inner::Single(single) => Some(single.as_bytes()),
+            #[cfg(feature = "stream")]
+            Inner::Streaming(_) => None,
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(_) => None,
         }
     }
 
-    pub(crate) fn to_js_value(&self) -> crate::Result<JsValue> {
-        match &self.inner {
+    /// Wrap a futures `Stream` in a box inside `Body`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use reqwest::Body;
+    /// # use futures_util;
+    /// # fn main() {
+    /// let chunks: Vec<Result<_, ::std::io::Error>> = vec![
+    ///     Ok("hello"),
+    ///     Ok(" "),
+    ///     Ok("world"),
+    /// ];
+    ///
+    /// let stream = futures_util::stream::iter(chunks);
+    ///
+    /// let body = Body::wrap_stream(stream);
+    /// # }
+    /// ```
+    ///
+    /// # Optional
+    ///
+    /// This requires the `stream` feature to be enabled.
+    #[cfg(feature = "stream")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
+    pub fn wrap_stream<S>(stream: S) -> Body
+    where
+        S: futures_core::stream::TryStream + Send + 'static,
+        S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+        Bytes: From<S::Ok>,
+    {
+        Body::stream(stream)
+    }
+
+    #[cfg(any(feature = "stream", feature = "multipart", feature = "blocking"))]
+    pub(crate) fn stream<S>(stream: S) -> Body
+    where
+        S: futures_core::stream::TryStream + Send + 'static,
+        S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+        Bytes: From<S::Ok>,
+    {
+        use futures_util::TryStreamExt;
+        use http_body::Frame;
+        use http_body_util::StreamBody;
+
+        let body = http_body_util::BodyExt::boxed(StreamBody::new(sync_wrapper::SyncStream::new(
+            stream
+                .map_ok(|d| Frame::data(Bytes::from(d)))
+                .map_err(Into::into),
+        )));
+        Body {
+            inner: Inner::Streaming(body),
+        }
+    }
+
+    pub(crate) fn into_js_value(self) -> crate::Result<JsValue> {
+        match self.inner {
             Inner::Single(single) => Ok(single.to_js_value()),
+            #[cfg(feature = "stream")]
+            Inner::Streaming(streaming) => {
+                use futures_util::TryStreamExt;
+                use http_body_util::BodyExt;
+
+                let body = streaming
+                    .into_data_stream()
+                    .map_ok(|bytes| JsValue::from(bytes.to_vec()))
+                    .map_err(|err| JsValue::from(js_sys::Error::new(&err.to_string())));
+                let stream = wasm_streams::ReadableStream::from_stream(body).into_raw();
+                Ok(JsValue::from(stream))
+            }
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(form) => {
                 let form_data = form.to_form_data()?;
@@ -87,6 +160,8 @@ impl Body {
     pub(crate) fn as_single(&self) -> Option<&Single> {
         match &self.inner {
             Inner::Single(single) => Some(single),
+            #[cfg(feature = "stream")]
+            Inner::Streaming(_) => None,
             Inner::MultipartForm(_) => None,
         }
     }
@@ -115,6 +190,8 @@ impl Body {
     pub(crate) fn is_empty(&self) -> bool {
         match &self.inner {
             Inner::Single(single) => single.is_empty(),
+            #[cfg(feature = "stream")]
+            Inner::Streaming(_) => false,
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(form) => form.is_empty(),
         }
@@ -125,6 +202,8 @@ impl Body {
             Inner::Single(single) => Some(Self {
                 inner: Inner::Single(single.clone()),
             }),
+            #[cfg(feature = "stream")]
+            Inner::Streaming(_) => None,
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(_) => None,
         }
@@ -225,7 +304,7 @@ mod tests {
         let mut init = web_sys::RequestInit::new();
         init.method("POST");
         init.body(Some(
-            body.to_js_value()
+            body.into_js_value()
                 .expect("could not convert body to JsValue")
                 .as_ref(),
         ));
@@ -247,7 +326,7 @@ mod tests {
         let mut init = web_sys::RequestInit::new();
         init.method("POST");
         init.body(Some(
-            body.to_js_value()
+            body.into_js_value()
                 .expect("could not convert body to JsValue")
                 .as_ref(),
         ));
@@ -270,7 +349,7 @@ mod tests {
         let mut init = web_sys::RequestInit::new();
         init.method("POST");
         init.body(Some(
-            body.to_js_value()
+            body.into_js_value()
                 .expect("could not convert body to JsValue")
                 .as_ref(),
         ));
@@ -298,7 +377,7 @@ mod tests {
         let mut init = web_sys::RequestInit::new();
         init.method("POST");
         init.body(Some(
-            body.to_js_value()
+            body.into_js_value()
                 .expect("could not convert body to JsValue")
                 .as_ref(),
         ));
