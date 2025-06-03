@@ -186,7 +186,7 @@ impl fmt::Debug for ClientBuilder {
 // > `init.method(m)` to `init.set_method(m)`
 // For now, ignore their deprecation.
 #[allow(deprecated)]
-async fn fetch(req: Request) -> crate::Result<Response> {
+async fn fetch(mut req: Request) -> crate::Result<Response> {
     // Build the js Request
     let mut init = web_sys::RequestInit::new();
     init.method(req.method().as_str());
@@ -216,9 +216,18 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         init.credentials(creds);
     }
 
-    if let Some(body) = req.body() {
+    if let Some(duplex) = req.duplex() {
+        js_sys::Reflect::set(
+            &js_sys::Object::from(wasm_bindgen::JsValue::from(&init)),
+            &wasm_bindgen::JsValue::from_str("duplex"),
+            &wasm_bindgen::JsValue::from_str(&duplex),
+        )
+        .expect_throw("failed to set duplex");
+    }
+
+    if let Some(body) = req.body_mut().take() {
         if !body.is_empty() {
-            init.body(Some(body.to_js_value()?.as_ref()));
+            init.body(Some(body.into_js_value()?.as_ref()));
         }
     }
 
