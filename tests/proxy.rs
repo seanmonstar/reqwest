@@ -381,3 +381,65 @@ async fn tunnel_includes_user_agent() {
         err
     );
 }
+
+#[tokio::test]
+async fn tunnel_includes_proxy_auth_with_multiple_proxies() {
+    let url = "http://hyper.rs.local/prox";
+    let server1 = server::http(move |req| {
+        assert_eq!(req.method(), "GET");
+        assert_eq!(req.uri(), url);
+        assert_eq!(req.headers()["host"], "hyper.rs.local");
+        assert_eq!(
+            req.headers()["proxy-authorization"],
+            "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="
+        );
+        assert_eq!(req.headers()["proxy-header"], "proxy2");
+        async { http::Response::default() }
+    });
+
+    let proxy_url = format!("http://Aladdin:open%20sesame@{}", server1.addr());
+
+    let mut headers1 = reqwest::header::HeaderMap::new();
+    headers1.insert("proxy-header", "proxy1".parse().unwrap());
+
+    let mut headers2 = reqwest::header::HeaderMap::new();
+    headers2.insert("proxy-header", "proxy2".parse().unwrap());
+
+    let client = reqwest::Client::builder()
+        // When processing proxy headers, the first one is iterated,
+        // and if the current URL does not match, the proxy is skipped
+        .proxy(
+            reqwest::Proxy::https(&proxy_url)
+                .unwrap()
+                .headers(headers1.clone()),
+        )
+        // When processing proxy headers, the second one is iterated,
+        // and for the current URL matching, the proxy will be used
+        .proxy(
+            reqwest::Proxy::http(&proxy_url)
+                .unwrap()
+                .headers(headers2.clone()),
+        )
+        .build()
+        .unwrap();
+
+    let res = client.get(url).send().await.unwrap();
+
+    assert_eq!(res.url().as_str(), url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+
+    let client = reqwest::Client::builder()
+        // When processing proxy headers, the first one is iterated,
+        // and for the current URL matching, the proxy will be used
+        .proxy(reqwest::Proxy::http(&proxy_url).unwrap().headers(headers2))
+        // When processing proxy headers, the second one is iterated,
+        // and if the current URL does not match, the proxy is skipped
+        .proxy(reqwest::Proxy::https(&proxy_url).unwrap().headers(headers1))
+        .build()
+        .unwrap();
+
+    let res = client.get(url).send().await.unwrap();
+
+    assert_eq!(res.url().as_str(), url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
