@@ -255,6 +255,10 @@ compile_error!(
 "
 );
 
+// Used to pin the version.
+#[cfg(feature = "http3")]
+use slab as _;
+
 macro_rules! if_wasm {
     ($($item:item)*) => {$(
         #[cfg(target_arch = "wasm32")]
