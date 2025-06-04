@@ -255,9 +255,13 @@ compile_error!(
 "
 );
 
+// Ignore `unused_crate_dependencies` warnings.
 // Used to pin the version.
 #[cfg(feature = "http3")]
 use slab as _;
+// Used in many features that they're not worth making it optional.
+use futures_core as _;
+use sync_wrapper as _;
 
 macro_rules! if_wasm {
     ($($item:item)*) => {$(
@@ -281,7 +285,7 @@ pub use url::Url;
 // universal mods
 #[macro_use]
 mod error;
-// TODO: remove `if_hyper` if wasm has been mirgated to new config system.
+// TODO: remove `if_hyper` if wasm has been migrated to new config system.
 if_hyper! {
     mod config;
 }
