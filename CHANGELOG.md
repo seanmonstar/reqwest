@@ -1,3 +1,17 @@
+## v0.12.19
+
+- Fix redirect that changes the method to GET should remove payload headers.
+- Fix redirect to only check the next scheme if the policy action is to follow.
+- (wasm) Fix compilation error if `cookies` feature is enabled (by the way, it's a noop feature in wasm).
+
+## v0.12.18
+
+- Fix compilation when `socks` enabled without TLS.
+
+## v0.12.17
+
+- Fix compilation on macOS.
+
 ## v0.12.16
 
 - Add `ClientBuilder::http3_congestion_bbr()` to enable BBR congestion control.

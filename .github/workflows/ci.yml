@@ -19,6 +19,7 @@ jobs:
     needs:
       - style
       - test
+      - features
       - unstable
       - nightly
       - msrv
@@ -201,6 +202,27 @@ jobs:
           cargo test --locked --workspace --doc ${{ matrix.features }} ${{ matrix.test-features }}
         shell: bash
 
+  features:
+    name: features
+    needs: [style]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: check --feature-powerset
+        run: cargo hack --no-dev-deps check --feature-powerset --depth 2 --skip http3,__tls,__rustls,__rustls-ring,native-tls-vendored,trust-dns
+        env:
+          RUSTFLAGS: "-D dead_code -D unused_imports"
+
   unstable:
     name: "unstable features"
     needs: [style]
@@ -338,6 +360,9 @@ jobs:
 
       - name: Check
         run: cargo check --target wasm32-unknown-unknown
+
+      - name: Check cookies
+        run: cargo check --target wasm32-unknown-unknown --features cookies
 
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
