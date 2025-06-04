@@ -2538,9 +2538,8 @@ impl Client {
         for proxy in self.inner.proxies.iter() {
             if let Some(header) = proxy.http_non_tunnel_basic_auth(dst) {
                 headers.insert(PROXY_AUTHORIZATION, header);
-            }
-
-            break;
+                break;
+            }        
         }
     }
 
