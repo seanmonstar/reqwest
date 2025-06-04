@@ -53,7 +53,7 @@ rustls-tls-native-roots = ["rustls-tls-native-roots-no-provider", "__rustls-ring
 
 blocking = ["dep:futures-channel", "futures-channel?/sink", "dep:futures-util", "futures-util?/io", "futures-util?/sink", "tokio/sync"]
 
-charset = ["dep:encoding_rs"]
+charset = ["dep:encoding_rs", "dep:mime"]
 
 cookies = ["dep:cookie_crate", "dep:cookie_store"]
 
@@ -125,7 +125,6 @@ hyper = { version = "1.1", features = ["http1", "client"] }
 hyper-util = { version = "0.1.12", features = ["http1", "client", "client-legacy", "client-proxy", "tokio"] }
 h2 = { version = "0.4", optional = true }
 log = "0.4.17"
-mime = "0.3.16"
 percent-encoding = "2.3"
 tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
 tower = { version = "0.5.2", default-features = false, features = ["timeout", "util"] }
@@ -134,6 +133,7 @@ pin-project-lite = "0.2.11"
 
 # Optional deps...
 rustls-pki-types = { version = "1.9.0", features = ["std"], optional = true }
+mime = { version = "0.3.16", optional = true }
 
 ## default-tls
 hyper-tls = { version = "0.6", optional = true }
