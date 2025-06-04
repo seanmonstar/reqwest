@@ -2557,9 +2557,8 @@ impl Client {
                 iter.iter().for_each(|(key, value)| {
                     headers.insert(key, value.clone());
                 });
+                break;
             }
-
-            break;
         }
     }
 }
