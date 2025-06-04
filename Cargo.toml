@@ -132,7 +132,6 @@ tokio = { version = "1.0", default-features = false, features = ["net", "time"] 
 tower = { version = "0.5.2", default-features = false, features = ["timeout", "util"] }
 tower-http = { version = "0.6.5", default-features = false, features = ["follow-redirect"] }
 pin-project-lite = "0.2.11"
-ipnet = "2.3"
 
 # Optional deps...
 rustls-pki-types = { version = "1.9.0", features = ["std"], optional = true }
