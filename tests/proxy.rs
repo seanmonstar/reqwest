@@ -408,10 +408,33 @@ async fn tunnel_includes_proxy_auth_with_multiple_proxies() {
     let client = reqwest::Client::builder()
         // When processing proxy headers, the first one is iterated,
         // and if the current URL does not match, the proxy is skipped
-        .proxy(reqwest::Proxy::https(&proxy_url).unwrap().headers(headers1))
+        .proxy(
+            reqwest::Proxy::https(&proxy_url)
+                .unwrap()
+                .headers(headers1.clone()),
+        )
         // When processing proxy headers, the second one is iterated,
         // and for the current URL matching, the proxy will be used
+        .proxy(
+            reqwest::Proxy::http(&proxy_url)
+                .unwrap()
+                .headers(headers2.clone()),
+        )
+        .build()
+        .unwrap();
+
+    let res = client.get(url).send().await.unwrap();
+
+    assert_eq!(res.url().as_str(), url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+
+    let client = reqwest::Client::builder()
+        // When processing proxy headers, the first one is iterated,
+        // and for the current URL matching, the proxy will be used
         .proxy(reqwest::Proxy::http(&proxy_url).unwrap().headers(headers2))
+        // When processing proxy headers, the second one is iterated,
+        // and if the current URL does not match, the proxy is skipped
+        .proxy(reqwest::Proxy::https(&proxy_url).unwrap().headers(headers1))
         .build()
         .unwrap();
 
