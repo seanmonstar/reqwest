@@ -2539,7 +2539,7 @@ impl Client {
             if let Some(header) = proxy.http_non_tunnel_basic_auth(dst) {
                 headers.insert(PROXY_AUTHORIZATION, header);
                 break;
-            }        
+            }
         }
     }
 
