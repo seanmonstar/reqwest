@@ -7,7 +7,6 @@ use std::time::Duration;
 use bytes::Bytes;
 use http_body::Body as HttpBody;
 use http_body_util::combinators::BoxBody;
-//use sync_wrapper::SyncWrapper;
 use pin_project_lite::pin_project;
 #[cfg(feature = "stream")]
 use tokio::fs::File;
