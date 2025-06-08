@@ -603,7 +603,6 @@ mod tests {
     use super::*;
     use futures_util::stream;
     use futures_util::TryStreamExt;
-    use mime_guess::mime;
     use std::future;
     use tokio::{self, runtime};
 
