@@ -303,6 +303,6 @@ impl<
     > Clone for CookiesEnabledService<S>
 {
     fn clone(&self) -> Self {
-        Self { store: Arc::new((*self.store).clone()), inner_service: self.inner_service.clone() }
+        Self { store: Arc::new(self.store.as_ref().clone()), inner_service: self.inner_service.clone() }
     }
 }
