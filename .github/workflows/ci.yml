@@ -318,6 +318,7 @@ jobs:
           cargo update -p hashbrown --precise 0.15.0
           cargo update -p native-tls --precise 0.2.13
           cargo update -p once_cell --precise 1.20.3
+          cargo update -p tracing-core --precise 0.1.33
 
       - uses: Swatinem/rust-cache@v2
 

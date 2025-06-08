@@ -94,9 +94,15 @@ impl Error {
     }
 
     /// Returns true if the error is from `Response::error_for_status`.
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn is_status(&self) -> bool {
-        matches!(self.inner.kind, Kind::Status(_, _))
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            matches!(self.inner.kind, Kind::Status(_, _))
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            matches!(self.inner.kind, Kind::Status(_))
+        }
     }
 
     /// Returns true if the error is related to a timeout.
