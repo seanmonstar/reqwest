@@ -25,6 +25,7 @@ use crate::connect::{
     sealed::{Conn, Unnameable},
     BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
 };
+#[cfg(feature="cookies")]
 use crate::cookie::{CookiesEnabledService, Jar};
 #[cfg(feature = "hickory-dns")]
 use crate::dns::hickory::HickoryDnsResolver;
@@ -3009,6 +3010,7 @@ impl Future for PendingRequest {
                                 Poll::Ready(Ok(res)) => res,
                                 Poll::Pending => return Poll::Pending,
                             },
+                            #[cfg(feature="cookies")]
                             ResponseFuture::CookiesEnabledHyper(r)=>match Pin::new(r).poll(cx) {
                                 Poll::Ready(Err(e)) => {
                                     #[cfg(feature = "http2")]
@@ -3025,6 +3027,7 @@ impl Future for PendingRequest {
                                 Poll::Ready(Ok(res)) => res.map(super::body::boxed),
                                 Poll::Pending => return Poll::Pending,
                         },
+                        #[cfg(all(feature="cookies",feature="http3"))]
                         ResponseFuture::CookiesEnabledH3(r)=> match Pin::new(r).poll(cx) {
                                 Poll::Ready(Err(e)) => {
                                     if self.as_mut().retry_error(&e) {
