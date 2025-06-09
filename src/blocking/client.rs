@@ -610,6 +610,20 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.tcp_keepalive_retries(retries))
     }
 
+    /// Set that all sockets have `TCP_USER_TIMEOUT` set with the supplied duration.
+    ///
+    /// This option controls how long transmitted data may remain unacknowledged before
+    /// the connection is force-closed.
+    ///
+    /// The current default is `None` (option disabled).
+    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+    pub fn tcp_user_timeout<D>(self, val: D) -> ClientBuilder
+    where
+        D: Into<Option<Duration>>,
+    {
+        self.with_inner(move |inner| inner.tcp_user_timeout(val))
+    }
+
     // TLS options
 
     /// Add a custom root certificate.

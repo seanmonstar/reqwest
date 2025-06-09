@@ -424,6 +424,18 @@ where {
     pub(crate) fn set_socks_resolver(&mut self, resolver: DynResolver) {
         self.resolver = Some(resolver);
     }
+
+    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+    pub(crate) fn set_tcp_user_timeout(&mut self, dur: Option<Duration>) {
+        match &mut self.inner {
+            #[cfg(feature = "default-tls")]
+            Inner::DefaultTls(http, _tls) => http.set_tcp_user_timeout(dur),
+            #[cfg(feature = "__rustls")]
+            Inner::RustlsTls { http, .. } => http.set_tcp_user_timeout(dur),
+            #[cfg(not(feature = "__tls"))]
+            Inner::Http(http) => http.set_tcp_user_timeout(dur),
+        }
+    }
 }
 
 #[allow(missing_debug_implementations)]
