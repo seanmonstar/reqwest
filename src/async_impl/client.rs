@@ -2501,7 +2501,7 @@ impl Client {
             .map(Box::pin);
 
         Pending {
-            inner: PendingInner::Request(PendingRequest {
+            inner: PendingInner::Request(Box::pin(PendingRequest {
                 method,
                 url,
                 headers,
@@ -2515,7 +2515,7 @@ impl Client {
                 total_timeout,
                 read_timeout_fut,
                 read_timeout: self.inner.read_timeout,
-            }),
+            })),
         }
     }
 
@@ -2798,7 +2798,7 @@ pin_project! {
 }
 
 enum PendingInner {
-    Request(PendingRequest),
+    Request(Pin<Box<PendingRequest>>),
     Error(Option<crate::Error>),
 }
 
@@ -3091,5 +3091,11 @@ mod tests {
         let err = result.err().unwrap();
         assert!(err.is_builder());
         assert_eq!(url_str, err.url().unwrap().as_str());
+    }
+
+    #[test]
+    fn test_future_size() {
+        let s = std::mem::size_of::<super::Pending>();
+        assert!(s < 128, "size_of::<Pending>() == {s}, too big");
     }
 }
