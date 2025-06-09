@@ -2805,6 +2805,7 @@ pin_project! {
 }
 
 enum ResponseFuture {
+        #[cfg(not(feature="cookies"))]
     Default(tower_http::follow_redirect::ResponseFuture<HyperService, Body, TowerRedirectPolicy>),
     #[cfg(feature = "http3")]
     H3(tower_http::follow_redirect::ResponseFuture<H3Client, Body, TowerRedirectPolicy>),
@@ -2981,6 +2982,7 @@ impl Future for PendingRequest {
 
         loop {
             let res = match self.as_mut().in_flight().get_mut() {
+                #[cfg(not(feature="cookies"))]
                 ResponseFuture::Default(r) => match Pin::new(r).poll(cx) {
                                 Poll::Ready(Err(e)) => {
                                     #[cfg(feature = "http2")]

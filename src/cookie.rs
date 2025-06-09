@@ -167,7 +167,7 @@ impl Jar {
         headers.get_all(SET_COOKIE).iter()
     }
     /// extract response cookie
-    pub async fn extract_response_cookies<'a>(
+    pub (crate)async fn extract_response_cookies<'a>(
         headers: &'a hyper::HeaderMap,
     ) -> impl Iterator<Item = Result<Cookie<'a>, CookieParseError>> + 'a {
         headers

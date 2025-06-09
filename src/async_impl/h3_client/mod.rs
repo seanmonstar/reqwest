@@ -6,7 +6,7 @@ mod pool;
 
 use crate::async_impl::body::ResponseBody;
 use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
-
+#[cfg(feature="cookies")]
 use crate::cookie::Jar;
 use crate::error::{BoxError, Error, Kind};
 use crate::{error, Body};
