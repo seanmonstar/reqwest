@@ -75,7 +75,7 @@ hickory-dns = ["dep:hickory-resolver"]
 
 stream = ["tokio/fs", "dep:futures-util", "dep:tokio-util", "dep:wasm-streams"]
 
-socks = ["dep:tokio-socks"]
+socks = []
 
 # Use the system's proxy configuration.
 system-proxy = ["hyper-util/client-proxy-system"]
@@ -156,9 +156,6 @@ cookie_store = { version = "0.21.0", optional = true }
 ## compression
 async-compression = { version = "0.4.0", default-features = false, features = ["tokio"], optional = true }
 tokio-util = { version = "0.7.9", default-features = false, features = ["codec", "io"], optional = true }
-
-## socks
-tokio-socks = { version = "0.5.2", optional = true }
 
 ## hickory-dns
 hickory-resolver = { version = "0.24", optional = true, features = ["tokio-runtime"] }
