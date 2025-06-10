@@ -5,11 +5,11 @@ use support::server;
 
 use std::env;
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use tokio::sync::Mutex;
 
 // serialize tests that read from / write to environment variables
-static HTTP_PROXY_ENV_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+static HTTP_PROXY_ENV_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 #[tokio::test]
 async fn http_proxy() {
