@@ -1,3 +1,9 @@
+## v0.12.20
+
+- Add `ClientBuilder::tcp_user_timeout(Duration)` option to set `TCP_USER_TIMEOUT`.
+- Fix proxy headers only using the first matched proxy.
+- (wasm) Fix re-adding `Error::is_status()`.
+
 ## v0.12.19
 
 - Fix redirect that changes the method to GET should remove payload headers.
