@@ -978,7 +978,7 @@ impl ClientBuilder {
                 config.cookie_store.clone(),
             );
             #[cfg(feature = "cookies")]
-            let h3_service = ServiceBuilder::new()
+            let h3_service = tower::ServiceBuilder::new()
                 .layer(cookie::CookieManagerLayer::new(config.cookie_store.clone()))
                 .service(h3_service);
             Some(FollowRedirect::with_policy(h3_service, policy))
