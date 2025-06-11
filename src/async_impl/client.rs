@@ -969,17 +969,10 @@ impl ClientBuilder {
 
         #[cfg(feature = "http3")]
         let h3_client = if let Some(h3_connector) = h3_connector {
-            #[cfg(not(feature = "cookies"))]
             let h3_service = H3Client::new(h3_connector, config.pool_idle_timeout);
             #[cfg(feature = "cookies")]
-            let h3_service = H3Client::new(
-                h3_connector,
-                config.pool_idle_timeout,
-                config.cookie_store.clone(),
-            );
-            #[cfg(feature = "cookies")]
             let h3_service = tower::ServiceBuilder::new()
-                .layer(cookie::CookieManagerLayer::new(config.cookie_store.clone()))
+                .layer(cookie::CookieManagerLayer::new(config.cookie_store))
                 .service(h3_service);
             Some(FollowRedirect::with_policy(h3_service, policy))
         } else {
