@@ -59,7 +59,7 @@ use quinn::TransportConfig;
 use quinn::VarInt;
 use tokio::time::Sleep;
 use tower::util::BoxCloneSyncServiceLayer;
-use tower::{Layer, Service, ServiceBuilder};
+use tower::{Layer, Service};
 use tower_http::follow_redirect::FollowRedirect;
 
 /// An asynchronous `Client` to make Requests with.
@@ -960,7 +960,7 @@ impl ClientBuilder {
             };
 
             #[cfg(feature = "cookies")]
-            let hyper_service = ServiceBuilder::new()
+            let hyper_service = tower::ServiceBuilder::new()
                 .layer(cookie::CookieManagerLayer::new(config.cookie_store.clone()))
                 .service(hyper_service);
 
