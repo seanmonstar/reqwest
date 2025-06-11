@@ -110,12 +110,6 @@ impl<'a> fmt::Debug for Cookie<'a> {
     }
 }
 
-pub(crate) fn extract_response_cookie_headers<'a>(
-    headers: &'a hyper::HeaderMap,
-) -> impl Iterator<Item = &'a HeaderValue> + 'a {
-    headers.get_all(SET_COOKIE).iter()
-}
-
 pub(crate) fn extract_response_cookies<'a>(
     headers: &'a hyper::HeaderMap,
 ) -> impl Iterator<Item = Result<Cookie<'a>, CookieParseError>> + 'a {
@@ -231,7 +225,11 @@ mod future {
             // If we have a cookie store, extract cookies from the response headers
             // and store them in the cookie store.
             if let Some(cookie_store) = this.cookie_store {
-                let mut cookies = super::extract_response_cookie_headers(res.headers()).peekable();
+                let mut cookies = res
+                    .headers()
+                    .get_all(http::header::SET_COOKIE)
+                    .iter()
+                    .peekable();
                 if cookies.peek().is_some() {
                     cookie_store.set_cookies(&mut cookies, &this.url);
                 }
@@ -283,8 +281,9 @@ mod service {
             // and add them to the request headers.
             if let Some(ref cookie_store) = self.cookie_store {
                 if req.headers().get(crate::header::COOKIE).is_none() {
-                    let headers = req.headers_mut();
-                    crate::util::add_cookie_header(headers, &**cookie_store, &url);
+                    if let Some(header) = cookie_store.cookies(&url) {
+                        req.headers_mut().insert(crate::header::COOKIE, header);
+                    }
                 }
             }
 
