@@ -243,7 +243,7 @@ mod future {
 }
 
 mod service {
-    //! Middleware to use [`Cookies`].
+    //! Middleware to use [\`CookieStore\`].
 
     use super::{future::ResponseFuture, CookieStore};
     use http::{Request, Response};
@@ -254,7 +254,7 @@ mod service {
     use tower::Layer;
     use tower_service::Service;
 
-    /// Middleware to use [`Cookies`].
+    /// Middleware to use [\`CookieStore\`].
     #[allow(missing_debug_implementations)]
     #[derive(Clone)]
     pub struct CookieManager<S> {
