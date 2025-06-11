@@ -208,7 +208,7 @@ mod future {
             #[pin]
             pub(crate) future: F,
             pub(crate) cookie_store: Option<Arc<dyn CookieStore>>,
-            pub(crate) url: url::Url,
+            pub(crate) url: Option<url::Url>,
         }
     }
 
@@ -225,13 +225,16 @@ mod future {
             // If we have a cookie store, extract cookies from the response headers
             // and store them in the cookie store.
             if let Some(cookie_store) = this.cookie_store {
-                let mut cookies = res
-                    .headers()
-                    .get_all(http::header::SET_COOKIE)
-                    .iter()
-                    .peekable();
-                if cookies.peek().is_some() {
-                    cookie_store.set_cookies(&mut cookies, &this.url);
+                if let Some(url) = this.url {
+                    // Extract the Set-Cookie headers from the response.
+                    let mut cookies = res
+                        .headers()
+                        .get_all(http::header::SET_COOKIE)
+                        .iter()
+                        .peekable();
+                    if cookies.peek().is_some() {
+                        cookie_store.set_cookies(&mut cookies, url);
+                    }
                 }
             }
 
@@ -275,14 +278,18 @@ mod service {
 
         fn call(&mut self, mut req: Request<ReqBody>) -> Self::Future {
             // Extract the request URL.
-            let url = url::Url::parse(&req.uri().to_string()).expect("invalid URL");
+            let mut url = None;
 
             // If we have a cookie store, check if there are any cookies for the URL
             // and add them to the request headers.
             if let Some(ref cookie_store) = self.cookie_store {
-                if req.headers().get(crate::header::COOKIE).is_none() {
-                    if let Some(header) = cookie_store.cookies(&url) {
-                        req.headers_mut().insert(crate::header::COOKIE, header);
+                url = url::Url::parse(&req.uri().to_string()).ok();
+                if let Some(url) = &url {
+                    // If the request does not already have a Cookie header, add it.
+                    if req.headers().get(crate::header::COOKIE).is_none() {
+                        if let Some(header) = cookie_store.cookies(url) {
+                            req.headers_mut().insert(crate::header::COOKIE, header);
+                        }
                     }
                 }
             }
