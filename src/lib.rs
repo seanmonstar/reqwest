@@ -256,9 +256,6 @@ compile_error!(
 );
 
 // Ignore `unused_crate_dependencies` warnings.
-// Used to pin the version.
-#[cfg(feature = "http3")]
-use slab as _;
 // Used in many features that they're not worth making it optional.
 use futures_core as _;
 use sync_wrapper as _;
