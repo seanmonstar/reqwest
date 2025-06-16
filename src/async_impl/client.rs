@@ -1027,8 +1027,8 @@ impl ClientBuilder {
                     #[cfg(not(feature = "__tls"))]
                     crate::connect::Inner::Http(_) => crate::arti::Tls::Http,
                     #[cfg(feature = "__rustls")]
-                    crate::connect::Inner::RustlsTls { tls, tls_proxy, .. } => {
-                        crate::arti::Tls::RustlsTls { tls, tls_proxy }
+                    crate::connect::Inner::RustlsTls { tls, .. } => {
+                        crate::arti::Tls::RustlsTls { tls }
                     }
                     #[cfg(feature = "default-tls")]
                     crate::connect::Inner::DefaultTls(_, tls_connector) => {

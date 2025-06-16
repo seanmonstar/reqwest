@@ -36,10 +36,7 @@ pub(crate) enum Tls {
     #[cfg(feature = "default-tls")]
     DefaultTls(native_tls_crate::TlsConnector),
     #[cfg(feature = "__rustls")]
-    RustlsTls {
-        tls: Arc<rustls::ClientConfig>,
-        tls_proxy: Arc<rustls::ClientConfig>,
-    },
+    RustlsTls { tls: Arc<rustls::ClientConfig> },
 }
 
 #[derive(Error, Clone, Debug)]
@@ -65,7 +62,7 @@ pub enum ConnectionError {
 
     /// TLS connection failed
     #[error("TLS connection failed")]
-    TLS(#[source] Arc<anyhow::Error>),
+    TLS(#[from] Arc<anyhow::Error>),
 }
 
 /// Convert uri to http\[s\] host and port, and whether to do tls
@@ -111,7 +108,7 @@ impl<R: Runtime> Service<Uri> for ArtiHttpConnector<R> {
         let tls_conn = self.tls_conn.clone();
         Box::pin(async move {
             // Extract the host and port to connect to from the URI.
-            let (host, port, use_tls) = uri_to_host_port_tls(req)?;
+            let (host, port, use_tls) = uri_to_host_port_tls(req.clone())?;
             // Initiate a new Tor connection, producing a `DataStream` if successful.
             let addr = (&host as &str, port)
                 .into_tor_addr()
@@ -139,17 +136,18 @@ impl<R: Runtime> Service<Uri> for ArtiHttpConnector<R> {
                     #[cfg(feature = "__rustls")]
                     Tls::RustlsTls { tls, .. } => {
                         use crate::connect::rustls_tls_conn::RustlsTlsConn;
+                        use anyhow::anyhow;
                         use tokio_rustls::TlsConnector as RustlsConnector;
 
                         let tls = tls.clone();
                         let server_name =
                             rustls_pki_types::ServerName::try_from(host.as_str().to_owned())
-                                .map_err(|_| "Invalid Server Name")
-                                .unwrap();
+                                .map_err(|_| ConnectionError::UnsupportedUriScheme { uri: req })?;
                         let io = RustlsConnector::from(tls)
                             .connect(server_name, ds)
                             .await
-                            .unwrap();
+                            .map_err(|e| Arc::new(anyhow!(e)))
+                            .map_err(ConnectionError::TLS)?;
                         let v: RustlsTlsConn<DataStream> = RustlsTlsConn {
                             inner: TokioIo::new(io),
                         };
