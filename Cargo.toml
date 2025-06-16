@@ -84,7 +84,22 @@ system-proxy = ["hyper-util/client-proxy-system"]
 macos-system-configuration = ["system-proxy"]
 
 # Experimental HTTP/3 client.
-http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
+http3 = [
+    "rustls-tls-manual-roots",
+    "dep:h3",
+    "dep:h3-quinn",
+    "dep:quinn",
+    "tokio/macros",
+]
+tor = [
+    "dep:arti-client",
+    "dep:tor-rtcompat",
+    "dep:tls-api",
+    "dep:tls-api-native-tls",
+    "dep:pin-project",
+    "dep:thiserror",
+    "dep:anyhow",
+]
 
 
 # Internal (PRIVATE!) features used to aid testing.
@@ -107,7 +122,7 @@ serde = "1.0"
 serde_urlencoded = "0.7.1"
 tower-service = "0.3"
 futures-core = { version = "0.3.28", default-features = false }
-futures-util = { version = "0.3.28", default-features = false, optional = true }
+futures-util = { version = "0.3", default-features = false, optional = true }
 sync_wrapper = { version = "1.0", features = ["futures"] }
 
 # Optional deps...
@@ -139,6 +154,15 @@ mime = { version = "0.3.16", optional = true }
 hyper-tls = { version = "0.6", optional = true }
 native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls" }
 tokio-native-tls = { version = "0.3.0", optional = true }
+
+## tor
+arti-client = { version = "0.31", optional = true }
+tor-rtcompat = { version = "0.31.0", optional = true }
+tls-api = { version = "0.12.0", optional = true }
+tls-api-native-tls = { version = "0.12.1", optional = true }
+pin-project = { version = "1.1.10", optional = true }
+thiserror = { version = "2.0.12", optional = true }
+anyhow = { version = "1.0.98", optional = true }
 
 # rustls-tls
 hyper-rustls = { version = "0.27.0", default-features = false, optional = true, features = ["http1", "tls12"] }

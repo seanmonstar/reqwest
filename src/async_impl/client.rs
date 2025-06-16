@@ -11,24 +11,35 @@ use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
 use std::{fmt, str};
 
+use super::Body;
 use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
-use super::Body;
-#[cfg(feature = "http3")]
-use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
+#[cfg(feature = "tor")]
+use crate::arti::ArtiHttpConnector;
+#[cfg(feature = "tor")]
+use tls_api::TlsConnector as _;
+#[cfg(feature = "tor")]
+use tls_api::TlsConnectorBuilder as _;
+
+#[cfg(feature = "__tls")]
+use crate::Certificate;
+#[cfg(any(feature = "native-tls", feature = "__rustls"))]
+use crate::Identity;
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::H3Client;
+#[cfg(feature = "http3")]
+use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 use crate::config::{RequestConfig, RequestTimeout};
 use crate::connect::{
-    sealed::{Conn, Unnameable},
     BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
+    sealed::{Conn, Unnameable},
 };
 #[cfg(feature = "cookies")]
 use crate::cookie;
 #[cfg(feature = "hickory-dns")]
 use crate::dns::hickory::HickoryDnsResolver;
-use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
+use crate::dns::{DnsResolverWithOverrides, DynResolver, Resolve, gai::GaiResolver};
 use crate::error::{self, BoxError};
 use crate::into_url::try_uri;
 use crate::proxy::Matcher as ProxyMatcher;
@@ -37,18 +48,16 @@ use crate::redirect::{self, TowerRedirectPolicy};
 use crate::tls::CertificateRevocationList;
 #[cfg(feature = "__tls")]
 use crate::tls::{self, TlsBackend};
-#[cfg(feature = "__tls")]
-use crate::Certificate;
-#[cfg(any(feature = "native-tls", feature = "__rustls"))]
-use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, Url};
 
+#[cfg(feature = "tor")]
+use arti_client::TorClient;
 use bytes::Bytes;
+use http::Uri;
 use http::header::{
-    Entry, HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, PROXY_AUTHORIZATION, RANGE, USER_AGENT,
+    ACCEPT, ACCEPT_ENCODING, Entry, HeaderMap, HeaderValue, PROXY_AUTHORIZATION, RANGE, USER_AGENT,
 };
 use http::uri::Scheme;
-use http::Uri;
 use hyper_util::client::legacy::connect::HttpConnector;
 #[cfg(feature = "default-tls")]
 use native_tls_crate::TlsConnector;
@@ -58,6 +67,8 @@ use quinn::TransportConfig;
 #[cfg(feature = "http3")]
 use quinn::VarInt;
 use tokio::time::Sleep;
+#[cfg(feature = "tor")]
+use tor_rtcompat::PreferredRuntime;
 use tower::util::BoxCloneSyncServiceLayer;
 use tower::{Layer, Service};
 use tower_http::follow_redirect::FollowRedirect;
@@ -84,6 +95,8 @@ pub struct Client {
 #[must_use]
 pub struct ClientBuilder {
     config: Config,
+    #[cfg(feature = "tor")]
+    tor: Option<TorClient<PreferredRuntime>>,
 }
 
 enum HttpVersionPref {
@@ -102,20 +115,45 @@ struct HyperService {
     hyper: HyperClient,
 }
 
+#[derive(Clone)]
+pub enum HyperClient {
+    #[allow(dead_code)]
+    #[cfg(feature = "tor")]
+    Tor(
+        hyper_util::client::legacy::Client<
+            ArtiHttpConnector<PreferredRuntime, tls_api_native_tls::TlsConnector>,
+            Body,
+        >,
+    ),
+    NonTor(hyper_util::client::legacy::Client<Connector, Body>),
+}
+
 impl Service<hyper::Request<crate::async_impl::body::Body>> for HyperService {
     type Error = crate::Error;
     type Response = http::Response<hyper::body::Incoming>;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.hyper.poll_ready(cx).map_err(crate::error::request)
+        match &mut self.hyper {
+            #[cfg(feature = "tor")]
+            HyperClient::Tor(client) => client.poll_ready(cx).map_err(crate::error::request),
+            HyperClient::NonTor(client) => client.poll_ready(cx).map_err(crate::error::request),
+        }
     }
 
     #[cfg(not(feature = "cookies"))]
     fn call(&mut self, req: hyper::Request<crate::async_impl::body::Body>) -> Self::Future {
         let clone = self.hyper.clone();
         let mut inner = std::mem::replace(&mut self.hyper, clone);
-        Box::pin(async move { inner.call(req).await.map_err(crate::error::request) })
+        Box::pin(async move {
+            match &mut inner {
+                #[cfg(feature = "tor")]
+                HyperClient::Tor(client) => client.call(req).await.map_err(crate::error::request),
+                HyperClient::NonTor(client) => {
+                    client.call(req).await.map_err(crate::error::request)
+                }
+            }
+        })
     }
 
     #[cfg(feature = "cookies")]
@@ -273,6 +311,7 @@ impl ClientBuilder {
         headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
 
         ClientBuilder {
+            tor: None,
             config: Config {
                 error: None,
                 accepts: Accepts::default(),
@@ -382,6 +421,13 @@ impl ClientBuilder {
                 dns_resolver: None,
             },
         }
+    }
+
+    #[cfg(feature = "tor")]
+    /// Creates tor client from config
+    /// Example: `ClientBuilder::tor(Default::default())`
+    pub async fn tor(config: arti_client::TorClientConfig) -> Result<Self, arti_client::Error> {
+        Ok(Self::new().set_tor(TorClient::create_bootstrapped(config).await?))
     }
 }
 
@@ -981,7 +1027,24 @@ impl ClientBuilder {
             Some(format!("{:?}", &config.redirect_policy))
         };
 
-        let hyper_client = builder.build(connector_builder.build(config.connector_layers));
+        #[cfg(feature = "tor")]
+        let hyper_client = match self.tor {
+            Some(tor) => {
+                let tls_connector = tls_api_native_tls::TlsConnector::builder()
+                    .unwrap()
+                    .build()
+                    .unwrap();
+                HyperClient::Tor(builder.build(ArtiHttpConnector::new(tor, tls_connector)))
+            }
+            None => {
+                HyperClient::NonTor(builder.build(connector_builder.build(config.connector_layers)))
+            }
+        };
+        #[cfg(not(feature = "tor"))]
+        let hyper_client = {
+            HyperClient::NonTor(builder.build(connector_builder.build(config.connector_layers)))
+        };
+
         let hyper_service = HyperService {
             #[cfg(feature = "cookies")]
             cookie_store: config.cookie_store.clone(),
@@ -1031,6 +1094,13 @@ impl ClientBuilder {
                 redirect_policy_desc,
             }),
         })
+    }
+
+    #[cfg(feature = "tor")]
+    /// Set tor client
+    pub fn set_tor(mut self, client: arti_client::TorClient<PreferredRuntime>) -> Self {
+        self.tor = Some(client);
+        self
     }
 
     // Higher-level options
@@ -2328,8 +2398,6 @@ impl ClientBuilder {
     }
 }
 
-type HyperClient = hyper_util::client::legacy::Client<Connector, super::Body>;
-
 impl Default for Client {
     fn default() -> Self {
         Self::new()
@@ -2348,6 +2416,22 @@ impl Client {
     /// instead of panicking.
     pub fn new() -> Client {
         ClientBuilder::new().build().expect("Client::new()")
+    }
+
+    /// Constructs a new `Client`.
+    /// # Panics
+    ///
+    /// This method panics if a TLS backend cannot be initialized, or the resolver
+    /// cannot load the system configuration, or the tor client cannot be initialized.
+    ///
+    /// Use `Client::builder()` if you wish to handle the failure as an `Error`
+    /// instead of panicking.
+    pub async fn tor() -> Client {
+        ClientBuilder::tor(Default::default())
+            .await
+            .expect("TorClient::new()")
+            .build()
+            .expect("Client::new()")
     }
 
     /// Creates a `ClientBuilder` to configure a `Client`.

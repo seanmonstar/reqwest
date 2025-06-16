@@ -379,6 +379,8 @@ if_hyper! {
     #[cfg(feature = "__tls")]
     pub mod tls;
     mod util;
+    #[cfg(feature = "tor")]
+    mod arti;
 }
 
 if_wasm! {
