@@ -2417,6 +2417,7 @@ impl Client {
         ClientBuilder::new().build().expect("Client::new()")
     }
 
+    #[cfg(feature = "tor")]
     /// Constructs a new `Client`.
     /// # Panics
     ///
