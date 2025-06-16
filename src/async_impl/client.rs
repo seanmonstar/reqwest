@@ -2419,12 +2419,15 @@ impl Client {
 
     #[cfg(feature = "tor")]
     /// Constructs a new `Client`.
+    /// # MacOS panics
+    /// nativetls doesnt work on macos with tor. use `rustls-tls` feature and use `ClientBuilder::tor(Default::default()).await?.use_rustls_tls().build()?`
+    ///
     /// # Panics
     ///
     /// This method panics if a TLS backend cannot be initialized, or the resolver
     /// cannot load the system configuration, or the tor client cannot be initialized.
     ///
-    /// Use `Client::builder()` if you wish to handle the failure as an `Error`
+    /// Use `reqwest::ClientBuilder::tor(Default::default())` or `reqwest::ClientBuilder::new().set_tor(client)` if you wish to handle the failure as an `Error`
     /// instead of panicking.
     pub async fn tor() -> Client {
         ClientBuilder::tor(Default::default())
