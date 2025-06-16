@@ -17,10 +17,6 @@ use super::response::Response;
 use super::Body;
 #[cfg(feature = "tor")]
 use crate::arti::ArtiHttpConnector;
-#[cfg(feature = "tor")]
-use tls_api::TlsConnector as _;
-#[cfg(feature = "tor")]
-use tls_api::TlsConnectorBuilder as _;
 
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
@@ -119,12 +115,7 @@ struct HyperService {
 pub enum HyperClient {
     #[allow(dead_code)]
     #[cfg(feature = "tor")]
-    Tor(
-        hyper_util::client::legacy::Client<
-            ArtiHttpConnector<PreferredRuntime, tls_api_native_tls::TlsConnector>,
-            Body,
-        >,
-    ),
+    Tor(hyper_util::client::legacy::Client<ArtiHttpConnector<PreferredRuntime>, Body>),
     NonTor(hyper_util::client::legacy::Client<Connector, Body>),
 }
 
@@ -1030,13 +1021,21 @@ impl ClientBuilder {
 
         #[cfg(feature = "tor")]
         let hyper_client = match self.tor {
-            Some(tor) => {
-                let tls_connector = tls_api_native_tls::TlsConnector::builder()
-                    .unwrap()
-                    .build()
-                    .unwrap();
-                HyperClient::Tor(builder.build(ArtiHttpConnector::new(tor, tls_connector)))
-            }
+            Some(tor) => HyperClient::Tor(builder.build(ArtiHttpConnector::new(
+                tor,
+                match connector_builder.inner {
+                    #[cfg(not(feature = "__tls"))]
+                    crate::connect::Inner::Http(_) => crate::arti::Tls::Http,
+                    #[cfg(feature = "__rustls")]
+                    crate::connect::Inner::RustlsTls { tls, tls_proxy, .. } => {
+                        crate::arti::Tls::RustlsTls { tls, tls_proxy }
+                    }
+                    #[cfg(feature = "default-tls")]
+                    crate::connect::Inner::DefaultTls(_, tls_connector) => {
+                        crate::arti::Tls::DefaultTls(tls_connector)
+                    }
+                },
+            ))),
             None => {
                 HyperClient::NonTor(builder.build(connector_builder.build(config.connector_layers)))
             }

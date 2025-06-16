@@ -68,7 +68,7 @@ pub(crate) type BoxedConnectorLayer =
     BoxCloneSyncServiceLayer<BoxedConnectorService, Unnameable, Conn, BoxError>;
 
 pub(crate) struct ConnectorBuilder {
-    inner: Inner,
+    pub(crate) inner: Inner,
     proxies: Arc<Vec<ProxyMatcher>>,
     verbose: verbose::Wrapper,
     timeout: Option<Duration>,
@@ -460,7 +460,7 @@ pub(crate) struct ConnectorService {
 }
 
 #[derive(Clone)]
-enum Inner {
+pub(crate) enum Inner {
     #[cfg(not(feature = "__tls"))]
     Http(HttpConnector),
     #[cfg(feature = "default-tls")]
@@ -1008,7 +1008,7 @@ pub(crate) mod sealed {
 pub(crate) type Connecting = Pin<Box<dyn Future<Output = Result<Conn, BoxError>> + Send>>;
 
 #[cfg(feature = "default-tls")]
-mod native_tls_conn {
+pub(crate) mod native_tls_conn {
     use super::TlsInfoFactory;
     use hyper::rt::{Read, ReadBufCursor, Write};
     use hyper_tls::MaybeHttpsStream;
@@ -1025,8 +1025,8 @@ mod native_tls_conn {
     use tokio_native_tls::TlsStream;
 
     pin_project! {
-        pub(super) struct NativeTlsConn<T> {
-            #[pin] pub(super) inner: TokioIo<TlsStream<T>>,
+        pub(crate) struct NativeTlsConn<T> {
+            #[pin] pub inner: TokioIo<TlsStream<T>>,
         }
     }
 
@@ -1132,7 +1132,7 @@ mod native_tls_conn {
 }
 
 #[cfg(feature = "__rustls")]
-mod rustls_tls_conn {
+pub(crate) mod rustls_tls_conn {
     use super::TlsInfoFactory;
     use hyper::rt::{Read, ReadBufCursor, Write};
     use hyper_rustls::MaybeHttpsStream;
@@ -1149,8 +1149,8 @@ mod rustls_tls_conn {
     use tokio_rustls::client::TlsStream;
 
     pin_project! {
-        pub(super) struct RustlsTlsConn<T> {
-            #[pin] pub(super) inner: TokioIo<TlsStream<T>>,
+        pub(crate) struct RustlsTlsConn<T> {
+            #[pin] pub inner: TokioIo<TlsStream<T>>,
         }
     }
 

@@ -1,17 +1,20 @@
 use std::{
     future::Future,
     mem::MaybeUninit,
-    pin::Pin,
+    pin::{pin, Pin},
     sync::Arc,
     task::{Context, Poll},
 };
 
 use arti_client::{DataStream, IntoTorAddr, TorClient};
 use http::{uri::Scheme, Uri};
+#[cfg(any(feature = "default-tls", feature = "__rustls"))]
+use hyper::rt::Write;
 use hyper_util::client::legacy::connect::{Connected, Connection};
+#[cfg(any(feature = "default-tls", feature = "__rustls"))]
+use hyper_util::rt::TokioIo;
 use pin_project::pin_project;
 use thiserror::Error;
-use tls_api::TlsConnector as TlsConn;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tor_rtcompat::Runtime;
 use tower_service::Service;
@@ -24,6 +27,19 @@ enum UseTls {
 
     /// Yes
     Tls,
+}
+
+#[derive(Clone)]
+pub(crate) enum Tls {
+    #[cfg(not(feature = "__tls"))]
+    Http,
+    #[cfg(feature = "default-tls")]
+    DefaultTls(native_tls_crate::TlsConnector),
+    #[cfg(feature = "__rustls")]
+    RustlsTls {
+        tls: Arc<rustls::ClientConfig>,
+        tls_proxy: Arc<rustls::ClientConfig>,
+    },
 }
 
 #[derive(Error, Clone, Debug)]
@@ -77,8 +93,8 @@ fn uri_to_host_port_tls(uri: Uri) -> Result<(String, u16, UseTls), ConnectionErr
     Ok((host.to_owned(), port, use_tls))
 }
 
-impl<R: Runtime, TC: TlsConn> Service<Uri> for ArtiHttpConnector<R, TC> {
-    type Response = ArtiHttpConnection<TC>;
+impl<R: Runtime> Service<Uri> for ArtiHttpConnector<R> {
+    type Response = ArtiHttpConnection;
     type Error = ConnectionError;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -103,13 +119,43 @@ impl<R: Runtime, TC: TlsConn> Service<Uri> for ArtiHttpConnector<R, TC> {
             let ds = client.connect(addr).await?;
 
             let inner = match use_tls {
-                UseTls::Tls => {
-                    let conn = tls_conn
-                        .connect_impl_tls_stream(&host, ds)
-                        .await
-                        .map_err(|e| ConnectionError::TLS(e.into()))?;
-                    MaybeHttpsStream::Https(conn)
-                }
+                UseTls::Tls => match &*tls_conn {
+                    #[cfg(feature = "default-tls")]
+                    Tls::DefaultTls(tls_connector) => {
+                        use crate::connect::native_tls_conn::NativeTlsConn;
+
+                        let tls_connector =
+                            tokio_native_tls::TlsConnector::from(tls_connector.clone());
+
+                        let connect = tls_connector.connect(&host, ds).await.unwrap();
+
+                        let v: NativeTlsConn<DataStream> = NativeTlsConn {
+                            inner: TokioIo::new(connect),
+                        };
+                        MaybeHttpsStream::NativeHttps(v)
+                    }
+                    #[cfg(not(feature = "__tls"))]
+                    Tls::Http => MaybeHttpsStream::Http(Box::new(ds).into()),
+                    #[cfg(feature = "__rustls")]
+                    Tls::RustlsTls { tls, .. } => {
+                        use crate::connect::rustls_tls_conn::RustlsTlsConn;
+                        use tokio_rustls::TlsConnector as RustlsConnector;
+
+                        let tls = tls.clone();
+                        let server_name =
+                            rustls_pki_types::ServerName::try_from(host.as_str().to_owned())
+                                .map_err(|_| "Invalid Server Name")
+                                .unwrap();
+                        let io = RustlsConnector::from(tls)
+                            .connect(server_name, ds)
+                            .await
+                            .unwrap();
+                        let v: RustlsTlsConn<DataStream> = RustlsTlsConn {
+                            inner: TokioIo::new(io),
+                        };
+                        MaybeHttpsStream::RustLsHttps(v)
+                    }
+                },
                 UseTls::Bare => MaybeHttpsStream::Http(Box::new(ds).into()),
             };
 
@@ -118,15 +164,15 @@ impl<R: Runtime, TC: TlsConn> Service<Uri> for ArtiHttpConnector<R, TC> {
     }
 }
 
-pub struct ArtiHttpConnector<R: Runtime, TC: TlsConn> {
+pub struct ArtiHttpConnector<R: Runtime> {
     /// The client
     client: Arc<TorClient<R>>,
 
     /// TLS for using across Tor.
-    tls_conn: Arc<TC>,
+    tls_conn: Arc<Tls>,
 }
 
-impl<R: Runtime, TC: TlsConn> Clone for ArtiHttpConnector<R, TC> {
+impl<R: Runtime> Clone for ArtiHttpConnector<R> {
     fn clone(&self) -> Self {
         Self {
             client: self.client.clone(),
@@ -135,9 +181,9 @@ impl<R: Runtime, TC: TlsConn> Clone for ArtiHttpConnector<R, TC> {
     }
 }
 
-impl<R: Runtime, TC: TlsConn> ArtiHttpConnector<R, TC> {
+impl<R: Runtime> ArtiHttpConnector<R> {
     /// Make a new `ArtiHttpConnector` using an Arti `TorClient` object.
-    pub fn new(client: TorClient<R>, tls_conn: TC) -> Self {
+    pub fn new(client: TorClient<R>, tls_conn: Tls) -> Self {
         let tls_conn = tls_conn.into();
         Self {
             client: Arc::new(client),
@@ -147,44 +193,33 @@ impl<R: Runtime, TC: TlsConn> ArtiHttpConnector<R, TC> {
 }
 
 #[pin_project]
-pub struct ArtiHttpConnection<TC: TlsConn> {
+pub struct ArtiHttpConnection {
     /// The stream
     #[pin]
-    inner: MaybeHttpsStream<TC>,
+    inner: MaybeHttpsStream,
 }
 
 /// The actual actual stream; might be TLS, might not
 #[pin_project(project = MaybeHttpsStreamProj)]
-enum MaybeHttpsStream<TC: TlsConn> {
+enum MaybeHttpsStream {
     /// http
     Http(Pin<Box<DataStream>>), // Tc:TlsStream is generally boxed; box this one too
 
+    #[cfg(feature = "default-tls")]
     /// https
-    Https(#[pin] TC::TlsStream),
+    NativeHttps(#[pin] crate::connect::native_tls_conn::NativeTlsConn<DataStream>),
+    #[cfg(feature = "__rustls")]
+    /// https
+    RustLsHttps(#[pin] crate::connect::rustls_tls_conn::RustlsTlsConn<DataStream>),
 }
 
-impl<TC: TlsConn> Connection for ArtiHttpConnection<TC> {
+impl Connection for ArtiHttpConnection {
     fn connected(&self) -> Connected {
         Connected::new()
     }
 }
 
-// These trait implementations just defer to the inner `DataStream`; the wrapper type is just
-// there to implement the `Connection` trait.
-impl<TC: TlsConn> AsyncRead for ArtiHttpConnection<TC> {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
-        match self.project().inner.project() {
-            MaybeHttpsStreamProj::Http(ds) => ds.as_mut().poll_read(cx, buf),
-            MaybeHttpsStreamProj::Https(t) => t.poll_read(cx, buf),
-        }
-    }
-}
-
-impl<TC: TlsConn> AsyncWrite for ArtiHttpConnection<TC> {
+impl AsyncWrite for ArtiHttpConnection {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -192,14 +227,26 @@ impl<TC: TlsConn> AsyncWrite for ArtiHttpConnection<TC> {
     ) -> Poll<Result<usize, std::io::Error>> {
         match self.project().inner.project() {
             MaybeHttpsStreamProj::Http(ds) => ds.as_mut().poll_write(cx, buf),
-            MaybeHttpsStreamProj::Https(t) => t.poll_write(cx, buf),
+            #[cfg(feature = "default-tls")]
+            MaybeHttpsStreamProj::NativeHttps(t) => {
+                let inner = t.project().inner;
+                inner.poll_write(cx, buf)
+            }
+            #[cfg(feature = "__rustls")]
+            MaybeHttpsStreamProj::RustLsHttps(t) => {
+                let inner = t.project().inner;
+                inner.poll_write(cx, buf)
+            }
         }
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
         match self.project().inner.project() {
             MaybeHttpsStreamProj::Http(ds) => ds.as_mut().poll_flush(cx),
-            MaybeHttpsStreamProj::Https(t) => t.poll_flush(cx),
+            #[cfg(feature = "default-tls")]
+            MaybeHttpsStreamProj::NativeHttps(t) => t.project().inner.poll_flush(cx),
+            #[cfg(feature = "__rustls")]
+            MaybeHttpsStreamProj::RustLsHttps(t) => t.project().inner.poll_flush(cx),
         }
     }
 
@@ -209,33 +256,41 @@ impl<TC: TlsConn> AsyncWrite for ArtiHttpConnection<TC> {
     ) -> Poll<Result<(), std::io::Error>> {
         match self.project().inner.project() {
             MaybeHttpsStreamProj::Http(ds) => ds.as_mut().poll_shutdown(cx),
-            MaybeHttpsStreamProj::Https(t) => t.poll_shutdown(cx),
+            #[cfg(feature = "default-tls")]
+            MaybeHttpsStreamProj::NativeHttps(t) => t.project().inner.poll_shutdown(cx),
+            #[cfg(feature = "__rustls")]
+            MaybeHttpsStreamProj::RustLsHttps(t) => t.project().inner.poll_shutdown(cx),
         }
     }
 }
 
-impl<TC: TlsConn> hyper::rt::Read for ArtiHttpConnection<TC> {
+impl hyper::rt::Read for ArtiHttpConnection {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         mut buf: hyper::rt::ReadBufCursor<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
-        let data: &mut [MaybeUninit<u8>] = unsafe { buf.as_mut() };
-        let mut read_buf = ReadBuf::uninit(data);
-        let inner_read = match self.project().inner.project() {
-            MaybeHttpsStreamProj::Http(ds) => ds.as_mut().poll_read(cx, &mut read_buf),
-            MaybeHttpsStreamProj::Https(t) => t.poll_read(cx, &mut read_buf),
-        };
-        match inner_read {
-            Poll::Ready(Ok(())) => {
-                let n = read_buf.filled().len();
-                unsafe {
-                    buf.advance(n);
+        match self.project().inner.project() {
+            MaybeHttpsStreamProj::Http(ds) => {
+                let data: &mut [MaybeUninit<u8>] = unsafe { buf.as_mut() };
+                let mut read_buf = ReadBuf::uninit(data);
+                let inner_read = ds.as_mut().poll_read(cx, &mut read_buf);
+                match inner_read {
+                    Poll::Ready(Ok(())) => {
+                        let n = read_buf.filled().len();
+                        unsafe {
+                            buf.advance(n);
+                        }
+                        Poll::Ready(Ok(()))
+                    }
+                    Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+                    Poll::Pending => Poll::Pending,
                 }
-                Poll::Ready(Ok(()))
             }
-            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
-            Poll::Pending => Poll::Pending,
+            #[cfg(feature = "__rustls")]
+            MaybeHttpsStreamProj::RustLsHttps(t) => t.project().inner.poll_read(cx, buf),
+            #[cfg(feature = "default-tls")]
+            MaybeHttpsStreamProj::NativeHttps(t) => t.project().inner.poll_read(cx, buf),
         }
     }
 }
@@ -244,7 +299,7 @@ impl<TC: TlsConn> hyper::rt::Read for ArtiHttpConnection<TC> {
 ///
 /// [`AsyncWrite`]: tokio::io::AsyncWrite
 /// [`Write`]: hyper::rt::Write
-impl<TC: TlsConn> hyper::rt::Write for ArtiHttpConnection<TC> {
+impl hyper::rt::Write for ArtiHttpConnection {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -252,14 +307,20 @@ impl<TC: TlsConn> hyper::rt::Write for ArtiHttpConnection<TC> {
     ) -> Poll<Result<usize, std::io::Error>> {
         match self.project().inner.project() {
             MaybeHttpsStreamProj::Http(ds) => ds.as_mut().poll_write(cx, buf),
-            MaybeHttpsStreamProj::Https(t) => t.poll_write(cx, buf),
+            #[cfg(feature = "default-tls")]
+            MaybeHttpsStreamProj::NativeHttps(t) => t.project().inner.poll_write(cx, buf),
+            #[cfg(feature = "__rustls")]
+            MaybeHttpsStreamProj::RustLsHttps(t) => t.project().inner.poll_write(cx, buf),
         }
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
         match self.project().inner.project() {
             MaybeHttpsStreamProj::Http(ds) => ds.as_mut().poll_flush(cx),
-            MaybeHttpsStreamProj::Https(t) => t.poll_flush(cx),
+            #[cfg(feature = "__rustls")]
+            MaybeHttpsStreamProj::RustLsHttps(t) => t.project().inner.poll_flush(cx),
+            #[cfg(feature = "default-tls")]
+            MaybeHttpsStreamProj::NativeHttps(t) => t.project().inner.poll_flush(cx),
         }
     }
 
@@ -269,14 +330,20 @@ impl<TC: TlsConn> hyper::rt::Write for ArtiHttpConnection<TC> {
     ) -> Poll<Result<(), std::io::Error>> {
         match self.project().inner.project() {
             MaybeHttpsStreamProj::Http(ds) => ds.as_mut().poll_shutdown(cx),
-            MaybeHttpsStreamProj::Https(t) => t.poll_shutdown(cx),
+            #[cfg(feature = "__rustls")]
+            MaybeHttpsStreamProj::RustLsHttps(t) => t.project().inner.poll_shutdown(cx),
+            #[cfg(feature = "default-tls")]
+            MaybeHttpsStreamProj::NativeHttps(t) => t.project().inner.poll_shutdown(cx),
         }
     }
 
     fn is_write_vectored(&self) -> bool {
         match &self.inner {
             MaybeHttpsStream::Http(ds) => ds.is_write_vectored(),
-            MaybeHttpsStream::Https(t) => t.is_write_vectored(),
+            #[cfg(feature = "__rustls")]
+            MaybeHttpsStream::RustLsHttps(t) => t.inner.is_write_vectored(),
+            #[cfg(feature = "default-tls")]
+            MaybeHttpsStream::NativeHttps(t) => t.inner.is_write_vectored(),
         }
     }
 
@@ -287,7 +354,10 @@ impl<TC: TlsConn> hyper::rt::Write for ArtiHttpConnection<TC> {
     ) -> Poll<Result<usize, std::io::Error>> {
         match self.project().inner.project() {
             MaybeHttpsStreamProj::Http(ds) => ds.as_mut().poll_write_vectored(cx, bufs),
-            MaybeHttpsStreamProj::Https(t) => t.poll_write_vectored(cx, bufs),
+            #[cfg(feature = "__rustls")]
+            MaybeHttpsStreamProj::RustLsHttps(t) => t.project().inner.poll_write_vectored(cx, bufs),
+            #[cfg(feature = "default-tls")]
+            MaybeHttpsStreamProj::NativeHttps(t) => t.project().inner.poll_write_vectored(cx, bufs),
         }
     }
 }
