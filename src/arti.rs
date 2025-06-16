@@ -124,7 +124,11 @@ impl<R: Runtime> Service<Uri> for ArtiHttpConnector<R> {
                         let tls_connector =
                             tokio_native_tls::TlsConnector::from(tls_connector.clone());
 
-                        let connect = tls_connector.connect(&host, ds).await.unwrap();
+                        let connect = tls_connector
+                            .connect(&host, ds)
+                            .await
+                            .map_err(|e| Arc::new(anyhow::anyhow!(e)))
+                            .map_err(ConnectionError::TLS)?;
 
                         let v: NativeTlsConn<DataStream> = NativeTlsConn {
                             inner: TokioIo::new(connect),
