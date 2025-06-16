@@ -113,7 +113,6 @@ struct HyperService {
 
 #[derive(Clone)]
 pub enum HyperClient {
-    #[allow(dead_code)]
     #[cfg(feature = "tor")]
     Tor(hyper_util::client::legacy::Client<ArtiHttpConnector<PreferredRuntime>, Body>),
     NonTor(hyper_util::client::legacy::Client<Connector, Body>),
