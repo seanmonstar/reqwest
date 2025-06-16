@@ -11,10 +11,10 @@ use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
 use std::{fmt, str};
 
-use super::Body;
 use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
+use super::Body;
 #[cfg(feature = "tor")]
 use crate::arti::ArtiHttpConnector;
 #[cfg(feature = "tor")]
@@ -22,24 +22,20 @@ use tls_api::TlsConnector as _;
 #[cfg(feature = "tor")]
 use tls_api::TlsConnectorBuilder as _;
 
-#[cfg(feature = "__tls")]
-use crate::Certificate;
-#[cfg(any(feature = "native-tls", feature = "__rustls"))]
-use crate::Identity;
-#[cfg(feature = "http3")]
-use crate::async_impl::h3_client::H3Client;
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
+#[cfg(feature = "http3")]
+use crate::async_impl::h3_client::H3Client;
 use crate::config::{RequestConfig, RequestTimeout};
 use crate::connect::{
-    BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
     sealed::{Conn, Unnameable},
+    BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
 };
 #[cfg(feature = "cookies")]
 use crate::cookie;
 #[cfg(feature = "hickory-dns")]
 use crate::dns::hickory::HickoryDnsResolver;
-use crate::dns::{DnsResolverWithOverrides, DynResolver, Resolve, gai::GaiResolver};
+use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
 use crate::error::{self, BoxError};
 use crate::into_url::try_uri;
 use crate::proxy::Matcher as ProxyMatcher;
@@ -48,16 +44,20 @@ use crate::redirect::{self, TowerRedirectPolicy};
 use crate::tls::CertificateRevocationList;
 #[cfg(feature = "__tls")]
 use crate::tls::{self, TlsBackend};
+#[cfg(feature = "__tls")]
+use crate::Certificate;
+#[cfg(any(feature = "native-tls", feature = "__rustls"))]
+use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, Url};
 
 #[cfg(feature = "tor")]
 use arti_client::TorClient;
 use bytes::Bytes;
-use http::Uri;
 use http::header::{
-    ACCEPT, ACCEPT_ENCODING, Entry, HeaderMap, HeaderValue, PROXY_AUTHORIZATION, RANGE, USER_AGENT,
+    Entry, HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, PROXY_AUTHORIZATION, RANGE, USER_AGENT,
 };
 use http::uri::Scheme;
+use http::Uri;
 use hyper_util::client::legacy::connect::HttpConnector;
 #[cfg(feature = "default-tls")]
 use native_tls_crate::TlsConnector;
@@ -311,6 +311,7 @@ impl ClientBuilder {
         headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
 
         ClientBuilder {
+            #[cfg(feature = "tor")]
             tor: None,
             config: Config {
                 error: None,
