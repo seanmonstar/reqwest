@@ -19,14 +19,14 @@
 //! - Uses [TLS](#tls) by default
 //! - Cookies
 //!
-//! The [`reqwest::Client`][client] is asynchronous. For applications wishing
-//! to only make a few HTTP requests, the [`reqwest::blocking`](blocking) API
-//! may be more convenient.
+//! The [`reqwest::Client`][client] is asynchronous (requiring Tokio). For
+//! applications wishing  to only make a few HTTP requests, the
+//! [`reqwest::blocking`](blocking) API may be more convenient.
 //!
 //! Additional learning resources include:
 //!
 //! - [The Rust Cookbook](https://rust-lang-nursery.github.io/rust-cookbook/web/clients.html)
-//! - [Reqwest Repository Examples](https://github.com/seanmonstar/reqwest/tree/master/examples)
+//! - [reqwest Repository Examples](https://github.com/seanmonstar/reqwest/tree/master/examples)
 //!
 //! ## Commercial Support
 //!
@@ -256,9 +256,6 @@ compile_error!(
 );
 
 // Ignore `unused_crate_dependencies` warnings.
-// Used to pin the version.
-#[cfg(feature = "http3")]
-use slab as _;
 // Used in many features that they're not worth making it optional.
 use futures_core as _;
 use sync_wrapper as _;
