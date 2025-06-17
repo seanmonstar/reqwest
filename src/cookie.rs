@@ -199,16 +199,25 @@ mod future {
         future::Future,
         pin::Pin,
         sync::Arc,
-        task::{Context, Poll},
+        task::{ready, Context, Poll},
     };
+    use url::Url;
 
     pin_project! {
         /// Response future for [`CookieManager`].
-        pub struct ResponseFuture<F> {
-            #[pin]
-            pub(crate) future: F,
-            pub(crate) cookie_store: Option<Arc<dyn CookieStore>>,
-            pub(crate) url: Option<url::Url>,
+        #[allow(missing_docs)]
+        #[project=ResponseFutureProj]
+        pub enum ResponseFuture<F> {
+            WithCookieStore {
+                #[pin]
+                future: F,
+                cookie_store: Arc<dyn CookieStore>,
+                url: Option<Url>,
+            },
+            WithoutCookieStore {
+                #[pin]
+                future: F,
+            },
         }
     }
 
@@ -219,26 +228,31 @@ mod future {
         type Output = F::Output;
 
         fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-            let this = self.project();
-            let res = std::task::ready!(this.future.poll(cx)?);
-
-            // If we have a cookie store, extract cookies from the response headers
-            // and store them in the cookie store.
-            if let Some(cookie_store) = this.cookie_store {
-                if let Some(url) = this.url {
-                    // Extract the Set-Cookie headers from the response.
-                    let mut cookies = res
-                        .headers()
-                        .get_all(http::header::SET_COOKIE)
-                        .iter()
-                        .peekable();
-                    if cookies.peek().is_some() {
-                        cookie_store.set_cookies(&mut cookies, url);
+            match self.project() {
+                ResponseFutureProj::WithCookieStore {
+                    future,
+                    cookie_store,
+                    url,
+                } => {
+                    let res = ready!(future.poll(cx)?);
+                    if let Some(url) = url {
+                        let mut cookies = res
+                            .headers()
+                            .get_all(http::header::SET_COOKIE)
+                            .iter()
+                            .peekable();
+                        if cookies.peek().is_some() {
+                            cookie_store.set_cookies(&mut cookies, &*url);
+                        }
                     }
+
+                    Poll::Ready(Ok(res))
+                }
+                ResponseFutureProj::WithoutCookieStore { mut future } => {
+                    let res = ready!(future.as_mut().poll(cx)?);
+                    Poll::Ready(Ok(res))
                 }
             }
-
-            Poll::Ready(Ok(res))
         }
     }
 }
@@ -247,7 +261,7 @@ mod service {
     //! Middleware to use [\`CookieStore\`].
 
     use super::{future::ResponseFuture, CookieStore};
-    use http::{Request, Response};
+    use http::{header::COOKIE, Request, Response};
     use std::{
         sync::Arc,
         task::{Context, Poll},
@@ -277,27 +291,31 @@ mod service {
         }
 
         fn call(&mut self, mut req: Request<ReqBody>) -> Self::Future {
-            // Extract the request URL.
-            let mut url = None;
-
-            // If we have a cookie store, check if there are any cookies for the URL
-            // and add them to the request headers.
+            // If a cookie store is present, inject cookies for this URL if not already set.
             if let Some(ref cookie_store) = self.cookie_store {
-                url = url::Url::parse(&req.uri().to_string()).ok();
-                if let Some(url) = &url {
-                    // If the request does not already have a Cookie header, add it.
-                    if req.headers().get(crate::header::COOKIE).is_none() {
-                        if let Some(header) = cookie_store.cookies(url) {
-                            req.headers_mut().insert(crate::header::COOKIE, header);
+                // Try to extract the request URL.
+                let mut url = None;
+                if req.headers().get(COOKIE).is_none() {
+                    url = url::Url::parse(&req.uri().to_string()).ok();
+
+                    if let Some(ref url) = url {
+                        let headers = req.headers_mut();
+                        if let Some(cookie_headers) = cookie_store.cookies(url) {
+                            headers.insert(COOKIE, cookie_headers);
                         }
                     }
                 }
-            }
 
-            ResponseFuture {
-                future: self.inner.call(req),
-                cookie_store: self.cookie_store.clone(),
-                url,
+                ResponseFuture::WithCookieStore {
+                    future: self.inner.call(req),
+                    cookie_store: cookie_store.clone(),
+                    url,
+                }
+            } else {
+                // If no cookie store is present, just call the inner service.
+                ResponseFuture::WithoutCookieStore {
+                    future: self.inner.call(req),
+                }
             }
         }
     }
