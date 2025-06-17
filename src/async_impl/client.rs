@@ -219,6 +219,8 @@ struct Config {
     #[cfg(feature = "http2")]
     http2_keep_alive_while_idle: bool,
     local_address: Option<IpAddr>,
+    #[cfg(feature = "http3")]
+    local_port: Option<u16>,
     #[cfg(any(
         target_os = "android",
         target_os = "fuchsia",
@@ -344,6 +346,8 @@ impl ClientBuilder {
                 #[cfg(feature = "http2")]
                 http2_keep_alive_while_idle: false,
                 local_address: None,
+                #[cfg(feature = "http3")]
+                local_port: None,
                 #[cfg(any(
                     target_os = "android",
                     target_os = "fuchsia",
@@ -450,6 +454,7 @@ impl ClientBuilder {
                  h3_max_field_section_size,
                  h3_send_grease,
                  local_address,
+                 local_port,
                  http_version_pref: &HttpVersionPref| {
                     let mut transport_config = TransportConfig::default();
 
@@ -490,6 +495,7 @@ impl ClientBuilder {
                         resolver,
                         tls,
                         local_address,
+                        local_port,
                         transport_config,
                         h3_client_config,
                     );
@@ -636,6 +642,7 @@ impl ClientBuilder {
                             config.h3_max_field_section_size,
                             config.h3_send_grease,
                             config.local_address,
+                            config.local_port,
                             &config.http_version_pref,
                         )?;
                     }
@@ -841,6 +848,7 @@ impl ClientBuilder {
                             config.h3_max_field_section_size,
                             config.h3_send_grease,
                             config.local_address,
+                            config.local_port,
                             &config.http_version_pref,
                         )?;
                     }
@@ -1612,6 +1620,25 @@ impl ClientBuilder {
         T: Into<Option<IpAddr>>,
     {
         self.config.local_address = addr.into();
+        self
+    }
+
+    /// Bind to a local Port.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # fn doc() -> Result<(), reqwest::Error> {
+    /// let local_Port = 12345;
+    /// let client = reqwest::Client::builder()
+    ///     .local_port(local_port)
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[cfg(feature = "http3")]
+    pub fn local_port(mut self, port: u16) -> ClientBuilder {
+        self.config.local_port = Some(port);
         self
     }
 
