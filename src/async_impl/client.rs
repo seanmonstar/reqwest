@@ -941,6 +941,9 @@ impl ClientBuilder {
         let proxies_maybe_http_custom_headers =
             proxies.iter().any(|p| p.maybe_has_http_custom_headers());
 
+        #[cfg(feature = "cookies")]
+        let cookie_store_desc = config.cookie_store.is_some();
+
         let redirect_policy_desc = if config.redirect_policy.is_default() {
             None
         } else {
@@ -996,6 +999,7 @@ impl ClientBuilder {
                 proxies_maybe_http_custom_headers,
                 https_only: config.https_only,
                 redirect_policy_desc,
+                cookie_store_desc,
             }),
         })
     }
@@ -2743,12 +2747,21 @@ struct ClientRef {
     proxies_maybe_http_custom_headers: bool,
     https_only: bool,
     redirect_policy_desc: Option<String>,
+    #[cfg(feature = "cookies")]
+    cookie_store_desc: bool,
 }
 
 impl ClientRef {
     fn fmt_fields(&self, f: &mut fmt::DebugStruct<'_, '_>) {
         // Instead of deriving Debug, only print fields when their output
         // would provide relevant or interesting data.
+
+        #[cfg(feature = "cookies")]
+        {
+            if self.cookie_store_desc {
+                f.field("cookie_store", &self.cookie_store_desc);
+            }
+        }
 
         f.field("accepts", &self.accepts);
 
