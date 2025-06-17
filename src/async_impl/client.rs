@@ -964,7 +964,7 @@ impl ClientBuilder {
 
             #[cfg(feature = "cookies")]
             let hyper_service = tower::ServiceBuilder::new()
-                .layer(cookie::CookieManagerLayer::new(config.cookie_store.clone()))
+                .layer(cookie::CookieServiceLayer::new(config.cookie_store.clone()))
                 .service(hyper_service);
 
             FollowRedirect::with_policy(hyper_service, policy.clone())
@@ -975,7 +975,7 @@ impl ClientBuilder {
             let h3_service = H3Client::new(h3_connector, config.pool_idle_timeout);
             #[cfg(feature = "cookies")]
             let h3_service = tower::ServiceBuilder::new()
-                .layer(cookie::CookieManagerLayer::new(config.cookie_store))
+                .layer(cookie::CookieServiceLayer::new(config.cookie_store))
                 .service(h3_service);
             Some(FollowRedirect::with_policy(h3_service, policy))
         } else {
@@ -2733,13 +2733,13 @@ impl Config {
 type HyperClientService = FollowRedirect<HyperService, TowerRedirectPolicy>;
 
 #[cfg(feature = "cookies")]
-type HyperClientService = FollowRedirect<cookie::CookieManager<HyperService>, TowerRedirectPolicy>;
+type HyperClientService = FollowRedirect<cookie::CookieService<HyperService>, TowerRedirectPolicy>;
 
 #[cfg(all(feature = "http3", not(feature = "cookies")))]
 type H3ClientService = Option<FollowRedirect<H3Client, TowerRedirectPolicy>>;
 
 #[cfg(all(feature = "http3", feature = "cookies"))]
-type H3ClientService = Option<FollowRedirect<cookie::CookieManager<H3Client>, TowerRedirectPolicy>>;
+type H3ClientService = Option<FollowRedirect<cookie::CookieService<H3Client>, TowerRedirectPolicy>>;
 
 struct ClientRef {
     accepts: Accepts,
@@ -2834,7 +2834,7 @@ enum ResponseFuture {
     #[cfg(feature = "cookies")]
     Default(
         tower_http::follow_redirect::ResponseFuture<
-            cookie::CookieManager<HyperService>,
+            cookie::CookieService<HyperService>,
             Body,
             TowerRedirectPolicy,
         >,
@@ -2842,7 +2842,7 @@ enum ResponseFuture {
     #[cfg(all(feature = "http3", feature = "cookies"))]
     H3(
         tower_http::follow_redirect::ResponseFuture<
-            cookie::CookieManager<H3Client>,
+            cookie::CookieService<H3Client>,
             Body,
             TowerRedirectPolicy,
         >,

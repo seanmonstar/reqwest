@@ -10,7 +10,7 @@ use bytes::Bytes;
 
 pub use self::{
     future::ResponseFuture,
-    service::{CookieManager, CookieManagerLayer},
+    service::{CookieService, CookieServiceLayer},
 };
 
 /// Actions for a persistent cookie store providing session support.
@@ -204,7 +204,7 @@ mod future {
     use url::Url;
 
     pin_project! {
-        /// Response future for [`CookieManager`].
+        /// Response future for [`CookieService`].
         #[allow(missing_docs)]
         #[project=ResponseFutureProj]
         pub enum ResponseFuture<F> {
@@ -258,7 +258,7 @@ mod future {
 }
 
 mod service {
-    //! Middleware to use [\`CookieStore\`].
+    //! Middleware to use [`CookieStore`].
 
     use super::{future::ResponseFuture, CookieStore};
     use http::{header::COOKIE, Request, Response};
@@ -269,15 +269,15 @@ mod service {
     use tower::Layer;
     use tower_service::Service;
 
-    /// Middleware to use [\`CookieStore\`].
+    /// Middleware to use [`CookieStore`].
     #[allow(missing_debug_implementations)]
     #[derive(Clone)]
-    pub struct CookieManager<S> {
+    pub struct CookieService<S> {
         inner: S,
         cookie_store: Option<Arc<dyn CookieStore>>,
     }
 
-    impl<ReqBody, ResBody, S> Service<Request<ReqBody>> for CookieManager<S>
+    impl<ReqBody, ResBody, S> Service<Request<ReqBody>> for CookieService<S>
     where
         S: Service<Request<ReqBody>, Response = Response<ResBody>>,
     {
@@ -320,25 +320,25 @@ mod service {
         }
     }
 
-    /// Layer to apply [`CookieManager`] middleware.
+    /// Layer to apply [`CookieService`] middleware.
     #[allow(missing_debug_implementations)]
     #[derive(Clone)]
-    pub struct CookieManagerLayer {
+    pub struct CookieServiceLayer {
         cookie_store: Option<Arc<dyn CookieStore>>,
     }
 
-    impl CookieManagerLayer {
-        /// Create a new cookie manager layer.
+    impl CookieServiceLayer {
+        /// Create a new cookie service layer.
         pub fn new(cookie_store: Option<Arc<dyn CookieStore + 'static>>) -> Self {
             Self { cookie_store }
         }
     }
 
-    impl<S> Layer<S> for CookieManagerLayer {
-        type Service = CookieManager<S>;
+    impl<S> Layer<S> for CookieServiceLayer {
+        type Service = CookieService<S>;
 
         fn layer(&self, inner: S) -> Self::Service {
-            CookieManager {
+            CookieService {
                 inner,
                 cookie_store: self.cookie_store.clone(),
             }
