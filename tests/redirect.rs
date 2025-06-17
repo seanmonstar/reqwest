@@ -403,7 +403,7 @@ async fn test_redirect_limit_to_1() {
         .build()
         .unwrap();
     let res = client.get(&url).send().await.unwrap_err();
-    // If the maxmium limit is 1, then the final uri should be /redirect/1
+    // If the maximum limit is 1, then the final uri should be /redirect/1
     assert_eq!(
         res.url().unwrap().as_str(),
         format!("http://{}/redirect/1", server.addr()).as_str()
