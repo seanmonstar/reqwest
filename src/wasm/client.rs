@@ -1,8 +1,14 @@
+use std::convert::TryInto;
+use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{ready, Context, Poll};
+
 use http::header::USER_AGENT;
 use http::{HeaderMap, HeaderValue, Method};
 use js_sys::{Promise, JSON};
-use std::convert::TryInto;
-use std::{fmt, future::Future, sync::Arc};
+use pin_project_lite::pin_project;
 use url::Url;
 use wasm_bindgen::prelude::{wasm_bindgen, UnwrapThrowExt as _};
 
@@ -182,11 +188,46 @@ impl fmt::Debug for ClientBuilder {
     }
 }
 
+pin_project! {
+    struct Pending {
+        #[pin]
+        body_fut: Option<super::body::BodyFuture>,
+        #[pin]
+        fetch: wasm_bindgen_futures::JsFuture,
+    }
+}
+
+impl Future for Pending {
+    type Output = Result<web_sys::Response, crate::error::BoxError>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        use wasm_bindgen::JsCast;
+
+        let mut this = self.project();
+        if let Some(body_fut) = this.body_fut.as_mut().as_pin_mut() {
+            if let Poll::Ready(res) = body_fut.poll(cx) {
+                this.body_fut.set(None);
+                if let Err(err) = res {
+                    return Poll::Ready(Err(crate::error::wasm(err)));
+                }
+            }
+        }
+        Poll::Ready(
+            ready!(this.fetch.poll(cx))
+                .map_err(crate::error::wasm)
+                .and_then(|js_resp| {
+                    js_resp
+                        .dyn_into::<web_sys::Response>()
+                        .map_err(|_js_val| "promise resolved to unexpected type".into())
+                }),
+        )
+    }
+}
+
 // Can use new methods in web-sys when requiring v0.2.93.
 // > `init.method(m)` to `init.set_method(m)`
 // For now, ignore their deprecation.
 #[allow(deprecated)]
-async fn fetch(req: Request) -> crate::Result<Response> {
+async fn fetch(mut req: Request) -> crate::Result<Response> {
     // Build the js Request
     let mut init = web_sys::RequestInit::new();
     init.method(req.method().as_str());
@@ -216,11 +257,22 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         init.credentials(creds);
     }
 
-    if let Some(body) = req.body() {
+    let body_fut = if let Some(body) = req.body_mut().take() {
         if !body.is_empty() {
             init.body(Some(body.to_js_value()?.as_ref()));
+            let fut = body.into_future();
+            if fut.is_some() {
+                js_sys::Reflect::set(&init, &"duplex".into(), &"half".into())
+                    .map_err(crate::error::wasm)
+                    .map_err(crate::error::builder)?;
+            }
+            fut
+        } else {
+            None
         }
-    }
+    } else {
+        None
+    };
 
     let mut abort = AbortGuard::new()?;
     if let Some(timeout) = req.timeout() {
@@ -233,8 +285,11 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         .map_err(crate::error::builder)?;
 
     // Await the fetch() promise
-    let p = js_fetch(&js_req);
-    let js_resp = super::promise::<web_sys::Response>(p)
+    let pending = Pending {
+        body_fut,
+        fetch: js_fetch(&js_req).into(),
+    };
+    let js_resp = pending
         .await
         .map_err(|error| {
             if error.to_string() == "JsValue(\"reqwest::errors::TimedOut\")" {

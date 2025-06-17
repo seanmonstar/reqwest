@@ -109,6 +109,7 @@ tower-service = "0.3"
 futures-core = { version = "0.3.28", default-features = false }
 futures-util = { version = "0.3.28", default-features = false, optional = true }
 sync_wrapper = { version = "1.0", features = ["futures"] }
+pin-project-lite = "0.2.11"
 
 # Optional deps...
 
@@ -129,7 +130,6 @@ percent-encoding = "2.3"
 tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
 tower = { version = "0.5.2", default-features = false, features = ["timeout", "util"] }
 tower-http = { version = "0.6.5", default-features = false, features = ["follow-redirect"] }
-pin-project-lite = "0.2.11"
 
 # Optional deps...
 rustls-pki-types = { version = "1.9.0", features = ["std"], optional = true }
