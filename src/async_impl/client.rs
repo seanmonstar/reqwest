@@ -2729,17 +2729,24 @@ impl Config {
     }
 }
 
+#[cfg(not(feature = "cookies"))]
+type HyperClientService = FollowRedirect<HyperService, TowerRedirectPolicy>;
+
+#[cfg(feature = "cookies")]
+type HyperClientService = FollowRedirect<cookie::CookieManager<HyperService>, TowerRedirectPolicy>;
+
+#[cfg(all(feature = "http3", not(feature = "cookies")))]
+type H3ClientService = Option<FollowRedirect<H3Client, TowerRedirectPolicy>>;
+
+#[cfg(all(feature = "http3", feature = "cookies"))]
+type H3ClientService = Option<FollowRedirect<cookie::CookieManager<H3Client>, TowerRedirectPolicy>>;
+
 struct ClientRef {
     accepts: Accepts,
     headers: HeaderMap,
-    #[cfg(feature = "cookies")]
-    hyper: FollowRedirect<cookie::CookieManager<HyperService>, TowerRedirectPolicy>,
-    #[cfg(not(feature = "cookies"))]
-    hyper: FollowRedirect<HyperService, TowerRedirectPolicy>,
-    #[cfg(all(feature = "http3", feature = "cookies"))]
-    h3_client: Option<FollowRedirect<cookie::CookieManager<H3Client>, TowerRedirectPolicy>>,
-    #[cfg(all(feature = "http3", not(feature = "cookies")))]
-    h3_client: Option<FollowRedirect<H3Client, TowerRedirectPolicy>>,
+    hyper: HyperClientService,
+    #[cfg(feature = "http3")]
+    h3_client: H3ClientService,
     referer: bool,
     request_timeout: RequestConfig<RequestTimeout>,
     read_timeout: Option<Duration>,
