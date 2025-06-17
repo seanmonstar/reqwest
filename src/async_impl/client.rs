@@ -999,6 +999,7 @@ impl ClientBuilder {
                 proxies_maybe_http_custom_headers,
                 https_only: config.https_only,
                 redirect_policy_desc,
+                #[cfg(feature = "cookies")]
                 cookie_store_desc,
             }),
         })
