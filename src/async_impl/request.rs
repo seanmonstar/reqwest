@@ -665,6 +665,7 @@ mod tests {
 
     use super::{Client, HttpRequest, Request, RequestBuilder, Version};
     use crate::Method;
+    use http::HeaderMap;
     use serde::Serialize;
     use std::collections::BTreeMap;
     use std::convert::TryFrom;
@@ -884,6 +885,19 @@ mod tests {
         assert_eq!(req.url().as_str(), "https://localhost/");
         assert_eq!(req.headers()["hiding"], "in plain sight");
         assert!(req.headers()["hiding"].is_sensitive());
+    }
+
+    #[test]
+    fn from_empty_http_request() {
+        let http_request = HttpRequest::builder()
+            .uri("http://localhost/")
+            .body(())
+            .unwrap();
+        let req = Request::try_from(http_request).unwrap();
+        assert_eq!(req.body().unwrap().as_bytes(), Some(&[] as &[u8]));
+        assert_eq!(req.headers(), &HeaderMap::new());
+        assert_eq!(req.method(), Method::GET);
+        assert_eq!(req.url().as_str(), "http://localhost/");
     }
 
     #[test]
