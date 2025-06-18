@@ -593,3 +593,10 @@ async fn http1_reason_phrase() {
         )
     );
 }
+
+#[tokio::test]
+async fn error_has_url() {
+    let u = "http://does.not.exist.local/ever";
+    let err = reqwest::get(u).await.unwrap_err();
+    assert_eq!(err.url().map(AsRef::as_ref), Some(u), "{err:?}");
+}

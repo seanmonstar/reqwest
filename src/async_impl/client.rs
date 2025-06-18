@@ -3020,7 +3020,7 @@ impl Future for PendingRequest {
                             }
                         }
 
-                        return Poll::Ready(Err(e));
+                        return Poll::Ready(Err(e.if_no_url(|| self.url.clone())));
                     }
                     Poll::Ready(Ok(res)) => res.map(super::body::boxed),
                     Poll::Pending => return Poll::Pending,

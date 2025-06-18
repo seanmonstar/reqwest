@@ -76,6 +76,13 @@ impl Error {
         self
     }
 
+    pub(crate) fn if_no_url(mut self, f: impl FnOnce() -> Url) -> Self {
+        if self.inner.url.is_none() {
+            self.inner.url = Some(f());
+        }
+        self
+    }
+
     /// Strip the related url from this error (if, for example, it contains
     /// sensitive information)
     pub fn without_url(mut self) -> Self {
