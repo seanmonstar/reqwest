@@ -492,7 +492,7 @@ impl ConnectorService {
     async fn connect_socks(mut self, dst: Uri, proxy: Intercepted) -> Result<Conn, BoxError> {
         let dns = match proxy.uri().scheme_str() {
             Some("socks4") | Some("socks5") => socks::DnsResolve::Local,
-            Some("socks4h") | Some("socks5h") => socks::DnsResolve::Proxy,
+            Some("socks4a") | Some("socks5h") => socks::DnsResolve::Proxy,
             _ => {
                 unreachable!("connect_socks is only called for socks proxies");
             }
@@ -653,7 +653,7 @@ impl ConnectorService {
 
         #[cfg(feature = "socks")]
         match proxy.uri().scheme_str().ok_or("proxy scheme expected")? {
-            "socks4" | "socks4h" | "socks5" | "socks5h" => {
+            "socks4" | "socks4a" | "socks5" | "socks5h" => {
                 return self.connect_socks(dst, proxy).await
             }
             _ => (),
@@ -1300,7 +1300,7 @@ mod socks {
 
         // TODO: can `Scheme::from_static()` be const fn, compare with a SOCKS5 constant?
         match proxy.uri().scheme_str() {
-            Some("socks4") | Some("socks4h") => {
+            Some("socks4") | Some("socks4a") => {
                 let mut svc = SocksV4::new(proxy_uri, http_connector);
                 let stream = Service::call(&mut svc, dst_uri)
                     .await
