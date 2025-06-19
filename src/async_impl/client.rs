@@ -219,7 +219,6 @@ struct Config {
     #[cfg(feature = "http2")]
     http2_keep_alive_while_idle: bool,
     local_address: Option<IpAddr>,
-
     #[cfg(any(
         target_os = "android",
         target_os = "fuchsia",
@@ -962,9 +961,6 @@ impl ClientBuilder {
             if config.http2_keep_alive_while_idle {
                 builder.http2_keep_alive_while_idle(true);
             }
-            if let Some(quic_keep_alive_interval) = config.quic_keep_alive_interval {
-                builder.quic_keep_alive_interval(quic_keep_alive_interval)
-            }
         }
 
         builder.timer(hyper_util::rt::TokioTimer::new());
@@ -1653,9 +1649,9 @@ impl ClientBuilder {
     ///
     /// ```
     /// # fn doc() -> Result<(), reqwest::Error> {
-    /// let local_Port = 12345;
+    /// let quic_local_port = 12345;
     /// let client = reqwest::Client::builder()
-    ///     .local_port(local_port)
+    ///     .quic_local_port(local_port)
     ///     .build()?;
     /// # Ok(())
     /// # }
