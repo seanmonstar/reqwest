@@ -219,8 +219,7 @@ struct Config {
     #[cfg(feature = "http2")]
     http2_keep_alive_while_idle: bool,
     local_address: Option<IpAddr>,
-    #[cfg(feature = "http3")]
-    local_port: Option<u16>,
+
     #[cfg(any(
         target_os = "android",
         target_os = "fuchsia",
@@ -241,7 +240,11 @@ struct Config {
     error: Option<crate::Error>,
     https_only: bool,
     #[cfg(feature = "http3")]
+    quic_local_port: Option<u16>,
+    #[cfg(feature = "http3")]
     tls_enable_early_data: bool,
+    #[cfg(feature = "http3")]
+    quic_keep_alive_interval: Option<Duration>,
     #[cfg(feature = "http3")]
     quic_max_idle_timeout: Option<Duration>,
     #[cfg(feature = "http3")]
@@ -347,7 +350,9 @@ impl ClientBuilder {
                 http2_keep_alive_while_idle: false,
                 local_address: None,
                 #[cfg(feature = "http3")]
-                local_port: None,
+                quic_local_port: None,
+                #[cfg(feature = "http3")]
+                quic_keep_alive_interval: None,
                 #[cfg(any(
                     target_os = "android",
                     target_os = "fuchsia",
@@ -451,6 +456,7 @@ impl ClientBuilder {
                  quic_receive_window,
                  quic_send_window,
                  quic_congestion_bbr,
+                 quic_keep_alive_interval,
                  h3_max_field_section_size,
                  h3_send_grease,
                  local_address,
@@ -475,6 +481,8 @@ impl ClientBuilder {
                     if let Some(send_window) = quic_send_window {
                         transport_config.send_window(send_window);
                     }
+
+                    transport_config.keep_alive_interval(quic_keep_alive_interval);
 
                     if quic_congestion_bbr {
                         let factory = Arc::new(quinn::congestion::BbrConfig::default());
@@ -639,10 +647,11 @@ impl ClientBuilder {
                             config.quic_receive_window,
                             config.quic_send_window,
                             config.quic_congestion_bbr,
+                            config.quic_keep_alive_interval,
                             config.h3_max_field_section_size,
                             config.h3_send_grease,
                             config.local_address,
-                            config.local_port,
+                            config.quic_local_port,
                             &config.http_version_pref,
                         )?;
                     }
@@ -845,10 +854,11 @@ impl ClientBuilder {
                             config.quic_receive_window,
                             config.quic_send_window,
                             config.quic_congestion_bbr,
+                            config.quic_keep_alive_interval,
                             config.h3_max_field_section_size,
                             config.h3_send_grease,
                             config.local_address,
-                            config.local_port,
+                            config.quic_local_port,
                             &config.http_version_pref,
                         )?;
                     }
@@ -951,6 +961,9 @@ impl ClientBuilder {
             }
             if config.http2_keep_alive_while_idle {
                 builder.http2_keep_alive_while_idle(true);
+            }
+            if let Some(quic_keep_alive_interval) = config.quic_keep_alive_interval {
+                builder.quic_keep_alive_interval(quic_keep_alive_interval)
             }
         }
 
@@ -1591,6 +1604,17 @@ impl ClientBuilder {
         self
     }
 
+    /// Sets an interval for QUIC Ping frames should be sent to keep a connection alive.
+    ///
+    /// Pass `None` to disable QUIC keep-alive.
+    /// Default is currently disabled.
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http3")))]
+    pub fn quic_keep_alive_interval(mut self, timeout: Duration) -> ClientBuilder {
+        self.config.quic_keep_alive_interval = Some(timeout);
+        self
+    }
+
     // TCP options
 
     /// Set whether sockets have `TCP_NODELAY` enabled.
@@ -1637,8 +1661,8 @@ impl ClientBuilder {
     /// # }
     /// ```
     #[cfg(feature = "http3")]
-    pub fn local_port(mut self, port: u16) -> ClientBuilder {
-        self.config.local_port = Some(port);
+    pub fn quic_local_port(mut self, port: u16) -> ClientBuilder {
+        self.config.quic_local_port = Some(port);
         self
     }
 
