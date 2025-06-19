@@ -89,18 +89,6 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
     }
 }
 
-#[cfg(feature = "cookies")]
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn add_cookie_header(
-    headers: &mut HeaderMap,
-    cookie_store: &dyn crate::cookie::CookieStore,
-    url: &url::Url,
-) {
-    if let Some(header) = cookie_store.cookies(url) {
-        headers.insert(crate::header::COOKIE, header);
-    }
-}
-
 pub(crate) struct Escape<'a>(&'a [u8]);
 
 #[cfg(not(target_arch = "wasm32"))]

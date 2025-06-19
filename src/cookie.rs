@@ -8,6 +8,11 @@ use std::time::SystemTime;
 use crate::header::{HeaderValue, SET_COOKIE};
 use bytes::Bytes;
 
+pub use self::{
+    future::ResponseFuture,
+    service::{CookieService, CookieServiceLayer},
+};
+
 /// Actions for a persistent cookie store providing session support.
 pub trait CookieStore: Send + Sync {
     /// Store a set of Set-Cookie header values received from `url`
@@ -105,12 +110,6 @@ impl<'a> fmt::Debug for Cookie<'a> {
     }
 }
 
-pub(crate) fn extract_response_cookie_headers<'a>(
-    headers: &'a hyper::HeaderMap,
-) -> impl Iterator<Item = &'a HeaderValue> + 'a {
-    headers.get_all(SET_COOKIE).iter()
-}
-
 pub(crate) fn extract_response_cookies<'a>(
     headers: &'a hyper::HeaderMap,
 ) -> impl Iterator<Item = Result<Cookie<'a>, CookieParseError>> + 'a {
@@ -187,5 +186,162 @@ impl CookieStore for Jar {
         }
 
         HeaderValue::from_maybe_shared(Bytes::from(s)).ok()
+    }
+}
+
+mod future {
+    //! [`Future`] types.
+
+    use super::CookieStore;
+    use http::Response;
+    use pin_project_lite::pin_project;
+    use std::{
+        future::Future,
+        pin::Pin,
+        sync::Arc,
+        task::{ready, Context, Poll},
+    };
+    use url::Url;
+
+    pin_project! {
+        /// Response future for [`CookieService`].
+        #[allow(missing_docs)]
+        #[project=ResponseFutureProj]
+        pub enum ResponseFuture<F> {
+            WithCookieStore {
+                #[pin]
+                future: F,
+                cookie_store: Arc<dyn CookieStore>,
+                url: Option<Url>,
+            },
+            WithoutCookieStore {
+                #[pin]
+                future: F,
+            },
+        }
+    }
+
+    impl<F, ResBody, E> Future for ResponseFuture<F>
+    where
+        F: Future<Output = Result<Response<ResBody>, E>>,
+    {
+        type Output = F::Output;
+
+        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            match self.project() {
+                ResponseFutureProj::WithCookieStore {
+                    future,
+                    cookie_store,
+                    url,
+                } => {
+                    let res = ready!(future.poll(cx)?);
+                    if let Some(url) = url {
+                        let mut cookies = res
+                            .headers()
+                            .get_all(http::header::SET_COOKIE)
+                            .iter()
+                            .peekable();
+                        if cookies.peek().is_some() {
+                            cookie_store.set_cookies(&mut cookies, &*url);
+                        }
+                    }
+
+                    Poll::Ready(Ok(res))
+                }
+                ResponseFutureProj::WithoutCookieStore { mut future } => {
+                    let res = ready!(future.as_mut().poll(cx)?);
+                    Poll::Ready(Ok(res))
+                }
+            }
+        }
+    }
+}
+
+mod service {
+    //! Middleware to use [`CookieStore`].
+
+    use super::{future::ResponseFuture, CookieStore};
+    use http::{header::COOKIE, Request, Response};
+    use std::{
+        sync::Arc,
+        task::{Context, Poll},
+    };
+    use tower::Layer;
+    use tower_service::Service;
+
+    /// Middleware to use [`CookieStore`].
+    #[allow(missing_debug_implementations)]
+    #[derive(Clone)]
+    pub struct CookieService<S> {
+        inner: S,
+        cookie_store: Option<Arc<dyn CookieStore>>,
+    }
+
+    impl<ReqBody, ResBody, S> Service<Request<ReqBody>> for CookieService<S>
+    where
+        S: Service<Request<ReqBody>, Response = Response<ResBody>>,
+    {
+        type Response = S::Response;
+        type Error = S::Error;
+        type Future = ResponseFuture<S::Future>;
+
+        #[inline]
+        fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            self.inner.poll_ready(cx)
+        }
+
+        fn call(&mut self, mut req: Request<ReqBody>) -> Self::Future {
+            // If a cookie store is present, inject cookies for this URL if not already set.
+            if let Some(ref cookie_store) = self.cookie_store {
+                // Try to extract the request URL.
+                let mut url = None;
+                if req.headers().get(COOKIE).is_none() {
+                    url = url::Url::parse(&req.uri().to_string()).ok();
+
+                    if let Some(ref url) = url {
+                        let headers = req.headers_mut();
+                        if let Some(cookie_headers) = cookie_store.cookies(url) {
+                            headers.insert(COOKIE, cookie_headers);
+                        }
+                    }
+                }
+
+                ResponseFuture::WithCookieStore {
+                    future: self.inner.call(req),
+                    cookie_store: cookie_store.clone(),
+                    url,
+                }
+            } else {
+                // If no cookie store is present, just call the inner service.
+                ResponseFuture::WithoutCookieStore {
+                    future: self.inner.call(req),
+                }
+            }
+        }
+    }
+
+    /// Layer to apply [`CookieService`] middleware.
+    #[allow(missing_debug_implementations)]
+    #[derive(Clone)]
+    pub struct CookieServiceLayer {
+        cookie_store: Option<Arc<dyn CookieStore>>,
+    }
+
+    impl CookieServiceLayer {
+        /// Create a new cookie service layer.
+        pub fn new(cookie_store: Option<Arc<dyn CookieStore + 'static>>) -> Self {
+            Self { cookie_store }
+        }
+    }
+
+    impl<S> Layer<S> for CookieServiceLayer {
+        type Service = CookieService<S>;
+
+        fn layer(&self, inner: S) -> Self::Service {
+            CookieService {
+                inner,
+                cookie_store: self.cookie_store.clone(),
+            }
+        }
     }
 }
