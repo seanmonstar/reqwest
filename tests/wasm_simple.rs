@@ -13,6 +13,24 @@ extern "C" {
     fn log(s: &str);
 }
 
+#[cfg(all(feature = "stream"))]
+#[wasm_bindgen_test]
+async fn send_stream() {
+    let chunks: Vec<Result<_, ::std::io::Error>> = vec![Ok("hello"), Ok(" "), Ok("world")];
+    let stream = futures_util::stream::iter(chunks);
+    let client = reqwest::Client::new();
+    let resp = client
+        .post("https://httpbin.org/post")
+        .header("Content-Type", "text/plain")
+        .body(reqwest::Body::wrap_stream(stream))
+        .duplex("half")
+        .send()
+        .await
+        .unwrap();
+    let body = resp.text().await.expect("response to utf-8 text");
+    log(&format!("Body:\n\n{body}"));
+}
+
 #[wasm_bindgen_test]
 async fn simple_example() {
     let res = reqwest::get("https://hyper.rs")
