@@ -1600,17 +1600,6 @@ impl ClientBuilder {
         self
     }
 
-    /// Sets an interval for QUIC Ping frames should be sent to keep a connection alive.
-    ///
-    /// Pass `None` to disable QUIC keep-alive.
-    /// Default is currently disabled.
-    #[cfg(feature = "http3")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "http3")))]
-    pub fn quic_keep_alive_interval(mut self, timeout: Duration) -> ClientBuilder {
-        self.config.quic_keep_alive_interval = Some(timeout);
-        self
-    }
-
     // TCP options
 
     /// Set whether sockets have `TCP_NODELAY` enabled.
@@ -1640,25 +1629,6 @@ impl ClientBuilder {
         T: Into<Option<IpAddr>>,
     {
         self.config.local_address = addr.into();
-        self
-    }
-
-    /// Bind to a local Port.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # fn doc() -> Result<(), reqwest::Error> {
-    /// let quic_local_port = 12345;
-    /// let client = reqwest::Client::builder()
-    ///     .quic_local_port(local_port)
-    ///     .build()?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    #[cfg(feature = "http3")]
-    pub fn quic_local_port(mut self, port: u16) -> ClientBuilder {
-        self.config.quic_local_port = Some(port);
         self
     }
 
@@ -2228,6 +2198,40 @@ impl ClientBuilder {
     #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
     pub fn tls_early_data(mut self, enabled: bool) -> ClientBuilder {
         self.config.tls_enable_early_data = enabled;
+        self
+    }
+
+    /// Bind to a local Port for QUIC connection.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # fn doc() -> Result<(), reqwest::Error> {
+    /// let port = 12345;
+    /// let client = reqwest::Client::builder()
+    ///     .http3_local_port(port)
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[cfg(feature = "http3")]
+    pub fn http3_local_port(mut self, port: u16) -> ClientBuilder {
+        self.config.quic_local_port = Some(port);
+        self
+    }
+
+    /// Period of inactivity before sending a keep-alive packet
+    ///
+    /// Keep-alive packets prevent an inactive but otherwise healthy connection from timing out.
+    ///
+    /// Pass `None` to disable QUIC keep-alive. Only one side of any given connection needs keep-alive
+    /// enabled for the connection to be preserved. Must be set lower than the idle_timeout of both
+    /// peers to be effective.
+    /// Default is currently disabled.
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http3")))]
+    pub fn http3_keep_alive_interval(mut self, timeout: Duration) -> ClientBuilder {
+        self.config.quic_keep_alive_interval = Some(timeout);
         self
     }
 
