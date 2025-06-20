@@ -120,6 +120,12 @@ impl Error {
             if err.is::<TimedOut>() {
                 return true;
             }
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(hyper_err) = err.downcast_ref::<hyper::Error>() {
+                if hyper_err.is_timeout() {
+                    return true;
+                }
+            }
             if let Some(io) = err.downcast_ref::<io::Error>() {
                 if io.kind() == io::ErrorKind::TimedOut {
                     return true;
@@ -453,7 +459,9 @@ mod tests {
         let err = super::request(super::TimedOut);
         assert!(err.is_timeout());
 
-        let io = io::Error::new(io::ErrorKind::Other, err);
+        // todo: test `hyper::Error::is_timeout` when we can easily construct one
+
+        let io = io::Error::from(io::ErrorKind::TimedOut);
         let nested = super::request(io);
         assert!(nested.is_timeout());
     }
