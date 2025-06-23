@@ -342,6 +342,13 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.redirect(policy))
     }
 
+    /// Set a request retry policy.
+    ///
+    /// Default behavior is to retry protocol NACKs.
+    pub fn retry(self, policy: crate::retry::Builder) -> ClientBuilder {
+        self.with_inner(move |inner| inner.retry(policy))
+    }
+
     /// Enable or disable automatic setting of the `Referer` header.
     ///
     /// Default is `true`.
