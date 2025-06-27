@@ -6,8 +6,6 @@ mod pool;
 
 use crate::async_impl::body::ResponseBody;
 use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
-#[cfg(feature = "cookies")]
-use crate::cookie;
 use crate::error::{BoxError, Error, Kind};
 use crate::{error, Body};
 use connect::H3Connector;
@@ -15,8 +13,6 @@ use http::{Request, Response};
 use log::trace;
 use std::future::{self, Future};
 use std::pin::Pin;
-#[cfg(feature = "cookies")]
-use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use sync_wrapper::SyncWrapper;
@@ -26,29 +22,13 @@ use tower::Service;
 pub(crate) struct H3Client {
     pool: Pool,
     connector: H3Connector,
-    #[cfg(feature = "cookies")]
-    cookie_store: Option<Arc<dyn cookie::CookieStore>>,
 }
 
 impl H3Client {
-    #[cfg(not(feature = "cookies"))]
     pub fn new(connector: H3Connector, pool_timeout: Option<Duration>) -> Self {
         H3Client {
             pool: Pool::new(pool_timeout),
             connector,
-        }
-    }
-
-    #[cfg(feature = "cookies")]
-    pub fn new(
-        connector: H3Connector,
-        pool_timeout: Option<Duration>,
-        cookie_store: Option<Arc<dyn cookie::CookieStore>>,
-    ) -> Self {
-        H3Client {
-            pool: Pool::new(pool_timeout),
-            connector,
-            cookie_store,
         }
     }
 
@@ -79,7 +59,6 @@ impl H3Client {
         Ok(self.pool.new_connection(lock, driver, tx))
     }
 
-    #[cfg(not(feature = "cookies"))]
     async fn send_request(
         mut self,
         key: Key,
@@ -93,42 +72,6 @@ impl H3Client {
             .send_request(req)
             .await
             .map_err(|e| Error::new(Kind::Request, Some(e)))
-    }
-
-    #[cfg(feature = "cookies")]
-    async fn send_request(
-        mut self,
-        key: Key,
-        mut req: Request<Body>,
-    ) -> Result<Response<ResponseBody>, Error> {
-        let mut pooled = match self.get_pooled_client(key).await {
-            Ok(client) => client,
-            Err(e) => return Err(error::request(e)),
-        };
-
-        let url = url::Url::parse(req.uri().to_string().as_str()).unwrap();
-        if let Some(cookie_store) = self.cookie_store.as_ref() {
-            if req.headers().get(crate::header::COOKIE).is_none() {
-                let headers = req.headers_mut();
-                crate::util::add_cookie_header(headers, &**cookie_store, &url);
-            }
-        }
-
-        let res = pooled
-            .send_request(req)
-            .await
-            .map_err(|e| Error::new(Kind::Request, Some(e)));
-
-        if let Some(ref cookie_store) = self.cookie_store {
-            if let Ok(res) = &res {
-                let mut cookies = cookie::extract_response_cookie_headers(res.headers()).peekable();
-                if cookies.peek().is_some() {
-                    cookie_store.set_cookies(&mut cookies, &url);
-                }
-            }
-        }
-
-        res
     }
 
     pub fn request(&self, mut req: Request<Body>) -> H3ResponseFuture {
