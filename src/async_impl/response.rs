@@ -12,7 +12,7 @@ use serde::de::DeserializeOwned;
 #[cfg(feature = "json")]
 use serde_json;
 use tokio::time::Sleep;
-use tower_http::follow_redirect::extension::FollowedPolicy;
+use tower_http::follow_redirect::FollowedPolicy;
 use url::Url;
 
 use super::body::Body;
