@@ -83,7 +83,7 @@ impl DynResolver {
             .port_u16()
             .unwrap_or_else(|| match target.scheme_str() {
                 Some("https") => 443,
-                Some("socks4") | Some("socks4h") | Some("socks5") | Some("socks5h") => 1080,
+                Some("socks4") | Some("socks4a") | Some("socks5") | Some("socks5h") => 1080,
                 _ => 80,
             });
 
