@@ -561,6 +561,7 @@ impl ConnectorService {
                 is_proxy: false,
                 tls_info: false,
             })
+            .map_err(Into::into)
     }
 
     async fn connect_with_maybe_proxy(self, dst: Uri, is_proxy: bool) -> Result<Conn, BoxError> {
@@ -1247,7 +1248,6 @@ mod rustls_tls_conn {
 
 #[cfg(feature = "socks")]
 mod socks {
-    use std::io;
     use tower_service::Service;
 
     use http::uri::Scheme;
@@ -1263,17 +1263,22 @@ mod socks {
         Proxy,
     }
 
+    #[derive(Debug)]
+    pub(super) enum SocksProxyError {
+        SocksNoHostInUrl,
+        SocksLocalResolve(BoxError),
+        SocksConnect(BoxError),
+    }
+
     pub(super) async fn connect(
         proxy: Intercepted,
         dst: Uri,
         dns_mode: DnsResolve,
         resolver: &crate::dns::DynResolver,
         http_connector: &mut crate::connect::HttpConnector,
-    ) -> Result<TcpStream, BoxError> {
+    ) -> Result<TcpStream, SocksProxyError> {
         let https = dst.scheme() == Some(&Scheme::HTTPS);
-        let original_host = dst
-            .host()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "no host in url"))?;
+        let original_host = dst.host().ok_or(SocksProxyError::SocksNoHostInUrl)?;
         let mut host = original_host.to_owned();
         let port = match dst.port() {
             Some(p) => p.as_u16(),
@@ -1282,8 +1287,13 @@ mod socks {
         };
 
         if let DnsResolve::Local = dns_mode {
-            let maybe_new_target = resolver.http_resolve(&dst).await?.next();
+            let maybe_new_target = resolver
+                .http_resolve(&dst)
+                .await
+                .map_err(SocksProxyError::SocksLocalResolve)?
+                .next();
             if let Some(new_target) = maybe_new_target {
+                log::trace!("socks local dns resolved {new_target:?}");
                 host = new_target.ip().to_string();
             }
         }
@@ -1296,7 +1306,8 @@ mod socks {
             host,
             port
         )
-        .parse::<Uri>()?;
+        .parse::<Uri>()
+        .map_err(|e| SocksProxyError::SocksConnect(e.into()))?;
 
         // TODO: can `Scheme::from_static()` be const fn, compare with a SOCKS5 constant?
         match proxy.uri().scheme_str() {
@@ -1304,7 +1315,7 @@ mod socks {
                 let mut svc = SocksV4::new(proxy_uri, http_connector);
                 let stream = Service::call(&mut svc, dst_uri)
                     .await
-                    .map_err(|e| format!("socks connect error: {e}"))?;
+                    .map_err(|e| SocksProxyError::SocksConnect(e.into()))?;
                 Ok(stream.into_inner())
             }
             Some("socks5") | Some("socks5h") => {
@@ -1316,10 +1327,30 @@ mod socks {
                 };
                 let stream = Service::call(&mut svc, dst_uri)
                     .await
-                    .map_err(|e| format!("socks connect error: {e}"))?;
+                    .map_err(|e| SocksProxyError::SocksConnect(e.into()))?;
                 Ok(stream.into_inner())
             }
             _ => unreachable!(),
+        }
+    }
+
+    impl std::fmt::Display for SocksProxyError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Self::SocksNoHostInUrl => f.write_str("socks proxy destination has no host"),
+                Self::SocksLocalResolve(_) => f.write_str("error resolving for socks proxy"),
+                Self::SocksConnect(_) => f.write_str("error connecting to socks proxy"),
+            }
+        }
+    }
+
+    impl std::error::Error for SocksProxyError {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            match self {
+                Self::SocksNoHostInUrl => None,
+                Self::SocksLocalResolve(ref e) => Some(&**e),
+                Self::SocksConnect(ref e) => Some(&**e),
+            }
         }
     }
 }
