@@ -69,13 +69,13 @@ pub struct CertificateRevocationList {
 /// Represents a server X509 certificate.
 #[derive(Clone)]
 pub struct Certificate {
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "native-tls")]
     native: native_tls_crate::Certificate,
-    #[cfg(feature = "__rustls")]
+    #[cfg(feature = "default-tls")]
     original: Cert,
 }
 
-#[cfg(feature = "__rustls")]
+#[cfg(feature = "default-tls")]
 #[derive(Clone)]
 enum Cert {
     Der(Vec<u8>),
@@ -94,7 +94,7 @@ enum ClientCert {
     Pkcs12(native_tls_crate::Identity),
     #[cfg(feature = "native-tls")]
     Pkcs8(native_tls_crate::Identity),
-    #[cfg(feature = "__rustls")]
+    #[cfg(feature = "default-tls")]
     Pem {
         key: rustls_pki_types::PrivateKeyDer<'static>,
         certs: Vec<rustls_pki_types::CertificateDer<'static>>,
@@ -141,9 +141,9 @@ impl Certificate {
     /// ```
     pub fn from_der(der: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
-            #[cfg(feature = "default-tls")]
+            #[cfg(feature = "native-tls")]
             native: native_tls_crate::Certificate::from_der(der).map_err(crate::error::builder)?,
-            #[cfg(feature = "__rustls")]
+            #[cfg(feature = "default-tls")]
             original: Cert::Der(der.to_owned()),
         })
     }
@@ -166,9 +166,9 @@ impl Certificate {
     /// ```
     pub fn from_pem(pem: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
-            #[cfg(feature = "default-tls")]
+            #[cfg(feature = "native-tls")]
             native: native_tls_crate::Certificate::from_pem(pem).map_err(crate::error::builder)?,
-            #[cfg(feature = "__rustls")]
+            #[cfg(feature = "default-tls")]
             original: Cert::Pem(pem.to_owned()),
         })
     }
@@ -199,12 +199,12 @@ impl Certificate {
             .collect::<crate::Result<Vec<Certificate>>>()
     }
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "native-tls")]
     pub(crate) fn add_to_native_tls(self, tls: &mut native_tls_crate::TlsConnectorBuilder) {
         tls.add_root_certificate(self.native);
     }
 
-    #[cfg(feature = "__rustls")]
+    #[cfg(feature = "default-tls")]
     pub(crate) fn add_to_rustls(
         self,
         root_cert_store: &mut rustls::RootCertStore,
@@ -529,7 +529,7 @@ impl Version {
     /// Version 1.3 of the TLS protocol.
     pub const TLS_1_3: Version = Version(InnerVersion::Tls1_3);
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "native-tls")]
     pub(crate) fn to_native_tls(self) -> Option<native_tls_crate::Protocol> {
         match self.0 {
             InnerVersion::Tls1_0 => Some(native_tls_crate::Protocol::Tlsv10),
@@ -539,7 +539,7 @@ impl Version {
         }
     }
 
-    #[cfg(feature = "__rustls")]
+    #[cfg(feature = "default-tls")]
     pub(crate) fn from_rustls(version: rustls::ProtocolVersion) -> Option<Self> {
         match version {
             rustls::ProtocolVersion::SSLv2 => None,
@@ -746,13 +746,13 @@ impl std::fmt::Debug for TlsInfo {
 mod tests {
     use super::*;
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "native-tls")]
     #[test]
     fn certificate_from_der_invalid() {
         Certificate::from_der(b"not der").unwrap_err();
     }
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "native-tls")]
     #[test]
     fn certificate_from_pem_invalid() {
         Certificate::from_pem(b"not pem").unwrap_err();
@@ -770,13 +770,13 @@ mod tests {
         Identity::from_pkcs8_pem(b"not pem", b"not key").unwrap_err();
     }
 
-    #[cfg(feature = "__rustls")]
+    #[cfg(feature = "default-tls")]
     #[test]
     fn identity_from_pem_invalid() {
         Identity::from_pem(b"not pem").unwrap_err();
     }
 
-    #[cfg(feature = "__rustls")]
+    #[cfg(feature = "default-tls")]
     #[test]
     fn identity_from_pem_pkcs1_key() {
         let pem = b"-----BEGIN CERTIFICATE-----\n\
@@ -821,7 +821,7 @@ mod tests {
         assert!(Certificate::from_pem_bundle(PEM_BUNDLE).is_ok())
     }
 
-    #[cfg(feature = "__rustls")]
+    #[cfg(feature = "default-tls")]
     #[test]
     fn crl_from_pem() {
         let pem = b"-----BEGIN X509 CRL-----\n-----END X509 CRL-----\n";
@@ -829,7 +829,7 @@ mod tests {
         CertificateRevocationList::from_pem(pem).unwrap();
     }
 
-    #[cfg(feature = "__rustls")]
+    #[cfg(feature = "default-tls")]
     #[test]
     fn crl_from_pem_bundle() {
         let pem_bundle = std::fs::read("tests/support/crl.pem").unwrap();

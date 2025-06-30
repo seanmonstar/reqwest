@@ -50,7 +50,7 @@ use http::header::{
 use http::uri::Scheme;
 use http::Uri;
 use hyper_util::client::legacy::connect::HttpConnector;
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "native-tls")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
 #[cfg(feature = "http3")]
@@ -508,7 +508,7 @@ impl ClientBuilder {
 
             #[cfg(feature = "__tls")]
             match config.tls {
-                #[cfg(feature = "default-tls")]
+                #[cfg(feature = "native-tls")]
                 TlsBackend::Default => {
                     let mut tls = TlsConnector::builder();
 
@@ -621,7 +621,7 @@ impl ClientBuilder {
                     config.nodelay,
                     config.tls_info,
                 ),
-                #[cfg(feature = "__rustls")]
+                #[cfg(feature = "default-tls")]
                 TlsBackend::BuiltRustls(conn) => {
                     #[cfg(feature = "http3")]
                     {
@@ -663,8 +663,8 @@ impl ClientBuilder {
                         config.tls_info,
                     )
                 }
-                #[cfg(feature = "__rustls")]
-                TlsBackend::Rustls => {
+                #[cfg(feature = "default-tls")]
+                TlsBackend::Default | TlsBackend::Rustls => {
                     use crate::tls::{IgnoreHostname, NoVerifier};
 
                     // Set root certificates.
@@ -747,11 +747,17 @@ impl ClientBuilder {
                     let provider = rustls::crypto::CryptoProvider::get_default()
                         .map(|arc| arc.clone())
                         .unwrap_or_else(|| {
-                            #[cfg(not(feature = "__rustls-ring"))]
+                            #[cfg(not(any(
+                                feature = "__rustls-ring",
+                                feature = "__rustls-aws-lc-rs"
+                            )))]
                             panic!("No provider set");
 
                             #[cfg(feature = "__rustls-ring")]
-                            Arc::new(rustls::crypto::ring::default_provider())
+                            return Arc::new(rustls::crypto::ring::default_provider());
+
+                            #[cfg(feature = "__rustls-aws-lc-rs")]
+                            Arc::new(rustls::crypto::aws_lc_rs::default_provider())
                         });
 
                     // Build TLS config
