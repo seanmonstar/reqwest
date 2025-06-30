@@ -1,3 +1,11 @@
+## v0.12.21
+
+- Fix socks proxy to use `socks4a://` instead of `socks4h://`.
+- Fix `Error::is_timeout()` to check for hyper and IO timeouts too.
+- Fix request `Error` to again include URLs when possible.
+- Fix socks connect error to include more context.
+- (wasm) implement `Default` for `Body`.
+
 ## v0.12.20
 
 - Add `ClientBuilder::tcp_user_timeout(Duration)` option to set `TCP_USER_TIMEOUT`.
