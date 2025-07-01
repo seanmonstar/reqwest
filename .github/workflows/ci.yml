@@ -319,6 +319,8 @@ jobs:
           cargo update -p native-tls --precise 0.2.13
           cargo update -p once_cell --precise 1.20.3
           cargo update -p tracing-core --precise 0.1.33
+          cargo update -p rustls --precise 0.23.19
+          cargo update -p tokio-rustls --precise 0.26.0
 
       - uses: Swatinem/rust-cache@v2
 
