@@ -1,3 +1,7 @@
+## v0.12.22
+
+- Fix socks proxies when resolving IPv6 destinations.
+
 ## v0.12.21
 
 - Fix socks proxy to use `socks4a://` instead of `socks4h://`.
