@@ -509,7 +509,7 @@ impl ClientBuilder {
             #[cfg(feature = "__tls")]
             match config.tls {
                 #[cfg(feature = "native-tls")]
-                TlsBackend::Default => {
+                TlsBackend::NativeTls => {
                     let mut tls = TlsConnector::builder();
 
                     #[cfg(all(feature = "native-tls-alpn", not(feature = "http3")))]
@@ -664,7 +664,7 @@ impl ClientBuilder {
                     )
                 }
                 #[cfg(feature = "default-tls")]
-                TlsBackend::Default | TlsBackend::Rustls => {
+                TlsBackend::Rustls => {
                     use crate::tls::{IgnoreHostname, NoVerifier};
 
                     // Set root certificates.
@@ -2003,7 +2003,7 @@ impl ClientBuilder {
     #[cfg(feature = "native-tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "native-tls")))]
     pub fn use_native_tls(mut self) -> ClientBuilder {
-        self.config.tls = TlsBackend::Default;
+        self.config.tls = TlsBackend::NativeTls;
         self
     }
 
