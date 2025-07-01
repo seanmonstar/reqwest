@@ -94,7 +94,7 @@ __tls = ["dep:rustls-pki-types", "tokio/io-util"]
 # Equivalent to rustls-tls-manual-roots but shorter :)
 __rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls"]
 __rustls-ring = ["hyper-rustls?/ring", "tokio-rustls?/ring", "rustls?/ring", "quinn?/ring"]
-__rustls-aws-lc-rs = ["hyper-rustls?/aws-lc-rs", "tokio-rustls?/aws-lc-rs", "rustls?/aws-lc-rs", "quinn?/aws-lc-rs"]
+__rustls-aws-lc-rs = ["dep:aws-lc-sys", "hyper-rustls?/aws-lc-rs", "tokio-rustls?/aws-lc-rs", "rustls?/aws-lc-rs", "quinn?/aws-lc-rs"]
 
 [dependencies]
 base64 = "0.22"
@@ -144,6 +144,9 @@ rustls = { version = "0.23.4", optional = true, default-features = false, featur
 tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["tls12"] }
 webpki-roots = { version = "1", optional = true }
 rustls-native-certs = { version = "0.8.0", optional = true }
+
+## explicit minimal version dependency to build on stable and nightly
+aws-lc-sys = { version = "0.29.0", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.18.0", package = "cookie", optional = true }
