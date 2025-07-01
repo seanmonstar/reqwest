@@ -29,7 +29,7 @@ features = [
 [features]
 default = ["default-tls", "charset", "http2", "system-proxy"]
 
-default-tls = ["dep:hyper-tls", "rustls-tls"]
+default-tls = ["rustls-tls"]
 
 http2 = ["h2", "hyper/http2", "hyper-util/http2", "hyper-rustls?/http2"]
 
@@ -133,12 +133,12 @@ pin-project-lite = "0.2.11"
 rustls-pki-types = { version = "1.9.0", features = ["std"], optional = true }
 mime = { version = "0.3.16", optional = true }
 
-## default-tls
+# native-tls
 hyper-tls = { version = "0.6", optional = true }
 native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls" }
 tokio-native-tls = { version = "0.3.0", optional = true }
 
-# rustls-tls
+# default-tls and rustls-tls
 hyper-rustls = { version = "0.27.0", default-features = false, optional = true, features = ["http1", "tls12"] }
 rustls = { version = "0.23.4", optional = true, default-features = false, features = ["std", "tls12"] }
 tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["tls12"] }
