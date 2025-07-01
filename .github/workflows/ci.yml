@@ -308,7 +308,7 @@ jobs:
         with:
           toolchain: ${{ steps.metadata.outputs.msrv }}
 
-      - name: Fix log and tokio versions
+      - name: Fix dependency versions
         run: |
           cargo update
           cargo update -p log --precise 0.4.18
@@ -319,6 +319,7 @@ jobs:
           cargo update -p native-tls --precise 0.2.13
           cargo update -p once_cell --precise 1.20.3
           cargo update -p tracing-core --precise 0.1.33
+          cargo update -p hyper-rustls --precise 0.27.2
           cargo update -p tokio-rustls --precise 0.26.0
           cargo update -p rustls --precise 0.23.19
 
