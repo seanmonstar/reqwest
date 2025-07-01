@@ -746,19 +746,7 @@ impl ClientBuilder {
                     // If not, we use ring.
                     let provider = rustls::crypto::CryptoProvider::get_default()
                         .map(|arc| arc.clone())
-                        .unwrap_or_else(|| {
-                            #[cfg(not(any(
-                                feature = "__rustls-ring",
-                                feature = "__rustls-aws-lc-rs"
-                            )))]
-                            panic!("No provider set");
-
-                            #[cfg(feature = "__rustls-ring")]
-                            return Arc::new(rustls::crypto::ring::default_provider());
-
-                            #[cfg(feature = "__rustls-aws-lc-rs")]
-                            Arc::new(rustls::crypto::aws_lc_rs::default_provider())
-                        });
+                        .unwrap_or_else(default_rustls_crypto_provider);
 
                     // Build TLS config
                     let signature_algorithms = provider.signature_verification_algorithms;
@@ -2340,6 +2328,20 @@ impl Default for Client {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn default_rustls_crypto_provider() -> Arc<rustls::crypto::CryptoProvider> {
+    #[cfg(not(any(
+        feature = "__rustls-ring",
+        feature = "__rustls-aws-lc-rs"
+    )))]
+    panic!("No provider set");
+
+    #[cfg(all(feature = "__rustls-ring", not(feature = "__rustls-aws-lc-rs")))]
+    return Arc::new(rustls::crypto::ring::default_provider());
+
+    #[cfg(feature = "__rustls-aws-lc-rs")]
+    Arc::new(rustls::crypto::aws_lc_rs::default_provider())
 }
 
 impl Client {
