@@ -2330,6 +2330,7 @@ impl Default for Client {
     }
 }
 
+#[cfg(feature = "__rustls")]
 fn default_rustls_crypto_provider() -> Arc<rustls::crypto::CryptoProvider> {
     #[cfg(not(any(feature = "__rustls-ring", feature = "__rustls-aws-lc-rs")))]
     panic!("No provider set");
