@@ -189,6 +189,13 @@ jobs:
         if: matrix.mingw64_path
         shell: bash
 
+      # This is required to build aws-lc-sys on windows GNU
+      # See https://github.com/actions/runner-images/issues/3316
+      - name: Add libclang to the path for windows GNU
+        run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
+        if: ${{ matrix.target == 'x86_64-pc-windows-gnu' || matrix.target == 'i686-pc-windows-gnu' }}
+        shell: bash
+
       - name: Update gcc
         if: matrix.package_name
         run: pacman.exe -Sy --noconfirm ${{ matrix.package_name }}
