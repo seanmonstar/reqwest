@@ -289,6 +289,7 @@ jobs:
           cargo clean
           cargo update -Z minimal-versions
           cargo update -p proc-macro2 --precise 1.0.87
+          cargo update -p aws-lc-rs --precise 1.13.1
           cargo update -p aws-lc-sys --precise 0.29.0
           cargo update -p openssl-sys
           cargo update -p openssl
