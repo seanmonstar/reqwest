@@ -575,7 +575,7 @@ impl ClientBuilder {
                         tls.max_protocol_version(Some(protocol));
                     }
 
-                    ConnectorBuilder::new_default_tls(
+                    ConnectorBuilder::new_native_tls(
                         http,
                         tls,
                         proxies.clone(),
@@ -599,7 +599,7 @@ impl ClientBuilder {
                     )?
                 }
                 #[cfg(feature = "native-tls")]
-                TlsBackend::BuiltNativeTls(conn) => ConnectorBuilder::from_built_default_tls(
+                TlsBackend::BuiltNativeTls(conn) => ConnectorBuilder::from_built_native_tls(
                     http,
                     conn,
                     proxies.clone(),
@@ -621,7 +621,7 @@ impl ClientBuilder {
                     config.nodelay,
                     config.tls_info,
                 ),
-                #[cfg(feature = "default-tls")]
+                #[cfg(feature = "__rustls")]
                 TlsBackend::BuiltRustls(conn) => {
                     #[cfg(feature = "http3")]
                     {
@@ -663,7 +663,7 @@ impl ClientBuilder {
                         config.tls_info,
                     )
                 }
-                #[cfg(feature = "default-tls")]
+                #[cfg(feature = "__rustls")]
                 TlsBackend::Rustls => {
                     use crate::tls::{IgnoreHostname, NoVerifier};
 

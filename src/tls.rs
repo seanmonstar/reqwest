@@ -12,10 +12,9 @@
 //! reqwest will pick a TLS backend by default. This is true when the
 //! `default-tls` feature is enabled.
 //!
-//! While it currently uses `native-tls`, the feature set is designed to only
+//! While it currently uses `rustls-tls`, the feature set is designed to only
 //! enable configuration that is shared among available backends. This allows
-//! reqwest to change the default to `rustls` (or another) at some point in the
-//! future.
+//! reqwest to change the default to `native-tls` (or another) by configuration.
 //!
 //! <div class="warning">This feature is enabled by default, and takes
 //! precedence if any other crate enables it. This is true even if you declare
@@ -71,11 +70,11 @@ pub struct CertificateRevocationList {
 pub struct Certificate {
     #[cfg(feature = "native-tls")]
     native: native_tls_crate::Certificate,
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "__rustls")]
     original: Cert,
 }
 
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "__rustls")]
 #[derive(Clone)]
 enum Cert {
     Der(Vec<u8>),
@@ -94,7 +93,7 @@ enum ClientCert {
     Pkcs12(native_tls_crate::Identity),
     #[cfg(feature = "native-tls")]
     Pkcs8(native_tls_crate::Identity),
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "__rustls")]
     Pem {
         key: rustls_pki_types::PrivateKeyDer<'static>,
         certs: Vec<rustls_pki_types::CertificateDer<'static>>,
@@ -143,7 +142,7 @@ impl Certificate {
         Ok(Certificate {
             #[cfg(feature = "native-tls")]
             native: native_tls_crate::Certificate::from_der(der).map_err(crate::error::builder)?,
-            #[cfg(feature = "default-tls")]
+            #[cfg(feature = "__rustls")]
             original: Cert::Der(der.to_owned()),
         })
     }
@@ -168,7 +167,7 @@ impl Certificate {
         Ok(Certificate {
             #[cfg(feature = "native-tls")]
             native: native_tls_crate::Certificate::from_pem(pem).map_err(crate::error::builder)?,
-            #[cfg(feature = "default-tls")]
+            #[cfg(feature = "__rustls")]
             original: Cert::Pem(pem.to_owned()),
         })
     }
@@ -204,7 +203,7 @@ impl Certificate {
         tls.add_root_certificate(self.native);
     }
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "__rustls")]
     pub(crate) fn add_to_rustls(
         self,
         root_cert_store: &mut rustls::RootCertStore,
@@ -539,7 +538,7 @@ impl Version {
         }
     }
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "__rustls")]
     pub(crate) fn from_rustls(version: rustls::ProtocolVersion) -> Option<Self> {
         match version {
             rustls::ProtocolVersion::SSLv2 => None,
@@ -770,13 +769,13 @@ mod tests {
         Identity::from_pkcs8_pem(b"not pem", b"not key").unwrap_err();
     }
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "__rustls")]
     #[test]
     fn identity_from_pem_invalid() {
         Identity::from_pem(b"not pem").unwrap_err();
     }
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "__rustls")]
     #[test]
     fn identity_from_pem_pkcs1_key() {
         let pem = b"-----BEGIN CERTIFICATE-----\n\
@@ -821,7 +820,7 @@ mod tests {
         assert!(Certificate::from_pem_bundle(PEM_BUNDLE).is_ok())
     }
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "__rustls")]
     #[test]
     fn crl_from_pem() {
         let pem = b"-----BEGIN X509 CRL-----\n-----END X509 CRL-----\n";
@@ -829,7 +828,7 @@ mod tests {
         CertificateRevocationList::from_pem(pem).unwrap();
     }
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "__rustls")]
     #[test]
     fn crl_from_pem_bundle() {
         let pem_bundle = std::fs::read("tests/support/crl.pem").unwrap();
