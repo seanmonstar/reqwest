@@ -322,6 +322,8 @@ jobs:
           cargo update -p hyper-rustls --precise 0.27.2
           cargo update -p tokio-rustls --precise 0.26.0
           cargo update -p rustls --precise 0.23.19
+          cargo update -p aws-lc-rs --precise 1.13.1
+          cargo update -p aws-lc-sys --precise 0.29.0
 
       - uses: Swatinem/rust-cache@v2
 
