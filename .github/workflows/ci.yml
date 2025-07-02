@@ -106,10 +106,12 @@ jobs:
             os: windows-latest
             target: x86_64-pc-windows-msvc
             features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart,stream"
+            aws_lc_sys_prebuilt_nasm: 1
           - name: windows / stable-i686-msvc
             os: windows-latest
             target: i686-pc-windows-msvc
             features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart,stream"
+            aws_lc_sys_prebuilt_nasm: 1
           - name: windows / stable-x86_64-gnu
             os: windows-latest
             rust: stable-x86_64-pc-windows-gnu
