@@ -1294,7 +1294,13 @@ mod socks {
                 .next();
             if let Some(new_target) = maybe_new_target {
                 log::trace!("socks local dns resolved {new_target:?}");
-                host = new_target.ip().to_string();
+                // If the resolved IP is IPv6, wrap it in brackets for URI formatting
+                let ip = new_target.ip();
+                if ip.is_ipv6() {
+                    host = format!("[{}]", ip);
+                } else {
+                    host = ip.to_string();
+                }
             }
         }
 
