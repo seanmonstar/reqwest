@@ -97,8 +97,6 @@ enum HttpVersionPref {
 
 #[derive(Clone)]
 struct HyperService {
-    #[cfg(feature = "cookies")]
-    cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     hyper: HyperClient,
 }
 
@@ -111,42 +109,10 @@ impl Service<hyper::Request<crate::async_impl::body::Body>> for HyperService {
         self.hyper.poll_ready(cx).map_err(crate::error::request)
     }
 
-    #[cfg(not(feature = "cookies"))]
     fn call(&mut self, req: hyper::Request<crate::async_impl::body::Body>) -> Self::Future {
         let clone = self.hyper.clone();
         let mut inner = std::mem::replace(&mut self.hyper, clone);
         Box::pin(async move { inner.call(req).await.map_err(crate::error::request) })
-    }
-
-    #[cfg(feature = "cookies")]
-    fn call(&mut self, mut req: hyper::Request<crate::async_impl::body::Body>) -> Self::Future {
-        let clone = self.hyper.clone();
-        let mut inner = std::mem::replace(&mut self.hyper, clone);
-        let url = Url::parse(req.uri().to_string().as_str()).expect("invalid URL");
-
-        if let Some(cookie_store) = self.cookie_store.as_ref() {
-            if req.headers().get(crate::header::COOKIE).is_none() {
-                let headers = req.headers_mut();
-                crate::util::add_cookie_header(headers, &**cookie_store, &url);
-            }
-        }
-
-        let cookie_store = self.cookie_store.clone();
-        Box::pin(async move {
-            let res = inner.call(req).await.map_err(crate::error::request);
-
-            if let Some(ref cookie_store) = cookie_store {
-                if let Ok(res) = &res {
-                    let mut cookies =
-                        cookie::extract_response_cookie_headers(res.headers()).peekable();
-                    if cookies.peek().is_some() {
-                        cookie_store.set_cookies(&mut cookies, &url);
-                    }
-                }
-            }
-
-            res
-        })
     }
 }
 
@@ -975,17 +941,13 @@ impl ClientBuilder {
         let proxies_maybe_http_custom_headers =
             proxies.iter().any(|p| p.maybe_has_http_custom_headers());
 
+        #[cfg(feature = "cookies")]
+        let cookie_store_desc = config.cookie_store.is_some();
+
         let redirect_policy_desc = if config.redirect_policy.is_default() {
             None
         } else {
             Some(format!("{:?}", &config.redirect_policy))
-        };
-
-        let hyper_client = builder.build(connector_builder.build(config.connector_layers));
-        let hyper_service = HyperService {
-            #[cfg(feature = "cookies")]
-            cookie_store: config.cookie_store.clone(),
-            hyper: hyper_client,
         };
 
         let policy = {
@@ -995,30 +957,38 @@ impl ClientBuilder {
             p
         };
 
-        let hyper = FollowRedirect::with_policy(hyper_service, policy.clone());
+        let hyper = {
+            let hyper_service = HyperService {
+                hyper: builder.build(connector_builder.build(config.connector_layers)),
+            };
+
+            #[cfg(feature = "cookies")]
+            let hyper_service = tower::ServiceBuilder::new()
+                .layer(cookie::CookieServiceLayer::new(config.cookie_store.clone()))
+                .service(hyper_service);
+
+            FollowRedirect::with_policy(hyper_service, policy.clone())
+        };
+
+        #[cfg(feature = "http3")]
+        let h3_client = if let Some(h3_connector) = h3_connector {
+            let h3_service = H3Client::new(h3_connector, config.pool_idle_timeout);
+            #[cfg(feature = "cookies")]
+            let h3_service = tower::ServiceBuilder::new()
+                .layer(cookie::CookieServiceLayer::new(config.cookie_store))
+                .service(h3_service);
+            Some(FollowRedirect::with_policy(h3_service, policy))
+        } else {
+            None
+        };
 
         Ok(Client {
             inner: Arc::new(ClientRef {
                 accepts: config.accepts,
-                #[cfg(feature = "cookies")]
-                cookie_store: config.cookie_store.clone(),
                 // Use match instead of map since config is partially moved,
                 // and it cannot be used in closure
                 #[cfg(feature = "http3")]
-                h3_client: match h3_connector {
-                    Some(h3_connector) => {
-                        #[cfg(not(feature = "cookies"))]
-                        let h3_service = H3Client::new(h3_connector, config.pool_idle_timeout);
-                        #[cfg(feature = "cookies")]
-                        let h3_service = H3Client::new(
-                            h3_connector,
-                            config.pool_idle_timeout,
-                            config.cookie_store,
-                        );
-                        Some(FollowRedirect::with_policy(h3_service, policy))
-                    }
-                    None => None,
-                },
+                h3_client,
                 headers: config.headers,
                 referer: config.referer,
                 read_timeout: config.read_timeout,
@@ -1029,6 +999,8 @@ impl ClientBuilder {
                 proxies_maybe_http_custom_headers,
                 https_only: config.https_only,
                 redirect_policy_desc,
+                #[cfg(feature = "cookies")]
+                cookie_store_desc,
             }),
         })
     }
@@ -2757,14 +2729,24 @@ impl Config {
     }
 }
 
+#[cfg(not(feature = "cookies"))]
+type HyperClientService = FollowRedirect<HyperService, TowerRedirectPolicy>;
+
+#[cfg(feature = "cookies")]
+type HyperClientService = FollowRedirect<cookie::CookieService<HyperService>, TowerRedirectPolicy>;
+
+#[cfg(all(feature = "http3", not(feature = "cookies")))]
+type H3ClientService = Option<FollowRedirect<H3Client, TowerRedirectPolicy>>;
+
+#[cfg(all(feature = "http3", feature = "cookies"))]
+type H3ClientService = Option<FollowRedirect<cookie::CookieService<H3Client>, TowerRedirectPolicy>>;
+
 struct ClientRef {
     accepts: Accepts,
-    #[cfg(feature = "cookies")]
-    cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     headers: HeaderMap,
-    hyper: FollowRedirect<HyperService, TowerRedirectPolicy>,
+    hyper: HyperClientService,
     #[cfg(feature = "http3")]
-    h3_client: Option<FollowRedirect<H3Client, TowerRedirectPolicy>>,
+    h3_client: H3ClientService,
     referer: bool,
     request_timeout: RequestConfig<RequestTimeout>,
     read_timeout: Option<Duration>,
@@ -2773,6 +2755,8 @@ struct ClientRef {
     proxies_maybe_http_custom_headers: bool,
     https_only: bool,
     redirect_policy_desc: Option<String>,
+    #[cfg(feature = "cookies")]
+    cookie_store_desc: bool,
 }
 
 impl ClientRef {
@@ -2782,8 +2766,8 @@ impl ClientRef {
 
         #[cfg(feature = "cookies")]
         {
-            if let Some(_) = self.cookie_store {
-                f.field("cookie_store", &true);
+            if self.cookie_store_desc {
+                f.field("cookie_store", &self.cookie_store_desc);
             }
         }
 
@@ -2845,8 +2829,25 @@ pin_project! {
 }
 
 enum ResponseFuture {
+    #[cfg(not(feature = "cookies"))]
     Default(tower_http::follow_redirect::ResponseFuture<HyperService, Body, TowerRedirectPolicy>),
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "cookies")]
+    Default(
+        tower_http::follow_redirect::ResponseFuture<
+            cookie::CookieService<HyperService>,
+            Body,
+            TowerRedirectPolicy,
+        >,
+    ),
+    #[cfg(all(feature = "http3", feature = "cookies"))]
+    H3(
+        tower_http::follow_redirect::ResponseFuture<
+            cookie::CookieService<H3Client>,
+            Body,
+            TowerRedirectPolicy,
+        >,
+    ),
+    #[cfg(all(feature = "http3", not(feature = "cookies")))]
     H3(tower_http::follow_redirect::ResponseFuture<H3Client, Body, TowerRedirectPolicy>),
 }
 
@@ -3040,16 +3041,6 @@ impl Future for PendingRequest {
                 },
             };
 
-            #[cfg(feature = "cookies")]
-            {
-                if let Some(ref cookie_store) = self.client.cookie_store {
-                    let mut cookies =
-                        cookie::extract_response_cookie_headers(res.headers()).peekable();
-                    if cookies.peek().is_some() {
-                        cookie_store.set_cookies(&mut cookies, &self.url);
-                    }
-                }
-            }
             if let Some(url) = &res
                 .extensions()
                 .get::<tower_http::follow_redirect::RequestUri>()
