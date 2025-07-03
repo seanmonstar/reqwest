@@ -11,6 +11,9 @@ use tokio::net::TcpStream;
 use tokio::runtime;
 use tokio::sync::oneshot;
 
+#[cfg(feature = "http3")]
+static CRYPTO_PROVIDER_INSTALLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
 pub struct Server {
     addr: net::SocketAddr,
     panic_rx: std_mpsc::Receiver<()>,
@@ -194,6 +197,8 @@ impl Http3 {
             let cert = std::fs::read("tests/support/server.cert").unwrap().into();
             let key = std::fs::read("tests/support/server.key").unwrap().try_into().unwrap();
 
+            CRYPTO_PROVIDER_INSTALLED.get_or_init(install_default_crypto_provider);
+
             let mut tls_config = rustls::ServerConfig::builder()
                 .with_no_client_auth()
                 .with_single_cert(vec![cert], key)
@@ -281,6 +286,24 @@ impl Http3 {
         .join()
         .unwrap()
     }
+}
+
+#[cfg(feature = "http3")]
+fn install_default_crypto_provider() -> bool {
+    #[cfg(not(any(feature = "__rustls-ring", feature = "__rustls-aws-lc-rs")))]
+    panic!("No provider set");
+
+    #[cfg(all(feature = "__rustls-ring", not(feature = "__rustls-aws-lc-rs")))]
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("failed to install the default Ring TLS provider");
+
+    #[cfg(feature = "__rustls-aws-lc-rs")]
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("failed to install the default TLS provider");
+
+    true
 }
 
 pub fn low_level_with_response<F>(do_response: F) -> Server
