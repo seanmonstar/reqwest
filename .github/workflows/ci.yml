@@ -182,15 +182,16 @@ jobs:
           toolchain: ${{ matrix.rust || 'stable' }}
           targets: ${{ matrix.target }}
 
-      - name: Install i686 Clang & NASM
-        if: ${{ matrix.target == 'i686-pc-windows-gnu' }}
-        run: pacman.exe -Sy --noconfirm mingw-w64-i686-clang mingw-w64-i686-nasm
-
       - name: Add mingw-w64 to path for i686-gnu
         run: |
           echo "${{ matrix.mingw64_path }}" >> $GITHUB_PATH
           echo "C:\msys64\usr\bin" >> $GITHUB_PATH
         if: matrix.mingw64_path
+        shell: bash
+
+      - name: Install i686 Clang & NASM
+        if: ${{ matrix.target == 'i686-pc-windows-gnu' }}
+        run: pacman.exe -Sy --noconfirm mingw-w64-i686-clang mingw-w64-i686-nasm
         shell: bash
 
       - name: Add libclang to the environment for windows i686-gnu
