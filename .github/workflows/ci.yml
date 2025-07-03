@@ -182,6 +182,10 @@ jobs:
           toolchain: ${{ matrix.rust || 'stable' }}
           targets: ${{ matrix.target }}
 
+      - name: Install i686 Clang & NASM
+        if: ${{ matrix.target == 'i686-pc-windows-gnu' }}
+        run: pacman.exe -Sy --noconfirm mingw-w64-i686-clang mingw-w64-i686-nasm
+
       - name: Add mingw-w64 to path for i686-gnu
         run: |
           echo "${{ matrix.mingw64_path }}" >> $GITHUB_PATH
@@ -189,11 +193,9 @@ jobs:
         if: matrix.mingw64_path
         shell: bash
 
-      # This is required to build aws-lc-sys on windows GNU
-      # See https://github.com/actions/runner-images/issues/3316
-      - name: Add libclang to the path for windows GNU
-        run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
-        if: ${{ matrix.target == 'x86_64-pc-windows-gnu' || matrix.target == 'i686-pc-windows-gnu' }}
+      - name: Add libclang to the environment for windows i686-gnu
+        run: echo "LIBCLANG_PATH=C:\msys64\mingw32\bin" >> $env:GITHUB_ENV
+        if: ${{ matrix.target == 'i686-pc-windows-gnu' }}
         shell: bash
 
       - name: Update gcc
