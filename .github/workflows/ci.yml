@@ -194,9 +194,19 @@ jobs:
         run: pacman.exe -Sy --noconfirm mingw-w64-i686-clang mingw-w64-i686-nasm
         shell: bash
 
+      - name: Install x86_64 Clang & NASM
+        if: ${{ matrix.target == 'x86_64-pc-windows-gnu' }}
+        run: pacman.exe -Sy --noconfirm mingw-w64-x86_64-clang mingw-w64-x86_64-nasm
+        shell: bash
+
       - name: Add libclang to the environment for windows i686-gnu
         run: echo "LIBCLANG_PATH=C:\msys64\mingw32\bin" >> $env:GITHUB_ENV
         if: ${{ matrix.target == 'i686-pc-windows-gnu' }}
+        shell: bash
+
+      - name: Add libclang to the environment for windows x86_64-gnu
+        run: echo "LIBCLANG_PATH=C:\msys64\mingw64\bin" >> $env:GITHUB_ENV
+        if: ${{ matrix.target == 'x86_64-pc-windows-gnu' }}
         shell: bash
 
       - name: Update gcc
