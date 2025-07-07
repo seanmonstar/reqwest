@@ -56,6 +56,9 @@ jobs:
 
     runs-on: ${{ matrix.os || 'ubuntu-latest' }}
 
+    env:
+      AWS_LC_SYS_PREBUILT_NASM: ${{ matrix.aws_lc_sys_prebuilt_nasm || 0 }}
+
     # The build matrix does not yet support 'allow failures' at job level.
     # See `jobs.nightly` for the active nightly job definition.
     strategy:
@@ -105,10 +108,12 @@ jobs:
             os: windows-latest
             target: x86_64-pc-windows-msvc
             features: "--features blocking,gzip,brotli,zstd,deflate,query,form,json,multipart,stream"
+            aws_lc_sys_prebuilt_nasm: 1
           - name: windows / stable-i686-msvc
             os: windows-latest
             target: i686-pc-windows-msvc
             features: "--features blocking,gzip,brotli,zstd,deflate,query,form,json,multipart,stream"
+            aws_lc_sys_prebuilt_nasm: 1
           - name: windows / stable-x86_64-gnu
             os: windows-latest
             rust: stable-x86_64-pc-windows-gnu
@@ -116,11 +121,12 @@ jobs:
             features: "--features blocking,gzip,brotli,zstd,deflate,query,form,json,multipart,stream"
             package_name: mingw-w64-x86_64-gcc
             mingw64_path: "C:\\msys64\\mingw64\\bin"
+            aws_lc_sys_prebuilt_nasm: 1
           - name: windows / stable-i686-gnu
             os: windows-latest
             rust: stable-i686-pc-windows-gnu
             target: i686-pc-windows-gnu
-            features: "--features blocking,gzip,brotli,zstd,deflate,query,form,json,multipart,stream"
+            features: "--no-default-features --features blocking,gzip,brotli,zstd,deflate,query,form,json,multipart,stream,native-tls,http2"
             package_name: mingw-w64-i686-gcc
             mingw64_path: "C:\\msys64\\mingw32\\bin"
 
@@ -188,6 +194,16 @@ jobs:
         if: matrix.mingw64_path
         shell: bash
 
+      - name: Install x86_64 Clang & NASM
+        if: ${{ matrix.target == 'x86_64-pc-windows-gnu' }}
+        run: pacman.exe -Sy --noconfirm mingw-w64-x86_64-clang mingw-w64-x86_64-nasm
+        shell: bash
+
+      - name: Add libclang to the environment for windows x86_64-gnu
+        run: echo "LIBCLANG_PATH=C:\msys64\mingw64\bin" >> $env:GITHUB_ENV
+        if: ${{ matrix.target == 'x86_64-pc-windows-gnu' }}
+        shell: bash
+
       - name: Update gcc
         if: matrix.package_name
         run: pacman.exe -Sy --noconfirm ${{ matrix.package_name }}
@@ -225,7 +241,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: check --feature-powerset
-        run: cargo hack --no-dev-deps check --feature-powerset --depth 2 --skip http3,__tls,__rustls,__rustls-ring,native-tls-vendored,trust-dns
+        run: cargo hack --no-dev-deps check --feature-powerset --depth 2 --skip http3,__tls,__rustls,__rustls-ring,__rustls-aws-lc-rs,native-tls-vendored,trust-dns
         env:
           RUSTFLAGS: "-D dead_code -D unused_imports"
 
@@ -290,6 +306,8 @@ jobs:
           cargo clean
           cargo update -Z minimal-versions
           cargo update -p proc-macro2 --precise 1.0.87
+          cargo update -p aws-lc-rs --precise 1.13.1
+          cargo update -p aws-lc-sys --precise 0.29.0
           cargo update -p openssl-sys
           cargo update -p openssl
           cargo check
