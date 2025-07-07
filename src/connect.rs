@@ -7,7 +7,7 @@ use hyper::rt::{Read, ReadBufCursor, Write};
 use hyper_util::client::legacy::connect::{Connected, Connection};
 #[cfg(any(feature = "socks", feature = "__tls"))]
 use hyper_util::rt::TokioIo;
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "native-tls")]
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
 use pin_project_lite::pin_project;
 use tower::util::{BoxCloneSyncServiceLayer, MapRequestLayer};
@@ -22,7 +22,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "native-tls")]
 use self::native_tls_conn::NativeTlsConn;
 #[cfg(feature = "__rustls")]
 use self::rustls_tls_conn::RustlsTlsConn;
@@ -199,8 +199,8 @@ where {
         }
     }
 
-    #[cfg(feature = "default-tls")]
-    pub(crate) fn new_default_tls<T>(
+    #[cfg(feature = "native-tls")]
+    pub(crate) fn new_native_tls<T>(
         http: HttpConnector,
         tls: TlsConnectorBuilder,
         proxies: Arc<Vec<ProxyMatcher>>,
@@ -226,7 +226,7 @@ where {
         T: Into<Option<IpAddr>>,
     {
         let tls = tls.build().map_err(crate::error::builder)?;
-        Ok(Self::from_built_default_tls(
+        Ok(Self::from_built_native_tls(
             http,
             tls,
             proxies,
@@ -250,8 +250,8 @@ where {
         ))
     }
 
-    #[cfg(feature = "default-tls")]
-    pub(crate) fn from_built_default_tls<T>(
+    #[cfg(feature = "native-tls")]
+    pub(crate) fn from_built_native_tls<T>(
         mut http: HttpConnector,
         tls: TlsConnector,
         proxies: Arc<Vec<ProxyMatcher>>,
@@ -296,7 +296,7 @@ where {
         http.enforce_http(false);
 
         ConnectorBuilder {
-            inner: Inner::DefaultTls(http, tls),
+            inner: Inner::NativeTls(http, tls),
             proxies,
             verbose: verbose::OFF,
             nodelay,
@@ -389,8 +389,8 @@ where {
 
     pub(crate) fn set_keepalive(&mut self, dur: Option<Duration>) {
         match &mut self.inner {
-            #[cfg(feature = "default-tls")]
-            Inner::DefaultTls(http, _tls) => http.set_keepalive(dur),
+            #[cfg(feature = "native-tls")]
+            Inner::NativeTls(http, _tls) => http.set_keepalive(dur),
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, .. } => http.set_keepalive(dur),
             #[cfg(not(feature = "__tls"))]
@@ -400,8 +400,8 @@ where {
 
     pub(crate) fn set_keepalive_interval(&mut self, dur: Option<Duration>) {
         match &mut self.inner {
-            #[cfg(feature = "default-tls")]
-            Inner::DefaultTls(http, _tls) => http.set_keepalive_interval(dur),
+            #[cfg(feature = "native-tls")]
+            Inner::NativeTls(http, _tls) => http.set_keepalive_interval(dur),
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, .. } => http.set_keepalive_interval(dur),
             #[cfg(not(feature = "__tls"))]
@@ -411,8 +411,8 @@ where {
 
     pub(crate) fn set_keepalive_retries(&mut self, retries: Option<u32>) {
         match &mut self.inner {
-            #[cfg(feature = "default-tls")]
-            Inner::DefaultTls(http, _tls) => http.set_keepalive_retries(retries),
+            #[cfg(feature = "native-tls")]
+            Inner::NativeTls(http, _tls) => http.set_keepalive_retries(retries),
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, .. } => http.set_keepalive_retries(retries),
             #[cfg(not(feature = "__tls"))]
@@ -428,8 +428,8 @@ where {
     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
     pub(crate) fn set_tcp_user_timeout(&mut self, dur: Option<Duration>) {
         match &mut self.inner {
-            #[cfg(feature = "default-tls")]
-            Inner::DefaultTls(http, _tls) => http.set_tcp_user_timeout(dur),
+            #[cfg(feature = "native-tls")]
+            Inner::NativeTls(http, _tls) => http.set_tcp_user_timeout(dur),
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, .. } => http.set_tcp_user_timeout(dur),
             #[cfg(not(feature = "__tls"))]
@@ -463,9 +463,9 @@ pub(crate) struct ConnectorService {
 enum Inner {
     #[cfg(not(feature = "__tls"))]
     Http(HttpConnector),
-    #[cfg(feature = "default-tls")]
-    DefaultTls(HttpConnector, TlsConnector),
-    #[cfg(feature = "__rustls")]
+    #[cfg(feature = "native-tls")]
+    NativeTls(HttpConnector, TlsConnector),
+    #[cfg(any(feature = "__rustls"))]
     RustlsTls {
         http: HttpConnector,
         tls: Arc<rustls::ClientConfig>,
@@ -477,8 +477,8 @@ impl Inner {
     #[cfg(feature = "socks")]
     fn get_http_connector(&mut self) -> &mut crate::connect::HttpConnector {
         match self {
-            #[cfg(feature = "default-tls")]
-            Inner::DefaultTls(http, _) => http,
+            #[cfg(feature = "native-tls")]
+            Inner::NativeTls(http, _) => http,
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, .. } => http,
             #[cfg(not(feature = "__tls"))]
@@ -499,8 +499,8 @@ impl ConnectorService {
         };
 
         match &mut self.inner {
-            #[cfg(feature = "default-tls")]
-            Inner::DefaultTls(http, tls) => {
+            #[cfg(feature = "native-tls")]
+            Inner::NativeTls(http, tls) => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     let host = dst.host().ok_or("no host in url")?.to_string();
                     let conn = socks::connect(proxy, dst, dns, &self.resolver, http).await?;
@@ -575,8 +575,8 @@ impl ConnectorService {
                     tls_info: false,
                 })
             }
-            #[cfg(feature = "default-tls")]
-            Inner::DefaultTls(http, tls) => {
+            #[cfg(feature = "native-tls")]
+            Inner::NativeTls(http, tls) => {
                 let mut http = http.clone();
 
                 // Disable Nagle's algorithm for TLS handshake
@@ -668,8 +668,8 @@ impl ConnectorService {
         let misc = proxy.custom_headers().clone();
 
         match &self.inner {
-            #[cfg(feature = "default-tls")]
-            Inner::DefaultTls(http, tls) => {
+            #[cfg(feature = "native-tls")]
+            Inner::NativeTls(http, tls) => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     log::trace!("tunneling HTTPS over proxy");
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
@@ -823,7 +823,7 @@ impl<T: TlsInfoFactory> TlsInfoFactory for TokioIo<T> {
     }
 }
 
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "native-tls")]
 impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<TokioIo<tokio::net::TcpStream>>> {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         let peer_certificate = self
@@ -836,7 +836,7 @@ impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<TokioIo<tokio::net::
     }
 }
 
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "native-tls")]
 impl TlsInfoFactory
     for tokio_native_tls::TlsStream<
         TokioIo<hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>>>,
@@ -853,7 +853,7 @@ impl TlsInfoFactory
     }
 }
 
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "native-tls")]
 impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>> {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
         match self {
@@ -1008,7 +1008,7 @@ pub(crate) mod sealed {
 
 pub(crate) type Connecting = Pin<Box<dyn Future<Output = Result<Conn, BoxError>> + Send>>;
 
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "native-tls")]
 mod native_tls_conn {
     use super::TlsInfoFactory;
     use hyper::rt::{Read, ReadBufCursor, Write};
