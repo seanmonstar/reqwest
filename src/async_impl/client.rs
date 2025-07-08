@@ -802,7 +802,7 @@ impl ClientBuilder {
                         {
                             use rustls_platform_verifier::BuilderVerifierExt;
                             config_builder.with_platform_verifier()
-                                .map_err(|_| crate::error::builder("invalid TLS verification settings"))?
+                                .map_err(crate::error::builder)?
                         }
                     };
 
