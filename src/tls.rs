@@ -59,7 +59,10 @@ use std::{
 };
 
 /// Represents a X509 certificate revocation list.
-#[cfg(feature = "__rustls")]
+#[cfg(all(
+    feature = "__rustls",
+    not(feature = "rustls-tls-platform-verifier-no-provider")
+))]
 pub struct CertificateRevocationList {
     #[cfg(feature = "__rustls")]
     inner: rustls_pki_types::CertificateRevocationListDer<'static>,
@@ -417,7 +420,10 @@ impl Identity {
     }
 }
 
-#[cfg(feature = "__rustls")]
+#[cfg(all(
+    feature = "__rustls",
+    not(feature = "rustls-tls-platform-verifier-no-provider")
+))]
 impl CertificateRevocationList {
     /// Parses a PEM encoded CRL.
     ///
@@ -496,7 +502,10 @@ impl fmt::Debug for Identity {
     }
 }
 
-#[cfg(feature = "__rustls")]
+#[cfg(all(
+    feature = "__rustls",
+    not(feature = "rustls-tls-platform-verifier-no-provider")
+))]
 impl fmt::Debug for CertificateRevocationList {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("CertificateRevocationList").finish()

@@ -33,7 +33,10 @@ use crate::error::{self, BoxError};
 use crate::into_url::try_uri;
 use crate::proxy::Matcher as ProxyMatcher;
 use crate::redirect::{self, TowerRedirectPolicy};
-#[cfg(feature = "__rustls")]
+#[cfg(all(
+    feature = "__rustls",
+    not(feature = "rustls-tls-platform-verifier-no-provider")
+))]
 use crate::tls::CertificateRevocationList;
 #[cfg(feature = "__tls")]
 use crate::tls::{self, TlsBackend};
@@ -185,7 +188,10 @@ struct Config {
     tls_built_in_certs_webpki: bool,
     #[cfg(feature = "rustls-tls-native-roots-no-provider")]
     tls_built_in_certs_native: bool,
-    #[cfg(feature = "__rustls")]
+    #[cfg(all(
+        feature = "__rustls",
+        not(feature = "rustls-tls-platform-verifier-no-provider")
+    ))]
     crls: Vec<CertificateRevocationList>,
     #[cfg(feature = "__tls")]
     min_tls_version: Option<tls::Version>,
@@ -310,7 +316,10 @@ impl ClientBuilder {
                 tls_built_in_certs_native: true,
                 #[cfg(any(feature = "native-tls", feature = "__rustls"))]
                 identity: None,
-                #[cfg(feature = "__rustls")]
+                #[cfg(all(
+                    feature = "__rustls",
+                    not(feature = "rustls-tls-platform-verifier-no-provider")
+                ))]
                 crls: vec![],
                 #[cfg(feature = "__tls")]
                 min_tls_version: None,
@@ -767,6 +776,7 @@ impl ClientBuilder {
                                 signature_algorithms,
                             )))
                     } else {
+                        #[cfg(not(feature = "rustls-tls-platform-verifier-no-provider"))]
                         if config.crls.is_empty() {
                             config_builder.with_root_certificates(root_cert_store)
                         } else {
@@ -786,6 +796,13 @@ impl ClientBuilder {
                                     crate::error::builder("invalid TLS verification settings")
                                 })?;
                             config_builder.with_webpki_verifier(verifier)
+                        }
+
+                        #[cfg(feature = "rustls-tls-platform-verifier-no-provider")]
+                        {
+                            use rustls_platform_verifier::BuilderVerifierExt;
+                            config_builder.with_platform_verifier()
+                                .map_err(|_| crate::error::builder("invalid TLS verification settings"))?
                         }
                     };
 
@@ -1737,8 +1754,14 @@ impl ClientBuilder {
     /// # Optional
     ///
     /// This requires the `rustls-tls(-...)` Cargo feature enabled.
-    #[cfg(feature = "__rustls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    #[cfg(all(
+        feature = "__rustls",
+        not(feature = "rustls-tls-platform-verifier-no-provider")
+    ))]
+    #[cfg_attr(docsrs, doc(cfg(all(
+        feature = "rustls-tls",
+        not(feature = "rustls-tls-platform-verifier-no-provider")
+    ))))]
     pub fn add_crl(mut self, crl: CertificateRevocationList) -> ClientBuilder {
         self.config.crls.push(crl);
         self
@@ -1750,8 +1773,14 @@ impl ClientBuilder {
     /// # Optional
     ///
     /// This requires the `rustls-tls(-...)` Cargo feature enabled.
-    #[cfg(feature = "__rustls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    #[cfg(all(
+        feature = "__rustls",
+        not(feature = "rustls-tls-platform-verifier-no-provider")
+    ))]
+    #[cfg_attr(docsrs, doc(cfg(all(
+        feature = "rustls-tls",
+        not(feature = "rustls-tls-platform-verifier-no-provider")
+    ))))]
     pub fn add_crls(
         mut self,
         crls: impl IntoIterator<Item = CertificateRevocationList>,
