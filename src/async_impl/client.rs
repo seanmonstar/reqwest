@@ -801,7 +801,8 @@ impl ClientBuilder {
                         #[cfg(feature = "rustls-tls-platform-verifier-no-provider")]
                         {
                             use rustls_platform_verifier::BuilderVerifierExt;
-                            config_builder.with_platform_verifier()
+                            config_builder
+                                .with_platform_verifier()
                                 .map_err(crate::error::builder)?
                         }
                     };
@@ -1758,10 +1759,13 @@ impl ClientBuilder {
         feature = "__rustls",
         not(feature = "rustls-tls-platform-verifier-no-provider")
     ))]
-    #[cfg_attr(docsrs, doc(cfg(all(
-        feature = "rustls-tls",
-        not(feature = "rustls-tls-platform-verifier-no-provider")
-    ))))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(all(
+            feature = "rustls-tls",
+            not(feature = "rustls-tls-platform-verifier-no-provider")
+        )))
+    )]
     pub fn add_crl(mut self, crl: CertificateRevocationList) -> ClientBuilder {
         self.config.crls.push(crl);
         self
@@ -1777,10 +1781,13 @@ impl ClientBuilder {
         feature = "__rustls",
         not(feature = "rustls-tls-platform-verifier-no-provider")
     ))]
-    #[cfg_attr(docsrs, doc(cfg(all(
-        feature = "rustls-tls",
-        not(feature = "rustls-tls-platform-verifier-no-provider")
-    ))))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(all(
+            feature = "rustls-tls",
+            not(feature = "rustls-tls-platform-verifier-no-provider")
+        )))
+    )]
     pub fn add_crls(
         mut self,
         crls: impl IntoIterator<Item = CertificateRevocationList>,
