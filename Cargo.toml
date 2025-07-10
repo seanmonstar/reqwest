@@ -12,6 +12,13 @@ license = "MIT OR Apache-2.0"
 edition = "2021"
 rust-version = "1.64.0"
 autotests = true
+include = [
+    "README.md",
+    "Cargo.toml",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "src/**/*.rs"
+]
 
 [package.metadata.docs.rs]
 all-features = true
