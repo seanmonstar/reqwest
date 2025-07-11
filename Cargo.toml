@@ -163,7 +163,7 @@ async-compression = { version = "0.4.0", default-features = false, features = ["
 tokio-util = { version = "0.7.9", default-features = false, features = ["codec", "io"], optional = true }
 
 ## hickory-dns
-hickory-resolver = { version = "0.24", optional = true, features = ["tokio-runtime"] }
+hickory-resolver = { version = "0.25", optional = true, features = ["tokio"] }
 once_cell = { version = "1.18", optional = true }
 
 # HTTP/3 experimental support
