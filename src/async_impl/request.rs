@@ -12,7 +12,7 @@ use super::client::{Client, Pending};
 #[cfg(feature = "multipart")]
 use super::multipart;
 use super::response::Response;
-use crate::config::{RequestConfig, TotalTimeout};
+use crate::config::{ReadTimeout, RequestConfig, TotalTimeout};
 #[cfg(feature = "multipart")]
 use crate::header::CONTENT_LENGTH;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
@@ -122,6 +122,18 @@ impl Request {
     #[inline]
     pub fn timeout_mut(&mut self) -> &mut Option<Duration> {
         RequestConfig::<TotalTimeout>::get_mut(&mut self.extensions)
+    }
+
+    /// Get the read timeout.
+    #[inline]
+    pub fn read_timeout(&self) -> Option<&Duration> {
+        RequestConfig::<ReadTimeout>::get(&self.extensions)
+    }
+
+    /// Get a mutable reference to the read timeout.
+    #[inline]
+    pub fn read_timeout_mut(&mut self) -> &mut Option<Duration> {
+        RequestConfig::<ReadTimeout>::get_mut(&mut self.extensions)
     }
 
     /// Get the http version.
