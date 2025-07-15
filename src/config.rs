@@ -110,8 +110,8 @@ impl RequestConfigValue for RequestTimeout {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct RequestReadTimeout;
+pub(crate) struct ReadTimeout;
 
-impl RequestConfigValue for RequestReadTimeout {
+impl RequestConfigValue for ReadTimeout {
     type Value = Duration;
 }
