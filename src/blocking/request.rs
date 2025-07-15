@@ -113,6 +113,18 @@ impl Request {
         self.inner.timeout_mut()
     }
 
+    /// Get the read timeout.
+    #[inline]
+    pub fn read_timeout(&self) -> Option<&Duration> {
+        self.inner.read_timeout()
+    }
+
+    /// Get a mutable reference to the read timeout.
+    #[inline]
+    pub fn read_timeout_mut(&mut self) -> &mut Option<Duration> {
+        self.inner.read_timeout_mut()
+    }
+
     /// Attempts to clone the `Request`.
     ///
     /// None is returned if a body is which can not be cloned. This can be because the body is a

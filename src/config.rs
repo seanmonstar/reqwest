@@ -108,3 +108,10 @@ pub(crate) struct RequestTimeout;
 impl RequestConfigValue for RequestTimeout {
     type Value = Duration;
 }
+
+#[derive(Clone, Copy)]
+pub(crate) struct RequestReadTimeout;
+
+impl RequestConfigValue for RequestReadTimeout {
+    type Value = Duration;
+}
