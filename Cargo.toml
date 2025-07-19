@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.12.21"
+version = "0.12.22"
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -12,6 +12,13 @@ license = "MIT OR Apache-2.0"
 edition = "2021"
 rust-version = "1.64.0"
 autotests = true
+include = [
+    "README.md",
+    "Cargo.toml",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "src/**/*.rs"
+]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -156,7 +163,7 @@ async-compression = { version = "0.4.0", default-features = false, features = ["
 tokio-util = { version = "0.7.9", default-features = false, features = ["codec", "io"], optional = true }
 
 ## hickory-dns
-hickory-resolver = { version = "0.24", optional = true, features = ["tokio-runtime"] }
+hickory-resolver = { version = "0.25", optional = true, features = ["tokio"] }
 once_cell = { version = "1.18", optional = true }
 
 # HTTP/3 experimental support
@@ -171,7 +178,7 @@ hyper = { version = "1.1.0", default-features = false, features = ["http1", "htt
 hyper-util = { version = "0.1.12", features = ["http1", "http2", "client", "client-legacy", "server-auto", "server-graceful", "tokio"] }
 serde = { version = "1.0", features = ["derive"] }
 flate2 = "1.0.13"
-brotli_crate = { package = "brotli", version = "7.0.0" }
+brotli_crate = { package = "brotli", version = "8" }
 zstd_crate = { package = "zstd", version = "0.13" }
 doc-comment = "0.3"
 tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
