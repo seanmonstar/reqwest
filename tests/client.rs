@@ -47,14 +47,11 @@ async fn auto_headers() {
     });
 
     let url = format!("http://{}/1", server.addr());
-    let res = reqwest::Client::builder()
-        .no_proxy()
-        .build()
-        .unwrap()
-        .get(&url)
-        .send()
-        .await
-        .unwrap();
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+    let res = client.get(&url).send().await.unwrap();
+
+    assert_eq!(client.headers()["accept"], "*/*");
+    assert_eq!(client.headers().get("user-agent"), None);
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
@@ -93,14 +90,13 @@ async fn user_agent() {
     });
 
     let url = format!("http://{}/ua", server.addr());
-    let res = reqwest::Client::builder()
+    let client = reqwest::Client::builder()
         .user_agent("reqwest-test-agent")
         .build()
-        .expect("client builder")
-        .get(&url)
-        .send()
-        .await
-        .expect("request");
+        .expect("client builder");
+    let res = client.get(&url).send().await.expect("request");
+
+    assert_eq!(client.headers()["user-agent"], "reqwest-test-agent");
 
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
