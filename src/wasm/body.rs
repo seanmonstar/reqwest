@@ -22,6 +22,8 @@ enum Inner {
     /// MultipartForm holds a multipart/form-data body.
     #[cfg(feature = "multipart")]
     MultipartForm(Form),
+    #[cfg(feature = "stream")]
+    Streaming(Streaming),
 }
 
 #[derive(Clone)]
@@ -58,6 +60,15 @@ impl Single {
     }
 }
 
+pub(crate) type BodyFuture =
+    std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), JsValue>> + 'static>>;
+
+#[cfg(feature = "stream")]
+pub(crate) struct Streaming {
+    write_fut: BodyFuture,
+    readable: web_sys::ReadableStream,
+}
+
 impl Body {
     /// Returns a reference to the internal data of the `Body`.
     ///
@@ -68,6 +79,56 @@ impl Body {
             Inner::Single(single) => Some(single.as_bytes()),
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(_) => None,
+            #[cfg(feature = "stream")]
+            Inner::Streaming(_) => None,
+        }
+    }
+
+    /// Turn a futures `Stream` into a JS `ReadableStream`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use reqwest::Body;
+    /// # use futures_util;
+    /// # fn main() {
+    /// let chunks: Vec<Result<_, ::std::io::Error>> = vec![
+    ///     Ok("hello"),
+    ///     Ok(" "),
+    ///     Ok("world"),
+    /// ];
+    ///
+    /// let stream = futures_util::stream::iter(chunks);
+    ///
+    /// let body = Body::wrap_stream(stream);
+    /// # }
+    /// ```
+    ///
+    /// # Optional
+    ///
+    /// This requires the `stream` feature to be enabled.
+    #[cfg(feature = "stream")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
+    pub fn wrap_stream<S>(stream: S) -> Body
+    where
+        S: futures_core::stream::TryStream + 'static,
+        S::Error: Into<Box<dyn std::error::Error>>,
+        Bytes: From<S::Ok>,
+    {
+        use futures_util::{FutureExt, StreamExt, TryStreamExt};
+        use wasm_bindgen::{JsError, UnwrapThrowExt};
+
+        let transform_stream =
+            wasm_streams::TransformStream::from_raw(web_sys::TransformStream::new().unwrap_throw());
+        Body {
+            inner: Inner::Streaming(Streaming {
+                write_fut: stream
+                    .map_ok(|b| Single::Bytes(b.into()).to_js_value())
+                    .map_err(|err| JsValue::from(JsError::new(&err.into().to_string())))
+                    .forward(transform_stream.writable().into_sink())
+                    .boxed_local(),
+                readable: transform_stream.readable().into_raw(),
+            }),
         }
     }
 
@@ -80,6 +141,18 @@ impl Body {
                 let js_value: &JsValue = form_data.as_ref();
                 Ok(js_value.to_owned())
             }
+            #[cfg(feature = "stream")]
+            Inner::Streaming(streaming) => Ok(streaming.readable.clone().into()),
+        }
+    }
+
+    pub(crate) fn into_future(self) -> Option<BodyFuture> {
+        match self.inner {
+            Inner::Single(_) => None,
+            #[cfg(feature = "multipart")]
+            Inner::MultipartForm(_) => None,
+            #[cfg(feature = "stream")]
+            Inner::Streaming(streaming) => Some(streaming.write_fut),
         }
     }
 
@@ -88,6 +161,8 @@ impl Body {
         match &self.inner {
             Inner::Single(single) => Some(single),
             Inner::MultipartForm(_) => None,
+            #[cfg(feature = "stream")]
+            Inner::Streaming(_) => None,
         }
     }
 
@@ -109,6 +184,10 @@ impl Body {
             Inner::MultipartForm(form) => Self {
                 inner: Inner::MultipartForm(form),
             },
+            #[cfg(feature = "stream")]
+            Inner::Streaming(streaming) => Self {
+                inner: Inner::Streaming(streaming),
+            },
         }
     }
 
@@ -117,6 +196,8 @@ impl Body {
             Inner::Single(single) => single.is_empty(),
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(form) => form.is_empty(),
+            #[cfg(feature = "stream")]
+            Inner::Streaming(_) => false,
         }
     }
 
@@ -127,6 +208,8 @@ impl Body {
             }),
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(_) => None,
+            #[cfg(feature = "stream")]
+            Inner::Streaming(_) => None,
         }
     }
 }
