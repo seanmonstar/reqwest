@@ -2,7 +2,7 @@
 #![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
 mod support;
 
-use support::server::{self, low_level_with_response};
+use support::server::{self};
 
 use http::header::{CONTENT_LENGTH, CONTENT_TYPE, TRANSFER_ENCODING};
 #[cfg(feature = "json")]

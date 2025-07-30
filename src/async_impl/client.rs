@@ -48,7 +48,8 @@ use http::header::{
     Entry, HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, PROXY_AUTHORIZATION, RANGE, USER_AGENT,
 };
 use http::uri::Scheme;
-use http::Uri;
+use http::{HeaderName, Uri};
+use http_body_util::BodyExt;
 use hyper_util::client::legacy::connect::HttpConnector;
 #[cfg(feature = "default-tls")]
 use native_tls_crate::TlsConnector;
@@ -154,6 +155,7 @@ struct Config {
     // NOTE: When adding a new field, update `fmt::Debug for ClientBuilder`
     accepts: Accepts,
     headers: HeaderMap,
+    trailer_headers: Option<HeaderMap>,
     #[cfg(feature = "__tls")]
     hostname_verification: bool,
     #[cfg(feature = "__tls")]
@@ -275,6 +277,7 @@ impl ClientBuilder {
                 error: None,
                 accepts: Accepts::default(),
                 headers,
+                trailer_headers: None,
                 #[cfg(feature = "__tls")]
                 hostname_verification: true,
                 #[cfg(feature = "__tls")]
@@ -1014,6 +1017,7 @@ impl ClientBuilder {
                     None => None,
                 },
                 headers: config.headers,
+                trailer_headers: config.trailer_headers,
                 referer: config.referer,
                 read_timeout: config.read_timeout,
                 request_timeout: RequestConfig::new(config.timeout),
@@ -2305,6 +2309,30 @@ impl ClientBuilder {
 
         self
     }
+    fn validate_trailer_key(&self, _key: &HeaderName) -> bool {
+        true
+    }
+    /// add propagating trailers header and request trailer header
+    ///
+    pub fn add_trailer_header(mut self, trailer_map: HeaderMap) -> ClientBuilder {
+        self.config
+            .headers
+            .insert("Transfer-Encoding", HeaderValue::from_static("chunked"));
+        let mut trailer_value = String::new();
+        for (key, _val) in &trailer_map {
+            if self.validate_trailer_key(key) {
+                trailer_value.push_str(key.as_str());
+                trailer_value.push_str(",");
+            }
+        }
+        trailer_value.remove(trailer_value.len() - 1);
+        self.config.headers.insert(
+            "Trailer",
+            HeaderValue::from_str(trailer_value.as_str()).expect("trailer header value create err"),
+        );
+        self.config.trailer_headers = Some(trailer_map);
+        self
+    }
 }
 
 type HyperClient = hyper_util::client::legacy::Client<Connector, super::Body>;
@@ -2454,14 +2482,22 @@ impl Client {
             _ => return Pending::new_err(error::url_invalid_uri(url)),
         };
 
-        let (reusable, body) = match body {
+        let (reusable,mut body) = match body {
             Some(body) => {
                 let (reusable, body) = body.try_reuse();
                 (Some(reusable), body)
             }
             None => (None, Body::empty()),
         };
-
+        if let Some(trailers) = &self.inner.trailer_headers {
+            if let None = reusable {
+                let trailers=trailers.clone();
+                let with_trailers = body.with_trailers(async { Some(Ok(trailers)) });
+                body = Body::wrap(with_trailers);
+            } else {
+                panic!("in order to add trailer headers,the request must be stream!");
+            }
+        }
         self.proxy_auth(&uri, &mut headers);
         self.proxy_custom_headers(&uri, &mut headers);
 
@@ -2479,10 +2515,10 @@ impl Client {
                 ResponseFuture::H3(h3.call(req))
             }
             _ => {
-                let mut req = builder.body(body).expect("valid request parts");
-                *req.headers_mut() = headers.clone();
-                let mut hyper = self.inner.hyper.clone();
-                ResponseFuture::Default(hyper.call(req))
+                    let mut req = builder.body(body).expect("valid request parts");
+                    *req.headers_mut() = headers.clone();
+                    let mut hyper = self.inner.hyper.clone();
+                    ResponseFuture::Default(hyper.call(req))
             }
         };
 
@@ -2741,6 +2777,7 @@ struct ClientRef {
     #[cfg(feature = "cookies")]
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     headers: HeaderMap,
+    trailer_headers: Option<HeaderMap>,
     hyper: FollowRedirect<HyperService, TowerRedirectPolicy>,
     #[cfg(feature = "http3")]
     h3_client: Option<FollowRedirect<H3Client, TowerRedirectPolicy>>,
