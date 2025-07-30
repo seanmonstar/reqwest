@@ -210,7 +210,8 @@ features = [
     "ServiceWorkerGlobalScope",
     "RequestCredentials",
     "File",
-    "ReadableStream"
+    "ReadableStream",
+    "RequestCache"
 ]
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
