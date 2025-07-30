@@ -6,7 +6,7 @@ use std::future::Future;
 use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
 use std::{fmt, str};
@@ -3009,8 +3009,8 @@ impl Future for PendingRequest {
 
         loop {
             let res = match self.as_mut().in_flight().get_mut() {
-                ResponseFuture::Default(r) => match Pin::new(r).poll(cx) {
-                    Poll::Ready(Err(e)) => {
+                ResponseFuture::Default(r) => match ready!(Pin::new(r).poll(cx)) {
+                    Err(e) => {
                         #[cfg(feature = "http2")]
                         if e.is_request() {
                             if let Some(e) = e.source() {
@@ -3022,12 +3022,11 @@ impl Future for PendingRequest {
 
                         return Poll::Ready(Err(e.if_no_url(|| self.url.clone())));
                     }
-                    Poll::Ready(Ok(res)) => res.map(super::body::boxed),
-                    Poll::Pending => return Poll::Pending,
+                    Ok(res) => res.map(super::body::boxed),
                 },
                 #[cfg(feature = "http3")]
-                ResponseFuture::H3(r) => match Pin::new(r).poll(cx) {
-                    Poll::Ready(Err(e)) => {
+                ResponseFuture::H3(r) => match ready!(Pin::new(r).poll(cx)) {
+                    Err(e) => {
                         if self.as_mut().retry_error(&e) {
                             continue;
                         }
@@ -3035,8 +3034,7 @@ impl Future for PendingRequest {
                             crate::error::request(e).with_url(self.url.clone())
                         ));
                     }
-                    Poll::Ready(Ok(res)) => res,
-                    Poll::Pending => return Poll::Pending,
+                    Ok(res) => res,
                 },
             };
 
