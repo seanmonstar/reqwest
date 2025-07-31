@@ -6,7 +6,7 @@ use std::future::Future;
 use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
 use std::{fmt, str};
@@ -169,6 +169,8 @@ struct Config {
     tcp_keepalive: Option<Duration>,
     tcp_keepalive_interval: Option<Duration>,
     tcp_keepalive_retries: Option<u32>,
+    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+    tcp_user_timeout: Option<Duration>,
     #[cfg(any(feature = "native-tls", feature = "__rustls"))]
     identity: Option<Identity>,
     proxies: Vec<ProxyMatcher>,
@@ -293,6 +295,8 @@ impl ClientBuilder {
                 tcp_keepalive: None, //Some(Duration::from_secs(60)),
                 tcp_keepalive_interval: None,
                 tcp_keepalive_retries: None,
+                #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+                tcp_user_timeout: None,
                 proxies: Vec::new(),
                 auto_sys_proxy: true,
                 redirect_policy: redirect::Policy::default(),
@@ -902,6 +906,8 @@ impl ClientBuilder {
         connector_builder.set_keepalive(config.tcp_keepalive);
         connector_builder.set_keepalive_interval(config.tcp_keepalive_interval);
         connector_builder.set_keepalive_retries(config.tcp_keepalive_retries);
+        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+        connector_builder.set_tcp_user_timeout(config.tcp_user_timeout);
 
         #[cfg(feature = "socks")]
         connector_builder.set_socks_resolver(resolver);
@@ -1692,6 +1698,21 @@ impl ClientBuilder {
         C: Into<Option<u32>>,
     {
         self.config.tcp_keepalive_retries = retries.into();
+        self
+    }
+
+    /// Set that all sockets have `TCP_USER_TIMEOUT` set with the supplied duration.
+    ///
+    /// This option controls how long transmitted data may remain unacknowledged before
+    /// the connection is force-closed.
+    ///
+    /// The current default is `None` (option disabled).
+    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+    pub fn tcp_user_timeout<D>(mut self, val: D) -> ClientBuilder
+    where
+        D: Into<Option<Duration>>,
+    {
+        self.config.tcp_user_timeout = val.into();
         self
     }
 
@@ -2537,7 +2558,7 @@ impl Client {
             .map(Box::pin);
 
         Pending {
-            inner: PendingInner::Request(PendingRequest {
+            inner: PendingInner::Request(Box::pin(PendingRequest {
                 method,
                 url,
                 headers,
@@ -2551,7 +2572,7 @@ impl Client {
                 total_timeout,
                 read_timeout_fut,
                 read_timeout: self.inner.read_timeout,
-            }),
+            })),
         }
     }
 
@@ -2835,7 +2856,7 @@ pin_project! {
 }
 
 enum PendingInner {
-    Request(PendingRequest),
+    Request(Pin<Box<PendingRequest>>),
     Error(Option<crate::Error>),
 }
 
@@ -3025,8 +3046,8 @@ impl Future for PendingRequest {
 
         loop {
             let res = match self.as_mut().in_flight().get_mut() {
-                ResponseFuture::Default(r) => match Pin::new(r).poll(cx) {
-                    Poll::Ready(Err(e)) => {
+                ResponseFuture::Default(r) => match ready!(Pin::new(r).poll(cx)) {
+                    Err(e) => {
                         #[cfg(feature = "http2")]
                         if e.is_request() {
                             if let Some(e) = e.source() {
@@ -3036,14 +3057,13 @@ impl Future for PendingRequest {
                             }
                         }
 
-                        return Poll::Ready(Err(e));
+                        return Poll::Ready(Err(e.if_no_url(|| self.url.clone())));
                     }
-                    Poll::Ready(Ok(res)) => res.map(super::body::boxed),
-                    Poll::Pending => return Poll::Pending,
+                    Ok(res) => res.map(super::body::boxed),
                 },
                 #[cfg(feature = "http3")]
-                ResponseFuture::H3(r) => match Pin::new(r).poll(cx) {
-                    Poll::Ready(Err(e)) => {
+                ResponseFuture::H3(r) => match ready!(Pin::new(r).poll(cx)) {
+                    Err(e) => {
                         if self.as_mut().retry_error(&e) {
                             continue;
                         }
@@ -3051,8 +3071,7 @@ impl Future for PendingRequest {
                             crate::error::request(e).with_url(self.url.clone())
                         ));
                     }
-                    Poll::Ready(Ok(res)) => res,
-                    Poll::Pending => return Poll::Pending,
+                    Ok(res) => res,
                 },
             };
 
@@ -3128,5 +3147,11 @@ mod tests {
         let err = result.err().unwrap();
         assert!(err.is_builder());
         assert_eq!(url_str, err.url().unwrap().as_str());
+    }
+
+    #[test]
+    fn test_future_size() {
+        let s = std::mem::size_of::<super::Pending>();
+        assert!(s < 128, "size_of::<Pending>() == {s}, too big");
     }
 }

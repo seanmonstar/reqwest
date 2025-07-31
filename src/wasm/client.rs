@@ -216,6 +216,10 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         init.credentials(creds);
     }
 
+    if let Some(cache) = req.cache {
+        init.set_cache(cache);
+    }
+
     if let Some(body) = req.body() {
         if !body.is_empty() {
             init.body(Some(body.to_js_value()?.as_ref()));

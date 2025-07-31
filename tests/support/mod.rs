@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub mod delay_layer;
 pub mod delay_server;
 pub mod error;

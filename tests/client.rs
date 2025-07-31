@@ -2,7 +2,7 @@
 #![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
 mod support;
 
-use support::server::{self};
+use support::server;
 
 use http::header::{CONTENT_LENGTH, CONTENT_TYPE, TRANSFER_ENCODING};
 #[cfg(feature = "json")]
@@ -592,4 +592,11 @@ async fn http1_reason_phrase() {
             server.addr()
         )
     );
+}
+
+#[tokio::test]
+async fn error_has_url() {
+    let u = "http://does.not.exist.local/ever";
+    let err = reqwest::get(u).await.unwrap_err();
+    assert_eq!(err.url().map(AsRef::as_ref), Some(u), "{err:?}");
 }

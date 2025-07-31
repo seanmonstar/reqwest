@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.12.19"
+version = "0.12.22"
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -12,6 +12,13 @@ license = "MIT OR Apache-2.0"
 edition = "2021"
 rust-version = "1.64.0"
 autotests = true
+include = [
+    "README.md",
+    "Cargo.toml",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "src/**/*.rs"
+]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -53,7 +60,7 @@ rustls-tls-native-roots = ["rustls-tls-native-roots-no-provider", "__rustls-ring
 
 blocking = ["dep:futures-channel", "futures-channel?/sink", "dep:futures-util", "futures-util?/io", "futures-util?/sink", "tokio/sync"]
 
-charset = ["dep:encoding_rs"]
+charset = ["dep:encoding_rs", "dep:mime"]
 
 cookies = ["dep:cookie_crate", "dep:cookie_store"]
 
@@ -71,11 +78,11 @@ multipart = ["dep:mime_guess", "dep:futures-util"]
 
 # Deprecated, remove this feature while bumping minor versions.
 trust-dns = []
-hickory-dns = ["dep:hickory-resolver"]
+hickory-dns = ["dep:hickory-resolver", "dep:once_cell"]
 
 stream = ["tokio/fs", "dep:futures-util", "dep:tokio-util", "dep:wasm-streams"]
 
-socks = ["dep:tokio-socks"]
+socks = []
 
 # Use the system's proxy configuration.
 system-proxy = ["hyper-util/client-proxy-system"]
@@ -84,7 +91,7 @@ system-proxy = ["hyper-util/client-proxy-system"]
 macos-system-configuration = ["system-proxy"]
 
 # Experimental HTTP/3 client.
-http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "dep:slab", "dep:futures-channel", "tokio/macros"]
+http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
 
 
 # Internal (PRIVATE!) features used to aid testing.
@@ -124,18 +131,16 @@ http-body-util = "0.1"
 hyper = { version = "1.1", features = ["http1", "client"] }
 hyper-util = { version = "0.1.12", features = ["http1", "client", "client-legacy", "client-proxy", "tokio"] }
 h2 = { version = "0.4", optional = true }
-once_cell = "1.18"
 log = "0.4.17"
-mime = "0.3.16"
 percent-encoding = "2.3"
 tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
 tower = { version = "0.5.2", default-features = false, features = ["timeout", "util"] }
 tower-http = { version = "0.6.5", default-features = false, features = ["follow-redirect"] }
 pin-project-lite = "0.2.11"
-ipnet = "2.3"
 
 # Optional deps...
 rustls-pki-types = { version = "1.9.0", features = ["std"], optional = true }
+mime = { version = "0.3.16", optional = true }
 
 ## default-tls
 hyper-tls = { version = "0.6", optional = true }
@@ -157,17 +162,14 @@ cookie_store = { version = "0.21.0", optional = true }
 async-compression = { version = "0.4.0", default-features = false, features = ["tokio"], optional = true }
 tokio-util = { version = "0.7.9", default-features = false, features = ["codec", "io"], optional = true }
 
-## socks
-tokio-socks = { version = "0.5.2", optional = true }
-
 ## hickory-dns
-hickory-resolver = { version = "0.24", optional = true, features = ["tokio-runtime"] }
+hickory-resolver = { version = "0.25", optional = true, features = ["tokio"] }
+once_cell = { version = "1.18", optional = true }
 
 # HTTP/3 experimental support
 h3 = { version = "0.0.8", optional = true }
 h3-quinn = { version = "0.0.10", optional = true }
 quinn = { version = "0.11.1", default-features = false, features = ["rustls", "runtime-tokio"], optional = true }
-slab = { version = "0.4.9", optional = true } # just to get minimal versions working with quinn
 futures-channel = { version = "0.3", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
@@ -176,7 +178,7 @@ hyper = { version = "1.1.0", default-features = false, features = ["http1", "htt
 hyper-util = { version = "0.1.12", features = ["http1", "http2", "client", "client-legacy", "server-auto", "server-graceful", "tokio"] }
 serde = { version = "1.0", features = ["derive"] }
 flate2 = "1.0.13"
-brotli_crate = { package = "brotli", version = "7.0.0" }
+brotli_crate = { package = "brotli", version = "8" }
 zstd_crate = { package = "zstd", version = "0.13" }
 doc-comment = "0.3"
 tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
@@ -208,7 +210,8 @@ features = [
     "ServiceWorkerGlobalScope",
     "RequestCredentials",
     "File",
-    "ReadableStream"
+    "ReadableStream",
+    "RequestCache"
 ]
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

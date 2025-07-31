@@ -8,7 +8,7 @@ use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
 use url::Url;
-use web_sys::RequestCredentials;
+use web_sys::{RequestCache, RequestCredentials};
 
 use super::{Body, Client, Response};
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
@@ -22,6 +22,7 @@ pub struct Request {
     timeout: Option<Duration>,
     pub(super) cors: bool,
     pub(super) credentials: Option<RequestCredentials>,
+    pub(super) cache: Option<RequestCache>,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -42,6 +43,7 @@ impl Request {
             timeout: None,
             cors: true,
             credentials: None,
+            cache: None,
         }
     }
 
@@ -122,6 +124,7 @@ impl Request {
             timeout: self.timeout,
             cors: self.cors,
             credentials: self.credentials,
+            cache: self.cache,
         })
     }
 }
@@ -375,6 +378,102 @@ impl RequestBuilder {
         self
     }
 
+    /// Set fetch cache mode to 'default'.
+    ///
+    /// # WASM
+    ///
+    /// This option is only effective with WebAssembly target.
+    ///
+    /// The [request cache][mdn] will be set to 'default'.
+    ///
+    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
+    pub fn fetch_cache_default(mut self) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.cache = Some(RequestCache::Default);
+        }
+        self
+    }
+
+    /// Set fetch cache mode to 'no-store'.
+    ///
+    /// # WASM
+    ///
+    /// This option is only effective with WebAssembly target.
+    ///
+    /// The [request cache][mdn] will be set to 'no-store'.
+    ///
+    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
+    pub fn fetch_cache_no_store(mut self) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.cache = Some(RequestCache::NoStore);
+        }
+        self
+    }
+
+    /// Set fetch cache mode to 'reload'.
+    ///
+    /// # WASM
+    ///
+    /// This option is only effective with WebAssembly target.
+    ///
+    /// The [request cache][mdn] will be set to 'reload'.
+    ///
+    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
+    pub fn fetch_cache_reload(mut self) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.cache = Some(RequestCache::Reload);
+        }
+        self
+    }
+
+    /// Set fetch cache mode to 'no-cache'.
+    ///
+    /// # WASM
+    ///
+    /// This option is only effective with WebAssembly target.
+    ///
+    /// The [request cache][mdn] will be set to 'no-cache'.
+    ///
+    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
+    pub fn fetch_cache_no_cache(mut self) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.cache = Some(RequestCache::NoCache);
+        }
+        self
+    }
+
+    /// Set fetch cache mode to 'force-cache'.
+    ///
+    /// # WASM
+    ///
+    /// This option is only effective with WebAssembly target.
+    ///
+    /// The [request cache][mdn] will be set to 'force-cache'.
+    ///
+    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
+    pub fn fetch_cache_force_cache(mut self) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.cache = Some(RequestCache::ForceCache);
+        }
+        self
+    }
+
+    /// Set fetch cache mode to 'only-if-cached'.
+    ///
+    /// # WASM
+    ///
+    /// This option is only effective with WebAssembly target.
+    ///
+    /// The [request cache][mdn] will be set to 'only-if-cached'.
+    ///
+    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
+    pub fn fetch_cache_only_if_cached(mut self) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.cache = Some(RequestCache::OnlyIfCached);
+        }
+        self
+    }
+
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
     pub fn build(self) -> crate::Result<Request> {
@@ -493,6 +592,7 @@ where
             timeout: None,
             cors: true,
             credentials: None,
+            cache: None,
         })
     }
 }
