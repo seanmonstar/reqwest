@@ -82,9 +82,15 @@ pub(crate) struct ConnectorBuilder {
     resolver: Option<DynResolver>,
     #[cfg(unix)]
     unix_socket: Option<Arc<std::path::Path>>,
+    #[cfg(target_os = "windows")]
+    windows_named_pipe: Option<Arc<str>>,
 }
 
 impl ConnectorBuilder {
+    #[cfg(target_os = "windows")]
+    pub(crate) fn set_windows_named_pipe(&mut self, pipe: Option<Arc<str>>) {
+        self.windows_named_pipe = pipe;
+    }
     pub(crate) fn build(self, layers: Vec<BoxedConnectorLayer>) -> Connector
 where {
         // construct the inner tower service
@@ -103,12 +109,19 @@ where {
             resolver: self.resolver.unwrap_or_else(DynResolver::gai),
             #[cfg(unix)]
             unix_socket: self.unix_socket,
+            #[cfg(target_os = "windows")]
+            windows_named_pipe: self.windows_named_pipe,
         };
 
         #[cfg(unix)]
         if base_service.unix_socket.is_some() && !base_service.proxies.is_empty() {
             base_service.proxies = Default::default();
             log::trace!("unix_socket() set, proxies are ignored");
+        }
+        #[cfg(target_os = "windows")]
+        if base_service.windows_named_pipe.is_some() && !base_service.proxies.is_empty() {
+            base_service.proxies = Default::default();
+            log::trace!("windows_named_pipe() set, proxies are ignored");
         }
 
         if layers.is_empty() {
@@ -673,21 +686,40 @@ impl ConnectorService {
         }
     }
 
-    /// Connect over Unix Domain Socket (or Windows?).
-    #[cfg(unix)]
+    /// Connect over a local transport: Unix Domain Socket (on Unix) or Windows Named Pipe (on Windows).
+    #[cfg(any(unix, target_os = "windows"))]
     async fn connect_local_transport(self, dst: Uri) -> Result<Conn, BoxError> {
-        let path = self
-            .unix_socket
-            .as_ref()
-            .expect("connect local must have socket path")
-            .clone();
-        let svc = tower::service_fn(move |_| {
-            let fut = tokio::net::UnixStream::connect(path.clone());
-            async move {
-                let io = fut.await?;
-                Ok::<_, std::io::Error>(TokioIo::new(io))
-            }
-        });
+        #[cfg(unix)]
+        let svc = {
+            let path = self
+                .unix_socket
+                .as_ref()
+                .expect("connect local must have socket path")
+                .clone();
+            tower::service_fn(move |_| {
+                let fut = tokio::net::UnixStream::connect(path.clone());
+                async move {
+                    let io = fut.await?;
+                    Ok::<_, std::io::Error>(TokioIo::new(io))
+                }
+            })
+        };
+        #[cfg(target_os = "windows")]
+        let svc = {
+            use tokio::net::windows::named_pipes::ClientOptions;
+            let pipe = self
+                .windows_named_pipe
+                .as_ref()
+                .expect("connect local must have pipe path")
+                .clone();
+            tower::service_fn(move |_| {
+                let fut = ClientOptions::new().open(pipe.clone());
+                async move {
+                    let io = fut.await?;
+                    Ok::<_, std::io::Error>(TokioIo::new(io))
+                }
+            })
+        };
         let is_proxy = false;
         match self.inner {
             #[cfg(not(feature = "__tls"))]
@@ -852,6 +884,15 @@ impl ConnectorService {
 
         self.connect_with_maybe_proxy(proxy_dst, true).await
     }
+
+    #[cfg(any(unix, target_os = "windows"))]
+    fn should_use_local_transport(&self) -> bool {
+        #[cfg(unix)]
+        return self.unix_socket.is_some();
+
+        #[cfg(target_os = "windows")]
+        return self.windows_named_pipe.is_some();
+    }
 }
 
 async fn with_timeout<T, F>(f: F, timeout: Option<Duration>) -> Result<T, BoxError>
@@ -882,9 +923,9 @@ impl Service<Uri> for ConnectorService {
         log::debug!("starting new connection: {dst:?}");
         let timeout = self.simple_timeout;
 
-        // Local transports (UDS) skip proxies
-        #[cfg(unix)]
-        if self.unix_socket.is_some() {
+        // Local transports (UDS, Windows Named Pipes) skip proxies
+        #[cfg(any(unix, target_os = "windows"))]
+        if self.should_use_local_transport() {
             return Box::pin(with_timeout(
                 self.clone().connect_local_transport(dst),
                 timeout,
@@ -1246,6 +1287,42 @@ pub(crate) mod uds {
         &'_ Path,
         std::path::PathBuf,
         std::sync::Arc<Path>,
+    ];
+}
+
+// Sealed trait for Windows Named Pipe support
+#[cfg(target_os = "windows")]
+pub(crate) mod windows_named_pipe {
+    /// A provider for Windows Named Pipe paths.
+    ///
+    /// This trait is sealed. This allows us to expand support in the future
+    /// by controlling who can implement the trait.
+    #[cfg(target_os = "windows")]
+    pub trait WindowsNamedPipeProvider {
+        #[doc(hidden)]
+        fn reqwest_windows_named_pipe_path(&self, _: Internal) -> &str;
+    }
+
+    #[allow(missing_debug_implementations)]
+    pub struct Internal;
+
+    macro_rules! as_str {
+        ($($t:ty,)+) => {
+            $(
+                impl WindowsNamedPipeProvider for $t {
+                    #[doc(hidden)]
+                    fn reqwest_windows_named_pipe_path(&self, _: Internal) -> &str {
+                        self.as_ref()
+                    }
+                }
+            )+
+        }
+    }
+
+    as_str![
+        String,
+        &'_ str,
+        std::sync::Arc<str>,
     ];
 }
 
