@@ -265,7 +265,7 @@ impl StdError for TooManyRedirects {}
 pub(crate) struct TowerRedirectPolicy {
     policy: Arc<Policy>,
     referer: bool,
-    urls: Vec<Url>,
+    pub(crate) urls: Vec<Url>,
     https_only: bool,
 }
 
