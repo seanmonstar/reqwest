@@ -287,13 +287,11 @@ impl ClientBuilder {
                 connection_verbose: false,
                 pool_idle_timeout: Some(Duration::from_secs(90)),
                 pool_max_idle_per_host: usize::MAX,
-                // TODO: Re-enable default duration once hyper's HttpConnector is fixed
-                // to no longer error when an option fails.
-                tcp_keepalive: None, //Some(Duration::from_secs(60)),
-                tcp_keepalive_interval: None,
-                tcp_keepalive_retries: None,
+                tcp_keepalive: Some(Duration::from_secs(15)),
+                tcp_keepalive_interval: Some(Duration::from_secs(15)),
+                tcp_keepalive_retries: Some(3),
                 #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
-                tcp_user_timeout: None,
+                tcp_user_timeout: Some(Duration::from_secs(30)),
                 proxies: Vec::new(),
                 auto_sys_proxy: true,
                 redirect_policy: redirect::Policy::default(),
@@ -1702,7 +1700,7 @@ impl ClientBuilder {
     /// This option controls how long transmitted data may remain unacknowledged before
     /// the connection is force-closed.
     ///
-    /// The current default is `None` (option disabled).
+    /// If `None`, the option will not be set.
     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
     pub fn tcp_user_timeout<D>(mut self, val: D) -> ClientBuilder
     where
