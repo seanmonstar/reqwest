@@ -60,7 +60,7 @@ use quinn::VarInt;
 use tokio::time::Sleep;
 use tower::util::BoxCloneSyncServiceLayer;
 use tower::{Layer, Service};
-use tower_http::follow_redirect::FollowRedirect;
+use tower_http::follow_redirect::{FollowRedirect, UriAndPolicyExtensions};
 
 /// An asynchronous `Client` to make Requests with.
 ///
@@ -993,7 +993,7 @@ impl ClientBuilder {
             p
         };
 
-        let hyper = FollowRedirect::with_policy(hyper_service, policy.clone());
+        let hyper = FollowRedirect::with_policy_extension(hyper_service, policy.clone());
 
         Ok(Client {
             inner: Arc::new(ClientRef {
@@ -1013,7 +1013,7 @@ impl ClientBuilder {
                             config.pool_idle_timeout,
                             config.cookie_store,
                         );
-                        Some(FollowRedirect::with_policy(h3_service, policy))
+                        Some(FollowRedirect::with_policy_extension(h3_service, policy))
                     }
                     None => None,
                 },
@@ -2760,9 +2760,9 @@ struct ClientRef {
     #[cfg(feature = "cookies")]
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     headers: HeaderMap,
-    hyper: FollowRedirect<HyperService, TowerRedirectPolicy>,
+    hyper: FollowRedirect<HyperService, TowerRedirectPolicy, UriAndPolicyExtensions>,
     #[cfg(feature = "http3")]
-    h3_client: Option<FollowRedirect<H3Client, TowerRedirectPolicy>>,
+    h3_client: Option<FollowRedirect<H3Client, TowerRedirectPolicy, UriAndPolicyExtensions>>,
     referer: bool,
     request_timeout: RequestConfig<RequestTimeout>,
     read_timeout: Option<Duration>,
@@ -2843,9 +2843,23 @@ pin_project! {
 }
 
 enum ResponseFuture {
-    Default(tower_http::follow_redirect::ResponseFuture<HyperService, Body, TowerRedirectPolicy>),
+    Default(
+        tower_http::follow_redirect::ResponseFuture<
+            HyperService,
+            Body,
+            TowerRedirectPolicy,
+            UriAndPolicyExtensions,
+        >,
+    ),
     #[cfg(feature = "http3")]
-    H3(tower_http::follow_redirect::ResponseFuture<H3Client, Body, TowerRedirectPolicy>),
+    H3(
+        tower_http::follow_redirect::ResponseFuture<
+            H3Client,
+            Body,
+            TowerRedirectPolicy,
+            UriAndPolicyExtensions,
+        >,
+    ),
 }
 
 impl PendingRequest {
