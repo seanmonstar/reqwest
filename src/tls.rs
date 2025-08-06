@@ -655,6 +655,10 @@ impl ServerCertVerifier for NoVerifier {
             SignatureScheme::ED448,
         ]
     }
+
+    fn request_ocsp_response(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(feature = "__rustls")]
@@ -719,6 +723,10 @@ impl ServerCertVerifier for IgnoreHostname {
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.signature_algorithms.supported_schemes()
+    }
+
+    fn request_ocsp_response(&self) -> bool {
+        todo!()
     }
 }
 
