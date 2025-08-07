@@ -1,12 +1,11 @@
 //! HTTP Cookies
 
+use crate::header::{HeaderValue, SET_COOKIE};
+use bytes::Bytes;
 use std::convert::TryInto;
 use std::fmt;
 use std::sync::RwLock;
 use std::time::SystemTime;
-
-use crate::header::{HeaderValue, SET_COOKIE};
-use bytes::Bytes;
 
 /// Actions for a persistent cookie store providing session support.
 pub trait CookieStore: Send + Sync {
@@ -187,5 +186,108 @@ impl CookieStore for Jar {
         }
 
         HeaderValue::from_maybe_shared(Bytes::from(s)).ok()
+    }
+}
+
+pub(crate) mod service {
+    use crate::cookie;
+    use http::{Request, Response};
+    use http_body::Body;
+    use pin_project_lite::pin_project;
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::sync::Arc;
+    use std::task::ready;
+    use std::task::Context;
+    use std::task::Poll;
+    use tower::Service;
+    use url::Url;
+
+    /// A [`Service`] that adds cookie support to a lower-level [`Service`].
+    #[derive(Clone)]
+    pub struct CookieService<S> {
+        inner: S,
+        cookie_store: Option<Arc<dyn cookie::CookieStore>>,
+    }
+
+    impl<S> CookieService<S> {
+        /// Create a new [`CookieService`].
+        pub fn new(inner: S, cookie_store: Option<Arc<dyn cookie::CookieStore>>) -> Self {
+            Self {
+                inner,
+                cookie_store,
+            }
+        }
+    }
+
+    impl<ReqBody, ResBody, S> Service<Request<ReqBody>> for CookieService<S>
+    where
+        S: Service<Request<ReqBody>, Response = Response<ResBody>> + Clone,
+        ReqBody: Body + Default,
+    {
+        type Response = Response<ResBody>;
+        type Error = S::Error;
+        type Future = ResponseFuture<S, ReqBody>;
+
+        #[inline]
+        fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            self.inner.poll_ready(cx)
+        }
+
+        fn call(&mut self, mut req: Request<ReqBody>) -> Self::Future {
+            let clone = self.inner.clone();
+            let mut inner = std::mem::replace(&mut self.inner, clone);
+            let url = Url::parse(req.uri().to_string().as_str()).expect("invalid URL");
+            if let Some(cookie_store) = self.cookie_store.as_ref() {
+                if req.headers().get(crate::header::COOKIE).is_none() {
+                    let headers = req.headers_mut();
+                    crate::util::add_cookie_header(headers, &**cookie_store, &url);
+                }
+            }
+
+            let cookie_store = self.cookie_store.clone();
+            ResponseFuture {
+                future: inner.call(req),
+                cookie_store,
+                url,
+            }
+        }
+    }
+
+    pin_project! {
+        #[allow(missing_debug_implementations)]
+        #[derive(Clone)]
+        /// A [`Future`] that adds cookie support to a lower-level [`Future`].
+        pub struct ResponseFuture<S, B>
+        where
+            S: Service<Request<B>>,
+        {
+            #[pin]
+            future: S::Future,
+            cookie_store: Option<Arc<dyn cookie::CookieStore>>,
+            url: Url,
+        }
+    }
+
+    impl<S, ReqBody, ResBody> Future for ResponseFuture<S, ReqBody>
+    where
+        S: Service<Request<ReqBody>, Response = Response<ResBody>> + Clone,
+        ReqBody: Body + Default,
+    {
+        type Output = Result<Response<ResBody>, S::Error>;
+
+        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            let cookie_store = self.cookie_store.clone();
+            let url = self.url.clone();
+            let res = ready!(self.project().future.as_mut().poll(cx)?);
+
+            if let Some(cookie_store) = cookie_store.as_ref() {
+                let mut cookies = cookie::extract_response_cookie_headers(res.headers()).peekable();
+                if cookies.peek().is_some() {
+                    cookie_store.set_cookies(&mut cookies, &url);
+                }
+            }
+            Poll::Ready(Ok(res))
+        }
     }
 }
