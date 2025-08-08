@@ -6,7 +6,7 @@ use std::future::Future;
 use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
 use std::{fmt, str};
@@ -287,13 +287,11 @@ impl ClientBuilder {
                 connection_verbose: false,
                 pool_idle_timeout: Some(Duration::from_secs(90)),
                 pool_max_idle_per_host: usize::MAX,
-                // TODO: Re-enable default duration once hyper's HttpConnector is fixed
-                // to no longer error when an option fails.
-                tcp_keepalive: None, //Some(Duration::from_secs(60)),
-                tcp_keepalive_interval: None,
-                tcp_keepalive_retries: None,
+                tcp_keepalive: Some(Duration::from_secs(15)),
+                tcp_keepalive_interval: Some(Duration::from_secs(15)),
+                tcp_keepalive_retries: Some(3),
                 #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
-                tcp_user_timeout: None,
+                tcp_user_timeout: Some(Duration::from_secs(30)),
                 proxies: Vec::new(),
                 auto_sys_proxy: true,
                 redirect_policy: redirect::Policy::default(),
@@ -1702,7 +1700,7 @@ impl ClientBuilder {
     /// This option controls how long transmitted data may remain unacknowledged before
     /// the connection is force-closed.
     ///
-    /// The current default is `None` (option disabled).
+    /// If `None`, the option will not be set.
     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
     pub fn tcp_user_timeout<D>(mut self, val: D) -> ClientBuilder
     where
@@ -3009,8 +3007,8 @@ impl Future for PendingRequest {
 
         loop {
             let res = match self.as_mut().in_flight().get_mut() {
-                ResponseFuture::Default(r) => match Pin::new(r).poll(cx) {
-                    Poll::Ready(Err(e)) => {
+                ResponseFuture::Default(r) => match ready!(Pin::new(r).poll(cx)) {
+                    Err(e) => {
                         #[cfg(feature = "http2")]
                         if e.is_request() {
                             if let Some(e) = e.source() {
@@ -3022,12 +3020,11 @@ impl Future for PendingRequest {
 
                         return Poll::Ready(Err(e.if_no_url(|| self.url.clone())));
                     }
-                    Poll::Ready(Ok(res)) => res.map(super::body::boxed),
-                    Poll::Pending => return Poll::Pending,
+                    Ok(res) => res.map(super::body::boxed),
                 },
                 #[cfg(feature = "http3")]
-                ResponseFuture::H3(r) => match Pin::new(r).poll(cx) {
-                    Poll::Ready(Err(e)) => {
+                ResponseFuture::H3(r) => match ready!(Pin::new(r).poll(cx)) {
+                    Err(e) => {
                         if self.as_mut().retry_error(&e) {
                             continue;
                         }
@@ -3035,8 +3032,7 @@ impl Future for PendingRequest {
                             crate::error::request(e).with_url(self.url.clone())
                         ));
                     }
-                    Poll::Ready(Ok(res)) => res,
-                    Poll::Pending => return Poll::Pending,
+                    Ok(res) => res,
                 },
             };
 
