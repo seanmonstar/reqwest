@@ -601,7 +601,6 @@ async fn error_has_url() {
     assert_eq!(err.url().map(AsRef::as_ref), Some(u), "{err:?}");
 }
 
-#[cfg(feature = "stream")]
 #[tokio::test]
 async fn response_trailers() {
     use tokio::io::AsyncWriteExt;
