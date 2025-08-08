@@ -11,6 +11,7 @@ use hyper_util::client::legacy::connect::HttpInfo;
 use serde::de::DeserializeOwned;
 #[cfg(feature = "json")]
 use serde_json;
+use tokio::sync::oneshot::{self, Receiver};
 use tokio::time::Sleep;
 use url::Url;
 
@@ -31,6 +32,7 @@ pub struct Response {
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
+    trailers_rx: Receiver<HeaderMap>,
 }
 
 impl Response {
@@ -42,16 +44,20 @@ impl Response {
         read_timeout: Option<Duration>,
     ) -> Response {
         let (mut parts, body) = res.into_parts();
+        let (body, trailers_rx) = extract_trailers_from_body(body);
+
         let decoder = Decoder::detect(
             &mut parts.headers,
             super::body::response(body, total_timeout, read_timeout),
             accepts,
         );
+
         let res = hyper::Response::from_parts(parts, decoder);
 
         Response {
             res,
             url: Box::new(url),
+            trailers_rx,
         }
     }
 
@@ -424,6 +430,22 @@ impl Response {
         }
     }
 
+    /// Get the response trailers if available.
+    ///
+    /// Trailers are additional headers sent after the response body in HTTP/1.1 chunked
+    /// encoding or HTTP/2 responses. They are typically used for metadata that can only
+    /// be determined after processing the entire response body.
+    #[inline]
+    pub async fn trailers(&mut self) -> crate::Result<Option<HeaderMap>> {
+        match self.trailers_rx.try_recv() {
+            Ok(trailers) => Ok(Some(trailers)),
+            Err(err) => match err {
+                oneshot::error::TryRecvError::Empty => Ok(None),
+                oneshot::error::TryRecvError::Closed => Err(crate::error::body(err)),
+            },
+        }
+    }
+
     // private
 
     // The Response's body is an implementation detail.
@@ -462,6 +484,9 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
 
         let (mut parts, body) = r.into_parts();
         let body: crate::async_impl::body::Body = body.into();
+
+        let (body, trailers_rx) = extract_trailers_from_body(body);
+
         let decoder = Decoder::detect(
             &mut parts.headers,
             ResponseBody::new(body.map_err(Into::into)),
@@ -476,6 +501,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
         Response {
             res,
             url: Box::new(url),
+            trailers_rx,
         }
     }
 }
@@ -488,6 +514,25 @@ impl From<Response> for http::Response<Body> {
         let body = Body::wrap(body);
         http::Response::from_parts(parts, body)
     }
+}
+
+fn extract_trailers_from_body<B>(body: B) -> (Body, Receiver<HeaderMap>)
+where
+    B: http_body::Body<Data = bytes::Bytes> + Send + Sync + 'static,
+    B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    let (trailers_tx, trailers_rx) = oneshot::channel();
+    let mut trailers_tx = Some(trailers_tx);
+    let body = Body::wrap(body.map_frame(move |mut frame| {
+        if let Some(trailers) = frame.trailers_mut() {
+            if let Some(tx) = trailers_tx.take() {
+                let _ = tx.send(std::mem::take(trailers));
+            }
+        }
+        frame
+    }));
+
+    (body, trailers_rx)
 }
 
 #[cfg(test)]
