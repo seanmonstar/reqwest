@@ -3,6 +3,7 @@ use std::fmt;
 use std::future::Future;
 use std::time::Duration;
 
+
 use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
@@ -548,6 +549,17 @@ impl RequestBuilder {
                 client: self.client.clone(),
                 request: Ok(req),
             })
+    }
+///  insert a key,value pair to trailer headermap,if not exist ,will create one   
+    pub fn insert_header_into_trailer_headermap(mut self,key:HeaderName,value:HeaderValue)->RequestBuilder{
+        if let Ok(ref mut req) = self.request {
+            if let Some(_bd)=&req.body {
+                 self.client.insert_header_into_trailer_headermap(key, value);
+            }else{
+                panic!("call body(...) to insert a body before insert a trailer header");
+            }
+        }
+        self
     }
 }
 

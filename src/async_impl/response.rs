@@ -435,6 +435,37 @@ impl Response {
     pub(crate) fn body_mut(&mut self) -> &mut Decoder {
         self.res.body_mut()
     }
+    /// retrieve trailers from response return option
+    pub async fn trailers(&mut self) -> crate::Result<Option<HeaderMap>> {
+        use http_body_util::BodyExt;
+
+        // loop to ignore unrecognized frames
+        loop {
+            let body = self.res.body_mut();
+            if let Some(res) = body.frame().await {
+                if let Ok(frame) = res {
+                    if frame.is_trailers() {
+                        if let Ok(headermap) = frame.into_trailers() {
+                            return Ok(Some(headermap));
+                        } else {
+                            return Err(crate::Error::new(
+                                crate::error::Kind::Body,
+                                Some("error making Frame into a trailer map"),
+                            ));
+                        }
+                    }
+                } else if let Err(e) = res {
+                    return Err(crate::Error::new(
+                        crate::error::Kind::Body,
+                        Some(e.to_string()),
+                    ));
+                }
+                // else continue
+            } else {
+                return Ok(None);
+            }
+        }
+    }
 }
 
 impl fmt::Debug for Response {
