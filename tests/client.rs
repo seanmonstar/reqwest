@@ -600,3 +600,96 @@ async fn error_has_url() {
     let err = reqwest::get(u).await.unwrap_err();
     assert_eq!(err.url().map(AsRef::as_ref), Some(u), "{err:?}");
 }
+
+#[cfg(feature = "stream")]
+#[tokio::test]
+async fn response_trailers() {
+    use tokio::io::AsyncWriteExt;
+
+    let server = server::low_level_with_response(|_raw_request, client_socket| {
+        Box::new(async move {
+            // Send HTTP response with chunked encoding and trailers
+            client_socket
+                .write_all(b"HTTP/1.1 200 OK\r\n")
+                .await
+                .expect("write status line");
+
+            client_socket
+                .write_all(b"Transfer-Encoding: chunked\r\n")
+                .await
+                .expect("write transfer-encoding header");
+
+            client_socket
+                .write_all(b"Trailer: X-Custom-Trailer, X-Checksum\r\n")
+                .await
+                .expect("write trailer header");
+
+            client_socket
+                .write_all(b"\r\n")
+                .await
+                .expect("write header end");
+
+            // Send chunked body
+            client_socket
+                .write_all(b"5\r\nHello\r\n")
+                .await
+                .expect("write chunk 1");
+
+            client_socket
+                .write_all(b"6\r\nWorld!\r\n")
+                .await
+                .expect("write chunk 2");
+
+            // Send end chunk
+            client_socket
+                .write_all(b"0\r\n")
+                .await
+                .expect("write end chunk");
+
+            // Send trailers
+            client_socket
+                .write_all(b"X-Custom-Trailer: custom-value\r\n")
+                .await
+                .expect("write custom trailer");
+
+            client_socket
+                .write_all(b"X-Checksum: abc123\r\n")
+                .await
+                .expect("write checksum trailer");
+
+            // End of trailers
+            client_socket
+                .write_all(b"\r\n")
+                .await
+                .expect("write trailers end");
+        })
+    });
+
+    let client = Client::new();
+
+    let mut res = client
+        .get(&format!("http://{}/trailers", server.addr()))
+        .send()
+        .await
+        .expect("Failed to get response");
+
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+
+    // Read the body using chunk() to preserve response ownership
+    let mut body_content = Vec::new();
+
+    while let Some(chunk) = res.chunk().await.expect("Failed to read chunk") {
+        body_content.extend_from_slice(&chunk);
+    }
+
+    let body = String::from_utf8(body_content).expect("Invalid UTF-8");
+    assert_eq!(body, "HelloWorld!");
+
+    // Now we can check trailers since the response body has been fully consumed
+    if let Some(trailers) = res.trailers().await.expect("Failed to get trailers") {
+        assert_eq!(trailers.get("X-Custom-Trailer").unwrap(), "custom-value");
+        assert_eq!(trailers.get("X-Checksum").unwrap(), "abc123");
+    } else {
+        panic!("Expected trailers but got None");
+    }
+}

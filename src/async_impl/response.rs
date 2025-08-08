@@ -1,9 +1,11 @@
 use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use bytes::Bytes;
+use http_body::{Frame, SizeHint};
 use http_body_util::BodyExt;
 use hyper::{HeaderMap, StatusCode, Version};
 use hyper_util::client::legacy::connect::HttpInfo;
@@ -516,23 +518,88 @@ impl From<Response> for http::Response<Body> {
     }
 }
 
-fn extract_trailers_from_body<B>(body: B) -> (Body, Receiver<HeaderMap>)
+pin_project_lite::pin_project! {
+    /// A body wrapper that extracts HTTP trailers while preserving the original size hint.
+    ///
+    /// This wrapper monitors HTTP frames for trailers and sends them through a oneshot
+    /// channel when found, while maintaining the original body's size hint and other
+    /// characteristics to ensure `content_length()` continues to work correctly.
+    ///
+    /// HTTP trailers are additional headers sent after the response body in chunked
+    /// encoding (HTTP/1.1) or HTTP/2 responses. They are useful for metadata that
+    /// can only be determined after processing the entire response body, such as
+    /// checksums or final status information.
+    pub struct TrailerExtractingBody<B> {
+        #[pin]
+        inner: B,
+        trailers_tx: Option<oneshot::Sender<HeaderMap>>,
+    }
+}
+
+impl<B> TrailerExtractingBody<B> {
+    fn new(body: B, trailers_tx: oneshot::Sender<HeaderMap>) -> Self
+    where
+        B: http_body::Body,
+    {
+        Self {
+            inner: body,
+            trailers_tx: Some(trailers_tx),
+        }
+    }
+}
+
+impl<B> http_body::Body for TrailerExtractingBody<B>
 where
-    B: http_body::Body<Data = bytes::Bytes> + Send + Sync + 'static,
-    B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    B: http_body::Body<Data = Bytes>,
+{
+    type Data = Bytes;
+    type Error = B::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        let this = self.project();
+
+        match std::task::ready!(this.inner.poll_frame(cx)) {
+            Some(Ok(mut frame)) => {
+                if let Some(trailers) = frame.trailers_mut() {
+                    if let Some(tx) = this.trailers_tx.take() {
+                        let _ = tx.send(std::mem::take(trailers));
+                    }
+                }
+                Poll::Ready(Some(Ok(frame)))
+            }
+            Some(Err(e)) => Poll::Ready(Some(Err(e))),
+            None => Poll::Ready(None),
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> SizeHint {
+        self.inner.size_hint()
+    }
+
+    #[inline]
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
+    }
+}
+
+fn extract_trailers_from_body<B>(
+    body: B,
+) -> (
+    http_body_util::combinators::BoxBody<Bytes, B::Error>,
+    oneshot::Receiver<HeaderMap>,
+)
+where
+    B: http_body::Body<Data = Bytes> + Send + Sync + 'static,
 {
     let (trailers_tx, trailers_rx) = oneshot::channel();
-    let mut trailers_tx = Some(trailers_tx);
-    let body = Body::wrap(body.map_frame(move |mut frame| {
-        if let Some(trailers) = frame.trailers_mut() {
-            if let Some(tx) = trailers_tx.take() {
-                let _ = tx.send(std::mem::take(trailers));
-            }
-        }
-        frame
-    }));
+    let wrapper = TrailerExtractingBody::new(body, trailers_tx);
+    let boxed_body = http_body_util::BodyExt::boxed(wrapper);
 
-    (body, trailers_rx)
+    (boxed_body, trailers_rx)
 }
 
 #[cfg(test)]
