@@ -20,6 +20,8 @@ use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::wait;
 use crate::connect::sealed::{Conn, Unnameable};
+#[cfg(unix)]
+use crate::connect::uds::UnixSocketProvider;
 use crate::connect::BoxedConnectorService;
 use crate::dns::Resolve;
 use crate::error::BoxError;
@@ -721,6 +723,24 @@ impl ClientBuilder {
         D: Into<Option<Duration>>,
     {
         self.with_inner(move |inner| inner.tcp_user_timeout(val))
+    }
+
+    // Alt Transports
+
+    /// Set that all connections will use this Unix socket.
+    ///
+    /// If a request URI uses the `https` scheme, TLS will still be used over
+    /// the Unix socket.
+    ///
+    /// # Note
+    ///
+    /// This option is not compatible with any of the TCP or Proxy options.
+    /// Setting this will ignore all those options previously set.
+    ///
+    /// Likewise, DNS resolution will not be done on the domain name.
+    #[cfg(unix)]
+    pub fn unix_socket(self, path: impl UnixSocketProvider) -> ClientBuilder {
+        self.with_inner(move |inner| inner.unix_socket(path))
     }
 
     // TLS options
