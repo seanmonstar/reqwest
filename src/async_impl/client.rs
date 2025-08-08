@@ -2338,10 +2338,12 @@ impl ClientBuilder {
             "content-type",
         ];
         if INVALID_KEYS.contains(&key.to_string().to_lowercase().as_str()) {
-            panic!("the header key \"{}\" 
+            panic!(
+                "the header key \"{}\" 
             is invalid for trailer header
             ,please replace with valid key!",
-            key.to_string());
+                key.to_string()
+            );
         }
     }
     /// add propagating trailers header and request trailer header
@@ -2485,7 +2487,7 @@ impl Client {
         if url.scheme() != "http" && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
         }
-        let read_inner=self.inner.read().unwrap();
+        let read_inner = self.inner.read().unwrap();
         // check if we're in https_only mode and check the scheme of the current URL
         if read_inner.https_only && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
@@ -2513,22 +2515,27 @@ impl Client {
         };
 
         let (reusable, body) = match body {
-            Some( body) => {
-                let (reusable,mut body) = body.try_reuse();
+            Some(body) => {
+                let (reusable, mut body) = body.try_reuse();
                 if let Some(trailers) = &read_inner.trailer_headers {
-            if let None = reusable {
-                let trailers = trailers.clone();
-                let with_trailers = body.with_trailers(async { Some(Ok(trailers)) });
-                body = Body::wrap(with_trailers);
-            } else {
-                panic!("in order to add trailer headers,the request must be stream!");
-            }
-        }
+                    if let None = reusable {
+                        let trailers = trailers.clone();
+                        let with_trailers = body.with_trailers(async { Some(Ok(trailers)) });
+                        body = Body::wrap(with_trailers);
+                    } else {
+                        panic!("in order to add trailer headers,the request must be stream!");
+                    }
+                }
                 (Some(reusable), body)
             }
-            None => (None, Body::empty()),
+            None => {
+                if let Some(_trailers) = &read_inner.trailer_headers {
+                    panic!("please add a body to request to let the trailer headers work");
+                }
+                (None, Body::empty())
+            }
         };
-        
+
         self.proxy_auth(&uri, &mut headers);
         self.proxy_custom_headers(&uri, &mut headers);
 
@@ -2585,7 +2592,7 @@ impl Client {
     }
 
     fn proxy_auth(&self, dst: &Uri, headers: &mut HeaderMap) {
-        let read_inner=self.inner.read().unwrap();
+        let read_inner = self.inner.read().unwrap();
         if !read_inner.proxies_maybe_http_auth {
             return;
         }
@@ -2610,7 +2617,7 @@ impl Client {
     }
 
     fn proxy_custom_headers(&self, dst: &Uri, headers: &mut HeaderMap) {
-        let read_inner=self.inner.read().unwrap();
+        let read_inner = self.inner.read().unwrap();
         if !read_inner.proxies_maybe_http_custom_headers {
             return;
         }
@@ -2630,7 +2637,7 @@ impl Client {
     }
     /// add propagating trailers header and request trailer header
     pub fn add_trailer_header(&mut self, trailer_map: HeaderMap) {
-        let mut write_inner=self.inner.write().unwrap();
+        let mut write_inner = self.inner.write().unwrap();
         write_inner
             .headers
             .insert("transfer-encoding", HeaderValue::from_static("chunked"));
@@ -2648,17 +2655,17 @@ impl Client {
         write_inner.trailer_headers = Some(trailer_map);
     }
     ///  insert a key,value pair to trailer headermap,if not exist ,will create one   
-    pub fn insert_header_into_trailer_headermap(&mut self,key:HeaderName,value:HeaderValue){
-        let headermap={
-        let mut write_inner=self.inner.write().unwrap();
-        if let Some(map)=&mut write_inner.trailer_headers {
+    pub fn insert_header_into_trailer_headermap(&mut self, key: HeaderName, value: HeaderValue) {
+        let headermap = {
+            let mut write_inner = self.inner.write().unwrap();
+            if let Some(map) = &mut write_inner.trailer_headers {
                 map.insert(key, value);
                 map.clone()
-        }else{
-                let mut headermap=HeaderMap::new();
-                headermap.insert(key, value);      
+            } else {
+                let mut headermap = HeaderMap::new();
+                headermap.insert(key, value);
                 headermap
-        }
+            }
         };
         self.add_trailer_header(headermap);
     }
@@ -2996,7 +3003,7 @@ impl PendingRequest {
                     .body(body)
                     .expect("valid request parts");
                 *req.headers_mut() = self.headers.clone();
-                let read_client=self.client.read().unwrap();
+                let read_client = self.client.read().unwrap();
                 let mut hyper = read_client.hyper.clone();
                 ResponseFuture::Default(hyper.call(req))
             }
@@ -3139,9 +3146,7 @@ impl Future for PendingRequest {
                     Err(e) => return Poll::Ready(Err(crate::error::decode(e))),
                 }
             };
-            let accepts={
-                self.client.read().unwrap().accepts.clone()
-            };
+            let accepts = { self.client.read().unwrap().accepts.clone() };
             let res = Response::new(
                 res,
                 self.url.clone(),
