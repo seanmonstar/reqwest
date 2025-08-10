@@ -2218,6 +2218,15 @@ impl ClientBuilder {
         self
     }
 
+    /// Similar to [`dns_resolver`], but takes a dynamic trait object.
+    ///
+    /// This enables dynamic dispatch for the resolver, allowing you to pass any type that
+    /// implements the `Resolve` trait.
+    pub fn dns_resolver_dyn(mut self, resolver: Arc<dyn Resolve>) -> ClientBuilder {
+        self.config.dns_resolver = Some(resolver);
+        self
+    }
+
     /// Whether to send data on the first flight ("early data") in TLS 1.3 handshakes
     /// for HTTP/3 connections.
     ///
