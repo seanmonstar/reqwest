@@ -108,7 +108,7 @@ __rustls-ring = ["hyper-rustls?/ring", "tokio-rustls?/ring", "rustls?/ring", "qu
 [dependencies]
 base64 = "0.22"
 http = "1.1"
-url = "2.4"
+url = "2.5.4"
 bytes = "1.2"
 serde = "1.0"
 serde_urlencoded = "0.7.1"
