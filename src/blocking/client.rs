@@ -20,6 +20,8 @@ use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::wait;
 use crate::connect::sealed::{Conn, Unnameable};
+#[cfg(unix)]
+use crate::connect::uds::UnixSocketProvider;
 use crate::connect::BoxedConnectorService;
 use crate::dns::Resolve;
 use crate::error::BoxError;
@@ -338,6 +340,13 @@ impl ClientBuilder {
     /// Default will follow redirects up to a maximum of 10.
     pub fn redirect(self, policy: redirect::Policy) -> ClientBuilder {
         self.with_inner(move |inner| inner.redirect(policy))
+    }
+
+    /// Set a request retry policy.
+    ///
+    /// Default behavior is to retry protocol NACKs.
+    pub fn retry(self, policy: crate::retry::Builder) -> ClientBuilder {
+        self.with_inner(move |inner| inner.retry(policy))
     }
 
     /// Enable or disable automatic setting of the `Referer` header.
@@ -721,6 +730,24 @@ impl ClientBuilder {
         D: Into<Option<Duration>>,
     {
         self.with_inner(move |inner| inner.tcp_user_timeout(val))
+    }
+
+    // Alt Transports
+
+    /// Set that all connections will use this Unix socket.
+    ///
+    /// If a request URI uses the `https` scheme, TLS will still be used over
+    /// the Unix socket.
+    ///
+    /// # Note
+    ///
+    /// This option is not compatible with any of the TCP or Proxy options.
+    /// Setting this will ignore all those options previously set.
+    ///
+    /// Likewise, DNS resolution will not be done on the domain name.
+    #[cfg(unix)]
+    pub fn unix_socket(self, path: impl UnixSocketProvider) -> ClientBuilder {
+        self.with_inner(move |inner| inner.unix_socket(path))
     }
 
     // TLS options

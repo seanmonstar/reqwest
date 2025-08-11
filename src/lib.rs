@@ -376,9 +376,13 @@ if_hyper! {
     pub mod dns;
     mod proxy;
     pub mod redirect;
+    pub mod retry;
     #[cfg(feature = "__tls")]
     pub mod tls;
     mod util;
+
+    #[cfg(docsrs)]
+    pub use connect::uds::UnixSocketProvider;
 }
 
 if_wasm! {
