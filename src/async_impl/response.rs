@@ -31,6 +31,12 @@ pub struct Response {
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
+    ///this field stands for bytes that retrives from a chunked response,
+    ///only exist when the res is chunked
+    chunked_body_bytes: Option<Bytes>,
+    ///this field stands for trailers that retrives from a chunked response,
+    ///only exist when the res is chunked
+    trailers: Option<HeaderMap>,
 }
 
 impl Response {
@@ -52,6 +58,8 @@ impl Response {
         Response {
             res,
             url: Box::new(url),
+            chunked_body_bytes: None,
+            trailers: None,
         }
     }
 
@@ -298,7 +306,31 @@ impl Response {
             .await
             .map(|buf| buf.to_bytes())
     }
+    async fn unwrap_chunked(&mut self) {
+        use http_body_util::BodyExt;
 
+        // loop to ignore unrecognized frames
+        loop {
+            if let Some(res) = self.res.body_mut().frame().await {
+                if let Ok(frame) = res {
+                    if frame.is_data() {
+                        if let Ok(buf) = frame.into_data() {
+                            self.chunked_body_bytes = Some(buf);
+                        }
+                    } else if frame.is_trailers() {
+                        if let Ok(trailers) = frame.into_trailers() {
+                            self.trailers = Some(trailers);
+                        }
+                    }
+                } else {
+                    panic!("err to exact a chunked frame");
+                }
+                // else continue
+            } else {
+                break;
+            }
+        }
+    }
     /// Stream a chunk of the response body.
     ///
     /// When the response body has been exhausted, this will return `None`.
@@ -316,20 +348,11 @@ impl Response {
     /// # }
     /// ```
     pub async fn chunk(&mut self) -> crate::Result<Option<Bytes>> {
-        use http_body_util::BodyExt;
-
-        // loop to ignore unrecognized frames
-        loop {
-            if let Some(res) = self.res.body_mut().frame().await {
-                let frame = res?;
-                if let Ok(buf) = frame.into_data() {
-                    return Ok(Some(buf));
-                }
-                // else continue
-            } else {
-                return Ok(None);
-            }
+        if let Some(body) = &self.chunked_body_bytes {
+            return Ok(Some(body.clone()));
         }
+        self.unwrap_chunked().await;
+        Ok(self.chunked_body_bytes.clone())
     }
 
     /// Convert the response into a `Stream` of `Bytes` from the body.
@@ -437,34 +460,11 @@ impl Response {
     }
     /// retrieve trailers from response return option
     pub async fn trailers(&mut self) -> crate::Result<Option<HeaderMap>> {
-        use http_body_util::BodyExt;
-
-        // loop to ignore unrecognized frames
-        loop {
-            let body = self.res.body_mut();
-            if let Some(res) = body.frame().await {
-                if let Ok(frame) = res {
-                    if frame.is_trailers() {
-                        if let Ok(headermap) = frame.into_trailers() {
-                            return Ok(Some(headermap));
-                        } else {
-                            return Err(crate::Error::new(
-                                crate::error::Kind::Body,
-                                Some("error making Frame into a trailer map"),
-                            ));
-                        }
-                    }
-                } else if let Err(e) = res {
-                    return Err(crate::Error::new(
-                        crate::error::Kind::Body,
-                        Some(e.to_string()),
-                    ));
-                }
-                // else continue
-            } else {
-                return Ok(None);
-            }
+        if let Some(tr) = &self.trailers {
+            return Ok(Some(tr.clone()));
         }
+        self.unwrap_chunked().await;
+        Ok(self.trailers.clone())
     }
 }
 
@@ -507,6 +507,8 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
         Response {
             res,
             url: Box::new(url),
+            chunked_body_bytes: None,
+            trailers: None,
         }
     }
 }
