@@ -73,9 +73,9 @@ pub(crate) struct Policy {
 /// [`Builder::scoped()`].
 pub fn for_host<S>(host: S) -> Builder
 where
-    S: PartialEq<str> + Send + Sync + 'static,
+    S: for<'a> PartialEq<&'a str> + Send + Sync + 'static,
 {
-    scoped(move |req| &host == req.uri().host().unwrap_or(""))
+    scoped(move |req| host == req.uri().host().unwrap_or(""))
 }
 
 /// Create a retry policy that will never retry any request.
