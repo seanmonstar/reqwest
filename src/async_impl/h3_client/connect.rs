@@ -66,6 +66,7 @@ impl H3Connector {
         resolver: DynResolver,
         tls: rustls::ClientConfig,
         local_addr: Option<IpAddr>,
+        local_port: Option<u16>,
         transport_config: TransportConfig,
         client_config: H3ClientConfig,
     ) -> Result<H3Connector, BoxError> {
@@ -75,8 +76,10 @@ impl H3Connector {
         config.transport_config(Arc::new(transport_config));
 
         let socket_addr = match local_addr {
-            Some(ip) => SocketAddr::new(ip, 0),
-            None => "[::]:0".parse::<SocketAddr>().unwrap(),
+            Some(ip) => SocketAddr::new(ip, local_port.unwrap_or(0)),
+            None => format!("[::]:{}", local_port.unwrap_or(0))
+                .parse::<SocketAddr>()
+                .unwrap(),
         };
 
         let mut endpoint = Endpoint::client(socket_addr)?;
