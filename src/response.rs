@@ -55,6 +55,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn test_response_ext() {
         let url = Url::parse("http://example.com").unwrap();
