@@ -36,7 +36,7 @@ impl ResponseExt for http::Response<Body> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ResponseBuilderExt, ResponseExt, ResponseUrl};
+    use super::{ResponseBuilderExt, ResponseUrl};
     use http::response::Builder;
     use url::Url;
 
@@ -58,6 +58,7 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn test_response_ext() {
+        use super::ResponseExt;
         let url = Url::parse("http://example.com").unwrap();
         let response = http::Response::builder()
             .status(200)
