@@ -3,7 +3,7 @@ use std::any::Any;
 use std::future::Future;
 use std::net::IpAddr;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::task::{ready, Context, Poll};
 use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
@@ -47,7 +47,8 @@ use http::header::{
     Entry, HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, PROXY_AUTHORIZATION, RANGE, USER_AGENT,
 };
 use http::uri::Scheme;
-use http::Uri;
+use http::{HeaderName, Uri};
+use http_body_util::BodyExt;
 use hyper_util::client::legacy::connect::HttpConnector;
 #[cfg(feature = "default-tls")]
 use native_tls_crate::TlsConnector;
@@ -76,7 +77,7 @@ use tower_http::follow_redirect::FollowRedirect;
 /// [`Rc`]: std::rc::Rc
 #[derive(Clone)]
 pub struct Client {
-    inner: Arc<ClientRef>,
+    inner: Arc<RwLock<ClientRef>>,
 }
 
 /// A `ClientBuilder` can be used to create a `Client` with custom configuration.
@@ -153,6 +154,7 @@ struct Config {
     // NOTE: When adding a new field, update `fmt::Debug for ClientBuilder`
     accepts: Accepts,
     headers: HeaderMap,
+    trailer_headers: Option<HeaderMap>,
     #[cfg(feature = "__tls")]
     hostname_verification: bool,
     #[cfg(feature = "__tls")]
@@ -280,6 +282,7 @@ impl ClientBuilder {
                 error: None,
                 accepts: Accepts::default(),
                 headers,
+                trailer_headers: None,
                 #[cfg(feature = "__tls")]
                 hostname_verification: true,
                 #[cfg(feature = "__tls")]
@@ -1012,7 +1015,7 @@ impl ClientBuilder {
         let hyper = FollowRedirect::with_policy(retries, redirect_policy.clone());
 
         Ok(Client {
-            inner: Arc::new(ClientRef {
+            inner: Arc::new(RwLock::new(ClientRef {
                 accepts: config.accepts,
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store.clone(),
@@ -1035,6 +1038,7 @@ impl ClientBuilder {
                     None => None,
                 },
                 headers: config.headers,
+                trailer_headers: config.trailer_headers,
                 referer: config.referer,
                 read_timeout: config.read_timeout,
                 request_timeout: RequestConfig::new(config.timeout),
@@ -1044,7 +1048,7 @@ impl ClientBuilder {
                 proxies_maybe_http_custom_headers,
                 https_only: config.https_only,
                 redirect_policy_desc,
-            }),
+            })),
         })
     }
 
@@ -2385,6 +2389,43 @@ impl ClientBuilder {
 
         self
     }
+    fn assert_trailer_key_is_valid(key: &HeaderName) {
+        const INVALID_KEYS: [&str; 6] = [
+            "transfer-encoding",
+            "content-length",
+            "host",
+            "trailer",
+            "content-encoding",
+            "content-type",
+        ];
+        if INVALID_KEYS.contains(&key.to_string().to_lowercase().as_str()) {
+            panic!(
+                "the header key \"{}\" 
+            is invalid for trailer header
+            ,please replace with valid key!",
+                key.to_string()
+            );
+        }
+    }
+    /// add propagating trailers header and request trailer header
+    pub fn add_trailer_header(mut self, trailer_map: HeaderMap) -> ClientBuilder {
+        self.config
+            .headers
+            .insert("transfer-encoding", HeaderValue::from_static("chunked"));
+        let mut trailer_value = String::new();
+        for (key, _val) in &trailer_map {
+            Self::assert_trailer_key_is_valid(key);
+            trailer_value.push_str(key.as_str());
+            trailer_value.push_str(",");
+        }
+        trailer_value.remove(trailer_value.len() - 1);
+        self.config.headers.insert(
+            "trailer",
+            HeaderValue::from_str(trailer_value.as_str()).expect("trailer header value create err"),
+        );
+        self.config.trailer_headers = Some(trailer_map);
+        self
+    }
 }
 
 type HyperClient = hyper_util::client::legacy::Client<Connector, super::Body>;
@@ -2507,21 +2548,21 @@ impl Client {
         if url.scheme() != "http" && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
         }
-
+        let read_inner = self.inner.read().unwrap();
         // check if we're in https_only mode and check the scheme of the current URL
-        if self.inner.https_only && url.scheme() != "https" {
+        if read_inner.https_only && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
         }
 
         // insert default headers in the request headers
         // without overwriting already appended headers.
-        for (key, value) in &self.inner.headers {
+        for (key, value) in &read_inner.headers {
             if let Entry::Vacant(entry) = headers.entry(key) {
                 entry.insert(value.clone());
             }
         }
 
-        let accept_encoding = self.inner.accepts.as_str();
+        let accept_encoding = read_inner.accepts.as_str();
 
         if let Some(accept_encoding) = accept_encoding {
             if !headers.contains_key(ACCEPT_ENCODING) && !headers.contains_key(RANGE) {
@@ -2533,8 +2574,16 @@ impl Client {
             Ok(uri) => uri,
             _ => return Pending::new_err(error::url_invalid_uri(url)),
         };
-
-        let body = body.unwrap_or_else(Body::empty);
+        let mut body = body.unwrap_or_else(Body::empty);
+        if let Some(trailers) = &read_inner.trailer_headers {
+            if let Streaming(bd) = body.into() {
+                let trailers = trailers.clone();
+                let with_trailers = bd.with_trailers(async { Some(Ok(trailers)) });
+                body = Body::wrap(with_trailers);
+            } else {
+                panic!("in order to add trailer headers,the request must be stream!");
+            }
+        }
 
         self.proxy_auth(&uri, &mut headers);
         self.proxy_custom_headers(&uri, &mut headers);
@@ -2555,21 +2604,19 @@ impl Client {
             _ => {
                 let mut req = builder.body(body).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
-                let mut hyper = self.inner.hyper.clone();
+                let mut hyper = read_inner.hyper.clone();
                 ResponseFuture::Default(hyper.call(req))
             }
         };
 
-        let total_timeout = self
-            .inner
+        let total_timeout = read_inner
             .request_timeout
             .fetch(&extensions)
             .copied()
             .map(tokio::time::sleep)
             .map(Box::pin);
 
-        let read_timeout_fut = self
-            .inner
+        let read_timeout_fut = read_inner
             .read_timeout
             .map(tokio::time::sleep)
             .map(Box::pin);
@@ -2585,13 +2632,14 @@ impl Client {
                 in_flight,
                 total_timeout,
                 read_timeout_fut,
-                read_timeout: self.inner.read_timeout,
+                read_timeout: read_inner.read_timeout,
             })),
         }
     }
 
     fn proxy_auth(&self, dst: &Uri, headers: &mut HeaderMap) {
-        if !self.inner.proxies_maybe_http_auth {
+        let read_inner = self.inner.read().unwrap();
+        if !read_inner.proxies_maybe_http_auth {
             return;
         }
 
@@ -2606,7 +2654,7 @@ impl Client {
             return;
         }
 
-        for proxy in self.inner.proxies.iter() {
+        for proxy in read_inner.proxies.iter() {
             if let Some(header) = proxy.http_non_tunnel_basic_auth(dst) {
                 headers.insert(PROXY_AUTHORIZATION, header);
                 break;
@@ -2615,7 +2663,8 @@ impl Client {
     }
 
     fn proxy_custom_headers(&self, dst: &Uri, headers: &mut HeaderMap) {
-        if !self.inner.proxies_maybe_http_custom_headers {
+        let read_inner = self.inner.read().unwrap();
+        if !read_inner.proxies_maybe_http_custom_headers {
             return;
         }
 
@@ -2623,7 +2672,7 @@ impl Client {
             return;
         }
 
-        for proxy in self.inner.proxies.iter() {
+        for proxy in read_inner.proxies.iter() {
             if let Some(iter) = proxy.http_non_tunnel_custom_headers(dst) {
                 iter.iter().for_each(|(key, value)| {
                     headers.insert(key, value.clone());
@@ -2632,12 +2681,46 @@ impl Client {
             }
         }
     }
+    /// add propagating trailers header and request trailer header
+    pub fn add_trailer_header(&mut self, trailer_map: HeaderMap) {
+        let mut write_inner = self.inner.write().unwrap();
+        write_inner
+            .headers
+            .insert("transfer-encoding", HeaderValue::from_static("chunked"));
+        let mut trailer_value = String::new();
+        for (key, _val) in &trailer_map {
+            ClientBuilder::assert_trailer_key_is_valid(key);
+            trailer_value.push_str(key.as_str());
+            trailer_value.push_str(",");
+        }
+        trailer_value.remove(trailer_value.len() - 1);
+        write_inner.headers.insert(
+            "trailer",
+            HeaderValue::from_str(trailer_value.as_str()).expect("trailer header value create err"),
+        );
+        write_inner.trailer_headers = Some(trailer_map);
+    }
+    ///  insert a key,value pair to trailer headermap,if not exist ,will create one   
+    pub fn insert_header_into_trailer_headermap(&mut self, key: HeaderName, value: HeaderValue) {
+        let headermap = {
+            let mut write_inner = self.inner.write().unwrap();
+            if let Some(map) = &mut write_inner.trailer_headers {
+                map.insert(key, value);
+                map.clone()
+            } else {
+                let mut headermap = HeaderMap::new();
+                headermap.insert(key, value);
+                headermap
+            }
+        };
+        self.add_trailer_header(headermap);
+    }
 }
 
 impl fmt::Debug for Client {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut builder = f.debug_struct("Client");
-        self.inner.fmt_fields(&mut builder);
+        self.inner.read().unwrap().fmt_fields(&mut builder);
         builder.finish()
     }
 }
@@ -2821,6 +2904,7 @@ struct ClientRef {
     #[cfg(feature = "cookies")]
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     headers: HeaderMap,
+    trailer_headers: Option<HeaderMap>,
     hyper: LayeredService<HyperService>,
     #[cfg(feature = "http3")]
     h3_client: Option<LayeredService<H3Client>>,
@@ -2888,7 +2972,7 @@ pin_project! {
         url: Url,
         headers: HeaderMap,
 
-        client: Arc<ClientRef>,
+        client: Arc<RwLock<ClientRef>>,
 
         #[pin]
         in_flight: ResponseFuture,
@@ -3000,11 +3084,11 @@ impl Future for PendingRequest {
                 Err(e) => return Poll::Ready(Err(crate::error::decode(e))),
             }
         };
-
+        let accepts = { self.client.read().unwrap().accepts.clone() };
         let res = Response::new(
             res,
             self.url.clone(),
-            self.client.accepts,
+            accepts,
             self.total_timeout.take(),
             self.read_timeout,
         );
