@@ -2504,7 +2504,11 @@ impl Client {
 
     pub(super) fn execute_request(&self, req: Request) -> Pending {
         let (method, url, mut headers, body, version, extensions) = req.pieces();
-        if url.scheme() != "http" && url.scheme() != "https" {
+        if url.scheme() != "http"
+            && url.scheme() != "https"
+            && url.scheme() != "ws"
+            && url.scheme() != "wss"
+        {
             return Pending::new_err(error::url_bad_scheme(url));
         }
 
