@@ -149,13 +149,13 @@ where
     .unwrap()
 }
 
-#[cfg(feature = "http3")]
+#[cfg(feature = "http3-no-provider")]
 #[derive(Debug, Default)]
 pub struct Http3 {
     addr: Option<std::net::SocketAddr>,
 }
 
-#[cfg(feature = "http3")]
+#[cfg(feature = "http3-no-provider")]
 impl Http3 {
     pub fn new() -> Self {
         Self::default()

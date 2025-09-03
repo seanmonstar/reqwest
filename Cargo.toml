@@ -91,9 +91,9 @@ system-proxy = ["hyper-util/client-proxy-system"]
 macos-system-configuration = ["system-proxy"]
 
 # Experimental HTTP/3 client.
-__http3 = ["rustls-tls-manual-roots-no-provider", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
-http3 = ["__http3", "quinn/rustls-ring"]
-http3-aws-lc-rs = ["__http3", "quinn/rustls-aws-lc-rs"]
+http3-no-provider = ["rustls-tls-manual-roots-no-provider", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
+http3 = ["http3-no-provider", "quinn/rustls-ring"]
+http3-aws-lc-rs = ["http3-no-provider", "quinn/rustls-aws-lc-rs"]
 
 
 # Internal (PRIVATE!) features used to aid testing.

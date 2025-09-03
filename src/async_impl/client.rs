@@ -13,9 +13,9 @@ use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
-#[cfg(feature = "http3")]
+#[cfg(feature = "http3-no-provider")]
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
-#[cfg(feature = "http3")]
+#[cfg(feature = "http3-no-provider")]
 use crate::async_impl::h3_client::H3Client;
 use crate::config::{RequestConfig, TotalTimeout};
 #[cfg(unix)]
@@ -54,9 +54,9 @@ use hyper_util::client::legacy::connect::HttpConnector;
 #[cfg(feature = "default-tls")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
-#[cfg(feature = "http3")]
+#[cfg(feature = "http3-no-provider")]
 use quinn::TransportConfig;
-#[cfg(feature = "http3")]
+#[cfg(feature = "http3-no-provider")]
 use quinn::VarInt;
 use tokio::time::Sleep;
 use tower::util::BoxCloneSyncServiceLayer;
@@ -91,7 +91,7 @@ enum HttpVersionPref {
     Http1,
     #[cfg(feature = "http2")]
     Http2,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "http3-no-provider")]
     Http3,
     All,
 }
@@ -206,21 +206,21 @@ struct Config {
     hickory_dns: bool,
     error: Option<crate::Error>,
     https_only: bool,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "http3-no-provider")]
     tls_enable_early_data: bool,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "http3-no-provider")]
     quic_max_idle_timeout: Option<Duration>,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "http3-no-provider")]
     quic_stream_receive_window: Option<VarInt>,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "http3-no-provider")]
     quic_receive_window: Option<VarInt>,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "http3-no-provider")]
     quic_send_window: Option<u64>,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "http3-no-provider")]
     quic_congestion_bbr: bool,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "http3-no-provider")]
     h3_max_field_section_size: Option<u64>,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "http3-no-provider")]
     h3_send_grease: Option<bool>,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
     dns_resolver: Option<Arc<dyn Resolve>>,
@@ -333,21 +333,21 @@ impl ClientBuilder {
                 cookie_store: None,
                 https_only: false,
                 dns_overrides: HashMap::new(),
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "http3-no-provider")]
                 tls_enable_early_data: false,
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "http3-no-provider")]
                 quic_max_idle_timeout: None,
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "http3-no-provider")]
                 quic_stream_receive_window: None,
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "http3-no-provider")]
                 quic_receive_window: None,
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "http3-no-provider")]
                 quic_send_window: None,
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "http3-no-provider")]
                 quic_congestion_bbr: false,
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "http3-no-provider")]
                 h3_max_field_section_size: None,
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "http3-no-provider")]
                 h3_send_grease: None,
                 dns_resolver: None,
                 #[cfg(unix)]
@@ -378,7 +378,7 @@ impl ClientBuilder {
         let proxies = Arc::new(proxies);
 
         #[allow(unused)]
-        #[cfg(feature = "http3")]
+        #[cfg(feature = "http3-no-provider")]
         let mut h3_connector = None;
 
         let resolver = {
@@ -410,7 +410,7 @@ impl ClientBuilder {
             let mut http = HttpConnector::new_with_resolver(resolver.clone());
             http.set_connect_timeout(config.connect_timeout);
 
-            #[cfg(all(feature = "http3", feature = "__rustls"))]
+            #[cfg(all(feature = "http3-no-provider", feature = "__rustls"))]
             let build_h3_connector =
                 |resolver,
                  tls,
@@ -484,7 +484,7 @@ impl ClientBuilder {
                 TlsBackend::Default => {
                     let mut tls = TlsConnector::builder();
 
-                    #[cfg(all(feature = "native-tls-alpn", not(feature = "http3")))]
+                    #[cfg(all(feature = "native-tls-alpn", not(feature = "http3-no-provider")))]
                     {
                         match config.http_version_pref {
                             HttpVersionPref::Http1 => {
@@ -595,7 +595,7 @@ impl ClientBuilder {
                 ),
                 #[cfg(feature = "__rustls")]
                 TlsBackend::BuiltRustls(conn) => {
-                    #[cfg(feature = "http3")]
+                    #[cfg(feature = "http3-no-provider")]
                     {
                         h3_connector = build_h3_connector(
                             resolver.clone(),
@@ -785,7 +785,7 @@ impl ClientBuilder {
                         HttpVersionPref::Http2 => {
                             tls.alpn_protocols = vec!["h2".into()];
                         }
-                        #[cfg(feature = "http3")]
+                        #[cfg(feature = "http3-no-provider")]
                         HttpVersionPref::Http3 => {
                             tls.alpn_protocols = vec!["h3".into()];
                         }
@@ -798,7 +798,7 @@ impl ClientBuilder {
                         }
                     }
 
-                    #[cfg(feature = "http3")]
+                    #[cfg(feature = "http3-no-provider")]
                     {
                         tls.enable_early_data = config.tls_enable_early_data;
 
@@ -986,7 +986,7 @@ impl ClientBuilder {
                 cookie_store: config.cookie_store.clone(),
                 // Use match instead of map since config is partially moved,
                 // and it cannot be used in closure
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "http3-no-provider")]
                 h3_client: match h3_connector {
                     Some(h3_connector) => {
                         let h3_service = H3Client::new(h3_connector, config.pool_idle_timeout);
@@ -1472,8 +1472,8 @@ impl ClientBuilder {
     }
 
     /// Only use HTTP/3.
-    #[cfg(feature = "http3")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    #[cfg(feature = "http3-no-provider")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider"))))]
     pub fn http3_prior_knowledge(mut self) -> ClientBuilder {
         self.config.http_version_pref = HttpVersionPref::Http3;
         self
@@ -2199,8 +2199,8 @@ impl ClientBuilder {
     /// for HTTP/3 connections.
     ///
     /// The default is false.
-    #[cfg(feature = "http3")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    #[cfg(feature = "http3-no-provider")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
     pub fn tls_early_data(mut self, enabled: bool) -> ClientBuilder {
         self.config.tls_enable_early_data = enabled;
         self
@@ -2211,8 +2211,8 @@ impl ClientBuilder {
     /// Please see docs in [`TransportConfig`] in [`quinn`].
     ///
     /// [`TransportConfig`]: https://docs.rs/quinn/latest/quinn/struct.TransportConfig.html
-    #[cfg(feature = "http3")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    #[cfg(feature = "http3-no-provider")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
     pub fn http3_max_idle_timeout(mut self, value: Duration) -> ClientBuilder {
         self.config.quic_max_idle_timeout = Some(value);
         self
@@ -2228,8 +2228,8 @@ impl ClientBuilder {
     /// # Panics
     ///
     /// Panics if the value is over 2^62.
-    #[cfg(feature = "http3")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    #[cfg(feature = "http3-no-provider")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
     pub fn http3_stream_receive_window(mut self, value: u64) -> ClientBuilder {
         self.config.quic_stream_receive_window = Some(value.try_into().unwrap());
         self
@@ -2245,8 +2245,8 @@ impl ClientBuilder {
     /// # Panics
     ///
     /// Panics if the value is over 2^62.
-    #[cfg(feature = "http3")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    #[cfg(feature = "http3-no-provider")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
     pub fn http3_conn_receive_window(mut self, value: u64) -> ClientBuilder {
         self.config.quic_receive_window = Some(value.try_into().unwrap());
         self
@@ -2257,8 +2257,8 @@ impl ClientBuilder {
     /// Please see docs in [`TransportConfig`] in [`quinn`].
     ///
     /// [`TransportConfig`]: https://docs.rs/quinn/latest/quinn/struct.TransportConfig.html
-    #[cfg(feature = "http3")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    #[cfg(feature = "http3-no-provider")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
     pub fn http3_send_window(mut self, value: u64) -> ClientBuilder {
         self.config.quic_send_window = Some(value);
         self
@@ -2271,8 +2271,8 @@ impl ClientBuilder {
     ///
     /// [BBR]: https://datatracker.ietf.org/doc/html/draft-ietf-ccwg-bbr
     /// [CUBIC]: https://datatracker.ietf.org/doc/html/rfc8312
-    #[cfg(feature = "http3")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    #[cfg(feature = "http3-no-provider")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
     pub fn http3_congestion_bbr(mut self) -> ClientBuilder {
         self.config.quic_congestion_bbr = true;
         self
@@ -2287,8 +2287,8 @@ impl ClientBuilder {
     /// Please see docs in [`Builder`] in [`h3`].
     ///
     /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.max_field_section_size
-    #[cfg(feature = "http3")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    #[cfg(feature = "http3-no-provider")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
     pub fn http3_max_field_section_size(mut self, value: u64) -> ClientBuilder {
         self.config.h3_max_field_section_size = Some(value.try_into().unwrap());
         self
@@ -2305,8 +2305,8 @@ impl ClientBuilder {
     /// Please see docs in [`Builder`] in [`h3`].
     ///
     /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.send_grease
-    #[cfg(feature = "http3")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    #[cfg(feature = "http3-no-provider")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
     pub fn http3_send_grease(mut self, enabled: bool) -> ClientBuilder {
         self.config.h3_send_grease = Some(enabled);
         self
@@ -2508,7 +2508,7 @@ impl Client {
             .version(version);
 
         let in_flight = match version {
-            #[cfg(feature = "http3")]
+            #[cfg(feature = "http3-no-provider")]
             http::Version::HTTP_3 if self.inner.h3_client.is_some() => {
                 let mut req = builder.body(body).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
@@ -2761,7 +2761,7 @@ impl Config {
             f.field("dns_overrides", &self.dns_overrides);
         }
 
-        #[cfg(feature = "http3")]
+        #[cfg(feature = "http3-no-provider")]
         {
             if self.tls_enable_early_data {
                 f.field("tls_enable_early_data", &true);
@@ -2791,7 +2791,7 @@ struct ClientRef {
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     headers: HeaderMap,
     hyper: LayeredService<HyperService>,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "http3-no-provider")]
     h3_client: Option<LayeredService<H3Client>>,
     referer: bool,
     total_timeout: RequestConfig<TotalTimeout>,
@@ -2871,7 +2871,7 @@ pin_project! {
 
 enum ResponseFuture {
     Default(LayeredFuture<HyperService>),
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "http3-no-provider")]
     H3(LayeredFuture<H3Client>),
 }
 
@@ -2942,7 +2942,7 @@ impl Future for PendingRequest {
                 }
                 Ok(res) => res.map(super::body::boxed),
             },
-            #[cfg(feature = "http3")]
+            #[cfg(feature = "http3-no-provider")]
             ResponseFuture::H3(r) => match ready!(Pin::new(r).poll(cx)) {
                 Err(e) => {
                     return Poll::Ready(Err(crate::error::request(e).with_url(self.url.clone())));
