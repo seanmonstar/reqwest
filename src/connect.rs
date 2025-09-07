@@ -81,7 +81,7 @@ pub(crate) struct ConnectorBuilder {
     #[cfg(feature = "socks")]
     resolver: Option<DynResolver>,
     #[cfg(unix)]
-    unix_socket: Option<Arc<std::path::Path>>,
+    unix_socket: Option<Arc<UdsPath>>,
 }
 
 impl ConnectorBuilder {
@@ -454,7 +454,7 @@ where {
     }
 
     #[cfg(unix)]
-    pub(crate) fn set_unix_socket(&mut self, path: Option<Arc<std::path::Path>>) {
+    pub(crate) fn set_unix_socket(&mut self, path: Option<Arc<UdsPath>>) {
         self.unix_socket = path;
     }
 }
@@ -480,7 +480,7 @@ pub(crate) struct ConnectorService {
     resolver: DynResolver,
     /// If set, this always takes priority over TCP.
     #[cfg(unix)]
-    unix_socket: Option<Arc<std::path::Path>>,
+    unix_socket: Option<Arc<UdsPath>>,
 }
 
 #[derive(Clone)]
@@ -681,13 +681,22 @@ impl ConnectorService {
             .as_ref()
             .expect("connect local must have socket path")
             .clone();
-        let svc = tower::service_fn(move |_| {
-            let fut = tokio::net::UnixStream::connect(path.clone());
-            async move {
-                let io = fut.await?;
-                Ok::<_, std::io::Error>(TokioIo::new(io))
+        let svc = {
+            if let UdsPath::FilePath(path) = path.as_ref() {
+                tower::service_fn(move |_| {
+                    let fut = tokio::net::UnixStream::connect(path.clone());
+                    async move {
+                        let io = fut.await?;
+                        Ok::<_, std::io::Error>(TokioIo::new(io))
+                    }
+                })
+            } else if let UdsPath::Fd(fd) = path.as_ref() {
+                tower::service_fn(move |_| {
+                    let io = unsafe { UnixStream::from_raw_fd(fd) };
+                    Ok::<_, std::io::Error>(TokioIo::new(io))
+                })
             }
-        });
+        };
         let is_proxy = false;
         match self.inner {
             #[cfg(not(feature = "__tls"))]
@@ -1210,8 +1219,12 @@ pub(crate) mod sealed {
 // Some sealed things for UDS
 #[cfg(unix)]
 pub(crate) mod uds {
-    use std::path::Path;
-
+    use std::os::unix::io::RawFd;
+    use std::path::{Path, PathBuf};
+    pub enum UdsPath {
+        FilePath(PathBuf),
+        Fd(RawFd),
+    }
     /// A provider for Unix Domain Socket paths.
     ///
     /// This trait is sealed. This allows us expand the support in the future
@@ -1221,7 +1234,7 @@ pub(crate) mod uds {
     #[cfg(unix)]
     pub trait UnixSocketProvider {
         #[doc(hidden)]
-        fn reqwest_uds_path(&self, _: Internal) -> &Path;
+        fn reqwest_uds_path(&self, _: Internal) -> UdsPath;
     }
 
     #[allow(missing_debug_implementations)]
@@ -1232,8 +1245,8 @@ pub(crate) mod uds {
             $(
                 impl UnixSocketProvider for $t {
                     #[doc(hidden)]
-                    fn reqwest_uds_path(&self, _: Internal) -> &Path {
-                        self.as_ref()
+                    fn reqwest_uds_path(&self, _: Internal) -> UdsPath {
+                        UdsPath::FilePath(PathBuf::from(self.as_ref()))
                     }
                 }
             )+
@@ -1247,6 +1260,12 @@ pub(crate) mod uds {
         std::path::PathBuf,
         std::sync::Arc<Path>,
     ];
+    impl UnixSocketProvider for RawFd {
+        #[doc(hidden)]
+        fn reqwest_uds_path(&self, _: Internal) -> UdsPath {
+            UdsPath::Fd(self.clone())
+        }
+    }
 }
 
 pub(crate) type Connecting = Pin<Box<dyn Future<Output = Result<Conn, BoxError>> + Send>>;

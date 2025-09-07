@@ -258,7 +258,7 @@ struct Config {
     dns_resolver: Option<Arc<dyn Resolve>>,
 
     #[cfg(unix)]
-    unix_socket: Option<Arc<std::path::Path>>,
+    unix_socket: Option<Arc<UdsPath>>,
 }
 
 impl Default for ClientBuilder {
@@ -1753,7 +1753,7 @@ impl ClientBuilder {
     /// Likewise, DNS resolution will not be done on the domain name.
     #[cfg(unix)]
     pub fn unix_socket(mut self, path: impl UnixSocketProvider) -> ClientBuilder {
-        self.config.unix_socket = Some(path.reqwest_uds_path(crate::connect::uds::Internal).into());
+        self.config.unix_socket = Some(path.reqwest_uds_path(crate::connect::uds::Internal));
         self
     }
 
