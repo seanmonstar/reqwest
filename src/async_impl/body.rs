@@ -7,7 +7,6 @@ use std::time::Duration;
 use bytes::Bytes;
 use http_body::Body as HttpBody;
 use http_body_util::combinators::BoxBody;
-//use sync_wrapper::SyncWrapper;
 use pin_project_lite::pin_project;
 #[cfg(feature = "stream")]
 use tokio::fs::File;
@@ -153,15 +152,6 @@ impl Body {
         Body {
             inner: Inner::Streaming(boxed),
         }
-    }
-
-    pub(crate) fn try_reuse(self) -> (Option<Bytes>, Self) {
-        let reuse = match self.inner {
-            Inner::Reusable(ref chunk) => Some(chunk.clone()),
-            Inner::Streaming { .. } => None,
-        };
-
-        (reuse, self)
     }
 
     pub(crate) fn try_clone(&self) -> Option<Body> {

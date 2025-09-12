@@ -9,6 +9,7 @@ use http::header::{CONTENT_LENGTH, CONTENT_TYPE, TRANSFER_ENCODING};
 use std::collections::HashMap;
 
 use reqwest::Client;
+use tokio::io::AsyncWriteExt;
 
 #[tokio::test]
 async fn auto_headers() {
@@ -472,78 +473,6 @@ async fn test_tls_info() {
     assert!(tls_info.is_none());
 }
 
-// NOTE: using the default "current_thread" runtime here would cause the test to
-// fail, because the only thread would block until `panic_rx` receives a
-// notification while the client needs to be driven to get the graceful shutdown
-// done.
-#[cfg(feature = "http2")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn highly_concurrent_requests_to_http2_server_with_low_max_concurrent_streams() {
-    let client = reqwest::Client::builder()
-        .http2_prior_knowledge()
-        .build()
-        .unwrap();
-
-    let server = server::http_with_config(
-        move |req| async move {
-            assert_eq!(req.version(), http::Version::HTTP_2);
-            http::Response::default()
-        },
-        |builder| {
-            builder.http2().max_concurrent_streams(1);
-        },
-    );
-
-    let url = format!("http://{}", server.addr());
-
-    let futs = (0..100).map(|_| {
-        let client = client.clone();
-        let url = url.clone();
-        async move {
-            let res = client.get(&url).send().await.unwrap();
-            assert_eq!(res.status(), reqwest::StatusCode::OK);
-        }
-    });
-    futures_util::future::join_all(futs).await;
-}
-
-#[cfg(feature = "http2")]
-#[tokio::test]
-async fn highly_concurrent_requests_to_slow_http2_server_with_low_max_concurrent_streams() {
-    use support::delay_server;
-
-    let client = reqwest::Client::builder()
-        .http2_prior_knowledge()
-        .build()
-        .unwrap();
-
-    let server = delay_server::Server::new(
-        move |req| async move {
-            assert_eq!(req.version(), http::Version::HTTP_2);
-            http::Response::default()
-        },
-        |http| {
-            http.http2().max_concurrent_streams(1);
-        },
-        std::time::Duration::from_secs(2),
-    )
-    .await;
-
-    let url = format!("http://{}", server.addr());
-
-    let futs = (0..100).map(|_| {
-        let client = client.clone();
-        let url = url.clone();
-        async move {
-            let res = client.get(&url).send().await.unwrap();
-            assert_eq!(res.status(), reqwest::StatusCode::OK);
-        }
-    });
-    futures_util::future::join_all(futs).await;
-
-    server.shutdown().await;
-}
-
 #[tokio::test]
 async fn close_connection_after_idle_timeout() {
     let mut server = server::http(move |_| async move { http::Response::default() });
@@ -563,4 +492,39 @@ async fn close_connection_after_idle_timeout() {
         .events()
         .iter()
         .any(|e| matches!(e, server::Event::ConnectionClosed)));
+}
+
+#[tokio::test]
+async fn http1_reason_phrase() {
+    let server = server::low_level_with_response(|_raw_request, client_socket| {
+        Box::new(async move {
+            client_socket
+                .write_all(b"HTTP/1.1 418 I'm not a teapot\r\nContent-Length: 0\r\n\r\n")
+                .await
+                .expect("response write_all failed");
+        })
+    });
+
+    let client = Client::new();
+
+    let res = client
+        .get(&format!("http://{}", server.addr()))
+        .send()
+        .await
+        .expect("Failed to get");
+
+    assert_eq!(
+        res.error_for_status().unwrap_err().to_string(),
+        format!(
+            "HTTP status client error (418 I'm not a teapot) for url (http://{}/)",
+            server.addr()
+        )
+    );
+}
+
+#[tokio::test]
+async fn error_has_url() {
+    let u = "http://does.not.exist.local/ever";
+    let err = reqwest::get(u).await.unwrap_err();
+    assert_eq!(err.url().map(AsRef::as_ref), Some(u), "{err:?}");
 }

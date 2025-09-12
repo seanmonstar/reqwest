@@ -3,6 +3,7 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 
+use crate::util::Escape;
 use crate::{StatusCode, Url};
 
 /// A `Result` alias where the `Err` case is `reqwest::Error`.
@@ -75,6 +76,13 @@ impl Error {
         self
     }
 
+    pub(crate) fn if_no_url(mut self, f: impl FnOnce() -> Url) -> Self {
+        if self.inner.url.is_none() {
+            self.inner.url = Some(f());
+        }
+        self
+    }
+
     /// Strip the related url from this error (if, for example, it contains
     /// sensitive information)
     pub fn without_url(mut self) -> Self {
@@ -94,7 +102,14 @@ impl Error {
 
     /// Returns true if the error is from `Response::error_for_status`.
     pub fn is_status(&self) -> bool {
-        matches!(self.inner.kind, Kind::Status(_))
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            matches!(self.inner.kind, Kind::Status(_, _))
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            matches!(self.inner.kind, Kind::Status(_))
+        }
     }
 
     /// Returns true if the error is related to a timeout.
@@ -104,6 +119,12 @@ impl Error {
         while let Some(err) = source {
             if err.is::<TimedOut>() {
                 return true;
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(hyper_err) = err.downcast_ref::<hyper::Error>() {
+                if hyper_err.is_timeout() {
+                    return true;
+                }
             }
             if let Some(io) = err.downcast_ref::<io::Error>() {
                 if io.kind() == io::ErrorKind::TimedOut {
@@ -152,7 +173,10 @@ impl Error {
     /// Returns the status code, if the error was generated from a response.
     pub fn status(&self) -> Option<StatusCode> {
         match self.inner.kind {
+            #[cfg(target_arch = "wasm32")]
             Kind::Status(code) => Some(code),
+            #[cfg(not(target_arch = "wasm32"))]
+            Kind::Status(code, _) => Some(code),
             _ => None,
         }
     }
@@ -204,6 +228,7 @@ impl fmt::Display for Error {
             Kind::Decode => f.write_str("error decoding response body")?,
             Kind::Redirect => f.write_str("error following redirect")?,
             Kind::Upgrade => f.write_str("error upgrading connection")?,
+            #[cfg(target_arch = "wasm32")]
             Kind::Status(ref code) => {
                 let prefix = if code.is_client_error() {
                     "HTTP status client error"
@@ -212,6 +237,25 @@ impl fmt::Display for Error {
                     "HTTP status server error"
                 };
                 write!(f, "{prefix} ({code})")?;
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            Kind::Status(ref code, ref reason) => {
+                let prefix = if code.is_client_error() {
+                    "HTTP status client error"
+                } else {
+                    debug_assert!(code.is_server_error());
+                    "HTTP status server error"
+                };
+                if let Some(reason) = reason {
+                    write!(
+                        f,
+                        "{prefix} ({} {})",
+                        code.as_str(),
+                        Escape::new(reason.as_bytes())
+                    )?;
+                } else {
+                    write!(f, "{prefix} ({code})")?;
+                }
             }
         };
 
@@ -248,6 +292,9 @@ pub(crate) enum Kind {
     Builder,
     Request,
     Redirect,
+    #[cfg(not(target_arch = "wasm32"))]
+    Status(StatusCode, Option<hyper::ext::ReasonPhrase>),
+    #[cfg(target_arch = "wasm32")]
     Status(StatusCode),
     Body,
     Decode,
@@ -276,8 +323,20 @@ pub(crate) fn redirect<E: Into<BoxError>>(e: E, url: Url) -> Error {
     Error::new(Kind::Redirect, Some(e)).with_url(url)
 }
 
-pub(crate) fn status_code(url: Url, status: StatusCode) -> Error {
-    Error::new(Kind::Status(status), None::<Error>).with_url(url)
+pub(crate) fn status_code(
+    url: Url,
+    status: StatusCode,
+    #[cfg(not(target_arch = "wasm32"))] reason: Option<hyper::ext::ReasonPhrase>,
+) -> Error {
+    Error::new(
+        Kind::Status(
+            status,
+            #[cfg(not(target_arch = "wasm32"))]
+            reason,
+        ),
+        None::<Error>,
+    )
+    .with_url(url)
 }
 
 pub(crate) fn url_bad_scheme(url: Url) -> Error {
@@ -400,7 +459,9 @@ mod tests {
         let err = super::request(super::TimedOut);
         assert!(err.is_timeout());
 
-        let io = io::Error::new(io::ErrorKind::Other, err);
+        // todo: test `hyper::Error::is_timeout` when we can easily construct one
+
+        let io = io::Error::from(io::ErrorKind::TimedOut);
         let nested = super::request(io);
         assert!(nested.is_timeout());
     }

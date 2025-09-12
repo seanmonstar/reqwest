@@ -402,7 +402,7 @@ impl<P: PartProps> FormParts<P> {
     }
 
     // If predictable, computes the length the request will have
-    // The length should be preditable if only String and file fields have been added,
+    // The length should be predictable if only String and file fields have been added,
     // but not if a generic reader has been added;
     pub(crate) fn compute_length(&mut self) -> Option<u64> {
         let mut length = 0u64;
@@ -601,8 +601,9 @@ fn gen_boundary() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::stream;
     use futures_util::TryStreamExt;
-    use futures_util::{future, stream};
+    use std::future;
     use tokio::{self, runtime};
 
     #[test]

@@ -1,6 +1,7 @@
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(not(test), warn(unused_crate_dependencies))]
 #![cfg_attr(test, deny(warnings))]
 
 //! # reqwest
@@ -18,14 +19,14 @@
 //! - Uses [TLS](#tls) by default
 //! - Cookies
 //!
-//! The [`reqwest::Client`][client] is asynchronous. For applications wishing
-//! to only make a few HTTP requests, the [`reqwest::blocking`](blocking) API
-//! may be more convenient.
+//! The [`reqwest::Client`][client] is asynchronous (requiring Tokio). For
+//! applications wishing  to only make a few HTTP requests, the
+//! [`reqwest::blocking`](blocking) API may be more convenient.
 //!
 //! Additional learning resources include:
 //!
 //! - [The Rust Cookbook](https://rust-lang-nursery.github.io/rust-cookbook/web/clients.html)
-//! - [Reqwest Repository Examples](https://github.com/seanmonstar/reqwest/tree/master/examples)
+//! - [reqwest Repository Examples](https://github.com/seanmonstar/reqwest/tree/master/examples)
 //!
 //! ## Commercial Support
 //!
@@ -175,6 +176,8 @@
 //! the usage is basically the same as the async api. Some of the features are disabled in wasm
 //! : [`tls`], [`cookie`], [`blocking`], as well as various `ClientBuilder` methods such as `timeout()` and `connector_layer()`.
 //!
+//! TLS and cookies are provided through the browser environment, so reqwest can issue TLS requests with cookies,
+//! but has limited configuration.
 //!
 //! ## Optional Features
 //!
@@ -208,6 +211,8 @@
 //! - **socks**: Provides SOCKS5 proxy support.
 //! - **hickory-dns**: Enables a hickory-dns async resolver instead of default
 //!   threadpool using `getaddrinfo`.
+//! - **system-proxy** *(enabled by default)*: Use Windows and macOS system
+//!   proxy settings automatically.
 //!
 //! ## Unstable Features
 //!
@@ -250,6 +255,11 @@ compile_error!(
 "
 );
 
+// Ignore `unused_crate_dependencies` warnings.
+// Used in many features that they're not worth making it optional.
+use futures_core as _;
+use sync_wrapper as _;
+
 macro_rules! if_wasm {
     ($($item:item)*) => {$(
         #[cfg(target_arch = "wasm32")]
@@ -272,7 +282,7 @@ pub use url::Url;
 // universal mods
 #[macro_use]
 mod error;
-// TODO: remove `if_hyper` if wasm has been mirgated to new config system.
+// TODO: remove `if_hyper` if wasm has been migrated to new config system.
 if_hyper! {
     mod config;
 }
@@ -366,9 +376,13 @@ if_hyper! {
     pub mod dns;
     mod proxy;
     pub mod redirect;
+    pub mod retry;
     #[cfg(feature = "__tls")]
     pub mod tls;
     mod util;
+
+    #[cfg(docsrs)]
+    pub use connect::uds::UnixSocketProvider;
 }
 
 if_wasm! {

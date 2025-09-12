@@ -182,6 +182,14 @@ impl fmt::Debug for Body {
     }
 }
 
+impl Default for Body {
+    fn default() -> Body {
+        Body {
+            inner: Inner::Single(Single::Bytes(Bytes::new())),
+        }
+    }
+}
+
 // Can use new methods in web-sys when requiring v0.2.93.
 // > `init.method(m)` to `init.set_method(m)`
 // For now, ignore their deprecation.
