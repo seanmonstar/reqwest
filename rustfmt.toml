@@ -1,0 +1,10 @@
+edition = "2024"
+tab_spaces = 4
+unstable_features = true
+condense_wildcard_suffixes = true
+newline_style = "Unix"
+use_field_init_shorthand = true
+use_try_shorthand = true
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+reorder_imports = true

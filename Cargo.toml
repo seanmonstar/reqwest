@@ -36,6 +36,8 @@ features = [
 [features]
 default = ["default-tls", "charset", "http2", "system-proxy"]
 
+proxy_ss = ["dep:shadowsocks"]
+
 # Note: this doesn't enable the 'native-tls' feature, which adds specific
 # functionality for it.
 default-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
@@ -122,6 +124,7 @@ sync_wrapper = { version = "1.0", features = ["futures"] }
 serde_json = { version = "1.0", optional = true }
 ## multipart
 mime_guess = { version = "2.0", default-features = false, optional = true }
+shadowsocks = { version = "1.17.2", optional = true, features = ["stream-cipher", "aead-cipher", "aead-cipher-2022"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 encoding_rs = { version = "0.8", optional = true }
@@ -222,6 +225,7 @@ wasm-bindgen-test = "0.3"
 tower = { version = "0.5.2", default-features = false, features = ["limit"] }
 num_cpus = "1.0"
 libc = "0"
+anyhow = "1.0.99"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(reqwest_unstable)'] }
@@ -262,6 +266,11 @@ required-features = ["http3", "rustls-tls"]
 [[example]]
 name = "connect_via_lower_priority_tokio_runtime"
 path = "examples/connect_via_lower_priority_tokio_runtime.rs"
+
+[[example]]
+name = "proxy_ss"
+path = "examples/proxy_ss.rs"
+required-features = ["proxy_ss"]
 
 [[test]]
 name = "blocking"

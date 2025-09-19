@@ -97,7 +97,11 @@ fn test_get() {
     let server = server::http(move |_req| async { http::Response::default() });
 
     let url = format!("http://{}/1", server.addr());
-    let res = reqwest::blocking::get(&url).unwrap();
+    let client = reqwest::blocking::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap();
+    let res = client.get(&url).send().unwrap();
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
