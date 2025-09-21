@@ -192,7 +192,6 @@ futures-util = { version = "0.3.28", default-features = false, features = ["std"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3.77"
-serde_json = "1.0"
 wasm-bindgen = "0.2.89"
 wasm-bindgen-futures = "0.4.18"
 wasm-streams = { version = "0.4", optional = true }
