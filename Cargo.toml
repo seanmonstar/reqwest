@@ -29,6 +29,8 @@ targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 features = [
     "blocking",
     "cookies",
+    "query",
+    "form",
     "json",
     "multipart",
 ]
@@ -72,7 +74,9 @@ zstd = ["tower-http/decompression-zstd"]
 
 deflate = ["tower-http/decompression-deflate"]
 
-json = ["dep:serde_json"]
+query = ["dep:serde", "dep:serde_urlencoded"]
+form = ["dep:serde", "dep:serde_urlencoded"]
+json = ["dep:serde", "dep:serde_json"]
 
 multipart = ["dep:mime_guess", "dep:futures-util"]
 
@@ -110,14 +114,15 @@ base64 = "0.22"
 http = "1.1"
 url = "2.4"
 bytes = "1.2"
-serde = "1.0"
-serde_urlencoded = "0.7.1"
 futures-core = { version = "0.3.28", default-features = false }
 futures-util = { version = "0.3.28", default-features = false, optional = true }
 sync_wrapper = { version = "1.0", features = ["futures"] }
 
 # Optional deps...
 
+serde = { version = "1.0", optional = true }
+## query/form
+serde_urlencoded = { version = "0.7.1", optional = true }
 ## json
 serde_json = { version = "1.0", optional = true }
 ## multipart
@@ -248,6 +253,7 @@ required-features = ["socks"]
 [[example]]
 name = "form"
 path = "examples/form.rs"
+required-features = ["form"]
 
 [[example]]
 name = "simple"

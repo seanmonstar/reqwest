@@ -82,9 +82,12 @@
 //! This can be an array of tuples, or a `HashMap`, or a custom type that
 //! implements [`Serialize`][serde].
 //!
+//! The feature `form` is required.
+//!
 //! ```rust
 //! # use reqwest::Error;
 //! #
+//! # #[cfg(feature = "form")]
 //! # async fn run() -> Result<(), Error> {
 //! // This will POST a body of `foo=bar&baz=quux`
 //! let params = [("foo", "bar"), ("baz", "quux")];
@@ -101,7 +104,9 @@
 //!
 //! There is also a `json` method helper on the [`RequestBuilder`][builder] that works in
 //! a similar fashion the `form` method. It can take any value that can be
-//! serialized into JSON. The feature `json` is required.
+//! serialized into JSON.
+//!
+//! The feature `json` is required.
 //!
 //! ```rust
 //! # use reqwest::Error;
@@ -205,6 +210,8 @@
 //! - **brotli**: Provides response body brotli decompression.
 //! - **zstd**: Provides response body zstd decompression.
 //! - **deflate**: Provides response body deflate decompression.
+//! - **query**: Provides query parameter serialization.
+//! - **form**: Provides form data serialization.
 //! - **json**: Provides serialization and deserialization for JSON bodies.
 //! - **multipart**: Provides functionality for multipart forms.
 //! - **stream**: Adds support for `futures::Stream`.

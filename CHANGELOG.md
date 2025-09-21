@@ -1,3 +1,7 @@
+## Unreleased
+
+- Add `query` and `form` features, making `serde` dependency optional.
+
 ## v0.12.27
 
 - Add `ClientBuilder::windows_named_pipe(name)` option that will force all requests over that Windows Named Piper.
