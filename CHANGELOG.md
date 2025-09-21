@@ -1,3 +1,7 @@
+## Unreleased
+
+- Add `query` and `form` features, making `serde` dependency optional.
+
 ## v0.12.24
 
 - Refactor cookie handling to an internal middleware.
