@@ -1814,3 +1814,136 @@ mod verbose {
         }
     }
 }
+
+/// Connection limiting functionality
+pub(crate) mod connection_limit {
+    use std::collections::HashMap;
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::sync::{Arc, Mutex};
+    use std::task::{Context, Poll};
+
+    use http::uri::Authority;
+    use tokio::sync::Semaphore;
+    use tower::{Layer, Service};
+
+    use super::sealed::{Conn, Unnameable};
+    use crate::error::BoxError;
+
+    /// A Tower layer that limits the maximum number of connections per host.
+    ///
+    /// This layer tracks active connections per host and enforces a maximum limit.
+    /// When the limit is reached, new connection attempts will wait until an existing
+    /// connection is dropped.
+    #[derive(Clone)]
+    pub(crate) struct ConnectionLimitLayer {
+        max_connections_per_host: usize,
+        semaphores: Arc<Mutex<HashMap<Authority, Arc<Semaphore>>>>,
+    }
+
+    impl ConnectionLimitLayer {
+        /// Create a new connection limiting layer.
+        ///
+        /// # Arguments
+        /// * `max_connections_per_host` - Maximum connections per host. 0 means no limit.
+        pub(crate) fn new(max_connections_per_host: usize) -> Self {
+            Self {
+                max_connections_per_host,
+                semaphores: Arc::new(Mutex::new(HashMap::new())),
+            }
+        }
+    }
+
+    impl<S> Layer<S> for ConnectionLimitLayer {
+        type Service = ConnectionLimitService<S>;
+
+        fn layer(&self, inner: S) -> Self::Service {
+            ConnectionLimitService {
+                inner,
+                max_connections_per_host: self.max_connections_per_host,
+                semaphores: self.semaphores.clone(),
+            }
+        }
+    }
+
+    /// A Tower service that enforces connection limits per host.
+    pub(crate) struct ConnectionLimitService<S> {
+        inner: S,
+        max_connections_per_host: usize,
+        semaphores: Arc<Mutex<HashMap<Authority, Arc<Semaphore>>>>,
+    }
+
+    impl<S> Clone for ConnectionLimitService<S>
+    where
+        S: Clone,
+    {
+        fn clone(&self) -> Self {
+            Self {
+                inner: self.inner.clone(),
+                max_connections_per_host: self.max_connections_per_host,
+                semaphores: self.semaphores.clone(),
+            }
+        }
+    }
+
+    impl<S> Service<Unnameable> for ConnectionLimitService<S>
+    where
+        S: Service<Unnameable, Response = Conn, Error = BoxError> + Clone + Send + 'static,
+        S::Future: Send + 'static,
+    {
+        type Response = Conn;
+        type Error = BoxError;
+        type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+        fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            self.inner.poll_ready(cx)
+        }
+
+        fn call(&mut self, req: Unnameable) -> Self::Future {
+            let uri = &req.0;
+            let authority = match uri.authority() {
+                Some(auth) => auth.clone(),
+                None => {
+                    // No authority, just pass through
+                    let mut inner = self.inner.clone();
+                    return Box::pin(async move { inner.call(req).await });
+                }
+            };
+
+            // Get semaphore for this host
+            let semaphore = if self.max_connections_per_host == 0 {
+                None // No limit
+            } else {
+                let mut semaphores = self.semaphores.lock().unwrap();
+                Some(
+                    semaphores
+                        .entry(authority.clone())
+                        .or_insert_with(|| Arc::new(Semaphore::new(self.max_connections_per_host)))
+                        .clone(),
+                )
+            };
+
+            let mut inner = self.inner.clone();
+
+            if let Some(semaphore) = semaphore {
+                Box::pin(async move {
+                    // Acquire permit for this host
+                    let _permit = semaphore
+                        .acquire()
+                        .await
+                        .map_err(|_| BoxError::from("Connection limit semaphore closed"))?;
+
+                    // Call the inner service
+                    let conn = inner.call(req).await?;
+
+                    // The permit will be automatically dropped when this future completes,
+                    // which will release the semaphore slot
+                    Ok(conn)
+                })
+            } else {
+                // No limit, just pass through
+                Box::pin(async move { inner.call(req).await })
+            }
+        }
+    }
+}

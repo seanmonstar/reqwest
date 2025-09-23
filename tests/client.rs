@@ -528,3 +528,27 @@ async fn error_has_url() {
     let err = reqwest::get(u).await.unwrap_err();
     assert_eq!(err.url().map(AsRef::as_ref), Some(u), "{err:?}");
 }
+
+#[tokio::test]
+async fn test_client_builder_with_connection_limit() {
+    // Test that the client builder accepts the connection limit configuration
+    let client = reqwest::Client::builder()
+        .pool_max_connections_per_host(5)
+        .build()
+        .unwrap();
+
+    // Just verify the client was created successfully
+    assert!(client.get("http://httpbin.org/get").build().is_ok());
+}
+
+#[tokio::test]
+async fn test_client_builder_with_no_limit() {
+    // Test that the client builder accepts 0 (no limit)
+    let client = reqwest::Client::builder()
+        .pool_max_connections_per_host(0)
+        .build()
+        .unwrap();
+
+    // Just verify the client was created successfully
+    assert!(client.get("http://httpbin.org/get").build().is_ok());
+}

@@ -53,6 +53,27 @@
 //! [`Client`][client] and reuse it, taking advantage of keep-alive connection
 //! pooling.
 //!
+//! ## Connection Limiting
+//!
+//! You can limit the maximum number of connections per host using the
+//! [`pool_max_connections_per_host`][ClientBuilder::pool_max_connections_per_host] method.
+//! This is useful to prevent overwhelming servers with too many concurrent connections.
+//!
+//! ```rust
+//! # async fn run() -> Result<(), reqwest::Error> {
+//! let client = reqwest::Client::builder()
+//!     .pool_max_connections_per_host(5) // Max 5 connections per host
+//!     .build()?;
+//!
+//! // When making concurrent requests to the same host,
+//! // only 5 connections will be active at a time
+//! let response = client.get("https://httpbin.org/get").send().await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Setting the value to `0` (the default) means no limit.
+//!
 //! ## Making POST requests (or setting request bodies)
 //!
 //! There are several ways you can set the body of a request. The basic one is

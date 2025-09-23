@@ -411,3 +411,15 @@ fn test_response_no_tls_info_for_http() {
     let body = res.text().unwrap();
     assert_eq!(b"Hello", body.as_bytes());
 }
+
+#[test]
+fn test_blocking_client_builder_with_connection_limit() {
+    // Test that the blocking client builder accepts the connection limit configuration
+    let client = reqwest::blocking::Client::builder()
+        .pool_max_connections_per_host(3)
+        .build()
+        .unwrap();
+
+    // Just verify the client was created successfully
+    assert!(client.get("http://httpbin.org/get").build().is_ok());
+}

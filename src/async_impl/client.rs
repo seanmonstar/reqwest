@@ -131,6 +131,7 @@ struct Config {
     connection_verbose: bool,
     pool_idle_timeout: Option<Duration>,
     pool_max_idle_per_host: usize,
+    pool_max_connections_per_host: usize,
     tcp_keepalive: Option<Duration>,
     tcp_keepalive_interval: Option<Duration>,
     tcp_keepalive_retries: Option<u32>,
@@ -258,6 +259,7 @@ impl ClientBuilder {
                 connection_verbose: false,
                 pool_idle_timeout: Some(Duration::from_secs(90)),
                 pool_max_idle_per_host: usize::MAX,
+                pool_max_connections_per_host: 0,
                 tcp_keepalive: Some(Duration::from_secs(15)),
                 tcp_keepalive_interval: Some(Duration::from_secs(15)),
                 tcp_keepalive_retries: Some(3),
@@ -959,7 +961,18 @@ impl ClientBuilder {
             Some(format!("{:?}", &config.redirect_policy))
         };
 
-        let hyper_client = builder.build(connector_builder.build(config.connector_layers));
+        // Add connection limiting layer if configured
+        let mut connector_layers = config.connector_layers;
+        if config.pool_max_connections_per_host > 0 {
+            use crate::connect::connection_limit::ConnectionLimitLayer;
+
+            let connection_limit_layer =
+                ConnectionLimitLayer::new(config.pool_max_connections_per_host);
+            let boxed_layer = BoxCloneSyncServiceLayer::new(connection_limit_layer);
+            connector_layers.push(boxed_layer);
+        }
+
+        let hyper_client = builder.build(connector_builder.build(connector_layers));
         let hyper_service = HyperService {
             hyper: hyper_client,
         };
@@ -1408,6 +1421,18 @@ impl ClientBuilder {
     /// Sets the maximum idle connection per host allowed in the pool.
     pub fn pool_max_idle_per_host(mut self, max: usize) -> ClientBuilder {
         self.config.pool_max_idle_per_host = max;
+        self
+    }
+
+    /// Sets the maximum total connections per host allowed.
+    ///
+    /// This includes active, idle, and connecting connections.
+    /// When the limit is reached, new requests will wait for a connection
+    /// to become available.
+    ///
+    /// Default is 0 (no limit).
+    pub fn pool_max_connections_per_host(mut self, max: usize) -> ClientBuilder {
+        self.config.pool_max_connections_per_host = max;
         self
     }
 
@@ -2700,6 +2725,13 @@ impl Config {
 
         if let Some(ref d) = self.timeout {
             f.field("timeout", d);
+        }
+
+        if self.pool_max_connections_per_host > 0 {
+            f.field(
+                "pool_max_connections_per_host",
+                &self.pool_max_connections_per_host,
+            );
         }
 
         if let Some(ref v) = self.local_address {

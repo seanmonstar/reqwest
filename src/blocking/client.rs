@@ -437,6 +437,17 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.pool_max_idle_per_host(max))
     }
 
+    /// Sets the maximum total connections per host allowed.
+    ///
+    /// This includes active, idle, and connecting connections.
+    /// When the limit is reached, new requests will wait for a connection
+    /// to become available.
+    ///
+    /// Default is 0 (no limit).
+    pub fn pool_max_connections_per_host(self, max: usize) -> ClientBuilder {
+        self.with_inner(move |inner| inner.pool_max_connections_per_host(max))
+    }
+
     /// Send headers as title case instead of lowercase.
     pub fn http1_title_case_headers(self) -> ClientBuilder {
         self.with_inner(|inner| inner.http1_title_case_headers())
