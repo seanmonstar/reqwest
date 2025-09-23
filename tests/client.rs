@@ -389,7 +389,10 @@ async fn http2_upgrade() {
 }
 
 #[cfg(feature = "default-tls")]
-#[cfg_attr(feature = "http3-no-provider", ignore = "enabling http3 seems to break this, why?")]
+#[cfg_attr(
+    feature = "http3-no-provider",
+    ignore = "enabling http3 seems to break this, why?"
+)]
 #[tokio::test]
 async fn test_allowed_methods() {
     let resp = reqwest::Client::builder()
