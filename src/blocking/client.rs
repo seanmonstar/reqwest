@@ -337,7 +337,7 @@ impl ClientBuilder {
     ///
     /// Default will follow redirects up to a maximum of 10.
     pub fn redirect(self, policy: redirect::Policy) -> ClientBuilder {
-        self.with_inner(move |inner| inner.redirect(policy))
+        self.with_inner(move |inner| inner.redirect_policy(policy))
     }
 
     /// Enable or disable automatic setting of the `Referer` header.
