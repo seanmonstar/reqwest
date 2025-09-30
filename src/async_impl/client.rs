@@ -3,7 +3,7 @@ use std::any::Any;
 use std::future::Future;
 use std::net::IpAddr;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::task::{ready, Context, Poll};
 use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
@@ -144,16 +144,15 @@ struct HyperService {
 impl Service<hyper::Request<crate::async_impl::body::Body>> for HyperService {
     type Error = crate::Error;
     type Response = http::Response<hyper::body::Incoming>;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.hyper.poll_ready(cx).map_err(crate::error::request)
     }
 
     fn call(&mut self, req: hyper::Request<crate::async_impl::body::Body>) -> Self::Future {
-        let clone = self.hyper.clone();
-        let mut inner = std::mem::replace(&mut self.hyper, clone);
-        Box::pin(async move { inner.call(req).await.map_err(crate::error::request) })
+        let fut = self.hyper.call(req);
+        Box::pin(async move { fut.await.map_err(crate::error::request) })
     }
 }
 
@@ -436,6 +435,7 @@ impl ClientBuilder {
             }
             DynResolver::new(resolver)
         };
+
 
         let mut connector_builder = {
             #[cfg(feature = "__tls")]
@@ -927,68 +927,6 @@ impl ClientBuilder {
         #[cfg(target_os = "windows")]
         connector_builder.set_windows_named_pipe(config.windows_named_pipe.clone());
 
-        let mut builder =
-            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
-        #[cfg(feature = "http2")]
-        {
-            if matches!(config.http_version_pref, HttpVersionPref::Http2) {
-                builder.http2_only(true);
-            }
-
-            if let Some(http2_initial_stream_window_size) = config.http2_initial_stream_window_size
-            {
-                builder.http2_initial_stream_window_size(http2_initial_stream_window_size);
-            }
-            if let Some(http2_initial_connection_window_size) =
-                config.http2_initial_connection_window_size
-            {
-                builder.http2_initial_connection_window_size(http2_initial_connection_window_size);
-            }
-            if config.http2_adaptive_window {
-                builder.http2_adaptive_window(true);
-            }
-            if let Some(http2_max_frame_size) = config.http2_max_frame_size {
-                builder.http2_max_frame_size(http2_max_frame_size);
-            }
-            if let Some(http2_max_header_list_size) = config.http2_max_header_list_size {
-                builder.http2_max_header_list_size(http2_max_header_list_size);
-            }
-            if let Some(http2_keep_alive_interval) = config.http2_keep_alive_interval {
-                builder.http2_keep_alive_interval(http2_keep_alive_interval);
-            }
-            if let Some(http2_keep_alive_timeout) = config.http2_keep_alive_timeout {
-                builder.http2_keep_alive_timeout(http2_keep_alive_timeout);
-            }
-            if config.http2_keep_alive_while_idle {
-                builder.http2_keep_alive_while_idle(true);
-            }
-        }
-
-        builder.timer(hyper_util::rt::TokioTimer::new());
-        builder.pool_timer(hyper_util::rt::TokioTimer::new());
-        builder.pool_idle_timeout(config.pool_idle_timeout);
-        builder.pool_max_idle_per_host(config.pool_max_idle_per_host);
-
-        if config.http09_responses {
-            builder.http09_responses(true);
-        }
-
-        if config.http1_title_case_headers {
-            builder.http1_title_case_headers(true);
-        }
-
-        if config.http1_allow_obsolete_multiline_headers_in_responses {
-            builder.http1_allow_obsolete_multiline_headers_in_responses(true);
-        }
-
-        if config.http1_ignore_invalid_headers_in_responses {
-            builder.http1_ignore_invalid_headers_in_responses(true);
-        }
-
-        if config.http1_allow_spaces_after_header_name_in_responses {
-            builder.http1_allow_spaces_after_header_name_in_responses(true);
-        }
-
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
         let proxies_maybe_http_custom_headers =
             proxies.iter().any(|p| p.maybe_has_http_custom_headers());
@@ -999,7 +937,183 @@ impl ClientBuilder {
             Some(format!("{:?}", &config.redirect_policy))
         };
 
-        let hyper_client = builder.build(connector_builder.build(config.connector_layers));
+        let exec = hyper_util::rt::TokioExecutor::new();
+
+        let pool_layer = {
+            // There a few different configurations of the pool stack:
+            // - HTTP/1 only (http2 feature is not enabled)
+            // - HTTP/2 only (set http2_prior_knowledge)
+            // - Disabled
+            // - All the things
+            #[cfg(feature = "http2")]
+            {
+                let mut http2 = hyper::client::conn::http2::Builder::new(exec.clone());
+                if let Some(http2_initial_stream_window_size) = config.http2_initial_stream_window_size
+                {
+                    http2.initial_stream_window_size(http2_initial_stream_window_size);
+                }
+                if let Some(http2_initial_connection_window_size) =
+                    config.http2_initial_connection_window_size
+                {
+                    http2.initial_connection_window_size(http2_initial_connection_window_size);
+                }
+                if config.http2_adaptive_window {
+                    http2.adaptive_window(true);
+                }
+                if let Some(http2_max_frame_size) = config.http2_max_frame_size {
+                    http2.max_frame_size(http2_max_frame_size);
+                }
+                if let Some(http2_max_header_list_size) = config.http2_max_header_list_size {
+                    http2.max_header_list_size(http2_max_header_list_size);
+                }
+                if let Some(http2_keep_alive_interval) = config.http2_keep_alive_interval {
+                    http2.keep_alive_interval(http2_keep_alive_interval);
+                }
+                if let Some(http2_keep_alive_timeout) = config.http2_keep_alive_timeout {
+                    http2.keep_alive_timeout(http2_keep_alive_timeout);
+                }
+                if config.http2_keep_alive_while_idle {
+                    http2.keep_alive_while_idle(true);
+                }
+                http2.timer(hyper_util::rt::TokioTimer::new());
+
+                /*
+                if matches!(config.http_version_pref, HttpVersionPref::Http2) {
+                    return tower::util::Either::Right(tower::layer::layer_fn(move |svc| {
+                        let http2 = hyper_util::client::conn::http2::<crate::Body>();
+                        http2.layer(svc)
+                    }));
+                }
+                */
+            }
+
+            /*
+            builder.timer(hyper_util::rt::TokioTimer::new());
+            builder.pool_timer(hyper_util::rt::TokioTimer::new());
+            builder.pool_idle_timeout(config.pool_idle_timeout);
+            builder.pool_max_idle_per_host(config.pool_max_idle_per_host);
+            */
+
+            let mut http1 = hyper::client::conn::http1::Builder::new();
+            if config.http09_responses {
+                http1.http09_responses(true);
+            }
+
+            if config.http1_title_case_headers {
+                http1.title_case_headers(true);
+            }
+
+            if config.http1_allow_obsolete_multiline_headers_in_responses {
+                http1.allow_obsolete_multiline_headers_in_responses(true);
+            }
+
+            if config.http1_ignore_invalid_headers_in_responses {
+                http1.ignore_invalid_headers_in_responses(true);
+            }
+
+            if config.http1_allow_spaces_after_header_name_in_responses {
+                http1.allow_spaces_after_header_name_in_responses(true);
+            }
+
+            let http1 = (
+                tower::layer::layer_fn(move |svc| {
+                    hyper_util::client::pool::cache::builder()
+                        .executor(exec.clone())
+                        .build(svc)
+                }),
+                // map the MakeService response with some HTTP/1 specific middleware
+                tower::util::MapResponseLayer::new(|svc| {
+                    let svc = hyper_util::client::service::Http1RequestTarget::new(svc);
+                    let svc = hyper_util::client::service::SetHost::new(svc);
+                    let svc = Meta::new(svc, MyMeta { idle_at: None });
+                    svc
+                }),
+                hyper_util::client::conn::Http1Layer::<crate::Body>::from(http1),
+            );
+
+            let http2 = (
+                tower::layer::layer_fn(|svc| {
+                    hyper_util::client::pool::singleton::Singleton::new(svc)
+                }),
+                hyper_util::client::conn::http2::<crate::Body>(),
+            );
+
+
+            //tower::util::Either::Left(tower::layer::layer_fn(move |svc| {
+            tower::layer::layer_fn(move |svc| {
+                hyper_util::client::pool::negotiate::builder()
+                    .fallback(http1.clone())
+                    .upgrade(http2.clone())
+                    .inspect(|conn: &<Connector as Service<Uri>>::Response| conn.is_negotiated_h2())
+                    .connect(svc)
+                    .build()
+            })
+            //}))
+        };
+
+        let connector = connector_builder.build(config.connector_layers);
+
+        let pool_map = hyper_util::client::pool::map::Map::builder::<http::Uri>()
+            .keys(|dst| (dst.scheme().cloned(), dst.authority().cloned()))
+            .values(move |_dst| {
+                pool_layer.layer(connector.clone())
+            })
+            .build();
+
+        // We can put the map in an Arc because at this step, backpressure
+        // is no longer relevant.
+        let pool_map = Arc::new(Mutex::new(pool_map));
+
+        // expires
+        if let Some(idle_dur) = config.pool_idle_timeout {
+            let expire = Arc::downgrade(&pool_map);
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(idle_dur).await;
+                    let now = std::time::Instant::now();
+                    let Some(expire) = expire.upgrade() else { return };
+                    expire.lock().unwrap().retain(|_key, svc| {
+                        svc.fallback_mut().retain(|svc| {
+                            if svc.inner().inner().inner().is_closed() {
+                                return false;
+                            }
+
+                            if let Some(idle_at) = svc.meta().idle_at {
+                                return now > idle_at + idle_dur;
+                            }
+                            true
+                        });
+                        svc.upgrade_mut().retain(|svc| {
+                            // maybe todo: allow an http2 max lifetime
+                            !svc.is_closed()
+                        });
+                        !svc.fallback_mut().is_empty() || !svc.upgrade_mut().is_empty()
+                    });
+                }
+            });
+        }
+
+
+        let pool_as_svc = tower::service_fn(move |req: http::Request<_>| {
+            let svc_fut = pool_map
+                .lock()
+                .unwrap()
+                .service(req.uri())
+                .call(req.uri().clone());
+            async move {
+                let mut svc = svc_fut.await.unwrap(); //todo
+                let result = svc.call(req).await.map_err(Into::into);
+                // todo: DelayedRelease wrapping just HTTP/1
+                tokio::spawn(async move {
+                    let _ = tower::ServiceExt::ready(&mut svc).await;
+                    if let Some(svc) = svc.fallback_mut() {
+                        svc.inner_mut().meta_mut().idle_at = Some(std::time::Instant::now());
+                    }
+                });
+                result
+            }
+        });
+        let hyper_client = tower::util::BoxCloneSyncService::new(pool_as_svc);
         let hyper_service = HyperService {
             hyper: hyper_client,
         };
@@ -2447,7 +2561,8 @@ impl ClientBuilder {
     }
 }
 
-type HyperClient = hyper_util::client::legacy::Client<Connector, super::Body>;
+//type HyperClient = hyper_util::client::legacy::Client<Connector, super::Body>;
+type HyperClient = tower::util::BoxCloneSyncService<http::Request<super::Body>, http::Response<hyper::body::Incoming>, BoxError>;
 
 impl Default for Client {
     fn default() -> Self {
@@ -3099,6 +3214,54 @@ impl fmt::Debug for Pending {
                 .finish(),
             PendingInner::Error(ref err) => f.debug_struct("Pending").field("error", err).finish(),
         }
+    }
+}
+
+// ===== impl Meta =====
+// TODO: This should likely be it's own middleware in `tower` proper. For now, unblocking myself.
+
+struct MyMeta {
+    //created_at: Instant,
+    idle_at: Option<std::time::Instant>,
+}
+
+struct Meta<S, M> {
+    inner: S,
+    meta: M,
+}
+
+impl<S, M> Meta<S, M> {
+    fn new(inner: S, meta: M) -> Self {
+        Meta { inner, meta }
+    }
+
+    fn inner(&self) -> &S {
+        &self.inner
+    }
+
+    fn meta(&self) -> &M {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut M {
+        &mut self.meta
+    }
+}
+
+impl<S, Req, M> Service<Req> for Meta<S, M>
+where
+    S: Service<Req>,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = S::Future;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: Req) -> Self::Future {
+        self.inner.call(req)
     }
 }
 

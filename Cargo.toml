@@ -118,7 +118,7 @@ encoding_rs = { version = "0.8", optional = true }
 http-body = "1"
 http-body-util = "0.1.2"
 hyper = { version = "1.1", features = ["http1", "client"] }
-hyper-util = { version = "0.1.12", features = ["http1", "client", "client-legacy", "client-proxy", "tokio"] }
+hyper-util = { version = "0.1.12", features = ["http1", "client", "client-legacy", "client-pool", "client-proxy", "tokio"] }
 h2 = { version = "0.4", optional = true }
 log = "0.4.17"
 percent-encoding = "2.3"
@@ -162,6 +162,7 @@ futures-channel = { version = "0.3", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.10"
+tracing = { version = "0.1", features = ["log"] }
 hyper = { version = "1.1.0", default-features = false, features = ["http1", "http2", "client", "server"] }
 hyper-util = { version = "0.1.12", features = ["http1", "http2", "client", "client-legacy", "server-auto", "server-graceful", "tokio"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -209,6 +210,9 @@ wasm-bindgen-test = "0.3"
 tower = { version = "0.5.2", default-features = false, features = ["limit"] }
 num_cpus = "1.0"
 libc = "0"
+
+[patch.crates-io]
+hyper-util = { path = "../hyper-util" }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(reqwest_unstable)'] }

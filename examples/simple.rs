@@ -6,6 +6,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
+    env_logger::init();
     // Some simple CLI args requirements...
     let url = if let Some(url) = std::env::args().nth(1) {
         url
@@ -20,14 +21,17 @@ async fn main() -> Result<(), reqwest::Error> {
     //
     // In most cases, you should create/build a reqwest::Client and reuse
     // it for all requests.
-    let res = reqwest::get(url).await?;
+    let mut res = reqwest::get(url).await?;
 
     eprintln!("Response: {:?} {}", res.version(), res.status());
     eprintln!("Headers: {:#?}\n", res.headers());
 
-    let body = res.text().await?;
+    while let Some(chunk) = res.chunk().await? {
+        println!("Received {} bytes", chunk.len());
+    }
+    //let body = res.text().await?;
 
-    println!("{body}");
+    //println!("{body}");
 
     Ok(())
 }
