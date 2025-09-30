@@ -1304,6 +1304,12 @@ pub(crate) mod sealed {
         }
     }
 
+    impl Conn {
+        pub(crate) fn is_negotiated_h2(&self) -> bool {
+            self.connected().is_negotiated_h2()
+        }
+    }
+
     impl Connection for Conn {
         fn connected(&self) -> Connected {
             let connected = self.inner.connected().proxy(self.is_proxy);
