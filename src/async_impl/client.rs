@@ -2200,7 +2200,7 @@ impl ClientBuilder {
     ///
     /// The default is false.
     #[cfg(feature = "http3-no-provider")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider"))))]
     pub fn tls_early_data(mut self, enabled: bool) -> ClientBuilder {
         self.config.tls_enable_early_data = enabled;
         self
@@ -2212,7 +2212,7 @@ impl ClientBuilder {
     ///
     /// [`TransportConfig`]: https://docs.rs/quinn/latest/quinn/struct.TransportConfig.html
     #[cfg(feature = "http3-no-provider")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider"))))]
     pub fn http3_max_idle_timeout(mut self, value: Duration) -> ClientBuilder {
         self.config.quic_max_idle_timeout = Some(value);
         self
@@ -2229,7 +2229,7 @@ impl ClientBuilder {
     ///
     /// Panics if the value is over 2^62.
     #[cfg(feature = "http3-no-provider")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider"))))]
     pub fn http3_stream_receive_window(mut self, value: u64) -> ClientBuilder {
         self.config.quic_stream_receive_window = Some(value.try_into().unwrap());
         self
@@ -2246,7 +2246,7 @@ impl ClientBuilder {
     ///
     /// Panics if the value is over 2^62.
     #[cfg(feature = "http3-no-provider")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider"))))]
     pub fn http3_conn_receive_window(mut self, value: u64) -> ClientBuilder {
         self.config.quic_receive_window = Some(value.try_into().unwrap());
         self
@@ -2258,7 +2258,7 @@ impl ClientBuilder {
     ///
     /// [`TransportConfig`]: https://docs.rs/quinn/latest/quinn/struct.TransportConfig.html
     #[cfg(feature = "http3-no-provider")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider"))))]
     pub fn http3_send_window(mut self, value: u64) -> ClientBuilder {
         self.config.quic_send_window = Some(value);
         self
@@ -2272,7 +2272,7 @@ impl ClientBuilder {
     /// [BBR]: https://datatracker.ietf.org/doc/html/draft-ietf-ccwg-bbr
     /// [CUBIC]: https://datatracker.ietf.org/doc/html/rfc8312
     #[cfg(feature = "http3-no-provider")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider"))))]
     pub fn http3_congestion_bbr(mut self) -> ClientBuilder {
         self.config.quic_congestion_bbr = true;
         self
@@ -2288,7 +2288,7 @@ impl ClientBuilder {
     ///
     /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.max_field_section_size
     #[cfg(feature = "http3-no-provider")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider"))))]
     pub fn http3_max_field_section_size(mut self, value: u64) -> ClientBuilder {
         self.config.h3_max_field_section_size = Some(value.try_into().unwrap());
         self
@@ -2306,7 +2306,7 @@ impl ClientBuilder {
     ///
     /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.send_grease
     #[cfg(feature = "http3-no-provider")]
-    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider",))))]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3-no-provider"))))]
     pub fn http3_send_grease(mut self, enabled: bool) -> ClientBuilder {
         self.config.h3_send_grease = Some(enabled);
         self
