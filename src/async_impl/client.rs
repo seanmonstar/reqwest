@@ -2324,7 +2324,7 @@ impl ClientBuilder {
     /// ```
     /// use std::time::Duration;
     ///
-    /// # #[cfg(not(feature = "rustls-tls-no-provider"))]
+    /// # #[cfg(feature = "rustls-tls")]
     /// let client = reqwest::Client::builder()
     ///                      // resolved to outermost layer, meaning while we are waiting on concurrency limit
     ///                      .connect_timeout(Duration::from_millis(200))
