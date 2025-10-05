@@ -1,6 +1,6 @@
 [package]
-name = "reqwest"
-version = "0.12.8"
+name = "zed-reqwest"
+version = "0.12.8-zed"
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
