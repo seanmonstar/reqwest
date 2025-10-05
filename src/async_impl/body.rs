@@ -1,7 +1,7 @@
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 use std::time::Duration;
 
 use bytes::Bytes;
@@ -148,10 +148,7 @@ impl Body {
     {
         use http_body_util::BodyExt;
 
-        let boxed = inner
-            .map_frame(|f| f.map_data(Into::into))
-            .map_err(Into::into)
-            .boxed();
+        let boxed = IntoBytesBody { inner }.map_err(Into::into).boxed();
 
         Body {
             inner: Inner::Streaming(boxed),
@@ -276,7 +273,7 @@ impl HttpBody for Body {
                 }
             }
             Inner::Streaming(ref mut body) => Poll::Ready(
-                futures_core::ready!(Pin::new(body).poll_frame(cx))
+                ready!(Pin::new(body).poll_frame(cx))
                     .map(|opt_chunk| opt_chunk.map_err(crate::error::body)),
             ),
         }
@@ -331,7 +328,7 @@ where
             return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
         }
         Poll::Ready(
-            futures_core::ready!(this.inner.poll_frame(cx))
+            ready!(this.inner.poll_frame(cx))
                 .map(|opt_chunk| opt_chunk.map_err(crate::error::body)),
         )
     }
@@ -374,7 +371,7 @@ where
             return Poll::Ready(Some(Err(crate::error::body(crate::error::TimedOut))));
         }
 
-        let item = futures_core::ready!(this.inner.poll_frame(cx))
+        let item = ready!(this.inner.poll_frame(cx))
             .map(|opt_chunk| opt_chunk.map_err(crate::error::body));
         // a ready frame means timeout is reset
         this.sleep.set(None);
@@ -445,7 +442,7 @@ where
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         loop {
-            return match futures_core::ready!(Pin::new(&mut self.0).poll_frame(cx)) {
+            return match ready!(Pin::new(&mut self.0).poll_frame(cx)) {
                 Some(Ok(frame)) => {
                     // skip non-data frames
                     if let Ok(buf) = frame.into_data() {
@@ -458,6 +455,47 @@ where
                 None => Poll::Ready(None),
             };
         }
+    }
+}
+
+// ===== impl IntoBytesBody =====
+
+pin_project! {
+    struct IntoBytesBody<B> {
+        #[pin]
+        inner: B,
+    }
+}
+
+// We can't use `map_frame()` because that loses the hint data (for good reason).
+// But we aren't transforming the data.
+impl<B> hyper::body::Body for IntoBytesBody<B>
+where
+    B: hyper::body::Body,
+    B::Data: Into<Bytes>,
+{
+    type Data = Bytes;
+    type Error = B::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context,
+    ) -> Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        match ready!(self.project().inner.poll_frame(cx)) {
+            Some(Ok(f)) => Poll::Ready(Some(Ok(f.map_data(Into::into)))),
+            Some(Err(e)) => Poll::Ready(Some(Err(e))),
+            None => Poll::Ready(None),
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> http_body::SizeHint {
+        self.inner.size_hint()
+    }
+
+    #[inline]
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
     }
 }
 
@@ -484,8 +522,9 @@ mod tests {
         assert!(!bytes_body.is_end_stream());
         assert_eq!(bytes_body.size_hint().exact(), Some(3));
 
-        let stream_body = Body::wrap(bytes_body);
-        assert!(!stream_body.is_end_stream());
-        assert_eq!(stream_body.size_hint().exact(), None);
+        // can delegate even when wrapped
+        let stream_body = Body::wrap(empty_body);
+        assert!(stream_body.is_end_stream());
+        assert_eq!(stream_body.size_hint().exact(), Some(0));
     }
 }

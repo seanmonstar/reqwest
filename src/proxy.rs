@@ -7,7 +7,6 @@ use crate::into_url::{IntoUrl, IntoUrlSealed};
 use crate::Url;
 use http::{header::HeaderValue, Uri};
 use ipnet::IpNet;
-use once_cell::sync::Lazy;
 use percent_encoding::percent_decode;
 use std::collections::HashMap;
 use std::env;
@@ -29,6 +28,9 @@ use system_configuration::{
     sys::schema_definitions::kSCPropNetProxiesHTTPSPort,
     sys::schema_definitions::kSCPropNetProxiesHTTPSProxy,
 };
+
+#[cfg(target_os = "windows")]
+use windows_registry::CURRENT_USER;
 
 /// Configuration of a proxy that a `Client` should pass requests to.
 ///
@@ -106,7 +108,7 @@ pub enum ProxyScheme {
         host: http::uri::Authority,
     },
     #[cfg(feature = "socks")]
-    Socks4 { addr: SocketAddr },
+    Socks4 { addr: SocketAddr, remote_dns: bool },
     #[cfg(feature = "socks")]
     Socks5 {
         addr: SocketAddr,
@@ -142,14 +144,11 @@ impl<S: IntoUrl> IntoProxyScheme for S {
                 let mut source = e.source();
                 while let Some(err) = source {
                     if let Some(parse_error) = err.downcast_ref::<url::ParseError>() {
-                        match parse_error {
-                            url::ParseError::RelativeUrlWithoutBase => {
-                                presumed_to_have_scheme = false;
-                                break;
-                            }
-                            _ => {}
+                        if *parse_error == url::ParseError::RelativeUrlWithoutBase {
+                            presumed_to_have_scheme = false;
+                            break;
                         }
-                    } else if let Some(_) = err.downcast_ref::<crate::error::BadScheme>() {
+                    } else if err.downcast_ref::<crate::error::BadScheme>().is_some() {
                         presumed_to_have_scheme = false;
                         break;
                     }
@@ -280,14 +279,22 @@ impl Proxy {
     }
 
     pub(crate) fn system() -> Proxy {
-        let mut proxy = if cfg!(feature = "__internal_proxy_sys_no_cache") {
-            Proxy::new(Intercept::System(Arc::new(get_sys_proxies(
-                get_from_platform(),
-            ))))
-        } else {
-            Proxy::new(Intercept::System(SYS_PROXIES.clone()))
-        };
+        let mut proxy = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(
+            get_from_platform(),
+        ))));
         proxy.no_proxy = NoProxy::from_env();
+
+        #[cfg(target_os = "windows")]
+        {
+            // Only read from windows registry proxy settings if not available from an environment
+            // variable. This is in line with the stated behavior of both dotnot and nuget on
+            // windows. <https://github.com/seanmonstar/reqwest/issues/2599>
+            if proxy.no_proxy.is_none() {
+                let win_exceptions: String = get_windows_proxy_exceptions();
+                proxy.no_proxy = NoProxy::from_string(&win_exceptions);
+            }
+        }
+
         proxy
     }
 
@@ -449,9 +456,12 @@ impl NoProxy {
     pub fn from_env() -> Option<NoProxy> {
         let raw = env::var("NO_PROXY")
             .or_else(|_| env::var("no_proxy"))
-            .unwrap_or_default();
+            .ok()?;
 
-        Self::from_string(&raw)
+        // Per the docs, this returns `None` if no environment variable is set. We can only reach
+        // here if an env var is set, so we return `Some(NoProxy::default)` if `from_string`
+        // returns None, which occurs with an empty string.
+        Some(Self::from_string(&raw).unwrap_or_default())
     }
 
     /// Returns a new no-proxy configuration based on a `no_proxy` string (or `None` if no variables
@@ -461,12 +471,12 @@ impl NoProxy {
     /// * If neither environment variable is set, `None` is returned
     /// * Entries are expected to be comma-separated (whitespace between entries is ignored)
     /// * IP addresses (both IPv4 and IPv6) are allowed, as are optional subnet masks (by adding /size,
-    /// for example "`192.168.1.0/24`").
+    ///   for example "`192.168.1.0/24`").
     /// * An entry "`*`" matches all hostnames (this is the only wildcard allowed)
     /// * Any other entry is considered a domain name (and may contain a leading dot, for example `google.com`
-    /// and `.google.com` are equivalent) and would match both that domain AND all subdomains.
+    ///   and `.google.com` are equivalent) and would match both that domain AND all subdomains.
     ///
-    /// For example, if `"NO_PROXY=google.com, 192.168.1.0/24"` was set, all of the following would match
+    /// For example, if `"NO_PROXY=google.com, 192.168.1.0/24"` was set, all the following would match
     /// (and therefore would bypass the proxy):
     /// * `http://google.com/`
     /// * `http://www.google.com/`
@@ -586,7 +596,25 @@ impl ProxyScheme {
     /// Current SOCKS4 support is provided via blocking IO.
     #[cfg(feature = "socks")]
     fn socks4(addr: SocketAddr) -> crate::Result<Self> {
-        Ok(ProxyScheme::Socks4 { addr })
+        Ok(ProxyScheme::Socks4 {
+            addr,
+            remote_dns: false,
+        })
+    }
+
+    /// Proxy traffic via the specified socket address over SOCKS4A
+    ///
+    /// This differs from SOCKS4 in that DNS resolution is also performed via the proxy.
+    ///
+    /// # Note
+    ///
+    /// Current SOCKS4 support is provided via blocking IO.
+    #[cfg(feature = "socks")]
+    fn socks4a(addr: SocketAddr) -> crate::Result<Self> {
+        Ok(ProxyScheme::Socks4 {
+            addr,
+            remote_dns: true,
+        })
     }
 
     /// Proxy traffic via the specified socket address over SOCKS5
@@ -702,7 +730,7 @@ impl ProxyScheme {
         let to_addr = || {
             let addrs = url
                 .socket_addrs(|| match url.scheme() {
-                    "socks4" | "socks5" | "socks5h" => Some(1080),
+                    "socks4" | "socks4a" | "socks5" | "socks5h" => Some(1080),
                     _ => None,
                 })
                 .map_err(crate::error::builder)?;
@@ -717,6 +745,8 @@ impl ProxyScheme {
             "https" => Self::https(&url[Position::BeforeHost..Position::AfterPort])?,
             #[cfg(feature = "socks")]
             "socks4" => Self::socks4(to_addr()?)?,
+            #[cfg(feature = "socks")]
+            "socks4a" => Self::socks4a(to_addr()?)?,
             #[cfg(feature = "socks")]
             "socks5" => Self::socks5(to_addr()?)?,
             #[cfg(feature = "socks")]
@@ -764,8 +794,9 @@ impl fmt::Debug for ProxyScheme {
             ProxyScheme::Http { auth: _auth, host } => write!(f, "http://{host}"),
             ProxyScheme::Https { auth: _auth, host } => write!(f, "https://{host}"),
             #[cfg(feature = "socks")]
-            ProxyScheme::Socks4 { addr } => {
-                write!(f, "socks4://{addr}")
+            ProxyScheme::Socks4 { addr, remote_dns } => {
+                let h = if *remote_dns { "a" } else { "" };
+                write!(f, "socks4{}://{}", h, addr)
             }
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 {
@@ -876,14 +907,11 @@ impl Dst for Uri {
     }
 }
 
-static SYS_PROXIES: Lazy<Arc<SystemProxyMap>> =
-    Lazy::new(|| Arc::new(get_sys_proxies(get_from_platform())));
-
 /// Get system proxies information.
 ///
 /// All platforms will check for proxy settings via environment variables.
 /// If those aren't set, platform-wide proxy settings will be looked up on
-/// Windows and MacOS platforms instead. Errors encountered while discovering
+/// Windows and macOS platforms instead. Errors encountered while discovering
 /// these settings are ignored.
 ///
 /// Returns:
@@ -967,7 +995,7 @@ fn is_cgi() -> bool {
 fn get_from_platform_impl() -> Result<Option<String>, Box<dyn Error>> {
     let internet_setting = windows_registry::CURRENT_USER
         .open("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")?;
-    // ensure the proxy is enable, if the value doesn't exist, an error will returned.
+    // ensure the proxy is enabled, if the value doesn't exist, an error will be returned.
     let proxy_enable = internet_setting.get_u32("ProxyEnable")?;
     let proxy_server = internet_setting.get_string("ProxyServer")?;
 
@@ -1124,6 +1152,24 @@ fn extract_type_prefix(address: &str) -> Option<&str> {
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 fn parse_platform_values(platform_values: String) -> SystemProxyMap {
     parse_platform_values_impl(platform_values)
+}
+
+#[cfg(target_os = "windows")]
+fn get_windows_proxy_exceptions() -> String {
+    let mut exceptions = String::new();
+    if let Ok(key) =
+        CURRENT_USER.create(r"Software\Microsoft\Windows\CurrentVersion\Internet Settings")
+    {
+        if let Ok(value) = key.get_string("ProxyOverride") {
+            exceptions = value
+                .split(';')
+                .map(|s| s.trim())
+                .collect::<Vec<&str>>()
+                .join(",")
+                .replace("*.", "");
+        }
+    }
+    exceptions
 }
 
 #[cfg(test)]
@@ -1586,6 +1632,18 @@ mod tests {
         // Manually construct this so we aren't use the cache
         let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
         p.no_proxy = NoProxy::from_env();
+
+        // everything should go through proxy, "effectively" nothing is in no_proxy
+        assert_eq!(intercepted_uri(&p, "http://hyper.rs"), target);
+
+        // Also test the behavior of `NO_PROXY` being an empty string.
+        env::set_var("NO_PROXY", "");
+
+        // Manually construct this so we aren't use the cache
+        let mut p = Proxy::new(Intercept::System(Arc::new(get_sys_proxies(None))));
+        p.no_proxy = NoProxy::from_env();
+        // In the case of an empty string `NoProxy::from_env()` should return `Some(..)`
+        assert!(p.no_proxy.is_some());
 
         // everything should go through proxy, "effectively" nothing is in no_proxy
         assert_eq!(intercepted_uri(&p, "http://hyper.rs"), target);

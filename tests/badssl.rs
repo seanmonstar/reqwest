@@ -20,8 +20,8 @@ async fn test_badssl_modern() {
 }
 
 #[cfg(any(
-    feature = "rustls-tls-webpki-roots",
-    feature = "rustls-tls-native-roots"
+    feature = "rustls-tls-webpki-roots-no-provider",
+    feature = "rustls-tls-native-roots-no-provider"
 ))]
 #[tokio::test]
 async fn test_rustls_badssl_modern() {

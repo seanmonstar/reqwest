@@ -140,9 +140,21 @@ impl Form {
     }
 
     /// Consume this instance and transform into an instance of Body for use in a request.
-    pub(crate) fn stream(mut self) -> Body {
+    pub(crate) fn stream(self) -> Body {
         if self.inner.fields.is_empty() {
             return Body::empty();
+        }
+
+        Body::stream(self.into_stream())
+    }
+
+    /// Produce a stream of the bytes in this `Form`, consuming it.
+    pub fn into_stream(mut self) -> impl Stream<Item = Result<Bytes, crate::Error>> + Send + Sync {
+        if self.inner.fields.is_empty() {
+            let empty_stream: Pin<
+                Box<dyn Stream<Item = Result<Bytes, crate::Error>> + Send + Sync>,
+            > = Box::pin(futures_util::stream::empty());
+            return empty_stream;
         }
 
         // create initial part to init reduce chain
@@ -161,7 +173,7 @@ impl Form {
         let last = stream::once(future::ready(Ok(
             format!("--{}--\r\n", self.boundary()).into()
         )));
-        Body::stream(stream.chain(last))
+        Box::pin(stream.chain(last))
     }
 
     /// Generate a hyper::Body stream for a single Part instance of a Form request.
@@ -267,7 +279,12 @@ impl Part {
         let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
         let mime = mime_guess::from_ext(ext).first_or_octet_stream();
         let file = File::open(path).await?;
-        let field = Part::stream(file).mime(mime);
+        let len = file.metadata().await.map(|m| m.len()).ok();
+        let field = match len {
+            Some(len) => Part::stream_with_length(file, len),
+            None => Part::stream(file),
+        }
+        .mime(mime);
 
         Ok(if let Some(file_name) = file_name {
             field.file_name(file_name)
@@ -412,7 +429,7 @@ impl<P: PartProps> FormParts<P> {
                 _ => return None,
             }
         }
-        // If there is a at least one field there is a special boundary for the very last field.
+        // If there is at least one field there is a special boundary for the very last field.
         if !self.fields.is_empty() {
             length += 2 + self.boundary().len() as u64 + 4
         }

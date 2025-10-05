@@ -15,7 +15,7 @@ use super::response::Response;
 #[cfg(feature = "multipart")]
 use crate::header::CONTENT_LENGTH;
 use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
-use crate::{Method, Url};
+use crate::{redirect, Method, Url};
 use http::{request::Parts, Request as HttpRequest, Version};
 
 /// A request which can be executed with `Client::execute()`.
@@ -25,6 +25,7 @@ pub struct Request {
     headers: HeaderMap,
     body: Option<Body>,
     timeout: Option<Duration>,
+    redirect_policy: Option<redirect::Policy>,
     version: Version,
 }
 
@@ -47,6 +48,7 @@ impl Request {
             headers: HeaderMap::new(),
             body: None,
             timeout: None,
+            redirect_policy: None,
             version: Version::default(),
         }
     }
@@ -111,6 +113,18 @@ impl Request {
         &mut self.timeout
     }
 
+    /// Get a this request's redirect policy.
+    #[inline]
+    pub fn redirect_policy(&self) -> Option<&redirect::Policy> {
+        self.redirect_policy.as_ref()
+    }
+
+    /// Get a mutable reference to the redirect policy.
+    #[inline]
+    pub fn redirect_policy_mut(&mut self) -> &mut Option<redirect::Policy> {
+        &mut self.redirect_policy
+    }
+
     /// Get the http version.
     #[inline]
     pub fn version(&self) -> Version {
@@ -147,6 +161,7 @@ impl Request {
         HeaderMap,
         Option<Body>,
         Option<Duration>,
+        Option<redirect::Policy>,
         Version,
     ) {
         (
@@ -155,6 +170,7 @@ impl Request {
             self.headers,
             self.body,
             self.timeout,
+            self.redirect_policy,
             self.version,
         )
     }
@@ -209,7 +225,7 @@ impl RequestBuilder {
             match <HeaderName as TryFrom<K>>::try_from(key) {
                 Ok(key) => match <HeaderValue as TryFrom<V>>::try_from(value) {
                     Ok(mut value) => {
-                        // We want to potentially make an unsensitive header
+                        // We want to potentially make an non-sensitive header
                         // to be sensitive, not the reverse. So, don't turn off
                         // a previously sensitive header.
                         if sensitive {
@@ -286,6 +302,14 @@ impl RequestBuilder {
     pub fn timeout(mut self, timeout: Duration) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             *req.timeout_mut() = Some(timeout);
+        }
+        self
+    }
+
+    /// Overrides the client's redirect policy for this request
+    pub fn redirect_policy(mut self, policy: redirect::Policy) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *req.redirect_policy_mut() = Some(policy)
         }
         self
     }
@@ -411,10 +435,11 @@ impl RequestBuilder {
         if let Ok(ref mut req) = self.request {
             match serde_urlencoded::to_string(form) {
                 Ok(body) => {
-                    req.headers_mut().insert(
-                        CONTENT_TYPE,
-                        HeaderValue::from_static("application/x-www-form-urlencoded"),
-                    );
+                    req.headers_mut()
+                        .entry(CONTENT_TYPE)
+                        .or_insert(HeaderValue::from_static(
+                            "application/x-www-form-urlencoded",
+                        ));
                     *req.body_mut() = Some(body.into());
                 }
                 Err(err) => error = Some(crate::error::builder(err)),
@@ -458,15 +483,15 @@ impl RequestBuilder {
         self
     }
 
-    /// Disable CORS on fetching the request.
-    ///
-    /// # WASM
-    ///
-    /// This option is only effective with WebAssembly target.
-    ///
-    /// The [request mode][mdn] will be set to 'no-cors'.
-    ///
-    /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/mode
+    // This was a shell only meant to help with rendered documentation.
+    // However, docs.rs can now show the docs for the wasm platforms, so this
+    // is no longer needed.
+    //
+    // You should not otherwise depend on this function. It's deprecation
+    // is just to nudge people to reduce breakage. It may be removed in a
+    // future patch version.
+    #[doc(hidden)]
+    #[cfg_attr(target_arch = "wasm32", deprecated)]
     pub fn fetch_mode_no_cors(self) -> RequestBuilder {
         self
     }
@@ -620,6 +645,7 @@ where
             headers,
             body: Some(body.into()),
             timeout: None,
+            redirect_policy: None,
             version,
         })
     }
