@@ -290,10 +290,20 @@ jobs:
           cargo check --all-features
 
   msrv:
-    name: MSRV
+    name: MSRV (${{ matrix.os }})
     needs: [style]
 
-    runs-on: ubuntu-latest
+    # Since we have some dependencies specific to different operation systems,
+    # check the MSRV on each OS.
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macOS-latest
+
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
