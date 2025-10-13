@@ -1,10 +1,20 @@
 #[cfg(feature = "multipart")]
 use super::multipart::Form;
+use super::AbortGuard;
 /// dox
 use bytes::Bytes;
+#[cfg(feature = "stream")]
+use futures_core::Stream;
+#[cfg(feature = "stream")]
+use futures_util::stream::{self, StreamExt};
 use js_sys::Uint8Array;
 use std::{borrow::Cow, fmt};
+#[cfg(feature = "stream")]
+use std::pin::Pin;
+#[cfg(feature = "stream")]
+use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
+use web_sys::Response as WebResponse;
 
 /// The body of a `Request`.
 ///
@@ -22,6 +32,7 @@ enum Inner {
     /// MultipartForm holds a multipart/form-data body.
     #[cfg(feature = "multipart")]
     MultipartForm(Form),
+    Streaming(StreamingBody),
 }
 
 #[derive(Clone)]
@@ -58,6 +69,70 @@ impl Single {
     }
 }
 
+struct StreamingBody {
+    response: WebResponse,
+    abort: AbortGuard,
+}
+
+impl StreamingBody {
+    #[cfg(feature = "stream")]
+    fn into_stream(self) -> Pin<Box<dyn Stream<Item = crate::Result<Bytes>>>> {
+        let StreamingBody { response, abort } = self;
+
+        if let Some(body) = response.body() {
+            let abort = abort;
+            let body = wasm_streams::ReadableStream::from_raw(body.unchecked_into());
+            Box::pin(body.into_stream().map(move |buf_js| {
+                // Keep the abort guard alive while the stream is active.
+                let _abort = &abort;
+                let buf_js = buf_js
+                    .map_err(crate::error::wasm)
+                    .map_err(crate::error::decode)?;
+                let buffer = Uint8Array::new(&buf_js);
+                let mut bytes = vec![0; buffer.length() as usize];
+                buffer.copy_to(&mut bytes);
+                Ok(bytes.into())
+            }))
+        } else {
+            drop(abort);
+            Box::pin(stream::empty())
+        }
+    }
+
+    async fn into_bytes(self) -> crate::Result<Bytes> {
+        let StreamingBody { response, abort } = self;
+        let promise = response
+            .array_buffer()
+            .map_err(crate::error::wasm)
+            .map_err(crate::error::decode)?;
+        let js_value = super::promise::<wasm_bindgen::JsValue>(promise)
+            .await
+            .map_err(crate::error::decode)?;
+        drop(abort);
+        let buffer = Uint8Array::new(&js_value);
+        let mut bytes = vec![0; buffer.length() as usize];
+        buffer.copy_to(&mut bytes);
+        Ok(bytes.into())
+    }
+
+    async fn into_text(self) -> crate::Result<String> {
+        let StreamingBody { response, abort } = self;
+        let promise = response
+            .text()
+            .map_err(crate::error::wasm)
+            .map_err(crate::error::decode)?;
+        let js_value = super::promise::<wasm_bindgen::JsValue>(promise)
+            .await
+            .map_err(crate::error::decode)?;
+        drop(abort);
+        if let Some(text) = js_value.as_string() {
+            Ok(text)
+        } else {
+            Err(crate::error::decode("response.text isn't string"))
+        }
+    }
+}
+
 impl Body {
     /// Returns a reference to the internal data of the `Body`.
     ///
@@ -68,6 +143,7 @@ impl Body {
             Inner::Single(single) => Some(single.as_bytes()),
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(_) => None,
+            Inner::Streaming(_) => None,
         }
     }
 
@@ -80,6 +156,9 @@ impl Body {
                 let js_value: &JsValue = form_data.as_ref();
                 Ok(js_value.to_owned())
             }
+            Inner::Streaming(_) => Err(crate::error::decode(
+                "streaming body cannot be converted to JsValue",
+            )),
         }
     }
 
@@ -117,6 +196,7 @@ impl Body {
             Inner::Single(single) => single.is_empty(),
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(form) => form.is_empty(),
+            Inner::Streaming(_) => false,
         }
     }
 
@@ -127,6 +207,63 @@ impl Body {
             }),
             #[cfg(feature = "multipart")]
             Inner::MultipartForm(_) => None,
+            Inner::Streaming(_) => None,
+        }
+    }
+
+    pub(super) fn from_response(response: WebResponse, abort: AbortGuard) -> Body {
+        if response.body().is_some() {
+            Body {
+                inner: Inner::Streaming(StreamingBody { response, abort }),
+            }
+        } else {
+            // Even without a body, ensure the guard lives until completion.
+            drop(abort);
+            Body::default()
+        }
+    }
+
+    /// Consume the body into bytes.
+    pub async fn bytes(self) -> crate::Result<Bytes> {
+        match self.inner {
+            Inner::Single(Single::Bytes(bytes)) => Ok(bytes),
+            Inner::Single(Single::Text(text)) => Ok(Bytes::copy_from_slice(text.as_bytes())),
+            #[cfg(feature = "multipart")]
+            Inner::MultipartForm(_) => Err(crate::error::decode(
+                "multipart body cannot be converted into bytes",
+            )),
+            Inner::Streaming(streaming) => streaming.into_bytes().await,
+        }
+    }
+
+    /// Consume the body into a UTF-8 string.
+    pub async fn text(self) -> crate::Result<String> {
+        match self.inner {
+            Inner::Single(Single::Bytes(bytes)) => String::from_utf8(bytes.to_vec())
+                .map_err(|_| crate::error::decode("body is not valid UTF-8")),
+            Inner::Single(Single::Text(text)) => Ok(text.into_owned()),
+            #[cfg(feature = "multipart")]
+            Inner::MultipartForm(_) => Err(crate::error::decode(
+                "multipart body cannot be converted into text",
+            )),
+            Inner::Streaming(streaming) => streaming.into_text().await,
+        }
+    }
+
+    /// Convert the body into a stream of `Bytes`.
+    #[cfg(feature = "stream")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
+    pub fn bytes_stream(self) -> Pin<Box<dyn Stream<Item = crate::Result<Bytes>>>> {
+        match self.inner {
+            Inner::Single(single) => {
+                let bytes = Bytes::copy_from_slice(single.as_bytes());
+                Box::pin(stream::once(async move { Ok(bytes) }))
+            }
+            #[cfg(feature = "multipart")]
+            Inner::MultipartForm(_) => {
+                Box::pin(stream::once(async { Err(crate::error::decode("multipart body cannot be streamed")) }))
+            }
+            Inner::Streaming(streaming) => streaming.into_stream(),
         }
     }
 }
