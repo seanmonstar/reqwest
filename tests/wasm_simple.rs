@@ -1,4 +1,6 @@
 #![cfg(target_arch = "wasm32")]
+use std::time::Duration;
+
 #[cfg(feature = "stream")]
 use futures_util::StreamExt;
 use wasm_bindgen::prelude::*;
@@ -22,6 +24,20 @@ async fn simple_example() {
 
     let body = res.text().await.expect("response to utf-8 text");
     log(&format!("Body:\n\n{body}"));
+}
+
+#[wasm_bindgen_test]
+async fn request_with_timeout() {
+    let client = reqwest::Client::new();
+    let err = client
+        .get("https://hyper.rs")
+        .timeout(Duration::from_millis(1))
+        .send()
+        .await
+        .expect_err("Expected error from aborted request");
+
+    assert!(err.is_request());
+    assert!(err.is_timeout());
 }
 
 #[wasm_bindgen_test]
