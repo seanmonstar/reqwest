@@ -8,9 +8,9 @@ use futures_core::Stream;
 #[cfg(feature = "stream")]
 use futures_util::stream::{self, StreamExt};
 use js_sys::Uint8Array;
-use std::{borrow::Cow, fmt};
 #[cfg(feature = "stream")]
 use std::pin::Pin;
+use std::{borrow::Cow, fmt};
 #[cfg(feature = "stream")]
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
@@ -260,9 +260,9 @@ impl Body {
                 Box::pin(stream::once(async move { Ok(bytes) }))
             }
             #[cfg(feature = "multipart")]
-            Inner::MultipartForm(_) => {
-                Box::pin(stream::once(async { Err(crate::error::decode("multipart body cannot be streamed")) }))
-            }
+            Inner::MultipartForm(_) => Box::pin(stream::once(async {
+                Err(crate::error::decode("multipart body cannot be streamed"))
+            })),
             Inner::Streaming(streaming) => streaming.into_stream(),
         }
     }
