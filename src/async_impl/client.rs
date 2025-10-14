@@ -207,7 +207,11 @@ struct Config {
     error: Option<crate::Error>,
     https_only: bool,
     #[cfg(feature = "http3")]
+    quic_local_port: Option<u16>,
+    #[cfg(feature = "http3")]
     tls_enable_early_data: bool,
+    #[cfg(feature = "http3")]
+    quic_keep_alive_interval: Option<Duration>,
     #[cfg(feature = "http3")]
     quic_max_idle_timeout: Option<Duration>,
     #[cfg(feature = "http3")]
@@ -314,6 +318,10 @@ impl ClientBuilder {
                 #[cfg(feature = "http2")]
                 http2_keep_alive_while_idle: false,
                 local_address: None,
+                #[cfg(feature = "http3")]
+                quic_local_port: None,
+                #[cfg(feature = "http3")]
+                quic_keep_alive_interval: None,
                 #[cfg(any(
                     target_os = "android",
                     target_os = "fuchsia",
@@ -419,9 +427,11 @@ impl ClientBuilder {
                  quic_receive_window,
                  quic_send_window,
                  quic_congestion_bbr,
+                 quic_keep_alive_interval,
                  h3_max_field_section_size,
                  h3_send_grease,
                  local_address,
+                 local_port,
                  http_version_pref: &HttpVersionPref| {
                     let mut transport_config = TransportConfig::default();
 
@@ -443,6 +453,8 @@ impl ClientBuilder {
                         transport_config.send_window(send_window);
                     }
 
+                    transport_config.keep_alive_interval(quic_keep_alive_interval);
+
                     if quic_congestion_bbr {
                         let factory = Arc::new(quinn::congestion::BbrConfig::default());
                         transport_config.congestion_controller_factory(factory);
@@ -462,6 +474,7 @@ impl ClientBuilder {
                         resolver,
                         tls,
                         local_address,
+                        local_port,
                         transport_config,
                         h3_client_config,
                     );
@@ -605,9 +618,11 @@ impl ClientBuilder {
                             config.quic_receive_window,
                             config.quic_send_window,
                             config.quic_congestion_bbr,
+                            config.quic_keep_alive_interval,
                             config.h3_max_field_section_size,
                             config.h3_send_grease,
                             config.local_address,
+                            config.quic_local_port,
                             &config.http_version_pref,
                         )?;
                     }
@@ -810,9 +825,11 @@ impl ClientBuilder {
                             config.quic_receive_window,
                             config.quic_send_window,
                             config.quic_congestion_bbr,
+                            config.quic_keep_alive_interval,
                             config.h3_max_field_section_size,
                             config.h3_send_grease,
                             config.local_address,
+                            config.quic_local_port,
                             &config.http_version_pref,
                         )?;
                     }
@@ -2203,6 +2220,40 @@ impl ClientBuilder {
     #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
     pub fn tls_early_data(mut self, enabled: bool) -> ClientBuilder {
         self.config.tls_enable_early_data = enabled;
+        self
+    }
+
+    /// Bind to a local Port for QUIC connection.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # fn doc() -> Result<(), reqwest::Error> {
+    /// let port = 12345;
+    /// let client = reqwest::Client::builder()
+    ///     .http3_local_port(port)
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[cfg(feature = "http3")]
+    pub fn http3_local_port(mut self, port: u16) -> ClientBuilder {
+        self.config.quic_local_port = Some(port);
+        self
+    }
+
+    /// Period of inactivity before sending a keep-alive packet
+    ///
+    /// Keep-alive packets prevent an inactive but otherwise healthy connection from timing out.
+    ///
+    /// Pass `None` to disable QUIC keep-alive. Only one side of any given connection needs keep-alive
+    /// enabled for the connection to be preserved. Must be set lower than the idle_timeout of both
+    /// peers to be effective.
+    /// Default is currently disabled.
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http3")))]
+    pub fn http3_keep_alive_interval(mut self, timeout: Duration) -> ClientBuilder {
+        self.config.quic_keep_alive_interval = Some(timeout);
         self
     }
 
