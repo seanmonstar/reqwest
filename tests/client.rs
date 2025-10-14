@@ -493,7 +493,79 @@ async fn test_tls_info() {
 }
 
 #[tokio::test]
-async fn close_connection_after_idle_timeout() {
+async fn pool_smoke_test() {
+    let server = server::http(|req| async move {
+        let n = req.headers()["x-req-cnt"].to_str().unwrap().parse::<u32>().unwrap();
+        if n % 3 == 0 {
+            http::Response::builder()
+                .header("connection", "close")
+                .body(Default::default())
+                .unwrap()
+        } else {
+            http::Response::default()
+        }
+    });
+
+    let client = reqwest::Client::new();
+
+    let url = format!("http://{}", server.addr());
+
+    for i in 0..20 {
+        client
+            .get(&url)
+            .header("x-req-cnt", i)
+            .send()
+            .await
+            .unwrap()
+            .bytes()
+            .await
+            .unwrap();
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pool_http2_uses_new_conn_when_recv_goaway() {
+    let mut server = server::http(move |_| async move { http::Response::default() });
+
+    let client = reqwest::Client::builder()
+        .http2_prior_knowledge()
+        .build()
+        .unwrap();
+
+    let url = format!("http://{}", server.addr());
+
+    for i in 0..5 {
+        println!("start {}", i);
+        client
+            .get(&url)
+            .header("x-req-cnt", i)
+            .send()
+            .await
+            .unwrap()
+            .bytes()
+            .await
+            .unwrap();
+    }
+
+    // drop the previous server
+    server = server::http(move |_| async move { http::Response::default() });
+    let url = format!("http://{}", server.addr());
+
+    for i in 5..10 {
+        client
+            .get(&url)
+            .header("x-req-cnt", i)
+            .send()
+            .await
+            .unwrap()
+            .bytes()
+            .await
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn pool_close_connection_after_idle_timeout() {
     let mut server = server::http(move |_| async move { http::Response::default() });
 
     let client = reqwest::Client::builder()
