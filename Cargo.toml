@@ -64,13 +64,13 @@ charset = ["dep:encoding_rs", "dep:mime"]
 
 cookies = ["dep:cookie_crate", "dep:cookie_store"]
 
-gzip = ["dep:async-compression", "async-compression?/gzip", "dep:futures-util", "dep:tokio-util"]
+gzip = ["tower-http/decompression-gzip"]
 
-brotli = ["dep:async-compression", "async-compression?/brotli", "dep:futures-util", "dep:tokio-util"]
+brotli = ["tower-http/decompression-br"]
 
-zstd = ["dep:async-compression", "async-compression?/zstd", "dep:futures-util", "dep:tokio-util"]
+zstd = ["tower-http/decompression-zstd"]
 
-deflate = ["dep:async-compression", "async-compression?/zlib", "dep:futures-util", "dep:tokio-util"]
+deflate = ["tower-http/decompression-deflate"]
 
 json = ["dep:serde_json"]
 
@@ -135,7 +135,7 @@ percent-encoding = "2.3"
 tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
 tower = { version = "0.5.2", default-features = false, features = ["retry", "timeout", "util"] }
 tower-service = "0.3"
-tower-http = { version = "0.6.5", default-features = false, features = ["follow-redirect"] }
+tower-http = { version = "0.6.7", default-features = false, features = ["follow-redirect"] }
 pin-project-lite = "0.2.11"
 
 # Optional deps...
@@ -159,7 +159,6 @@ cookie_crate = { version = "0.18.0", package = "cookie", optional = true }
 cookie_store = { version = "0.21.0", optional = true }
 
 ## compression
-async-compression = { version = "0.4.0", default-features = false, features = ["tokio"], optional = true }
 tokio-util = { version = "0.7.9", default-features = false, features = ["codec", "io"], optional = true }
 
 ## hickory-dns
