@@ -17,7 +17,7 @@ use super::Body;
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::H3Client;
-use crate::config::{RequestConfig, RequestTimeout};
+use crate::config::{RequestConfig, TotalTimeout};
 #[cfg(unix)]
 use crate::connect::uds::UnixSocketProvider;
 use crate::connect::{
@@ -26,6 +26,8 @@ use crate::connect::{
 };
 #[cfg(feature = "cookies")]
 use crate::cookie;
+#[cfg(feature = "cookies")]
+use crate::cookie::service::CookieService;
 #[cfg(feature = "hickory-dns")]
 use crate::dns::hickory::HickoryDnsResolver;
 use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
@@ -96,8 +98,6 @@ enum HttpVersionPref {
 
 #[derive(Clone)]
 struct HyperService {
-    #[cfg(feature = "cookies")]
-    cookie_store: Option<Arc<dyn cookie::CookieStore>>,
     hyper: HyperClient,
 }
 
@@ -110,42 +110,10 @@ impl Service<hyper::Request<crate::async_impl::body::Body>> for HyperService {
         self.hyper.poll_ready(cx).map_err(crate::error::request)
     }
 
-    #[cfg(not(feature = "cookies"))]
     fn call(&mut self, req: hyper::Request<crate::async_impl::body::Body>) -> Self::Future {
         let clone = self.hyper.clone();
         let mut inner = std::mem::replace(&mut self.hyper, clone);
         Box::pin(async move { inner.call(req).await.map_err(crate::error::request) })
-    }
-
-    #[cfg(feature = "cookies")]
-    fn call(&mut self, mut req: hyper::Request<crate::async_impl::body::Body>) -> Self::Future {
-        let clone = self.hyper.clone();
-        let mut inner = std::mem::replace(&mut self.hyper, clone);
-        let url = Url::parse(req.uri().to_string().as_str()).expect("invalid URL");
-
-        if let Some(cookie_store) = self.cookie_store.as_ref() {
-            if req.headers().get(crate::header::COOKIE).is_none() {
-                let headers = req.headers_mut();
-                crate::util::add_cookie_header(headers, &**cookie_store, &url);
-            }
-        }
-
-        let cookie_store = self.cookie_store.clone();
-        Box::pin(async move {
-            let res = inner.call(req).await.map_err(crate::error::request);
-
-            if let Some(ref cookie_store) = cookie_store {
-                if let Ok(res) = &res {
-                    let mut cookies =
-                        cookie::extract_response_cookie_headers(res.headers()).peekable();
-                    if cookies.peek().is_some() {
-                        cookie_store.set_cookies(&mut cookies, &url);
-                    }
-                }
-            }
-
-            res
-        })
     }
 }
 
@@ -993,8 +961,6 @@ impl ClientBuilder {
 
         let hyper_client = builder.build(connector_builder.build(config.connector_layers));
         let hyper_service = HyperService {
-            #[cfg(feature = "cookies")]
-            cookie_store: config.cookie_store.clone(),
             hyper: hyper_client,
         };
 
@@ -1007,9 +973,11 @@ impl ClientBuilder {
 
         let retry_policy = config.retry_policy.into_policy();
 
-        let retries = tower::retry::Retry::new(retry_policy.clone(), hyper_service);
+        let svc = tower::retry::Retry::new(retry_policy.clone(), hyper_service);
 
-        let hyper = FollowRedirect::with_policy(retries, redirect_policy.clone());
+        #[cfg(feature = "cookies")]
+        let svc = CookieService::new(svc, config.cookie_store.clone());
+        let hyper = FollowRedirect::with_policy(svc, redirect_policy.clone());
 
         Ok(Client {
             inner: Arc::new(ClientRef {
@@ -1021,23 +989,18 @@ impl ClientBuilder {
                 #[cfg(feature = "http3")]
                 h3_client: match h3_connector {
                     Some(h3_connector) => {
-                        #[cfg(not(feature = "cookies"))]
                         let h3_service = H3Client::new(h3_connector, config.pool_idle_timeout);
+                        let svc = tower::retry::Retry::new(retry_policy, h3_service);
                         #[cfg(feature = "cookies")]
-                        let h3_service = H3Client::new(
-                            h3_connector,
-                            config.pool_idle_timeout,
-                            config.cookie_store,
-                        );
-                        let retries = tower::retry::Retry::new(retry_policy, h3_service);
-                        Some(FollowRedirect::with_policy(retries, redirect_policy))
+                        let svc = CookieService::new(svc, config.cookie_store);
+                        Some(FollowRedirect::with_policy(svc, redirect_policy))
                     }
                     None => None,
                 },
                 headers: config.headers,
                 referer: config.referer,
                 read_timeout: config.read_timeout,
-                request_timeout: RequestConfig::new(config.timeout),
+                total_timeout: RequestConfig::new(config.timeout),
                 hyper,
                 proxies,
                 proxies_maybe_http_auth,
@@ -2562,7 +2525,7 @@ impl Client {
 
         let total_timeout = self
             .inner
-            .request_timeout
+            .total_timeout
             .fetch(&extensions)
             .copied()
             .map(tokio::time::sleep)
@@ -2812,8 +2775,14 @@ impl Config {
     }
 }
 
+#[cfg(not(feature = "cookies"))]
 type LayeredService<T> =
     FollowRedirect<tower::retry::Retry<crate::retry::Policy, T>, TowerRedirectPolicy>;
+#[cfg(feature = "cookies")]
+type LayeredService<T> = FollowRedirect<
+    CookieService<tower::retry::Retry<crate::retry::Policy, T>>,
+    TowerRedirectPolicy,
+>;
 type LayeredFuture<T> = <LayeredService<T> as Service<http::Request<Body>>>::Future;
 
 struct ClientRef {
@@ -2825,7 +2794,7 @@ struct ClientRef {
     #[cfg(feature = "http3")]
     h3_client: Option<LayeredService<H3Client>>,
     referer: bool,
-    request_timeout: RequestConfig<RequestTimeout>,
+    total_timeout: RequestConfig<TotalTimeout>,
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<ProxyMatcher>>,
     proxies_maybe_http_auth: bool,
@@ -2862,7 +2831,7 @@ impl ClientRef {
 
         f.field("default_headers", &self.headers);
 
-        self.request_timeout.fmt_as_field(f);
+        self.total_timeout.fmt_as_field(f);
 
         if let Some(ref d) = self.read_timeout {
             f.field("read_timeout", d);
@@ -2982,15 +2951,6 @@ impl Future for PendingRequest {
             },
         };
 
-        #[cfg(feature = "cookies")]
-        {
-            if let Some(ref cookie_store) = self.client.cookie_store {
-                let mut cookies = cookie::extract_response_cookie_headers(res.headers()).peekable();
-                if cookies.peek().is_some() {
-                    cookie_store.set_cookies(&mut cookies, &self.url);
-                }
-            }
-        }
         if let Some(url) = &res
             .extensions()
             .get::<tower_http::follow_redirect::RequestUri>()
