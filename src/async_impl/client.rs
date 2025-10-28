@@ -637,6 +637,8 @@ impl ClientBuilder {
                 }
                 #[cfg(feature = "__rustls")]
                 TlsBackend::Rustls => {
+                    #[cfg(feature = "rustls-platform-verifier-fallback")]
+                    use crate::tls::FallbackPlatformVerifier;
                     use crate::tls::{IgnoreHostname, NoVerifier};
 
                     // Set root certificates.
@@ -738,15 +740,67 @@ impl ClientBuilder {
                             .dangerous()
                             .with_custom_certificate_verifier(Arc::new(NoVerifier))
                     } else if !config.hostname_verification {
-                        config_builder
-                            .dangerous()
-                            .with_custom_certificate_verifier(Arc::new(IgnoreHostname::new(
-                                root_cert_store,
-                                signature_algorithms,
-                            )))
+                        let ignore_hostname_verifier =
+                            Arc::new(IgnoreHostname::new(root_cert_store, signature_algorithms));
+
+                        #[cfg(feature = "rustls-platform-verifier-fallback")]
+                        {
+                            let fallback_verifier =
+                                FallbackPlatformVerifier::with_platform_fallback(
+                                    ignore_hostname_verifier,
+                                    provider,
+                                )
+                                .map_err(|e| {
+                                    crate::error::builder(format!(
+                                        "failed to create platform verifier: {e:?}"
+                                    ))
+                                })?;
+                            config_builder
+                                .dangerous()
+                                .with_custom_certificate_verifier(Arc::new(fallback_verifier))
+                        }
+                        #[cfg(not(feature = "rustls-platform-verifier-fallback"))]
+                        {
+                            config_builder
+                                .dangerous()
+                                .with_custom_certificate_verifier(ignore_hostname_verifier)
+                        }
                     } else {
                         if config.crls.is_empty() {
-                            config_builder.with_root_certificates(root_cert_store)
+                            #[cfg(feature = "rustls-platform-verifier-fallback")]
+                            {
+                                let standard_verifier =
+                                    rustls::client::WebPkiServerVerifier::builder_with_provider(
+                                        Arc::new(root_cert_store),
+                                        provider.clone(),
+                                    )
+                                    .allow_unknown_revocation_status()
+                                    .build()
+                                    .map_err(|e| {
+                                        crate::error::builder(format!(
+                                            "invalid TLS verification settings: {e:?}"
+                                        ))
+                                    })?;
+
+                                let fallback_verifier =
+                                    FallbackPlatformVerifier::with_platform_fallback(
+                                        standard_verifier,
+                                        provider,
+                                    )
+                                    .map_err(|e| {
+                                        crate::error::builder(format!(
+                                            "failed to create platform verifier: {e:?}"
+                                        ))
+                                    })?;
+
+                                config_builder
+                                    .dangerous()
+                                    .with_custom_certificate_verifier(Arc::new(fallback_verifier))
+                            }
+                            #[cfg(not(feature = "rustls-platform-verifier-fallback"))]
+                            {
+                                config_builder.with_root_certificates(root_cert_store)
+                            }
                         } else {
                             let crls = config
                                 .crls
@@ -756,14 +810,34 @@ impl ClientBuilder {
                             let verifier =
                                 rustls::client::WebPkiServerVerifier::builder_with_provider(
                                     Arc::new(root_cert_store),
-                                    provider,
+                                    provider.clone(),
                                 )
                                 .with_crls(crls)
                                 .build()
                                 .map_err(|_| {
                                     crate::error::builder("invalid TLS verification settings")
                                 })?;
-                            config_builder.with_webpki_verifier(verifier)
+
+                            #[cfg(feature = "rustls-platform-verifier-fallback")]
+                            {
+                                let fallback_verifier =
+                                    FallbackPlatformVerifier::with_platform_fallback(
+                                        verifier, provider,
+                                    )
+                                    .map_err(|e| {
+                                        crate::error::builder(format!(
+                                            "failed to create platform verifier: {e:?}"
+                                        ))
+                                    })?;
+
+                                config_builder
+                                    .dangerous()
+                                    .with_custom_certificate_verifier(Arc::new(fallback_verifier))
+                            }
+                            #[cfg(not(feature = "rustls-platform-verifier-fallback"))]
+                            {
+                                config_builder.with_webpki_verifier(verifier)
+                            }
                         }
                     };
 
