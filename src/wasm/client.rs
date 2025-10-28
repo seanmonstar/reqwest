@@ -151,11 +151,19 @@ impl Client {
         }
     }
 
+    fn merge_timeout(&self, req: &mut Request) {
+        if let Some(timeout) = self.config.timeout {
+            // If a timeout was not already set on the request, set the client's default timeout.
+            req.timeout_mut().get_or_insert(timeout);
+        }
+    }
+
     pub(super) fn execute_request(
         &self,
         mut req: Request,
     ) -> impl Future<Output = crate::Result<Response>> {
         self.merge_headers(&mut req);
+        self.merge_timeout(&mut req);
         fetch(req)
     }
 }
@@ -320,6 +328,17 @@ impl ClientBuilder {
         }
         self
     }
+
+    /// Enables a total request timeout.
+    ///
+    /// The timeout is applied from when the request starts connecting until the
+    /// response body has finished. Also considered a total deadline.
+    ///
+    /// Default is no timeout.
+    pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
+        self.config.timeout = Some(timeout);
+        self
+    }
 }
 
 impl Default for ClientBuilder {
@@ -331,6 +350,7 @@ impl Default for ClientBuilder {
 #[derive(Debug)]
 struct Config {
     headers: HeaderMap,
+    timeout: Option<Duration>,
     error: Option<crate::Error>,
 }
 
