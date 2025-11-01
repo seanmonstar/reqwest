@@ -75,6 +75,23 @@ use tower_http::follow_redirect::FollowRedirect;
 /// You do **not** have to wrap the `Client` in an [`Rc`] or [`Arc`] to **reuse** it,
 /// because it already uses an [`Arc`] internally.
 ///
+/// # Connection Pooling
+///
+/// The Client maintains a pool of reusable HTTP connections to avoid
+/// connection setup overhead.
+///
+/// ## Default Behavior
+///
+/// Idle connections are kept alive for 90 seconds. There are no limits on
+/// the number of idle connections per host, active connections per host,
+/// or total connections.
+///
+/// ## Limitations
+///
+/// The current implementation does not support:
+/// - Limiting the number of active (in-use) connections per host
+/// - Limiting the total number of connections across all hosts
+///
 /// [`Rc`]: std::rc::Rc
 #[derive(Clone)]
 pub struct Client {
@@ -1397,6 +1414,8 @@ impl ClientBuilder {
     /// Pass `None` to disable timeout.
     ///
     /// Default is 90 seconds.
+    ///
+    /// This only affects idle connections in the pool, not active connections.
     pub fn pool_idle_timeout<D>(mut self, val: D) -> ClientBuilder
     where
         D: Into<Option<Duration>>,
@@ -1406,6 +1425,12 @@ impl ClientBuilder {
     }
 
     /// Sets the maximum idle connection per host allowed in the pool.
+    ///
+    /// Default is `usize::MAX` (no limit).
+    ///
+    /// This limits only idle connections waiting to be reused, not active
+    /// connections currently handling requests. There is currently no way to
+    /// limit the number of active connections.
     pub fn pool_max_idle_per_host(mut self, max: usize) -> ClientBuilder {
         self.config.pool_max_idle_per_host = max;
         self
