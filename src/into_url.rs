@@ -10,6 +10,7 @@ impl IntoUrl for Url {}
 impl IntoUrl for String {}
 impl<'a> IntoUrl for &'a str {}
 impl<'a> IntoUrl for &'a String {}
+impl<'a> IntoUrl for std::borrow::Cow<'a, str> {}
 
 pub trait IntoUrlSealed {
     // Besides parsing as a valid `Url`, the `Url` must be a valid
@@ -70,6 +71,14 @@ impl IntoUrlSealed for String {
 
     fn as_str(&self) -> &str {
         self.as_ref()
+    }
+}
+impl<'a> IntoUrlSealed for std::borrow::Cow<'a, str> {
+    fn into_url(self) -> crate::Result<Url> {
+        (&*self).into_url()
+    }
+    fn as_str(&self) -> &str {
+        &*self
     }
 }
 
