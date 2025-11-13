@@ -30,24 +30,30 @@ fn js_fetch(req: &web_sys::Request) -> Promise {
     }
 }
 
-/// dox
+/// An HTTP Client for WebAssembly.
+///
+/// Uses the browser's Fetch API to make requests. The `Client` holds
+/// configuration that applies to all requests. To configure a `Client`,
+/// use `Client::builder()`.
 #[derive(Clone)]
 pub struct Client {
     config: Arc<Config>,
 }
 
-/// dox
+/// A `ClientBuilder` can be used to create a `Client` with custom configuration.
 pub struct ClientBuilder {
     config: Config,
 }
 
 impl Client {
-    /// dox
+    /// Constructs a new `Client`.
     pub fn new() -> Self {
         Client::builder().build().unwrap_throw()
     }
 
-    /// dox
+    /// Creates a `ClientBuilder` to configure a `Client`.
+    ///
+    /// This is the same as `ClientBuilder::new()`.
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }
@@ -277,7 +283,9 @@ async fn fetch(req: Request) -> crate::Result<Response> {
 // ===== impl ClientBuilder =====
 
 impl ClientBuilder {
-    /// dox
+    /// Constructs a new `ClientBuilder`.
+    ///
+    /// This is the same as `Client::builder()`.
     pub fn new() -> Self {
         ClientBuilder {
             config: Config::default(),
