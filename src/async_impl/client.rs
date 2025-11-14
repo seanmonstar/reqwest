@@ -32,11 +32,11 @@ use crate::cookie::service::CookieService;
 use crate::dns::hickory::HickoryDnsResolver;
 use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
 use crate::error::{self, BoxError};
-use crate::into_url::try_uri;
 use crate::proxy::Matcher as ProxyMatcher;
 use crate::redirect::{self, TowerRedirectPolicy};
 #[cfg(feature = "__rustls")]
 use crate::tls::CertificateRevocationList;
+use crate::into_url::{try_uri, IntoUrlSealed};
 #[cfg(feature = "__tls")]
 use crate::tls::{self, TlsBackend};
 #[cfg(feature = "__tls")]
@@ -231,9 +231,9 @@ struct Config {
     h3_send_grease: Option<bool>,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
     dns_resolver: Option<Arc<dyn Resolve>>,
-
     #[cfg(unix)]
     unix_socket: Option<Arc<std::path::Path>>,
+    base_url: Option<Url>,
 }
 
 impl Default for ClientBuilder {
@@ -359,6 +359,7 @@ impl ClientBuilder {
                 dns_resolver: None,
                 #[cfg(unix)]
                 unix_socket: None,
+                base_url: None,
             },
         }
     }
@@ -1014,6 +1015,7 @@ impl ClientBuilder {
                 proxies_maybe_http_custom_headers,
                 https_only: config.https_only,
                 redirect_policy_desc,
+                base_url: config.base_url,
             }),
         })
     }
@@ -1055,6 +1057,26 @@ impl ClientBuilder {
         };
         self
     }
+
+    /// Sets a base url to be used on all requests with a relative URL.
+    ///
+    /// By default relative URLs are rejected, but will be allowed if a
+    /// base url has been set.
+    pub fn base_url<U>(mut self, base_url: U) -> ClientBuilder
+    where
+        U: IntoUrl,
+    {
+        match base_url.into_url() {
+            Ok(base_url) => {
+                self.config.base_url = Some(base_url);
+            }
+            Err(e) => {
+                self.config.error = Some(e);
+            }
+        }
+        self
+    }
+
     /// Sets the default headers for every request.
     ///
     /// # Example
@@ -2451,7 +2473,16 @@ impl Client {
     ///
     /// This method fails whenever the supplied `Url` cannot be parsed.
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
-        let req = url.into_url().map(move |url| Request::new(method, url));
+        let maybe_url = match &self.inner.base_url {
+            Some(ref base_url) => Url::options()
+                .base_url(Some(base_url))
+                .parse(url.as_str())
+                .map_err(crate::error::builder)
+                .and_then(IntoUrlSealed::into_url),
+            None => url.into_url(),
+        };
+
+        let req = maybe_url.map(move |url| Request::new(method, url));
         RequestBuilder::new(self.clone(), req)
     }
 
@@ -2810,6 +2841,7 @@ struct ClientRef {
     proxies_maybe_http_custom_headers: bool,
     https_only: bool,
     redirect_policy_desc: Option<String>,
+    base_url: Option<Url>,
 }
 
 impl ClientRef {
