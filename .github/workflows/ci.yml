@@ -219,7 +219,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: check --feature-powerset
-        run: cargo hack --no-dev-deps check --feature-powerset --depth 2 --skip http3,__tls,__rustls,__rustls-ring,native-tls-vendored,trust-dns
+        run: cargo hack --no-dev-deps check --feature-powerset --depth 2 --skip http3,http3-no-provider,http3-aws-lc-rs,__tls,__rustls,__rustls-ring,native-tls-vendored,trust-dns
         env:
           RUSTFLAGS: "-D dead_code -D unused_imports"
 
@@ -237,7 +237,7 @@ jobs:
           toolchain: 'stable'
 
       - name: Check
-        run: cargo test --features http3,stream
+        run: cargo test --features http3,http3-no-provider,http3-aws-lc-rs,stream
         env:
           RUSTFLAGS: --cfg reqwest_unstable
           RUSTDOCFLAGS: --cfg reqwest_unstable
