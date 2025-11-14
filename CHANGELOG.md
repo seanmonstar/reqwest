@@ -1,3 +1,8 @@
+## Unreleased
+
+- Add `query` and `form` features, making `serde` dependency optional.
+- (wasm) Change header parsing to use native array access instead of `serde_json`.
+
 ## v0.12.24
 
 - Refactor cookie handling to an internal middleware.
