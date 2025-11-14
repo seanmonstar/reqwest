@@ -54,6 +54,8 @@ use rustls::{
 use rustls_pki_types::pem::PemObject;
 #[cfg(feature = "__rustls")]
 use rustls_pki_types::{ServerName, UnixTime};
+#[cfg(feature = "rustls-platform-verifier-fallback")]
+use std::sync::Arc;
 use std::{
     fmt,
     io::{BufRead, BufReader},
@@ -719,6 +721,86 @@ impl ServerCertVerifier for IgnoreHostname {
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.signature_algorithms.supported_schemes()
+    }
+}
+
+/// A certificate verifier that tries a primary verifier first,
+/// and falls back to a platform verifier if the primary fails.
+#[cfg(feature = "rustls-platform-verifier-fallback")]
+#[derive(Debug)]
+pub(crate) struct FallbackPlatformVerifier {
+    primary: Arc<dyn ServerCertVerifier>,
+    fallback: Arc<dyn ServerCertVerifier>,
+}
+
+#[cfg(feature = "rustls-platform-verifier-fallback")]
+impl FallbackPlatformVerifier {
+    pub(crate) fn with_platform_fallback(
+        primary: Arc<dyn ServerCertVerifier>,
+        provider: Arc<rustls::crypto::CryptoProvider>,
+    ) -> Result<Self, TLSError> {
+        let fallback = Arc::new(rustls_platform_verifier::Verifier::new(provider)?);
+        Ok(Self { primary, fallback })
+    }
+}
+
+#[cfg(feature = "rustls-platform-verifier-fallback")]
+impl ServerCertVerifier for FallbackPlatformVerifier {
+    fn verify_server_cert(
+        &self,
+        end_entity: &rustls_pki_types::CertificateDer<'_>,
+        intermediates: &[rustls_pki_types::CertificateDer<'_>],
+        server_name: &ServerName<'_>,
+        ocsp_response: &[u8],
+        now: UnixTime,
+    ) -> Result<ServerCertVerified, TLSError> {
+        match self.primary.verify_server_cert(
+            end_entity,
+            intermediates,
+            server_name,
+            ocsp_response,
+            now,
+        ) {
+            Ok(verified) => Ok(verified),
+            Err(primary_err) => {
+                match self.fallback.verify_server_cert(
+                    end_entity,
+                    intermediates,
+                    server_name,
+                    ocsp_response,
+                    now,
+                ) {
+                    Ok(verified) => Ok(verified),
+                    Err(_) => Err(primary_err),
+                }
+            }
+        }
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls_pki_types::CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        // Both use rustls::crypto::verify_tls12_signature
+        self.primary.verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls_pki_types::CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        // Both use rustls::crypto::verify_tls13_signature
+        self.primary.verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        // Both verifiers use the same CryptoProvider, so they support the same
+        // signature schemes. Just return the primary's schemes.
+        self.primary.supported_verify_schemes()
     }
 }
 
