@@ -163,7 +163,7 @@ fn brotli_compress(input: &[u8]) -> Vec<u8> {
 
 #[tokio::test]
 async fn test_non_chunked_non_fragmented_response() {
-    let server = server::low_level_with_response(|_raw_request, client_socket| {
+    let server = server::low_level_with_response(1, |_raw_request, client_socket| {
         Box::new(async move {
             let brotlied_content = brotli_compress(RESPONSE_CONTENT.as_bytes());
             let content_length_header =
@@ -198,7 +198,7 @@ async fn test_chunked_fragmented_response_1() {
         tokio::time::Duration::from_millis(1000);
     const DELAY_MARGIN: tokio::time::Duration = tokio::time::Duration::from_millis(50);
 
-    let server = server::low_level_with_response(|_raw_request, client_socket| {
+    let server = server::low_level_with_response(1, |_raw_request, client_socket| {
         Box::new(async move {
             let brotlied_content = brotli_compress(RESPONSE_CONTENT.as_bytes());
             let response_first_part = [
@@ -252,7 +252,7 @@ async fn test_chunked_fragmented_response_2() {
         tokio::time::Duration::from_millis(1000);
     const DELAY_MARGIN: tokio::time::Duration = tokio::time::Duration::from_millis(50);
 
-    let server = server::low_level_with_response(|_raw_request, client_socket| {
+    let server = server::low_level_with_response(1, |_raw_request, client_socket| {
         Box::new(async move {
             let brotlied_content = brotli_compress(RESPONSE_CONTENT.as_bytes());
             let response_first_part = [
@@ -301,15 +301,13 @@ async fn test_chunked_fragmented_response_2() {
     assert!(start.elapsed() >= DELAY_BETWEEN_RESPONSE_PARTS - DELAY_MARGIN);
 }
 
-// TODO: figure out how apply fix from https://github.com/seanmonstar/reqwest/pull/2484
-#[ignore]
 #[tokio::test]
 async fn test_chunked_fragmented_response_with_extra_bytes() {
     const DELAY_BETWEEN_RESPONSE_PARTS: tokio::time::Duration =
         tokio::time::Duration::from_millis(1000);
     const DELAY_MARGIN: tokio::time::Duration = tokio::time::Duration::from_millis(50);
 
-    let server = server::low_level_with_response(|_raw_request, client_socket| {
+    let server = server::low_level_with_response(1, |_raw_request, client_socket| {
         Box::new(async move {
             let brotlied_content = brotli_compress(RESPONSE_CONTENT.as_bytes());
             let response_first_part = [
