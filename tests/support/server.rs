@@ -285,7 +285,7 @@ impl Http3 {
     }
 }
 
-pub fn low_level_with_response<F>(do_response: F) -> Server
+pub fn low_level_with_response<F>(requests_count: usize, do_response: F) -> Server
 where
     for<'c> F: Fn(&'c [u8], &'c mut TcpStream) -> Box<dyn Future<Output = ()> + Send + 'c>
         + Clone
@@ -324,7 +324,7 @@ where
                                 let do_response = do_response.clone();
                                 let events_tx = events_tx.clone();
                                 tokio::spawn(async move {
-                                    low_level_server_client(io, do_response).await;
+                                    low_level_server_client(io, requests_count, do_response).await;
                                     let _ = events_tx.send(Event::ConnectionClosed);
                                 });
                             }
@@ -345,11 +345,14 @@ where
     .unwrap()
 }
 
-async fn low_level_server_client<F>(mut client_socket: TcpStream, do_response: F)
-where
+async fn low_level_server_client<F>(
+    mut client_socket: TcpStream,
+    requests_count: usize,
+    do_response: F,
+) where
     for<'c> F: Fn(&'c [u8], &'c mut TcpStream) -> Box<dyn Future<Output = ()> + Send + 'c>,
 {
-    loop {
+    for _ in 0..requests_count {
         let request = low_level_read_http_request(&mut client_socket)
             .await
             .expect("read_http_request failed");

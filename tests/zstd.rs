@@ -157,7 +157,7 @@ fn zstd_compress(input: &[u8]) -> Vec<u8> {
 
 #[tokio::test]
 async fn test_non_chunked_non_fragmented_response() {
-    let server = server::low_level_with_response(|_raw_request, client_socket| {
+    let server = server::low_level_with_response(1, |_raw_request, client_socket| {
         Box::new(async move {
             let zstded_content = zstd_compress(RESPONSE_CONTENT.as_bytes());
             let content_length_header =
@@ -189,7 +189,7 @@ async fn test_non_chunked_non_fragmented_response() {
 // Big response can have multiple ZSTD frames in it
 #[tokio::test]
 async fn test_non_chunked_non_fragmented_multiple_frames_response() {
-    let server = server::low_level_with_response(|_raw_request, client_socket| {
+    let server = server::low_level_with_response(1, |_raw_request, client_socket| {
         Box::new(async move {
             // Split the content into two parts
             let content_bytes = RESPONSE_CONTENT.as_bytes();
@@ -235,7 +235,7 @@ async fn test_chunked_fragmented_multiple_frames_in_one_chunk() {
     const DELAY_MARGIN: tokio::time::Duration = tokio::time::Duration::from_millis(50); // Margin for timing assertions
 
     // Set up a low-level server
-    let server = server::low_level_with_response(|_raw_request, client_socket| {
+    let server = server::low_level_with_response(1, |_raw_request, client_socket| {
         Box::new(async move {
             // Split RESPONSE_CONTENT into two parts
             let mid = RESPONSE_CONTENT.len() / 2;
@@ -308,7 +308,7 @@ async fn test_connection_reuse_with_chunked_fragmented_multiple_frames_in_one_ch
     let peer_addrs_clone = peer_addrs.clone();
 
     // Set up a low-level server (it will reuse existing client connection, executing callback for each client request)
-    let server = server::low_level_with_response(move |_raw_request, client_socket| {
+    let server = server::low_level_with_response(5, move |_raw_request, client_socket| {
         let peer_addrs = peer_addrs_clone.clone();
         Box::new(async move {
             // Split RESPONSE_CONTENT into two parts
@@ -409,7 +409,7 @@ async fn test_chunked_fragmented_response_1() {
         tokio::time::Duration::from_millis(1000);
     const DELAY_MARGIN: tokio::time::Duration = tokio::time::Duration::from_millis(50);
 
-    let server = server::low_level_with_response(|_raw_request, client_socket| {
+    let server = server::low_level_with_response(1, |_raw_request, client_socket| {
         Box::new(async move {
             let zstded_content = zstd_compress(RESPONSE_CONTENT.as_bytes());
             let response_first_part = [
@@ -463,7 +463,7 @@ async fn test_chunked_fragmented_response_2() {
         tokio::time::Duration::from_millis(1000);
     const DELAY_MARGIN: tokio::time::Duration = tokio::time::Duration::from_millis(50);
 
-    let server = server::low_level_with_response(|_raw_request, client_socket| {
+    let server = server::low_level_with_response(1, |_raw_request, client_socket| {
         Box::new(async move {
             let zstded_content = zstd_compress(RESPONSE_CONTENT.as_bytes());
             let response_first_part = [
@@ -512,15 +512,13 @@ async fn test_chunked_fragmented_response_2() {
     assert!(start.elapsed() >= DELAY_BETWEEN_RESPONSE_PARTS - DELAY_MARGIN);
 }
 
-// TODO: figure out how apply fix from https://github.com/seanmonstar/reqwest/pull/2484
-#[ignore]
 #[tokio::test]
 async fn test_chunked_fragmented_response_with_extra_bytes() {
     const DELAY_BETWEEN_RESPONSE_PARTS: tokio::time::Duration =
         tokio::time::Duration::from_millis(1000);
     const DELAY_MARGIN: tokio::time::Duration = tokio::time::Duration::from_millis(50);
 
-    let server = server::low_level_with_response(|_raw_request, client_socket| {
+    let server = server::low_level_with_response(1, |_raw_request, client_socket| {
         Box::new(async move {
             let zstded_content = zstd_compress(RESPONSE_CONTENT.as_bytes());
             let response_first_part = [
