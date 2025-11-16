@@ -148,9 +148,9 @@ native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls"
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # rustls-tls
-hyper-rustls = { version = "0.27.0", default-features = false, optional = true, features = ["http1", "tls12"] }
-rustls = { version = "0.23.4", optional = true, default-features = false, features = ["std", "tls12"] }
-tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["tls12"] }
+hyper-rustls = { git = "https://github.com/fenollp/hyper-rustls.git", branch = "rustls-0.24", default-features = false, optional = true, features = ["http1", "tls12"] }
+rustls = { git = "https://github.com/rustls/rustls.git", rev = "30f3753a70c3b138841675b6381c0b63a3005414", optional = true, default-features = false, features = ["std", "tls12"] }
+tokio-rustls = { git = "https://github.com/fenollp/tokio-rustls.git", branch = "rustls-0.24", optional = true, default-features = false, features = ["tls12"] }
 webpki-roots = { version = "1", optional = true }
 rustls-native-certs = { version = "0.8.0", optional = true }
 
