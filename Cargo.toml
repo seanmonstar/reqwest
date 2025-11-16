@@ -93,7 +93,7 @@ macos-system-configuration = ["system-proxy"]
 # Experimental HTTP/3 client.
 http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
 
-
+websocket=[]
 # Internal (PRIVATE!) features used to aid testing.
 # Don't rely on these whatsoever. They may disappear at any time.
 
@@ -106,6 +106,8 @@ __rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls"]
 __rustls-ring = ["hyper-rustls?/ring", "tokio-rustls?/ring", "rustls?/ring", "quinn?/ring"]
 
 [dependencies]
+sha1 = "0.10.6"
+rand = "0.9.2"
 base64 = "0.22"
 http = "1.1"
 url = "2.4"
