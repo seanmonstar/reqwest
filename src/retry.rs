@@ -78,6 +78,13 @@ where
     scoped(move |req| host == req.uri().host().unwrap_or(""))
 }
 
+/// Create a retry policy that will retry any request.
+///
+/// This is useful for creating a client with a standard retry policy
+pub fn always() -> Builder {
+    scoped(|_| true).no_budget()
+}
+
 /// Create a retry policy that will never retry any request.
 ///
 /// This is useful for disabling the `Client`s default behavior of retrying
