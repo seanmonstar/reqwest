@@ -2,16 +2,11 @@ use std::fmt;
 
 use bytes::Bytes;
 use http::{HeaderMap, StatusCode};
-use js_sys::Uint8Array;
 use url::Url;
 
-use crate::wasm::AbortGuard;
+use crate::{response::ResponseUrl, wasm::AbortGuard};
 
-#[cfg(feature = "stream")]
-use wasm_bindgen::JsCast;
-
-#[cfg(feature = "stream")]
-use futures_util::stream::{self, StreamExt};
+use super::Body;
 
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
@@ -97,68 +92,23 @@ impl Response {
 
     /// Get the response text.
     pub async fn text(self) -> crate::Result<String> {
-        let p = self
-            .http
-            .body()
+        Body::from_response(self.http.into_body(), self._abort)
             .text()
-            .map_err(crate::error::wasm)
-            .map_err(crate::error::decode)?;
-        let js_val = super::promise::<wasm_bindgen::JsValue>(p)
             .await
-            .map_err(crate::error::decode)?;
-        if let Some(s) = js_val.as_string() {
-            Ok(s)
-        } else {
-            Err(crate::error::decode("response.text isn't string"))
-        }
     }
 
     /// Get the response as bytes
     pub async fn bytes(self) -> crate::Result<Bytes> {
-        let p = self
-            .http
-            .body()
-            .array_buffer()
-            .map_err(crate::error::wasm)
-            .map_err(crate::error::decode)?;
-
-        let buf_js = super::promise::<wasm_bindgen::JsValue>(p)
+        Body::from_response(self.http.into_body(), self._abort)
+            .bytes()
             .await
-            .map_err(crate::error::decode)?;
-
-        let buffer = Uint8Array::new(&buf_js);
-        let mut bytes = vec![0; buffer.length() as usize];
-        buffer.copy_to(&mut bytes);
-        Ok(bytes.into())
     }
 
     /// Convert the response into a `Stream` of `Bytes` from the body.
     #[cfg(feature = "stream")]
     pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
-        use futures_core::Stream;
-        use std::pin::Pin;
-
-        let web_response = self.http.into_body();
-        let abort = self._abort;
-
-        if let Some(body) = web_response.body() {
-            let body = wasm_streams::ReadableStream::from_raw(body.unchecked_into());
-            Box::pin(body.into_stream().map(move |buf_js| {
-                // Keep the abort guard alive as long as this stream is.
-                let _abort = &abort;
-                let buffer = Uint8Array::new(
-                    &buf_js
-                        .map_err(crate::error::wasm)
-                        .map_err(crate::error::decode)?,
-                );
-                let mut bytes = vec![0; buffer.length() as usize];
-                buffer.copy_to(&mut bytes);
-                Ok(bytes.into())
-            })) as Pin<Box<dyn Stream<Item = crate::Result<Bytes>>>>
-        } else {
-            // If there's no body, return an empty stream.
-            Box::pin(stream::empty()) as Pin<Box<dyn Stream<Item = crate::Result<Bytes>>>>
-        }
+        let body = Body::from_response(self.http.into_body(), self._abort);
+        body.bytes_stream()
     }
 
     // util methods
@@ -191,5 +141,15 @@ impl fmt::Debug for Response {
             .field("status", &self.status())
             .field("headers", self.headers())
             .finish()
+    }
+}
+
+impl From<Response> for http::Response<Body> {
+    fn from(response: Response) -> http::Response<Body> {
+        let Response { http, _abort, url } = response;
+        let (mut parts, body) = http.into_parts();
+        parts.extensions.insert(ResponseUrl(*url));
+        let body = Body::from_response(body, _abort);
+        http::Response::from_parts(parts, body)
     }
 }
