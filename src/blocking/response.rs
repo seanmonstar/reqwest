@@ -6,6 +6,7 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use bytes::Bytes;
+use futures_util::TryStreamExt;
 use http;
 use hyper::header::HeaderMap;
 #[cfg(feature = "json")]
@@ -413,13 +414,18 @@ impl Response {
     // private
 
     fn body_mut(&mut self) -> Pin<&mut dyn futures_util::io::AsyncRead> {
-        use futures_util::TryStreamExt;
         if self.body.is_none() {
-            let body = mem::replace(self.inner.body_mut(), async_impl::Decoder::empty());
+            let body = mem::replace(
+                self.inner.body_mut(),
+                async_impl::body::boxed(http_body_util::Empty::new()),
+            );
 
-            let body = body.into_stream().into_async_read();
-
-            self.body = Some(Box::pin(body));
+            self.body = Some(Box::pin(
+                async_impl::body::Body::wrap(body)
+                    .into_stream()
+                    .map_err(crate::error::Error::into_io)
+                    .into_async_read(),
+            ));
         }
         self.body.as_mut().expect("body was init").as_mut()
     }
