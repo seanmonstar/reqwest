@@ -93,7 +93,7 @@ where
 // ================================
 //
 // The following sections are all configuration types
-// provided by reqwets.
+// provided by reqwest.
 //
 // To add a new config:
 //
