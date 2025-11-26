@@ -496,7 +496,7 @@ async fn close_connection_after_idle_timeout() {
 
 #[tokio::test]
 async fn http1_reason_phrase() {
-    let server = server::low_level_with_response(1, |_raw_request, client_socket| {
+    let server = server::low_level_with_response(|_raw_request, client_socket| {
         Box::new(async move {
             client_socket
                 .write_all(b"HTTP/1.1 418 I'm not a teapot\r\nContent-Length: 0\r\n\r\n")
