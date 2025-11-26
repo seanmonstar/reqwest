@@ -135,7 +135,7 @@ percent-encoding = "2.3"
 tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
 tower = { version = "0.5.2", default-features = false, features = ["retry", "timeout", "util"] }
 tower-service = "0.3"
-tower-http = { version = "0.6.7", default-features = false, features = ["follow-redirect"] }
+tower-http = { git = "https://github.com/ducaale/tower-http.git", branch = "decompression-extra-bytes", default-features = false, features = ["follow-redirect"] }
 pin-project-lite = "0.2.11"
 
 # Optional deps...

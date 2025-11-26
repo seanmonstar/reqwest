@@ -301,8 +301,6 @@ async fn test_chunked_fragmented_response_2() {
     assert!(start.elapsed() >= DELAY_BETWEEN_RESPONSE_PARTS - DELAY_MARGIN);
 }
 
-// TODO: figure out how apply fix from https://github.com/seanmonstar/reqwest/pull/2484
-#[ignore]
 #[tokio::test]
 async fn test_chunked_fragmented_response_with_extra_bytes() {
     const DELAY_BETWEEN_RESPONSE_PARTS: tokio::time::Duration =
