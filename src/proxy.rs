@@ -915,7 +915,7 @@ mod tests {
         let m = Proxy::all("https://letme:in@yo.local")
             .unwrap()
             .into_matcher();
-        assert!(!m.maybe_has_http_auth(), "https always tunnels");
+        assert!(m.maybe_has_http_auth(), "https forwards");
 
         let m = Proxy::all("http://letme:in@yo.local")
             .unwrap()
