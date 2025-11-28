@@ -181,11 +181,6 @@ impl Error {
         }
     }
 
-    /// Returns true if the error is related to a protocol upgrade request
-    pub fn is_upgrade(&self) -> bool {
-        matches!(self.inner.kind, Kind::Upgrade)
-    }
-
     // private
 
     #[allow(unused)]
