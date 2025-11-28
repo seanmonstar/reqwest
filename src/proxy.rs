@@ -452,7 +452,8 @@ impl Proxy {
 }
 
 fn cache_maybe_has_http_auth(url: &Url, extra: &Option<HeaderValue>) -> bool {
-    url.scheme() == "http" && (url.username().len() > 0 || url.password().is_some() || extra.is_some())
+    url.scheme() == "http"
+        && (url.username().len() > 0 || url.password().is_some() || extra.is_some())
 }
 
 fn cache_maybe_has_http_custom_headers(url: &Url, extra: &Option<HeaderMap>) -> bool {
@@ -918,14 +919,10 @@ mod tests {
             .into_matcher();
         assert!(m.maybe_has_http_auth(), "http forwards");
 
-        let m = Proxy::all("http://:in@yo.local")
-            .unwrap()
-            .into_matcher();
+        let m = Proxy::all("http://:in@yo.local").unwrap().into_matcher();
         assert!(m.maybe_has_http_auth(), "http forwards with empty username");
 
-        let m = Proxy::all("http://letme:@yo.local")
-            .unwrap()
-            .into_matcher();
+        let m = Proxy::all("http://letme:@yo.local").unwrap().into_matcher();
         assert!(m.maybe_has_http_auth(), "http forwards with empty password");
     }
 
