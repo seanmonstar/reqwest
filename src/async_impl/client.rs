@@ -9,7 +9,6 @@ use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
 use std::{fmt, str};
 
-use super::decoder::Accepts;
 use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
@@ -45,9 +44,7 @@ use crate::Certificate;
 use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, Url};
 
-use http::header::{
-    Entry, HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, PROXY_AUTHORIZATION, RANGE, USER_AGENT,
-};
+use http::header::{Entry, HeaderMap, HeaderValue, ACCEPT, PROXY_AUTHORIZATION, USER_AGENT};
 use http::uri::Scheme;
 use http::Uri;
 use hyper_util::client::legacy::connect::HttpConnector;
@@ -61,6 +58,13 @@ use quinn::VarInt;
 use tokio::time::Sleep;
 use tower::util::BoxCloneSyncServiceLayer;
 use tower::{Layer, Service};
+#[cfg(any(
+    feature = "gzip",
+    feature = "brotli",
+    feature = "zstd",
+    feature = "deflate"
+))]
+use tower_http::decompression::Decompression;
 use tower_http::follow_redirect::FollowRedirect;
 
 /// An asynchronous `Client` to make Requests with.
@@ -101,6 +105,33 @@ enum HttpVersionPref {
     #[cfg(feature = "http3")]
     Http3,
     All,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Accepts {
+    #[cfg(feature = "gzip")]
+    gzip: bool,
+    #[cfg(feature = "brotli")]
+    brotli: bool,
+    #[cfg(feature = "zstd")]
+    zstd: bool,
+    #[cfg(feature = "deflate")]
+    deflate: bool,
+}
+
+impl Default for Accepts {
+    fn default() -> Accepts {
+        Accepts {
+            #[cfg(feature = "gzip")]
+            gzip: true,
+            #[cfg(feature = "brotli")]
+            brotli: true,
+            #[cfg(feature = "zstd")]
+            zstd: true,
+            #[cfg(feature = "deflate")]
+            deflate: true,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -985,6 +1016,21 @@ impl ClientBuilder {
         #[cfg(feature = "cookies")]
         let svc = CookieService::new(svc, config.cookie_store.clone());
         let hyper = FollowRedirect::with_policy(svc, redirect_policy.clone());
+        #[cfg(any(
+            feature = "gzip",
+            feature = "brotli",
+            feature = "zstd",
+            feature = "deflate"
+        ))]
+        let hyper = Decompression::new(hyper);
+        #[cfg(feature = "gzip")]
+        let hyper = hyper.gzip(config.accepts.gzip);
+        #[cfg(feature = "brotli")]
+        let hyper = hyper.br(config.accepts.brotli);
+        #[cfg(feature = "zstd")]
+        let hyper = hyper.zstd(config.accepts.zstd);
+        #[cfg(feature = "deflate")]
+        let hyper = hyper.deflate(config.accepts.deflate);
 
         Ok(Client {
             inner: Arc::new(ClientRef {
@@ -1000,7 +1046,23 @@ impl ClientBuilder {
                         let svc = tower::retry::Retry::new(retry_policy, h3_service);
                         #[cfg(feature = "cookies")]
                         let svc = CookieService::new(svc, config.cookie_store);
-                        Some(FollowRedirect::with_policy(svc, redirect_policy))
+                        let svc = FollowRedirect::with_policy(svc, redirect_policy);
+                        #[cfg(any(
+                            feature = "gzip",
+                            feature = "brotli",
+                            feature = "zstd",
+                            feature = "deflate"
+                        ))]
+                        let svc = Decompression::new(svc);
+                        #[cfg(feature = "gzip")]
+                        let svc = svc.gzip(config.accepts.gzip);
+                        #[cfg(feature = "brotli")]
+                        let svc = svc.br(config.accepts.brotli);
+                        #[cfg(feature = "zstd")]
+                        let svc = svc.zstd(config.accepts.zstd);
+                        #[cfg(feature = "deflate")]
+                        let svc = svc.deflate(config.accepts.deflate);
+                        Some(svc)
                     }
                     None => None,
                 },
@@ -2493,14 +2555,6 @@ impl Client {
             }
         }
 
-        let accept_encoding = self.inner.accepts.as_str();
-
-        if let Some(accept_encoding) = accept_encoding {
-            if !headers.contains_key(ACCEPT_ENCODING) && !headers.contains_key(RANGE) {
-                headers.insert(ACCEPT_ENCODING, HeaderValue::from_static(accept_encoding));
-            }
-        }
-
         let uri = match try_uri(&url) {
             Ok(uri) => uri,
             _ => return Pending::new_err(error::url_invalid_uri(url)),
@@ -2785,12 +2839,32 @@ impl Config {
 }
 
 #[cfg(not(feature = "cookies"))]
-type LayeredService<T> =
-    FollowRedirect<tower::retry::Retry<crate::retry::Policy, T>, TowerRedirectPolicy>;
+type MaybeCookieService<T> = T;
+
 #[cfg(feature = "cookies")]
-type LayeredService<T> = FollowRedirect<
-    CookieService<tower::retry::Retry<crate::retry::Policy, T>>,
-    TowerRedirectPolicy,
+type MaybeCookieService<T> = CookieService<T>;
+
+#[cfg(not(any(
+    feature = "gzip",
+    feature = "brotli",
+    feature = "zstd",
+    feature = "deflate"
+)))]
+type MaybeDecompression<T> = T;
+
+#[cfg(any(
+    feature = "gzip",
+    feature = "brotli",
+    feature = "zstd",
+    feature = "deflate"
+))]
+type MaybeDecompression<T> = Decompression<T>;
+
+type LayeredService<T> = MaybeDecompression<
+    FollowRedirect<
+        MaybeCookieService<tower::retry::Retry<crate::retry::Policy, T>>,
+        TowerRedirectPolicy,
+    >,
 >;
 type LayeredFuture<T> = <LayeredService<T> as Service<http::Request<Body>>>::Future;
 
@@ -2956,7 +3030,7 @@ impl Future for PendingRequest {
                 Err(e) => {
                     return Poll::Ready(Err(crate::error::request(e).with_url(self.url.clone())));
                 }
-                Ok(res) => res,
+                Ok(res) => res.map(super::body::boxed),
             },
         };
 
@@ -2973,7 +3047,6 @@ impl Future for PendingRequest {
         let res = Response::new(
             res,
             self.url.clone(),
-            self.client.accepts,
             self.total_timeout.take(),
             self.read_timeout,
         );
