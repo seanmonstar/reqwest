@@ -46,7 +46,7 @@ use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, Url};
 
 use http::header::{
-    Entry, HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, PROXY_AUTHORIZATION, RANGE, USER_AGENT,
+    HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, PROXY_AUTHORIZATION, RANGE, USER_AGENT,
 };
 use http::uri::Scheme;
 use http::Uri;
@@ -1079,9 +1079,7 @@ impl ClientBuilder {
     /// # }
     /// ```
     pub fn default_headers(mut self, headers: HeaderMap) -> ClientBuilder {
-        for (key, value) in headers.iter() {
-            self.config.headers.insert(key, value.clone());
-        }
+        crate::util::replace_headers(&mut self.config.headers, headers);
         self
     }
 
@@ -2487,11 +2485,9 @@ impl Client {
 
         // insert default headers in the request headers
         // without overwriting already appended headers.
-        for (key, value) in &self.inner.headers {
-            if let Entry::Vacant(entry) = headers.entry(key) {
-                entry.insert(value.clone());
-            }
-        }
+        let mut dest = self.inner.headers.clone();
+        crate::util::replace_headers(&mut dest, std::mem::take(&mut headers));
+        std::mem::swap(&mut headers, &mut dest);
 
         let accept_encoding = self.inner.accepts.as_str();
 
