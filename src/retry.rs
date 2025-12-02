@@ -283,10 +283,10 @@ fn is_retryable_error(err: &crate::Error) -> bool {
         return false;
     };
 
-    #[cfg(not(any(feature = "http3", feature = "http2")))]
+    #[cfg(not(any(feature = "http3-no-provider", feature = "http2")))]
     let _err = err;
 
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "http3-no-provider")]
     if let Some(cause) = err.source() {
         if let Some(err) = cause.downcast_ref::<h3::error::ConnectionError>() {
             log::trace!("determining if HTTP/3 error {err} can be retried");
