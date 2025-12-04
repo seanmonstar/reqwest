@@ -1,9 +1,11 @@
 use std::fmt;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use bytes::Bytes;
+use http_body::{Frame, SizeHint};
 use http_body_util::BodyExt;
 use hyper::{HeaderMap, StatusCode, Version};
 use hyper_util::client::legacy::connect::HttpInfo;
@@ -11,6 +13,7 @@ use hyper_util::client::legacy::connect::HttpInfo;
 use serde::de::DeserializeOwned;
 #[cfg(feature = "json")]
 use serde_json;
+use tokio::sync::oneshot::{self, Receiver};
 use tokio::time::Sleep;
 use url::Url;
 
@@ -31,6 +34,7 @@ pub struct Response {
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
+    trailers_rx: Receiver<HeaderMap>,
 }
 
 impl Response {
@@ -42,16 +46,20 @@ impl Response {
         read_timeout: Option<Duration>,
     ) -> Response {
         let (mut parts, body) = res.into_parts();
+        let (body, trailers_rx) = extract_trailers_from_body(body);
+
         let decoder = Decoder::detect(
             &mut parts.headers,
             super::body::response(body, total_timeout, read_timeout),
             accepts,
         );
+
         let res = hyper::Response::from_parts(parts, decoder);
 
         Response {
             res,
             url: Box::new(url),
+            trailers_rx,
         }
     }
 
@@ -424,6 +432,22 @@ impl Response {
         }
     }
 
+    /// Get the response trailers if available.
+    ///
+    /// Trailers are additional headers sent after the response body in HTTP/1.1 chunked
+    /// encoding or HTTP/2 responses. They are typically used for metadata that can only
+    /// be determined after processing the entire response body.
+    #[inline]
+    pub async fn trailers(&mut self) -> crate::Result<Option<HeaderMap>> {
+        match self.trailers_rx.try_recv() {
+            Ok(trailers) => Ok(Some(trailers)),
+            Err(err) => match err {
+                oneshot::error::TryRecvError::Empty => Ok(None),
+                oneshot::error::TryRecvError::Closed => Err(crate::error::body(err)),
+            },
+        }
+    }
+
     // private
 
     // The Response's body is an implementation detail.
@@ -462,6 +486,9 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
 
         let (mut parts, body) = r.into_parts();
         let body: crate::async_impl::body::Body = body.into();
+
+        let (body, trailers_rx) = extract_trailers_from_body(body);
+
         let decoder = Decoder::detect(
             &mut parts.headers,
             ResponseBody::new(body.map_err(Into::into)),
@@ -476,6 +503,7 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
         Response {
             res,
             url: Box::new(url),
+            trailers_rx,
         }
     }
 }
@@ -488,6 +516,90 @@ impl From<Response> for http::Response<Body> {
         let body = Body::wrap(body);
         http::Response::from_parts(parts, body)
     }
+}
+
+pin_project_lite::pin_project! {
+    /// A body wrapper that extracts HTTP trailers while preserving the original size hint.
+    ///
+    /// This wrapper monitors HTTP frames for trailers and sends them through a oneshot
+    /// channel when found, while maintaining the original body's size hint and other
+    /// characteristics to ensure `content_length()` continues to work correctly.
+    ///
+    /// HTTP trailers are additional headers sent after the response body in chunked
+    /// encoding (HTTP/1.1) or HTTP/2 responses. They are useful for metadata that
+    /// can only be determined after processing the entire response body, such as
+    /// checksums or final status information.
+    pub struct TrailerExtractingBody<B> {
+        #[pin]
+        inner: B,
+        trailers_tx: Option<oneshot::Sender<HeaderMap>>,
+    }
+}
+
+impl<B> TrailerExtractingBody<B> {
+    fn new(body: B, trailers_tx: oneshot::Sender<HeaderMap>) -> Self
+    where
+        B: http_body::Body,
+    {
+        Self {
+            inner: body,
+            trailers_tx: Some(trailers_tx),
+        }
+    }
+}
+
+impl<B> http_body::Body for TrailerExtractingBody<B>
+where
+    B: http_body::Body<Data = Bytes>,
+{
+    type Data = Bytes;
+    type Error = B::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        let this = self.project();
+
+        match std::task::ready!(this.inner.poll_frame(cx)) {
+            Some(Ok(mut frame)) => {
+                if let Some(trailers) = frame.trailers_mut() {
+                    if let Some(tx) = this.trailers_tx.take() {
+                        let _ = tx.send(std::mem::take(trailers));
+                    }
+                }
+                Poll::Ready(Some(Ok(frame)))
+            }
+            Some(Err(e)) => Poll::Ready(Some(Err(e))),
+            None => Poll::Ready(None),
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> SizeHint {
+        self.inner.size_hint()
+    }
+
+    #[inline]
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
+    }
+}
+
+fn extract_trailers_from_body<B>(
+    body: B,
+) -> (
+    http_body_util::combinators::BoxBody<Bytes, B::Error>,
+    oneshot::Receiver<HeaderMap>,
+)
+where
+    B: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+{
+    let (trailers_tx, trailers_rx) = oneshot::channel();
+    let wrapper = TrailerExtractingBody::new(body, trailers_tx);
+    let boxed_body = http_body_util::BodyExt::boxed(wrapper);
+
+    (boxed_body, trailers_rx)
 }
 
 #[cfg(test)]
