@@ -364,17 +364,6 @@ pub(crate) fn upgrade<E: Into<BoxError>>(e: E) -> Error {
 
 // io::Error helpers
 
-#[cfg(any(
-    feature = "gzip",
-    feature = "zstd",
-    feature = "brotli",
-    feature = "deflate",
-    feature = "blocking",
-))]
-pub(crate) fn into_io(e: BoxError) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, e)
-}
-
 #[allow(unused)]
 pub(crate) fn decode_io(e: io::Error) -> Error {
     if e.get_ref().map(|r| r.is::<Error>()).unwrap_or(false) {

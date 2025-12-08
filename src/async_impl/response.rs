@@ -15,7 +15,6 @@ use tokio::time::Sleep;
 use url::Url;
 
 use super::body::Body;
-use super::decoder::{Accepts, Decoder};
 use crate::async_impl::body::ResponseBody;
 #[cfg(feature = "cookies")]
 use crate::cookie;
@@ -27,7 +26,7 @@ use mime::Mime;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
-    pub(super) res: hyper::Response<Decoder>,
+    pub(super) res: hyper::Response<ResponseBody>,
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
@@ -37,17 +36,14 @@ impl Response {
     pub(super) fn new(
         res: hyper::Response<ResponseBody>,
         url: Url,
-        accepts: Accepts,
         total_timeout: Option<Pin<Box<Sleep>>>,
         read_timeout: Option<Duration>,
     ) -> Response {
-        let (mut parts, body) = res.into_parts();
-        let decoder = Decoder::detect(
-            &mut parts.headers,
+        let (parts, body) = res.into_parts();
+        let res = hyper::Response::from_parts(
+            parts,
             super::body::response(body, total_timeout, read_timeout),
-            accepts,
         );
-        let res = hyper::Response::from_parts(parts, decoder);
 
         Response {
             res,
@@ -297,6 +293,7 @@ impl Response {
         BodyExt::collect(self.res.into_body())
             .await
             .map(|buf| buf.to_bytes())
+            .map_err(crate::error::decode)
     }
 
     /// Stream a chunk of the response body.
@@ -321,7 +318,7 @@ impl Response {
         // loop to ignore unrecognized frames
         loop {
             if let Some(res) = self.res.body_mut().frame().await {
-                let frame = res?;
+                let frame = res.map_err(crate::error::decode)?;
                 if let Ok(buf) = frame.into_data() {
                     return Ok(Some(buf));
                 }
@@ -357,7 +354,7 @@ impl Response {
     #[cfg(feature = "stream")]
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
-        super::body::DataStream(self.res.into_body())
+        super::body::DataStream(self.res.into_body().map_err(crate::error::decode))
     }
 
     // util methods
@@ -432,7 +429,7 @@ impl Response {
     //
     // This method is just used by the blocking API.
     #[cfg(feature = "blocking")]
-    pub(crate) fn body_mut(&mut self) -> &mut Decoder {
+    pub(crate) fn body_mut(&mut self) -> &mut ResponseBody {
         self.res.body_mut()
     }
 }
@@ -462,17 +459,12 @@ impl<T: Into<Body>> From<http::Response<T>> for Response {
 
         let (mut parts, body) = r.into_parts();
         let body: crate::async_impl::body::Body = body.into();
-        let decoder = Decoder::detect(
-            &mut parts.headers,
-            ResponseBody::new(body.map_err(Into::into)),
-            Accepts::none(),
-        );
         let url = parts
             .extensions
             .remove::<ResponseUrl>()
             .unwrap_or_else(|| ResponseUrl(Url::parse("http://no.url.provided.local").unwrap()));
         let url = url.0;
-        let res = hyper::Response::from_parts(parts, decoder);
+        let res = hyper::Response::from_parts(parts, ResponseBody::new(body.map_err(Into::into)));
         Response {
             res,
             url: Box::new(url),
