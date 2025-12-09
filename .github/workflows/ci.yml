@@ -22,7 +22,8 @@ jobs:
       - features
       - unstable
       - nightly
-      - msrv
+      - msrv_default
+      - msrv_oldest
       - android
       - wasm
       - docs
@@ -74,11 +75,9 @@ jobs:
           - windows / stable-i686-gnu
           - "feat.: default-tls disabled"
           - "feat.: rustls-tls"
-          - "feat.: rustls-tls-manual-roots"
-          - "feat.: rustls-tls-native-roots"
           - "feat.: rustls-tls-no-provider"
           - "feat.: native-tls"
-          - "feat.: default-tls and rustls-tls"
+          - "feat.: default-tls and native-tls"
           - "feat.: rustls-tls and rustls-tls-no-provider"
           - "feat.: cookies"
           - "feat.: blocking"
@@ -92,7 +91,7 @@ jobs:
           - "feat.: multipart"
           - "feat.: stream"
           - "feat.: socks/default-tls"
-          - "feat.: socks/rustls-tls"
+          - "feat.: socks/native-tls"
           - "feat.: hickory-dns"
 
         include:
@@ -134,18 +133,14 @@ jobs:
             features: "--no-default-features"
           - name: "feat.: rustls-tls"
             features: "--no-default-features --features rustls-tls"
-          - name: "feat.: rustls-tls-manual-roots"
-            features: "--no-default-features --features rustls-tls-manual-roots"
-          - name: "feat.: rustls-tls-native-roots"
-            features: "--no-default-features --features rustls-tls-native-roots"
           - name: "feat.: rustls-tls-no-provider"
             features: "--no-default-features --features rustls-tls-no-provider"
           - name: "feat.: native-tls"
             features: "--features native-tls"
           - name: "feat.: rustls-tls and rustls-tls-no-provider"
             features: "--features rustls-tls,rustls-tls-no-provider"
-          - name: "feat.: default-tls and rustls-tls"
-            features: "--features rustls-tls"
+          - name: "feat.: default-tls and native-tls"
+            features: "--features native-tls"
           - name: "feat.: cookies"
             features: "--features cookies"
           - name: "feat.: blocking"
@@ -172,8 +167,8 @@ jobs:
             features: "--features stream"
           - name: "feat.: socks/default-tls"
             features: "--features socks"
-          - name: "feat.: socks/rustls-tls"
-            features: "--features socks,rustls-tls"
+          - name: "feat.: socks/native-tls"
+            features: "--features socks,native-tls"
           - name: "feat.: hickory-dns"
             features: "--features hickory-dns"
 
@@ -241,7 +236,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: check --feature-powerset
-        run: cargo hack --no-dev-deps check --feature-powerset --depth 2 --skip http3,__tls,__rustls,__rustls-ring,__rustls-aws-lc-rs,native-tls-vendored,trust-dns
+        run: cargo hack --no-dev-deps check --feature-powerset --depth 2 --skip http3,__tls,__rustls,__rustls-aws-lc-rs,native-tls-vendored,trust-dns
         env:
           RUSTFLAGS: "-D dead_code -D unused_imports"
 
@@ -313,8 +308,35 @@ jobs:
           cargo check
           cargo check --all-features
 
-  msrv:
-    name: MSRV
+  msrv_default:
+    name: MSRV Default
+    needs: [style]
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve MSRV aware dependencies
+        run: cargo update
+        env:
+          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+
+      # required by rustls-platform-verifier
+      - name: Install rust (1.71.0)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.71.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check
+        run: cargo check
+
+  msrv_oldest:
+    name: MSRV Oldest
     needs: [style]
 
     runs-on: ubuntu-latest
@@ -341,7 +363,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Check
-        run: cargo check
+        run: cargo check --no-default-features --features="http2,charset,native-tls"
 
   android:
     name: Android

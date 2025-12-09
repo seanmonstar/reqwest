@@ -1,32 +1,10 @@
 #![cfg(not(target_arch = "wasm32"))]
-#![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
+#![cfg(not(feature = "rustls-tls-no-provider"))]
 
-#[cfg(all(feature = "__tls", not(feature = "rustls-tls-manual-roots")))]
+#[cfg(all(feature = "__tls"))]
 #[tokio::test]
 async fn test_badssl_modern() {
     let text = reqwest::Client::builder()
-        .no_proxy()
-        .build()
-        .unwrap()
-        .get("https://mozilla-modern.badssl.com/")
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    assert!(text.contains("<title>mozilla-modern.badssl.com</title>"));
-}
-
-#[cfg(any(
-    feature = "rustls-tls-webpki-roots-no-provider",
-    feature = "rustls-tls-native-roots-no-provider"
-))]
-#[tokio::test]
-async fn test_rustls_badssl_modern() {
-    let text = reqwest::Client::builder()
-        .use_rustls_tls()
         .no_proxy()
         .build()
         .unwrap()
@@ -45,7 +23,7 @@ async fn test_rustls_badssl_modern() {
 #[tokio::test]
 async fn test_badssl_self_signed() {
     let text = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
+        .tls_danger_accept_invalid_certs(true)
         .no_proxy()
         .build()
         .unwrap()
@@ -64,7 +42,7 @@ async fn test_badssl_self_signed() {
 #[tokio::test]
 async fn test_badssl_no_built_in_roots() {
     let result = reqwest::Client::builder()
-        .tls_built_in_root_certs(false)
+        .tls_certs_only([])
         .no_proxy()
         .build()
         .unwrap()
@@ -79,7 +57,7 @@ async fn test_badssl_no_built_in_roots() {
 #[tokio::test]
 async fn test_badssl_wrong_host() {
     let text = reqwest::Client::builder()
-        .danger_accept_invalid_hostnames(true)
+        .tls_danger_accept_invalid_hostnames(true)
         .no_proxy()
         .build()
         .unwrap()
@@ -94,7 +72,7 @@ async fn test_badssl_wrong_host() {
     assert!(text.contains("<title>wrong.host.badssl.com</title>"));
 
     let result = reqwest::Client::builder()
-        .danger_accept_invalid_hostnames(true)
+        .tls_danger_accept_invalid_hostnames(true)
         .build()
         .unwrap()
         .get("https://self-signed.badssl.com/")

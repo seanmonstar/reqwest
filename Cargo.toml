@@ -44,20 +44,12 @@ default-tls = ["rustls-tls"]
 
 http2 = ["h2", "hyper/http2", "hyper-util/http2", "hyper-rustls?/http2"]
 
+rustls-tls = ["rustls-tls-no-provider", "__rustls-aws-lc-rs"]
+rustls-tls-no-provider = ["dep:rustls-platform-verifier", "__rustls"]
+
 native-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
 native-tls-alpn = ["native-tls", "native-tls-crate?/alpn", "hyper-tls?/alpn"]
 native-tls-vendored = ["native-tls", "native-tls-crate?/vendored"]
-
-rustls-tls = ["rustls-tls-webpki-roots"]
-rustls-tls-no-provider = ["rustls-tls-manual-roots-no-provider"]
-
-rustls-tls-manual-roots-no-provider = ["__rustls"]
-rustls-tls-webpki-roots-no-provider = ["dep:webpki-roots", "hyper-rustls?/webpki-tokio", "__rustls"]
-rustls-tls-native-roots-no-provider = ["dep:rustls-native-certs", "hyper-rustls?/native-tokio", "__rustls"]
-
-rustls-tls-manual-roots = ["rustls-tls-manual-roots-no-provider", "__rustls-aws-lc-rs"]
-rustls-tls-webpki-roots = ["rustls-tls-webpki-roots-no-provider", "__rustls-aws-lc-rs"]
-rustls-tls-native-roots = ["rustls-tls-native-roots-no-provider", "__rustls-aws-lc-rs"]
 
 blocking = ["dep:futures-channel", "futures-channel?/sink", "dep:futures-util", "futures-util?/io", "futures-util?/sink", "tokio/sync"]
 
@@ -94,7 +86,7 @@ system-proxy = ["hyper-util/client-proxy-system"]
 macos-system-configuration = ["system-proxy"]
 
 # Experimental HTTP/3 client.
-http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
+http3 = ["rustls-tls", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
 
 
 # Internal (PRIVATE!) features used to aid testing.
@@ -106,7 +98,6 @@ __tls = ["dep:rustls-pki-types", "tokio/io-util"]
 # Enables common rustls code.
 # Equivalent to rustls-tls-manual-roots but shorter :)
 __rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls"]
-__rustls-ring = ["hyper-rustls?/ring", "tokio-rustls?/ring", "rustls?/ring", "quinn?/ring"]
 __rustls-aws-lc-rs = ["hyper-rustls?/aws-lc-rs", "tokio-rustls?/aws-lc-rs", "rustls?/aws-lc-rs", "quinn?/aws-lc-rs"]
 
 [dependencies]
@@ -156,6 +147,7 @@ tokio-native-tls = { version = "0.3.0", optional = true }
 hyper-rustls = { version = "0.27.0", default-features = false, optional = true, features = ["http1", "tls12"] }
 rustls = { version = "0.23.4", optional = true, default-features = false, features = ["std", "tls12"] }
 tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["tls12"] }
+rustls-platform-verifier = { version = "0.6", optional = true }
 webpki-roots = { version = "1", optional = true }
 rustls-native-certs = { version = "0.8.0", optional = true }
 

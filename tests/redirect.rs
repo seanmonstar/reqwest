@@ -1,5 +1,5 @@
 #![cfg(not(target_arch = "wasm32"))]
-#![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
+#![cfg(not(feature = "rustls-tls-no-provider"))]
 mod support;
 use http_body_util::BodyExt;
 use reqwest::Body;
@@ -364,8 +364,8 @@ async fn test_redirect_https_only_enforced_gh1312() {
     let url = format!("https://{}/yikes", server.addr());
 
     let res = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .use_rustls_tls()
+        .tls_danger_accept_invalid_certs(true)
+        .tls_backend_rustls()
         .https_only(true)
         .build()
         .expect("client builder")

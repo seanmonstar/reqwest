@@ -1,5 +1,5 @@
 #![cfg(not(target_arch = "wasm32"))]
-#![cfg(not(feature = "rustls-tls-manual-roots-no-provider"))]
+#![cfg(not(feature = "rustls-tls-no-provider"))]
 mod support;
 
 use support::server;
@@ -375,8 +375,8 @@ async fn http2_upgrade() {
 
     let url = format!("https://localhost:{}", server.addr().port());
     let res = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .use_rustls_tls()
+        .tls_danger_accept_invalid_certs(true)
+        .tls_backend_rustls()
         .build()
         .expect("client builder")
         .get(&url)
@@ -443,7 +443,7 @@ fn update_json_content_type_if_set_manually() {
     assert_eq!("application/json", req.headers().get(CONTENT_TYPE).unwrap());
 }
 
-#[cfg(all(feature = "__tls", not(feature = "rustls-tls-manual-roots")))]
+#[cfg(all(feature = "__tls", not(feature = "rustls-tls-no-provider")))]
 #[tokio::test]
 async fn test_tls_info() {
     let resp = reqwest::Client::builder()
