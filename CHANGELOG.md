@@ -1,3 +1,10 @@
+## v0.12.25
+
+- Add `Error::is_upgrade()` to determine if the error was from an HTTP upgrade.
+- Fix sending `Proxy-Authorization` if only username is configured.
+- Fix sending `Proxy-Authorization` to HTTPS proxies when the target is HTTP.
+- Refactor internal decompression handling to use tower-http.
+
 ## v0.12.24
 
 - Refactor cookie handling to an internal middleware.
