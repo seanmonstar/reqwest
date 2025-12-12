@@ -156,7 +156,7 @@ rustls-native-certs = { version = "0.8.0", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.18.0", package = "cookie", optional = true }
-cookie_store = { version = "0.21.0", optional = true }
+cookie_store = { version = "0.22.0", optional = true }
 
 ## compression
 tokio-util = { version = "0.7.9", default-features = false, features = ["codec", "io"], optional = true }
