@@ -1022,7 +1022,13 @@ impl ClientBuilder {
             feature = "zstd",
             feature = "deflate"
         ))]
-        let hyper = Decompression::new(hyper);
+        let hyper = Decompression::new(hyper)
+            // set everything to NO, in case tower-http has it enabled but
+            // reqwest does not. then set to config value if cfg allows.
+            .no_gzip()
+            .no_deflate()
+            .no_br()
+            .no_zstd();
         #[cfg(feature = "gzip")]
         let hyper = hyper.gzip(config.accepts.gzip);
         #[cfg(feature = "brotli")]
