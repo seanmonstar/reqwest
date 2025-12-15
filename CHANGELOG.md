@@ -1,3 +1,7 @@
+## v0.12.26
+
+- Fix sending `Accept-Encoding` header only with values configured with reqwest, regardless of underlying tower-http config.
+
 ## v0.12.25
 
 - Add `Error::is_upgrade()` to determine if the error was from an HTTP upgrade.
