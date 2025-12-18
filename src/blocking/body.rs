@@ -114,6 +114,12 @@ impl Body {
         }
     }
 
+    pub(crate) fn empty() -> Body {
+        Body {
+            kind: Kind::Bytes(Bytes::new()),
+        }
+    }
+
     #[cfg(feature = "multipart")]
     pub(crate) fn len(&self) -> Option<u64> {
         match self.kind {
@@ -163,6 +169,20 @@ impl Kind {
             Kind::Reader(..) => None,
             Kind::Bytes(v) => Some(Kind::Bytes(v.clone())),
         }
+    }
+}
+
+impl Default for Body {
+    #[inline]
+    fn default() -> Body {
+        Body::empty()
+    }
+}
+
+impl From<()> for Body {
+    #[inline]
+    fn from(_: ()) -> Body {
+        Body::empty()
     }
 }
 
@@ -369,4 +389,27 @@ pub(crate) fn read_to_string(mut body: Body) -> io::Result<String> {
         Kind::Bytes(ref mut bytes) => (&**bytes).read_to_string(&mut s),
     }
     .map(|_| s)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Body;
+
+    #[test]
+    fn empty() {
+        let body = Body::empty();
+        assert_eq!(body.as_bytes(), Some(&[] as &[u8]));
+    }
+
+    #[test]
+    fn from_unit() {
+        let body = Body::from(());
+        assert_eq!(body.as_bytes(), Some(&[] as &[u8]));
+    }
+
+    #[test]
+    fn from_vec() {
+        let body = Body::from(vec![1, 2, 3]);
+        assert_eq!(body.as_bytes(), Some(&[1, 2, 3][..]));
+    }
 }
