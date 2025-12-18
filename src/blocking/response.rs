@@ -8,6 +8,7 @@ use std::time::Duration;
 use bytes::Bytes;
 use futures_util::TryStreamExt;
 use http;
+use http_body_util::BodyExt;
 use hyper::header::HeaderMap;
 #[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
@@ -422,7 +423,7 @@ impl Response {
 
             self.body = Some(Box::pin(
                 async_impl::body::Body::wrap(body)
-                    .into_stream()
+                    .into_data_stream()
                     .map_err(crate::error::Error::into_io)
                     .into_async_read(),
             ));
