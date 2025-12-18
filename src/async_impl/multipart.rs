@@ -16,6 +16,7 @@ use tokio::fs::File;
 
 use futures_core::Stream;
 use futures_util::{future, stream, StreamExt};
+use http_body_util::BodyExt;
 
 use super::Body;
 use crate::header::HeaderMap;
@@ -201,7 +202,7 @@ impl Form {
         // then append form data followed by terminating CRLF
         boundary
             .chain(header)
-            .chain(part.value.into_stream())
+            .chain(part.value.into_data_stream())
             .chain(stream::once(future::ready(Ok("\r\n".into()))))
     }
 
@@ -614,7 +615,7 @@ mod tests {
             .enable_all()
             .build()
             .expect("new rt");
-        let body = form.stream().into_stream();
+        let body = form.stream().into_data_stream();
         let s = body.map_ok(|try_c| try_c.to_vec()).try_concat();
 
         let out = rt.block_on(s);
@@ -667,7 +668,7 @@ mod tests {
             .enable_all()
             .build()
             .expect("new rt");
-        let body = form.stream().into_stream();
+        let body = form.stream().into_data_stream();
         let s = body.map(|try_c| try_c.map(|r| r.to_vec())).try_concat();
 
         let out = rt.block_on(s).unwrap();
@@ -699,7 +700,7 @@ mod tests {
             .enable_all()
             .build()
             .expect("new rt");
-        let body = form.stream().into_stream();
+        let body = form.stream().into_data_stream();
         let s = body.map(|try_c| try_c.map(|r| r.to_vec())).try_concat();
 
         let out = rt.block_on(s).unwrap();

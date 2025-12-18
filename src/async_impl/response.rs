@@ -354,7 +354,7 @@ impl Response {
     #[cfg(feature = "stream")]
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
-        super::body::DataStream(self.res.into_body().map_err(crate::error::decode))
+        http_body_util::BodyDataStream::new(self.res.into_body().map_err(crate::error::decode))
     }
 
     // util methods
