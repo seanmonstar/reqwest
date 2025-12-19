@@ -3,7 +3,7 @@
 // This is using the `tokio` runtime. You'll need the following dependency:
 //
 // `tokio = { version = "1", features = ["full"] }`
-#[cfg(feature = "http3")]
+#[cfg(feature = "http3-no-provider")]
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
@@ -40,5 +40,5 @@ async fn main() -> Result<(), reqwest::Error> {
 // for wasm32 target, because tokio isn't compatible with wasm32.
 // If you aren't building for wasm32, you don't need that line.
 // The two lines below avoid the "'main' function not found" error when building for wasm32 target.
-#[cfg(any(target_arch = "wasm32", not(feature = "http3")))]
+#[cfg(any(target_arch = "wasm32", not(feature = "http3-no-provider")))]
 fn main() {}

@@ -1,4 +1,4 @@
-#![cfg(feature = "http3")]
+#![cfg(feature = "http3-no-provider")]
 #![cfg(not(target_arch = "wasm32"))]
 
 mod support;
@@ -43,7 +43,7 @@ async fn find_free_tcp_addr() -> std::net::SocketAddr {
     listener.local_addr().unwrap()
 }
 
-#[cfg(feature = "http3")]
+#[cfg(feature = "http3-no-provider")]
 #[tokio::test]
 async fn http3_test_failed_connection() {
     let addr = find_free_tcp_addr().await;
@@ -106,7 +106,7 @@ async fn http3_test_failed_connection() {
     drop(server);
 }
 
-#[cfg(feature = "http3")]
+#[cfg(feature = "http3-no-provider")]
 #[tokio::test]
 async fn http3_test_concurrent_request() {
     let server = server::Http3::new().build(|req| async move {
@@ -153,7 +153,7 @@ async fn http3_test_concurrent_request() {
     drop(server);
 }
 
-#[cfg(feature = "http3")]
+#[cfg(feature = "http3-no-provider")]
 #[tokio::test]
 async fn http3_test_reconnection() {
     use std::error::Error;
@@ -222,7 +222,7 @@ async fn http3_test_reconnection() {
     drop(server);
 }
 
-#[cfg(all(feature = "http3", feature = "stream"))]
+#[cfg(all(feature = "http3-no-provider", feature = "stream"))]
 #[tokio::test]
 async fn http3_request_stream() {
     use http_body_util::BodyExt;
@@ -256,7 +256,7 @@ async fn http3_request_stream() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
 
-#[cfg(all(feature = "http3", feature = "stream"))]
+#[cfg(all(feature = "http3-no-provider", feature = "stream"))]
 #[tokio::test]
 async fn http3_request_stream_error() {
     use http_body_util::BodyExt;

@@ -91,7 +91,9 @@ system-proxy = ["hyper-util/client-proxy-system"]
 macos-system-configuration = ["system-proxy"]
 
 # Experimental HTTP/3 client.
-http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
+http3-no-provider = ["rustls-tls-manual-roots-no-provider", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
+http3 = ["http3-no-provider", "quinn/rustls-ring"]
+http3-aws-lc-rs = ["http3-no-provider", "quinn/rustls-aws-lc-rs"]
 
 
 # Internal (PRIVATE!) features used to aid testing.
@@ -168,7 +170,7 @@ once_cell = { version = "1.18", optional = true }
 # HTTP/3 experimental support
 h3 = { version = "0.0.8", optional = true }
 h3-quinn = { version = "0.0.10", optional = true }
-quinn = { version = "0.11.1", default-features = false, features = ["rustls", "runtime-tokio"], optional = true }
+quinn = { version = "0.11.1", default-features = false, features = ["runtime-tokio"], optional = true }
 futures-channel = { version = "0.3", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
