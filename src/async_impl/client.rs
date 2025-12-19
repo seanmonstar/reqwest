@@ -19,6 +19,8 @@ use crate::async_impl::h3_client::H3Client;
 use crate::config::{RequestConfig, TotalTimeout};
 #[cfg(unix)]
 use crate::connect::uds::UnixSocketProvider;
+#[cfg(target_os = "windows")]
+use crate::connect::windows_named_pipe::WindowsNamedPipeProvider;
 use crate::connect::{
     sealed::{Conn, Unnameable},
     BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
@@ -265,6 +267,8 @@ struct Config {
 
     #[cfg(unix)]
     unix_socket: Option<Arc<std::path::Path>>,
+    #[cfg(target_os = "windows")]
+    windows_named_pipe: Option<Arc<std::ffi::OsStr>>,
 }
 
 impl Default for ClientBuilder {
@@ -390,6 +394,8 @@ impl ClientBuilder {
                 dns_resolver: None,
                 #[cfg(unix)]
                 unix_socket: None,
+                #[cfg(target_os = "windows")]
+                windows_named_pipe: None,
             },
         }
     }
@@ -924,6 +930,8 @@ impl ClientBuilder {
         // ways TLS can be configured...
         #[cfg(unix)]
         connector_builder.set_unix_socket(config.unix_socket);
+        #[cfg(target_os = "windows")]
+        connector_builder.set_windows_named_pipe(config.windows_named_pipe.clone());
 
         let mut builder =
             hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new());
@@ -1800,6 +1808,26 @@ impl ClientBuilder {
     #[cfg(unix)]
     pub fn unix_socket(mut self, path: impl UnixSocketProvider) -> ClientBuilder {
         self.config.unix_socket = Some(path.reqwest_uds_path(crate::connect::uds::Internal).into());
+        self
+    }
+
+    /// Set that all connections will use this Windows named pipe.
+    ///
+    /// If a request URI uses the `https` scheme, TLS will still be used over
+    /// the Windows named pipe.
+    ///
+    /// # Note
+    ///
+    /// This option is not compatible with any of the TCP or Proxy options.
+    /// Setting this will ignore all those options previously set.
+    ///
+    /// Likewise, DNS resolution will not be done on the domain name.
+    #[cfg(target_os = "windows")]
+    pub fn windows_named_pipe(mut self, pipe: impl WindowsNamedPipeProvider) -> ClientBuilder {
+        self.config.windows_named_pipe = Some(
+            pipe.reqwest_windows_named_pipe_path(crate::connect::windows_named_pipe::Internal)
+                .into(),
+        );
         self
     }
 
