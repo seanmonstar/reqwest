@@ -5,7 +5,7 @@ use http::uri::Scheme;
 use http::Uri;
 use hyper::rt::{Read, ReadBufCursor, Write};
 use hyper_util::client::legacy::connect::{Connected, Connection};
-#[cfg(any(feature = "socks", feature = "__tls", unix))]
+#[cfg(any(feature = "socks", feature = "__tls", unix, target_os = "windows"))]
 use hyper_util::rt::TokioIo;
 #[cfg(feature = "default-tls")]
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
