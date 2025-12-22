@@ -781,16 +781,12 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls(-...)`
     /// feature to be enabled.
     #[cfg(feature = "__tls")]
     #[cfg_attr(
         docsrs,
-        doc(cfg(any(
-            feature = "default-tls",
-            feature = "native-tls",
-            feature = "rustls-tls"
-        )))
+        doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls")))
     )]
     pub fn tls_certs_merge(self, certs: impl IntoIterator<Item = Certificate>) -> ClientBuilder {
         self.with_inner(move |inner| inner.tls_certs_merge(certs))
@@ -806,16 +802,12 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls(-...)`
     /// feature to be enabled.
     #[cfg(feature = "__tls")]
     #[cfg_attr(
         docsrs,
-        doc(cfg(any(
-            feature = "default-tls",
-            feature = "native-tls",
-            feature = "rustls-tls"
-        )))
+        doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls")))
     )]
     pub fn tls_certs_only(self, certs: impl IntoIterator<Item = Certificate>) -> ClientBuilder {
         self.with_inner(move |inner| inner.tls_certs_only(certs))
@@ -839,9 +831,9 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the `rustls-tls(-...)` Cargo feature enabled.
+    /// This requires the `rustls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
     pub fn tls_crls_only(
         self,
         crls: impl IntoIterator<Item = CertificateRevocationList>,
@@ -851,14 +843,14 @@ impl ClientBuilder {
 
     /// Deprecated: use [`ClientBuilder::tls_crls_only()`] instead.
     #[cfg(feature = "__rustls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
     pub fn add_crl(self, crl: CertificateRevocationList) -> ClientBuilder {
         self.with_inner(move |inner| inner.add_crl(crl))
     }
 
     /// Deprecated: use [`ClientBuilder::tls_crls_only()`] instead.
     #[cfg(feature = "__rustls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
     pub fn add_crls(
         self,
         crls: impl IntoIterator<Item = CertificateRevocationList>,
@@ -870,10 +862,10 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `native-tls` or `rustls-tls(-...)` feature to be
+    /// This requires the optional `native-tls` or `rustls(-...)` feature to be
     /// enabled.
     #[cfg(any(feature = "native-tls", feature = "__rustls"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls"))))]
     pub fn identity(self, identity: Identity) -> ClientBuilder {
         self.with_inner(move |inner| inner.identity(identity))
     }
@@ -896,16 +888,12 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls(-...)`
     /// feature to be enabled.
     #[cfg(feature = "__tls")]
     #[cfg_attr(
         docsrs,
-        doc(cfg(any(
-            feature = "default-tls",
-            feature = "native-tls",
-            feature = "rustls-tls"
-        )))
+        doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls")))
     )]
     pub fn tls_danger_accept_invalid_hostnames(
         self,
@@ -934,11 +922,7 @@ impl ClientBuilder {
     #[cfg(feature = "__tls")]
     #[cfg_attr(
         docsrs,
-        doc(cfg(any(
-            feature = "default-tls",
-            feature = "native-tls",
-            feature = "rustls-tls"
-        )))
+        doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls")))
     )]
     pub fn tls_danger_accept_invalid_certs(self, accept_invalid_certs: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.tls_danger_accept_invalid_certs(accept_invalid_certs))
@@ -956,11 +940,7 @@ impl ClientBuilder {
     #[cfg(feature = "__tls")]
     #[cfg_attr(
         docsrs,
-        doc(cfg(any(
-            feature = "default-tls",
-            feature = "native-tls",
-            feature = "rustls-tls"
-        )))
+        doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls")))
     )]
     pub fn tls_sni(self, tls_sni: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.tls_sni(tls_sni))
@@ -979,16 +959,12 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls(-...)`
     /// feature to be enabled.
     #[cfg(feature = "__tls")]
     #[cfg_attr(
         docsrs,
-        doc(cfg(any(
-            feature = "default-tls",
-            feature = "native-tls",
-            feature = "rustls-tls"
-        )))
+        doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls")))
     )]
     pub fn tls_version_min(self, version: tls::Version) -> ClientBuilder {
         self.with_inner(|inner| inner.tls_version_min(version))
@@ -1013,16 +989,12 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls(-...)`
     /// feature to be enabled.
     #[cfg(feature = "__tls")]
     #[cfg_attr(
         docsrs,
-        doc(cfg(any(
-            feature = "default-tls",
-            feature = "native-tls",
-            feature = "rustls-tls"
-        )))
+        doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls")))
     )]
     pub fn tls_version_max(self, version: tls::Version) -> ClientBuilder {
         self.with_inner(|inner| inner.tls_version_max(version))
@@ -1061,16 +1033,16 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `rustls-tls(-...)` feature to be enabled.
+    /// This requires the optional `rustls(-...)` feature to be enabled.
     #[cfg(feature = "__rustls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
     pub fn tls_backend_rustls(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.tls_backend_rustls())
     }
 
     /// Deprecated: use [`ClientBuilder::tls_backend_rustls()`] instead.
     #[cfg(feature = "__rustls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rustls-tls")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
     pub fn use_rustls_tls(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.use_rustls_tls())
     }
@@ -1079,16 +1051,12 @@ impl ClientBuilder {
     ///
     /// # Optional
     ///
-    /// This requires the optional `default-tls`, `native-tls`, or `rustls-tls(-...)`
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls(-...)`
     /// feature to be enabled.
     #[cfg(feature = "__tls")]
     #[cfg_attr(
         docsrs,
-        doc(cfg(any(
-            feature = "default-tls",
-            feature = "native-tls",
-            feature = "rustls-tls"
-        )))
+        doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls")))
     )]
     pub fn tls_info(self, tls_info: bool) -> ClientBuilder {
         self.with_inner(|inner| inner.tls_info(tls_info))
@@ -1111,9 +1079,9 @@ impl ClientBuilder {
     /// # Optional
     ///
     /// This requires one of the optional features `native-tls` or
-    /// `rustls-tls(-...)` to be enabled.
+    /// `rustls(-...)` to be enabled.
     #[cfg(any(feature = "native-tls", feature = "__rustls",))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls-tls"))))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls"))))]
     pub fn tls_backend_preconfigured(self, tls: impl Any) -> ClientBuilder {
         self.with_inner(move |inner| inner.tls_backend_preconfigured(tls))
     }

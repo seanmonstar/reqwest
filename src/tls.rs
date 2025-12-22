@@ -12,7 +12,7 @@
 //! reqwest will pick a TLS backend by default. This is true when the
 //! `default-tls` feature is enabled.
 //!
-//! While it currently uses `rustls-tls`, the feature set is designed to only
+//! While it currently uses `rustls`, the feature set is designed to only
 //! enable configuration that is shared among available backends. This allows
 //! reqwest to change the default to `native-tls` (or another) by configuration.
 //!
@@ -37,7 +37,7 @@
 //!
 //! [native-tls]: https://crates.io/crates/native-tls
 //!
-//! ## rustls-tls
+//! ## rustls
 //!
 //! This backend uses the [rustls][] crate, a TLS library written in Rust.
 //!
@@ -199,7 +199,7 @@ impl Certificate {
     }
 
     /*
-    #[cfg(feature = "rustls-tls")]
+    #[cfg(feature = "rustls")]
     pub fn from_trust_anchor() -> Self {
 
     }
@@ -343,7 +343,7 @@ impl Identity {
     ///
     /// # Optional
     ///
-    /// This requires the `rustls-tls(-...)` Cargo feature enabled.
+    /// This requires the `rustls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
     pub fn from_pem(buf: &[u8]) -> crate::Result<Identity> {
         use rustls_pki_types::{pem::SectionKind, PrivateKeyDer};
@@ -445,7 +445,7 @@ impl CertificateRevocationList {
     ///
     /// # Optional
     ///
-    /// This requires the `rustls-tls(-...)` Cargo feature enabled.
+    /// This requires the `rustls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
     pub fn from_pem(pem: &[u8]) -> crate::Result<CertificateRevocationList> {
         Ok(CertificateRevocationList {
@@ -474,7 +474,7 @@ impl CertificateRevocationList {
     ///
     /// # Optional
     ///
-    /// This requires the `rustls-tls(-...)` Cargo feature enabled.
+    /// This requires the `rustls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
     pub fn from_pem_bundle(pem_bundle: &[u8]) -> crate::Result<Vec<CertificateRevocationList>> {
         rustls_pki_types::CertificateRevocationListDer::pem_slice_iter(pem_bundle)

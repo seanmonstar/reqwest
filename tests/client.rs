@@ -1,5 +1,5 @@
 #![cfg(not(target_arch = "wasm32"))]
-#![cfg(not(feature = "rustls-tls-no-provider"))]
+#![cfg(not(feature = "rustls-no-provider"))]
 mod support;
 
 use support::server;
@@ -443,7 +443,7 @@ fn update_json_content_type_if_set_manually() {
     assert_eq!("application/json", req.headers().get(CONTENT_TYPE).unwrap());
 }
 
-#[cfg(all(feature = "__tls", not(feature = "rustls-tls-no-provider")))]
+#[cfg(all(feature = "__tls", not(feature = "rustls-no-provider")))]
 #[tokio::test]
 async fn test_tls_info() {
     let resp = reqwest::Client::builder()
