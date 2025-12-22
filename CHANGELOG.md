@@ -1,3 +1,7 @@
+## v0.12.27
+
+- Add `ClientBuilder::windows_named_pipe(name)` option that will force all requests over that Windows Named Piper.
+
 ## v0.12.26
 
 - Fix sending `Accept-Encoding` header only with values configured with reqwest, regardless of underlying tower-http config.
