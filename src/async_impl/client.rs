@@ -2205,15 +2205,6 @@ impl ClientBuilder {
         self
     }
 
-    #[doc(hidden)]
-    #[cfg(feature = "hickory-dns")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "hickory-dns")))]
-    #[deprecated(note = "use `hickory_dns` instead")]
-    pub fn trust_dns(mut self, enable: bool) -> ClientBuilder {
-        self.config.hickory_dns = enable;
-        self
-    }
-
     /// Enables the [hickory-dns](hickory_resolver) async resolver instead of a default threadpool
     /// using `getaddrinfo`.
     ///
@@ -2232,12 +2223,6 @@ impl ClientBuilder {
     pub fn hickory_dns(mut self, enable: bool) -> ClientBuilder {
         self.config.hickory_dns = enable;
         self
-    }
-
-    #[doc(hidden)]
-    #[deprecated(note = "use `no_hickory_dns` instead")]
-    pub fn no_trust_dns(self) -> ClientBuilder {
-        self.no_hickory_dns()
     }
 
     /// Disables the hickory-dns async resolver.
