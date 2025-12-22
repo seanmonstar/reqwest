@@ -2284,21 +2284,9 @@ impl ClientBuilder {
 
     /// Override the DNS resolver implementation.
     ///
-    /// Pass an `Arc` wrapping a type implementing `Resolve`.
     /// Overrides for specific names passed to `resolve` and `resolve_to_addrs` will
     /// still be applied on top of this resolver.
-    pub fn dns_resolver<R: Resolve + 'static>(mut self, resolver: Arc<R>) -> ClientBuilder {
-        self.config.dns_resolver = Some(resolver as _);
-        self
-    }
-
-    /// Override the DNS resolver implementation.
-    ///
-    /// Overrides for specific names passed to `resolve` and `resolve_to_addrs` will
-    /// still be applied on top of this resolver.
-    ///
-    /// This method will replace `dns_resolver` in the next breaking change.
-    pub fn dns_resolver2<R>(mut self, resolver: R) -> ClientBuilder
+    pub fn dns_resolver<R>(mut self, resolver: R) -> ClientBuilder
     where
         R: crate::dns::resolve::IntoResolve,
     {
