@@ -40,12 +40,12 @@ features = [
 [features]
 default = ["default-tls", "charset", "http2", "system-proxy"]
 
-default-tls = ["rustls-tls"]
+default-tls = ["rustls"]
 
 http2 = ["h2", "hyper/http2", "hyper-util/http2", "hyper-rustls?/http2"]
 
-rustls-tls = ["rustls-tls-no-provider", "__rustls-aws-lc-rs"]
-rustls-tls-no-provider = ["dep:rustls-platform-verifier", "__rustls"]
+rustls = ["rustls-no-provider", "__rustls-aws-lc-rs"]
+rustls-no-provider = ["dep:rustls-platform-verifier", "__rustls"]
 
 native-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
 native-tls-alpn = ["native-tls", "native-tls-crate?/alpn", "hyper-tls?/alpn"]
@@ -86,7 +86,7 @@ system-proxy = ["hyper-util/client-proxy-system"]
 macos-system-configuration = ["system-proxy"]
 
 # Experimental HTTP/3 client.
-http3 = ["rustls-tls", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
+http3 = ["rustls", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
 
 
 # Internal (PRIVATE!) features used to aid testing.
@@ -96,7 +96,6 @@ http3 = ["rustls-tls", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
 __tls = ["dep:rustls-pki-types", "tokio/io-util"]
 
 # Enables common rustls code.
-# Equivalent to rustls-tls-manual-roots but shorter :)
 __rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls"]
 __rustls-aws-lc-rs = ["hyper-rustls?/aws-lc-rs", "tokio-rustls?/aws-lc-rs", "rustls?/aws-lc-rs", "quinn?/aws-lc-rs"]
 
@@ -143,7 +142,7 @@ hyper-tls = { version = "0.6", optional = true }
 native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls" }
 tokio-native-tls = { version = "0.3.0", optional = true }
 
-# default-tls and rustls-tls
+# default rustls
 hyper-rustls = { version = "0.27.0", default-features = false, optional = true, features = ["http1", "tls12"] }
 rustls = { version = "0.23.4", optional = true, default-features = false, features = ["std", "tls12"] }
 tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["tls12"] }
@@ -253,7 +252,7 @@ path = "examples/simple.rs"
 [[example]]
 name = "h3_simple"
 path = "examples/h3_simple.rs"
-required-features = ["http3", "rustls-tls"]
+required-features = ["http3", "rustls"]
 
 [[example]]
 name = "connect_via_lower_priority_tokio_runtime"

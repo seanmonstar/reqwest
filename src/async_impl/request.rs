@@ -663,7 +663,7 @@ impl TryFrom<Request> for HttpRequest<Body> {
 
 #[cfg(test)]
 mod tests {
-    #![cfg(not(feature = "rustls-tls-no-provider"))]
+    #![cfg(not(feature = "rustls-no-provider"))]
 
     use super::*;
     #[cfg(feature = "query")]
