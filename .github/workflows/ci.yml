@@ -207,6 +207,7 @@ jobs:
         run: cargo update
 
       - uses: Swatinem/rust-cache@v2
+        if: runner.os != 'Windows'
 
       - uses: taiki-e/install-action@v2
         with:
