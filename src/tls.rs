@@ -23,9 +23,9 @@
 //! Since Cargo features are additive, other crates in your dependency tree can
 //! cause the default backend to be enabled. If you wish to ensure your
 //! `Client` uses a specific backend, call the appropriate builder methods
-//! (such as [`use_rustls_tls()`][]).
+//! (such as [`tls_backend_rustls()`][]).
 //!
-//! [`use_rustls_tls()`]: crate::ClientBuilder::use_rustls_tls()
+//! [`tls_backend_rustls()`]: crate::ClientBuilder::tls_backend_rustls()
 //!
 //! ## native-tls
 //!
@@ -197,6 +197,13 @@ impl Certificate {
             .map(|cert_vec| Certificate::from_der(cert_vec))
             .collect::<crate::Result<Vec<Certificate>>>()
     }
+
+    /*
+    #[cfg(feature = "rustls-tls")]
+    pub fn from_trust_anchor() -> Self {
+
+    }
+    */
 
     #[cfg(feature = "native-tls")]
     pub(crate) fn add_to_native_tls(self, tls: &mut native_tls_crate::TlsConnectorBuilder) {
@@ -600,6 +607,36 @@ impl Default for TlsBackend {
             TlsBackend::NativeTls
         }
     }
+}
+
+#[cfg(feature = "__rustls")]
+pub(crate) fn rustls_store(certs: Vec<Certificate>) -> crate::Result<RootCertStore> {
+    let mut root_cert_store = rustls::RootCertStore::empty();
+    for cert in certs {
+        cert.add_to_rustls(&mut root_cert_store)?;
+    }
+    Ok(root_cert_store)
+}
+
+#[cfg(feature = "__rustls")]
+#[cfg(any(unix))] // windows and macos coming soon
+pub(crate) fn rustls_der(
+    certs: Vec<Certificate>,
+) -> crate::Result<Vec<rustls_pki_types::CertificateDer<'static>>> {
+    let mut ders = Vec::with_capacity(certs.len());
+    for cert in certs {
+        match cert.original {
+            Cert::Der(buf) => ders.push(buf.into()),
+            Cert::Pem(buf) => {
+                let mut reader = std::io::Cursor::new(buf);
+                let pems = Certificate::read_pem_certs(&mut reader)?;
+                for c in pems {
+                    ders.push(c.into());
+                }
+            }
+        }
+    }
+    Ok(ders)
 }
 
 #[cfg(feature = "__rustls")]
