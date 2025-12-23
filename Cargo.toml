@@ -58,11 +58,8 @@ charset = ["dep:encoding_rs", "dep:mime"]
 cookies = ["dep:cookie_crate", "dep:cookie_store"]
 
 gzip = ["tower-http/decompression-gzip"]
-
 brotli = ["tower-http/decompression-br"]
-
 zstd = ["tower-http/decompression-zstd"]
-
 deflate = ["tower-http/decompression-deflate"]
 
 query = ["dep:serde", "dep:serde_urlencoded"]
@@ -71,8 +68,6 @@ json = ["dep:serde", "dep:serde_json"]
 
 multipart = ["dep:mime_guess", "dep:futures-util"]
 
-# Deprecated, remove this feature while bumping minor versions.
-trust-dns = []
 hickory-dns = ["dep:hickory-resolver", "dep:once_cell"]
 
 stream = ["tokio/fs", "dep:futures-util", "dep:tokio-util", "dep:wasm-streams"]
@@ -81,9 +76,6 @@ socks = []
 
 # Use the system's proxy configuration.
 system-proxy = ["hyper-util/client-proxy-system"]
-
-# Deprecated, switch to system-proxy.
-macos-system-configuration = ["system-proxy"]
 
 # Experimental HTTP/3 client.
 http3 = ["rustls", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
