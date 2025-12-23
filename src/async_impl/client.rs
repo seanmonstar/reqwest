@@ -745,7 +745,7 @@ impl ClientBuilder {
                             rustls_platform_verifier::Verifier::new(provider.clone())
                                 .map_err(crate::error::builder)?
                         } else {
-                            #[cfg(any(unix))] // windows and macos coming soon
+                            #[cfg(any(unix, target_os = "windows"))] // android not supported
                             {
                                 rustls_platform_verifier::Verifier::new_with_extra_roots(
                                     crate::tls::rustls_der(config.root_certs)?,
@@ -754,7 +754,7 @@ impl ClientBuilder {
                                 .map_err(crate::error::builder)?
                             }
 
-                            #[cfg(not(any(unix)))] // windows and macos coming soon
+                            #[cfg(not(any(unix, target_os = "windows")))] // android not supported
                             return Err(crate::error::builder(
                                 "rustls-platform-verifier could not load extra certs",
                             ));
