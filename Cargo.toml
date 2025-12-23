@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.13.0-dev"
+version = "0.13.0-rc.1"
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -19,8 +19,6 @@ include = [
     "LICENSE-MIT",
     "src/**/*.rs"
 ]
-
-publish = false
 
 [package.metadata.docs.rs]
 all-features = true
