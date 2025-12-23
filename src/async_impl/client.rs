@@ -50,7 +50,7 @@ use http::header::{Entry, HeaderMap, HeaderValue, ACCEPT, PROXY_AUTHORIZATION, U
 use http::uri::Scheme;
 use http::Uri;
 use hyper_util::client::legacy::connect::HttpConnector;
-#[cfg(feature = "default-tls")]
+#[cfg(feature = "native-tls")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
 #[cfg(feature = "http3")]
@@ -524,8 +524,8 @@ impl ClientBuilder {
 
             #[cfg(feature = "__tls")]
             match config.tls {
-                #[cfg(feature = "default-tls")]
-                TlsBackend::Default => {
+                #[cfg(feature = "native-tls")]
+                TlsBackend::NativeTls => {
                     let mut tls = TlsConnector::builder();
 
                     #[cfg(all(feature = "native-tls-alpn", not(feature = "http3")))]
@@ -591,7 +591,7 @@ impl ClientBuilder {
                         tls.max_protocol_version(Some(protocol));
                     }
 
-                    ConnectorBuilder::new_default_tls(
+                    ConnectorBuilder::new_native_tls(
                         http,
                         tls,
                         proxies.clone(),
@@ -615,7 +615,7 @@ impl ClientBuilder {
                     )?
                 }
                 #[cfg(feature = "native-tls")]
-                TlsBackend::BuiltNativeTls(conn) => ConnectorBuilder::from_built_default_tls(
+                TlsBackend::BuiltNativeTls(conn) => ConnectorBuilder::from_built_native_tls(
                     http,
                     conn,
                     proxies.clone(),
@@ -762,13 +762,7 @@ impl ClientBuilder {
                     // If not, we use ring.
                     let provider = rustls::crypto::CryptoProvider::get_default()
                         .map(|arc| arc.clone())
-                        .unwrap_or_else(|| {
-                            #[cfg(not(feature = "__rustls-ring"))]
-                            panic!("No provider set");
-
-                            #[cfg(feature = "__rustls-ring")]
-                            Arc::new(rustls::crypto::ring::default_provider())
-                        });
+                        .unwrap_or_else(default_rustls_crypto_provider);
 
                     // Build TLS config
                     let signature_algorithms = provider.signature_verification_algorithms;
@@ -2116,7 +2110,7 @@ impl ClientBuilder {
     #[cfg(feature = "native-tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "native-tls")))]
     pub fn use_native_tls(mut self) -> ClientBuilder {
-        self.config.tls = TlsBackend::Default;
+        self.config.tls = TlsBackend::NativeTls;
         self
     }
 
@@ -2455,6 +2449,18 @@ impl Default for Client {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[cfg(feature = "__rustls")]
+fn default_rustls_crypto_provider() -> Arc<rustls::crypto::CryptoProvider> {
+    #[cfg(not(any(feature = "__rustls-ring", feature = "__rustls-aws-lc-rs")))]
+    panic!("No provider set");
+
+    #[cfg(all(feature = "__rustls-ring", not(feature = "__rustls-aws-lc-rs")))]
+    return Arc::new(rustls::crypto::ring::default_provider());
+
+    #[cfg(feature = "__rustls-aws-lc-rs")]
+    Arc::new(rustls::crypto::aws_lc_rs::default_provider())
 }
 
 impl Client {
