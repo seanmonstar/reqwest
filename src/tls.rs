@@ -619,7 +619,7 @@ pub(crate) fn rustls_store(certs: Vec<Certificate>) -> crate::Result<RootCertSto
 }
 
 #[cfg(feature = "__rustls")]
-#[cfg(any(unix))] // windows and macos coming soon
+#[cfg(any(unix, target_os = "windows"))] // android not supported
 pub(crate) fn rustls_der(
     certs: Vec<Certificate>,
 ) -> crate::Result<Vec<rustls_pki_types::CertificateDer<'static>>> {
