@@ -351,15 +351,19 @@ fn use_preconfigured_native_tls_default() {
         .expect("preconfigured default tls");
 }
 
-#[cfg(feature = "__rustls")]
+#[cfg(feature = "rustls")] // needs a TLS provider
 #[test]
 fn use_preconfigured_rustls_default() {
     extern crate rustls;
 
     let root_cert_store = rustls::RootCertStore::empty();
-    let tls = rustls::ClientConfig::builder()
-        .with_root_certificates(root_cert_store)
-        .with_no_client_auth();
+    let tls = rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .unwrap()
+    .with_root_certificates(root_cert_store)
+    .with_no_client_auth();
 
     reqwest::Client::builder()
         .use_preconfigured_tls(tls)

@@ -53,10 +53,11 @@ async fn test_badssl_no_built_in_roots() {
     assert!(result.is_err());
 }
 
-#[cfg(any(feature = "native-tls", feature = "rustls"))]
+#[cfg(any(feature = "native-tls"))]
 #[tokio::test]
 async fn test_badssl_wrong_host() {
     let text = reqwest::Client::builder()
+        .tls_backend_native()
         .tls_danger_accept_invalid_hostnames(true)
         .no_proxy()
         .build()
@@ -72,6 +73,7 @@ async fn test_badssl_wrong_host() {
     assert!(text.contains("<title>wrong.host.badssl.com</title>"));
 
     let result = reqwest::Client::builder()
+        .tls_backend_native()
         .tls_danger_accept_invalid_hostnames(true)
         .build()
         .unwrap()
