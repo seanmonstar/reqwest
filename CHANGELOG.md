@@ -1,7 +1,6 @@
-## Unreleased
+## v0.12.28
 
-- Add `query` and `form` features, making `serde` dependency optional.
-- (wasm) Change header parsing to use native array access instead of `serde_json`.
+- Fix compiling on Windows if TLS and SOCKS features are not enabled.
 
 ## v0.12.27
 
