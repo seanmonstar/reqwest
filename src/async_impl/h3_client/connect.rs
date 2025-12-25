@@ -1,6 +1,7 @@
 use crate::async_impl::h3_client::dns::resolve;
 use crate::dns::DynResolver;
 use crate::error::BoxError;
+use crate::tls::ResolveServerName;
 use bytes::Bytes;
 use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
@@ -8,6 +9,7 @@ use http::Uri;
 use hyper_util::client::legacy::connect::dns::Name;
 use quinn::crypto::rustls::QuicClientConfig;
 use quinn::{ClientConfig, Endpoint, TransportConfig};
+use std::borrow::Cow;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -63,6 +65,7 @@ pub(crate) struct H3Connector {
     endpoint: Endpoint,
     client_config: H3ClientConfig,
     local_addr: Option<IpAddr>,
+    server_name_resolver: Option<Arc<dyn ResolveServerName>>,
 }
 
 impl H3Connector {
@@ -72,6 +75,7 @@ impl H3Connector {
         local_addr: Option<IpAddr>,
         transport_config: TransportConfig,
         client_config: H3ClientConfig,
+        server_name_resolver: Option<Arc<dyn ResolveServerName>>,
     ) -> Result<H3Connector, BoxError> {
         let quic_client_config = Arc::new(QuicClientConfig::try_from(tls)?);
         let mut config = ClientConfig::new(quic_client_config);
@@ -92,6 +96,7 @@ impl H3Connector {
             endpoint,
             client_config,
             local_addr,
+            server_name_resolver,
         })
     }
 
@@ -102,6 +107,12 @@ impl H3Connector {
             .trim_start_matches('[')
             .trim_end_matches(']');
         let port = dest.port_u16().unwrap_or(443);
+
+        let tls_host = if let Some(server_name_resolver) = &self.server_name_resolver {
+            Cow::Owned(server_name_resolver.resolve(&dest)?.to_string())
+        } else {
+            Cow::Borrowed(host)
+        };
 
         let addrs = if let Some(addr) = IpAddr::from_str(host).ok() {
             // If the host is already an IP address, skip resolving.
@@ -115,7 +126,7 @@ impl H3Connector {
             addrs.collect()
         };
 
-        self.remote_connect(addrs, host).await
+        self.remote_connect(addrs, &tls_host).await
     }
 
     async fn remote_connect(

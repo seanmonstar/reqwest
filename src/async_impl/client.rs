@@ -39,7 +39,7 @@ use crate::redirect::{self, TowerRedirectPolicy};
 #[cfg(feature = "__rustls")]
 use crate::tls::CertificateRevocationList;
 #[cfg(feature = "__tls")]
-use crate::tls::{self, TlsBackend};
+use crate::tls::{self, ResolveServerName, TlsBackend};
 #[cfg(feature = "__tls")]
 use crate::Certificate;
 #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
@@ -193,6 +193,8 @@ struct Config {
     tls_certs_only: bool,
     #[cfg(feature = "__rustls")]
     crls: Vec<CertificateRevocationList>,
+    #[cfg(feature = "__tls")]
+    server_name_resolver: Option<Arc<dyn ResolveServerName>>,
     #[cfg(feature = "__tls")]
     min_tls_version: Option<tls::Version>,
     #[cfg(feature = "__tls")]
@@ -392,6 +394,8 @@ impl ClientBuilder {
                 unix_socket: None,
                 #[cfg(target_os = "windows")]
                 windows_named_pipe: None,
+                #[cfg(feature = "__tls")]
+                server_name_resolver: None,
             },
         }
     }
@@ -504,6 +508,7 @@ impl ClientBuilder {
                         local_address,
                         transport_config,
                         h3_client_config,
+                        config.server_name_resolver.clone(),
                     );
 
                     match res {
@@ -613,6 +618,7 @@ impl ClientBuilder {
                         config.interface.as_deref(),
                         config.nodelay,
                         config.tls_info,
+                        config.server_name_resolver,
                     )?
                 }
                 #[cfg(feature = "__native-tls")]
@@ -637,6 +643,7 @@ impl ClientBuilder {
                     config.interface.as_deref(),
                     config.nodelay,
                     config.tls_info,
+                    config.server_name_resolver,
                 ),
                 #[cfg(feature = "__rustls")]
                 TlsBackend::BuiltRustls(conn) => {
@@ -681,6 +688,7 @@ impl ClientBuilder {
                         config.interface.as_deref(),
                         config.nodelay,
                         config.tls_info,
+                        config.server_name_resolver,
                     )
                 }
                 #[cfg(feature = "__rustls")]
@@ -885,6 +893,7 @@ impl ClientBuilder {
                         config.interface.as_deref(),
                         config.nodelay,
                         config.tls_info,
+                        config.server_name_resolver,
                     )
                 }
                 #[cfg(any(feature = "__native-tls", feature = "__rustls",))]
@@ -1744,6 +1753,16 @@ impl ClientBuilder {
     ))]
     pub fn interface(mut self, interface: &str) -> ClientBuilder {
         self.config.interface = Some(interface.to_string());
+        self
+    }
+
+    /// Sets the server name resolver.
+    #[cfg(feature = "__tls")]
+    pub fn with_server_name_resolver(
+        mut self,
+        server_name_resolver: Arc<dyn ResolveServerName>,
+    ) -> ClientBuilder {
+        self.config.server_name_resolver = Some(server_name_resolver);
         self
     }
 
