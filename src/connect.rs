@@ -14,6 +14,8 @@ use tower::util::{BoxCloneSyncServiceLayer, MapRequestLayer};
 use tower::{timeout::TimeoutLayer, util::BoxCloneSyncService, ServiceBuilder};
 use tower_service::Service;
 
+#[cfg(feature = "native-tls")]
+use std::borrow::Cow;
 use std::future::Future;
 use std::io::{self, IoSlice};
 use std::net::IpAddr;
@@ -29,6 +31,8 @@ use self::rustls_tls_conn::RustlsTlsConn;
 use crate::dns::DynResolver;
 use crate::error::{cast_to_internal_error, BoxError};
 use crate::proxy::{Intercepted, Matcher as ProxyMatcher};
+#[cfg(feature = "__tls")]
+use crate::tls::ResolveServerName;
 use sealed::{Conn, Unnameable};
 
 pub(crate) type HttpConnector = hyper_util::client::legacy::connect::HttpConnector<DynResolver>;
@@ -244,6 +248,7 @@ where {
         interface: Option<&str>,
         nodelay: bool,
         tls_info: bool,
+        server_name_resolver: Option<Arc<dyn ResolveServerName>>,
     ) -> crate::Result<ConnectorBuilder>
     where
         T: Into<Option<IpAddr>>,
@@ -270,6 +275,7 @@ where {
             interface,
             nodelay,
             tls_info,
+            server_name_resolver,
         ))
     }
 
@@ -295,6 +301,7 @@ where {
         interface: Option<&str>,
         nodelay: bool,
         tls_info: bool,
+        server_name_resolver: Option<Arc<dyn ResolveServerName>>,
     ) -> ConnectorBuilder
     where
         T: Into<Option<IpAddr>>,
@@ -319,7 +326,7 @@ where {
         http.enforce_http(false);
 
         ConnectorBuilder {
-            inner: Inner::NativeTls(http, tls),
+            inner: Inner::NativeTls(http, tls, server_name_resolver),
             proxies,
             verbose: verbose::OFF,
             nodelay,
@@ -357,6 +364,7 @@ where {
         interface: Option<&str>,
         nodelay: bool,
         tls_info: bool,
+        server_name_resolver: Option<Arc<dyn ResolveServerName>>,
     ) -> ConnectorBuilder
     where
         T: Into<Option<IpAddr>>,
@@ -389,11 +397,21 @@ where {
             (Arc::new(tls), Arc::new(tls_proxy))
         };
 
+        let server_name_resolver: Arc<dyn hyper_rustls::ResolveServerName + Send + Sync> =
+            if let Some(server_name_resolver) = server_name_resolver {
+                Arc::new(crate::tls::RustlsResolveServerNameWrapper(
+                    server_name_resolver,
+                ))
+            } else {
+                Arc::new(hyper_rustls::DefaultServerNameResolver::default())
+            };
+
         ConnectorBuilder {
             inner: Inner::RustlsTls {
                 http,
                 tls,
                 tls_proxy,
+                server_name_resolver,
             },
             proxies,
             verbose: verbose::OFF,
@@ -421,7 +439,7 @@ where {
     pub(crate) fn set_keepalive(&mut self, dur: Option<Duration>) {
         match &mut self.inner {
             #[cfg(feature = "native-tls")]
-            Inner::NativeTls(http, _tls) => http.set_keepalive(dur),
+            Inner::NativeTls(http, _tls, _resolver) => http.set_keepalive(dur),
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, .. } => http.set_keepalive(dur),
             #[cfg(not(feature = "__tls"))]
@@ -432,7 +450,7 @@ where {
     pub(crate) fn set_keepalive_interval(&mut self, dur: Option<Duration>) {
         match &mut self.inner {
             #[cfg(feature = "native-tls")]
-            Inner::NativeTls(http, _tls) => http.set_keepalive_interval(dur),
+            Inner::NativeTls(http, _tls, _resolver) => http.set_keepalive_interval(dur),
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, .. } => http.set_keepalive_interval(dur),
             #[cfg(not(feature = "__tls"))]
@@ -443,7 +461,7 @@ where {
     pub(crate) fn set_keepalive_retries(&mut self, retries: Option<u32>) {
         match &mut self.inner {
             #[cfg(feature = "native-tls")]
-            Inner::NativeTls(http, _tls) => http.set_keepalive_retries(retries),
+            Inner::NativeTls(http, _tls, _resolver) => http.set_keepalive_retries(retries),
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, .. } => http.set_keepalive_retries(retries),
             #[cfg(not(feature = "__tls"))]
@@ -460,7 +478,7 @@ where {
     pub(crate) fn set_tcp_user_timeout(&mut self, dur: Option<Duration>) {
         match &mut self.inner {
             #[cfg(feature = "native-tls")]
-            Inner::NativeTls(http, _tls) => http.set_tcp_user_timeout(dur),
+            Inner::NativeTls(http, _tls, _resolver) => http.set_tcp_user_timeout(dur),
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, .. } => http.set_tcp_user_timeout(dur),
             #[cfg(not(feature = "__tls"))]
@@ -510,12 +528,17 @@ enum Inner {
     #[cfg(not(feature = "__tls"))]
     Http(HttpConnector),
     #[cfg(feature = "native-tls")]
-    NativeTls(HttpConnector, TlsConnector),
+    NativeTls(
+        HttpConnector,
+        TlsConnector,
+        Option<Arc<dyn ResolveServerName>>,
+    ),
     #[cfg(any(feature = "__rustls"))]
     RustlsTls {
         http: HttpConnector,
         tls: Arc<rustls::ClientConfig>,
         tls_proxy: Arc<rustls::ClientConfig>,
+        server_name_resolver: Arc<dyn hyper_rustls::ResolveServerName + Send + Sync>,
     },
 }
 
@@ -622,7 +645,7 @@ impl ConnectorService {
                 })
             }
             #[cfg(feature = "native-tls")]
-            Inner::NativeTls(http, tls) => {
+            Inner::NativeTls(http, tls, server_name_resolver) => {
                 let mut http = http.clone();
 
                 // Disable Nagle's algorithm for TLS handshake
@@ -633,9 +656,21 @@ impl ConnectorService {
                 }
 
                 let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
-                let mut http = hyper_tls::HttpsConnector::from((http, tls_connector));
-                let io = http.call(dst).await?;
-
+                let io = if let Some(server_name_resolver) = server_name_resolver {
+                    let servername = server_name_resolver.resolve(&dst)?.to_string();
+                    let is_https = dst.scheme() == Some(&Scheme::HTTPS);
+                    let tcp = http.call(dst).await?;
+                    if is_https {
+                        let stream = TokioIo::new(tcp);
+                        let tls = TokioIo::new(tls_connector.connect(&servername, stream).await?);
+                        hyper_tls::MaybeHttpsStream::Https(tls)
+                    } else {
+                        hyper_tls::MaybeHttpsStream::Http(tcp)
+                    }
+                } else {
+                    let mut http = hyper_tls::HttpsConnector::from((http, tls_connector));
+                    http.call(dst).await?
+                };
                 if let hyper_tls::MaybeHttpsStream::Https(stream) = io {
                     if !self.nodelay {
                         stream
@@ -661,7 +696,12 @@ impl ConnectorService {
                 }
             }
             #[cfg(feature = "__rustls")]
-            Inner::RustlsTls { http, tls, .. } => {
+            Inner::RustlsTls {
+                http,
+                tls,
+                server_name_resolver,
+                ..
+            } => {
                 let mut http = http.clone();
 
                 // Disable Nagle's algorithm for TLS handshake
@@ -671,7 +711,12 @@ impl ConnectorService {
                     http.set_nodelay(true);
                 }
 
-                let mut http = hyper_rustls::HttpsConnector::from((http, tls.clone()));
+                let mut http = hyper_rustls::HttpsConnector::new(
+                    http,
+                    tls.clone(),
+                    false,
+                    server_name_resolver,
+                );
                 let io = http.call(dst).await?;
 
                 if let hyper_rustls::MaybeHttpsStream::Https(stream) = io {
@@ -739,10 +784,25 @@ impl ConnectorService {
                 })
             }
             #[cfg(feature = "native-tls")]
-            Inner::NativeTls(_, tls) => {
+            Inner::NativeTls(_, tls, server_name_resolver) => {
                 let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
-                let mut http = hyper_tls::HttpsConnector::from((svc, tls_connector));
-                let io = http.call(dst).await?;
+                let io = if let Some(server_name_resolver) = server_name_resolver {
+                    let mut svc = svc;
+
+                    let servername = server_name_resolver.resolve(&dst)?.to_string();
+                    let is_https = dst.scheme() == Some(&Scheme::HTTPS);
+                    let tcp = svc.call(dst).await?;
+                    if is_https {
+                        let stream = TokioIo::new(tcp);
+                        let tls = TokioIo::new(tls_connector.connect(&servername, stream).await?);
+                        hyper_tls::MaybeHttpsStream::Https(tls)
+                    } else {
+                        hyper_tls::MaybeHttpsStream::Http(tcp)
+                    }
+                } else {
+                    let mut http = hyper_tls::HttpsConnector::from((svc, tls_connector));
+                    http.call(dst).await?
+                };
 
                 if let hyper_tls::MaybeHttpsStream::Https(stream) = io {
                     Ok(Conn {
@@ -800,7 +860,7 @@ impl ConnectorService {
 
         match &self.inner {
             #[cfg(feature = "native-tls")]
-            Inner::NativeTls(http, tls) => {
+            Inner::NativeTls(http, tls, server_name_resolver) => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     log::trace!("tunneling HTTPS over proxy");
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
@@ -825,8 +885,15 @@ impl ConnectorService {
                     // and we know this is definitely HTTPS.
                     let tunneled = tunnel.call(dst.clone()).await?;
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
+
+                    let tls_host = if let Some(server_name_resolver) = server_name_resolver {
+                        Cow::Owned(server_name_resolver.resolve(&dst)?.to_string())
+                    } else {
+                        Cow::Borrowed(dst.host().ok_or("no host in url")?)
+                    };
+
                     let io = tls_connector
-                        .connect(dst.host().ok_or("no host in url")?, TokioIo::new(tunneled))
+                        .connect(&tls_host, TokioIo::new(tunneled))
                         .await?;
                     return Ok(Conn {
                         inner: self.verbose.wrap(NativeTlsConn {
@@ -842,6 +909,7 @@ impl ConnectorService {
                 http,
                 tls,
                 tls_proxy,
+                ..
             } => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     use rustls_pki_types::ServerName;

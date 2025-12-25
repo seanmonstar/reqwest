@@ -52,10 +52,12 @@ use rustls::{
 };
 use rustls_pki_types::pem::PemObject;
 #[cfg(feature = "__rustls")]
-use rustls_pki_types::{ServerName, UnixTime};
+use rustls_pki_types::UnixTime;
 use std::{
-    fmt,
+    error::Error,
+    fmt::{self, Display},
     io::{BufRead, BufReader},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
 };
 
 /// Represents a X509 certificate revocation list.
@@ -649,7 +651,7 @@ impl ServerCertVerifier for NoVerifier {
         &self,
         _end_entity: &rustls_pki_types::CertificateDer,
         _intermediates: &[rustls_pki_types::CertificateDer],
-        _server_name: &ServerName,
+        _server_name: &rustls_pki_types::ServerName,
         _ocsp_response: &[u8],
         _now: UnixTime,
     ) -> Result<ServerCertVerified, TLSError> {
@@ -719,7 +721,7 @@ impl ServerCertVerifier for IgnoreHostname {
         &self,
         end_entity: &rustls_pki_types::CertificateDer<'_>,
         intermediates: &[rustls_pki_types::CertificateDer<'_>],
-        _server_name: &ServerName<'_>,
+        _server_name: &rustls_pki_types::ServerName<'_>,
         _ocsp_response: &[u8],
         now: UnixTime,
     ) -> Result<ServerCertVerified, TLSError> {
@@ -775,6 +777,129 @@ impl TlsInfo {
 impl std::fmt::Debug for TlsInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("TlsInfo").finish()
+    }
+}
+
+/// Represents a valid server name.
+#[non_exhaustive]
+#[derive(Debug)]
+pub enum ServerName {
+    /// The server is identified by a DNS name. The name is sent in the TLS Server Name Indication (SNI) extension.
+    DnsName(DnsName),
+    /// The server is identified by an IP address. SNI is not done.
+    IpAddress(IpAddr),
+}
+
+/// Represents a valid DNS name.
+#[derive(Debug)]
+pub struct DnsName {
+    #[cfg(feature = "__rustls")]
+    inner: rustls_pki_types::DnsName<'static>,
+    #[cfg(not(feature = "__rustls"))]
+    inner: String,
+}
+
+/// The provided input could not be parsed because it is not a syntactically-valid DNS Name.
+#[derive(Debug)]
+pub struct InvalidDnsNameError;
+
+impl std::fmt::Display for InvalidDnsNameError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str("invalid dns name")
+    }
+}
+
+impl std::error::Error for InvalidDnsNameError {}
+
+impl TryFrom<String> for DnsName {
+    type Error = InvalidDnsNameError;
+
+    #[cfg(feature = "__rustls")]
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        rustls_pki_types::DnsName::try_from(value)
+            .map(|inner| Self { inner })
+            .map_err(|_err| InvalidDnsNameError)
+    }
+
+    #[cfg(not(feature = "__rustls"))]
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        if value.len() > 253
+            || value.split('.').any(|label| {
+                label.is_empty()
+                    || label.starts_with('-')
+                    || label.ends_with('-')
+                    || label.len() >= 63
+                    || label.chars().all(|c| matches!(c, '0'..='9'))
+                    || label
+                        .chars()
+                        .any(|c| !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '-'))
+            })
+        {
+            return Err(InvalidDnsNameError);
+        }
+        Ok(Self { inner: value })
+    }
+}
+
+/// Trait to resolve the server name used in a tls connection.
+pub trait ResolveServerName: Send + Sync + 'static {
+    /// Resolves the server name for a tls connection.
+    fn resolve(&self, uri: &http::Uri) -> Result<ServerName, Box<dyn Error + Send + Sync>>;
+}
+
+#[cfg(feature = "__rustls")]
+impl From<DnsName> for rustls_pki_types::DnsName<'static> {
+    fn from(value: DnsName) -> Self {
+        value.inner
+    }
+}
+
+#[cfg(feature = "__rustls")]
+impl From<ServerName> for rustls_pki_types::ServerName<'static> {
+    fn from(value: ServerName) -> Self {
+        match value {
+            ServerName::DnsName(dns) => rustls_pki_types::ServerName::DnsName(dns.into()),
+            ServerName::IpAddress(ip) => rustls_pki_types::ServerName::IpAddress(ip.into()),
+        }
+    }
+}
+
+#[cfg(feature = "__rustls")]
+#[repr(transparent)]
+pub(crate) struct RustlsResolveServerNameWrapper(pub(crate) std::sync::Arc<dyn ResolveServerName>);
+
+#[cfg(feature = "__rustls")]
+impl hyper_rustls::ResolveServerName for RustlsResolveServerNameWrapper {
+    fn resolve(
+        &self,
+        uri: &http::Uri,
+    ) -> Result<rustls_pki_types::ServerName<'static>, Box<dyn std::error::Error + Sync + Send>>
+    {
+        self.0.resolve(uri).map(From::from)
+    }
+}
+
+impl Display for ServerName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::DnsName(dns) => <DnsName as Display>::fmt(dns, f),
+            Self::IpAddress(IpAddr::V4(ipv4)) => <Ipv4Addr as Display>::fmt(ipv4, f),
+            Self::IpAddress(IpAddr::V6(ipv6)) => <Ipv6Addr as Display>::fmt(ipv6, f),
+        }
+    }
+}
+
+#[cfg(feature = "__rustls")]
+impl Display for DnsName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.inner.as_ref())
+    }
+}
+
+#[cfg(not(feature = "__rustls"))]
+impl Display for DnsName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.inner)
     }
 }
 
