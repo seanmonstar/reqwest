@@ -76,7 +76,7 @@ impl Response {
     }
 
     /// Get the trailers of this `Response`.
-    pub fn trailers(&mut self) -> Option<&HeaderMap> {
+    pub fn trailers(&self) -> Option<&HeaderMap> {
         self.extensions()
             .get::<Trailers>()
             .map(|trailers| &trailers.0)
