@@ -130,6 +130,7 @@ fn test_post() {
 }
 
 #[test]
+#[cfg(feature = "form")]
 fn test_post_form() {
     let server = server::http(move |req| async move {
         assert_eq!(req.method(), "POST");

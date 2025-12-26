@@ -12,10 +12,9 @@
 //! reqwest will pick a TLS backend by default. This is true when the
 //! `default-tls` feature is enabled.
 //!
-//! While it currently uses `native-tls`, the feature set is designed to only
+//! While it currently uses `rustls`, the feature set is designed to only
 //! enable configuration that is shared among available backends. This allows
-//! reqwest to change the default to `rustls` (or another) at some point in the
-//! future.
+//! reqwest to change the default to `native-tls` (or another) by configuration.
 //!
 //! <div class="warning">This feature is enabled by default, and takes
 //! precedence if any other crate enables it. This is true even if you declare
@@ -24,9 +23,9 @@
 //! Since Cargo features are additive, other crates in your dependency tree can
 //! cause the default backend to be enabled. If you wish to ensure your
 //! `Client` uses a specific backend, call the appropriate builder methods
-//! (such as [`use_rustls_tls()`][]).
+//! (such as [`tls_backend_rustls()`][]).
 //!
-//! [`use_rustls_tls()`]: crate::ClientBuilder::use_rustls_tls()
+//! [`tls_backend_rustls()`]: crate::ClientBuilder::tls_backend_rustls()
 //!
 //! ## native-tls
 //!
@@ -38,7 +37,7 @@
 //!
 //! [native-tls]: https://crates.io/crates/native-tls
 //!
-//! ## rustls-tls
+//! ## rustls
 //!
 //! This backend uses the [rustls][] crate, a TLS library written in Rust.
 //!
@@ -69,7 +68,7 @@ pub struct CertificateRevocationList {
 /// Represents a server X509 certificate.
 #[derive(Clone)]
 pub struct Certificate {
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "native-tls")]
     native: native_tls_crate::Certificate,
     #[cfg(feature = "__rustls")]
     original: Cert,
@@ -141,7 +140,7 @@ impl Certificate {
     /// ```
     pub fn from_der(der: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
-            #[cfg(feature = "default-tls")]
+            #[cfg(feature = "native-tls")]
             native: native_tls_crate::Certificate::from_der(der).map_err(crate::error::builder)?,
             #[cfg(feature = "__rustls")]
             original: Cert::Der(der.to_owned()),
@@ -166,7 +165,7 @@ impl Certificate {
     /// ```
     pub fn from_pem(pem: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
-            #[cfg(feature = "default-tls")]
+            #[cfg(feature = "native-tls")]
             native: native_tls_crate::Certificate::from_pem(pem).map_err(crate::error::builder)?,
             #[cfg(feature = "__rustls")]
             original: Cert::Pem(pem.to_owned()),
@@ -199,7 +198,14 @@ impl Certificate {
             .collect::<crate::Result<Vec<Certificate>>>()
     }
 
-    #[cfg(feature = "default-tls")]
+    /*
+    #[cfg(feature = "rustls")]
+    pub fn from_trust_anchor() -> Self {
+
+    }
+    */
+
+    #[cfg(feature = "native-tls")]
     pub(crate) fn add_to_native_tls(self, tls: &mut native_tls_crate::TlsConnectorBuilder) {
         tls.add_root_certificate(self.native);
     }
@@ -337,7 +343,7 @@ impl Identity {
     ///
     /// # Optional
     ///
-    /// This requires the `rustls-tls(-...)` Cargo feature enabled.
+    /// This requires the `rustls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
     pub fn from_pem(buf: &[u8]) -> crate::Result<Identity> {
         use rustls_pki_types::{pem::SectionKind, PrivateKeyDer};
@@ -439,7 +445,7 @@ impl CertificateRevocationList {
     ///
     /// # Optional
     ///
-    /// This requires the `rustls-tls(-...)` Cargo feature enabled.
+    /// This requires the `rustls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
     pub fn from_pem(pem: &[u8]) -> crate::Result<CertificateRevocationList> {
         Ok(CertificateRevocationList {
@@ -468,7 +474,7 @@ impl CertificateRevocationList {
     ///
     /// # Optional
     ///
-    /// This requires the `rustls-tls(-...)` Cargo feature enabled.
+    /// This requires the `rustls(-...)` Cargo feature enabled.
     #[cfg(feature = "__rustls")]
     pub fn from_pem_bundle(pem_bundle: &[u8]) -> crate::Result<Vec<CertificateRevocationList>> {
         rustls_pki_types::CertificateRevocationListDer::pem_slice_iter(pem_bundle)
@@ -529,7 +535,7 @@ impl Version {
     /// Version 1.3 of the TLS protocol.
     pub const TLS_1_3: Version = Version(InnerVersion::Tls1_3);
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "native-tls")]
     pub(crate) fn to_native_tls(self) -> Option<native_tls_crate::Protocol> {
         match self.0 {
             InnerVersion::Tls1_0 => Some(native_tls_crate::Protocol::Tlsv10),
@@ -556,8 +562,8 @@ impl Version {
 pub(crate) enum TlsBackend {
     // This is the default and HTTP/3 feature does not use it so suppress it.
     #[allow(dead_code)]
-    #[cfg(feature = "default-tls")]
-    Default,
+    #[cfg(feature = "native-tls")]
+    NativeTls,
     #[cfg(feature = "native-tls")]
     BuiltNativeTls(native_tls_crate::TlsConnector),
     #[cfg(feature = "__rustls")]
@@ -571,8 +577,8 @@ pub(crate) enum TlsBackend {
 impl fmt::Debug for TlsBackend {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            #[cfg(feature = "default-tls")]
-            TlsBackend::Default => write!(f, "Default"),
+            #[cfg(feature = "native-tls")]
+            TlsBackend::NativeTls => write!(f, "NativeTls"),
             #[cfg(feature = "native-tls")]
             TlsBackend::BuiltNativeTls(_) => write!(f, "BuiltNativeTls"),
             #[cfg(feature = "__rustls")]
@@ -588,19 +594,49 @@ impl fmt::Debug for TlsBackend {
 #[allow(clippy::derivable_impls)]
 impl Default for TlsBackend {
     fn default() -> TlsBackend {
-        #[cfg(all(feature = "default-tls", not(feature = "http3")))]
-        {
-            TlsBackend::Default
-        }
-
         #[cfg(any(
-            all(feature = "__rustls", not(feature = "default-tls")),
+            all(feature = "__rustls", not(feature = "native-tls")),
             feature = "http3"
         ))]
         {
             TlsBackend::Rustls
         }
+
+        #[cfg(all(feature = "native-tls", not(feature = "http3")))]
+        {
+            TlsBackend::NativeTls
+        }
     }
+}
+
+#[cfg(feature = "__rustls")]
+pub(crate) fn rustls_store(certs: Vec<Certificate>) -> crate::Result<RootCertStore> {
+    let mut root_cert_store = rustls::RootCertStore::empty();
+    for cert in certs {
+        cert.add_to_rustls(&mut root_cert_store)?;
+    }
+    Ok(root_cert_store)
+}
+
+#[cfg(feature = "__rustls")]
+#[cfg(any(unix, target_os = "windows"))] // android not supported
+pub(crate) fn rustls_der(
+    certs: Vec<Certificate>,
+) -> crate::Result<Vec<rustls_pki_types::CertificateDer<'static>>> {
+    let mut ders = Vec::with_capacity(certs.len());
+    for cert in certs {
+        match cert.original {
+            Cert::Der(buf) => ders.push(buf.into()),
+            Cert::Pem(buf) => {
+                let mut reader = std::io::Cursor::new(buf);
+                let pems = Certificate::read_pem_certs(&mut reader)?;
+                for c in pems {
+                    ders.push(c.into());
+                }
+            }
+        }
+    }
+    Ok(ders)
 }
 
 #[cfg(feature = "__rustls")]
@@ -746,13 +782,13 @@ impl std::fmt::Debug for TlsInfo {
 mod tests {
     use super::*;
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "native-tls")]
     #[test]
     fn certificate_from_der_invalid() {
         Certificate::from_der(b"not der").unwrap_err();
     }
 
-    #[cfg(feature = "default-tls")]
+    #[cfg(feature = "native-tls")]
     #[test]
     fn certificate_from_pem_invalid() {
         Certificate::from_pem(b"not pem").unwrap_err();
