@@ -53,17 +53,25 @@ static ENDPOINT: tokio::sync::OnceCell<Endpoint> = tokio::sync::OnceCell::const_
 
 #[derive(Clone)]
 pub(crate) struct Iroh3Connector {
-    endpoint: iroh::Endpoint,
     client_config: Iroh3ClientConfig,
 }
 
 impl Iroh3Connector {
-    pub fn new(client_config: Iroh3ClientConfig) -> Result<Iroh3Connector, BoxError> {
-        let endpoint = ENDPOINT.get().unwrap().clone();
-        Ok(Self {
-            endpoint,
-            client_config,
-        })
+    pub fn new(
+        transport_config: iroh::endpoint::TransportConfig,
+        client_config: Iroh3ClientConfig,
+    ) -> Result<Iroh3Connector, BoxError> {
+        tokio::task::spawn(async move {
+            ENDPOINT.get_or_try_init(|| async {
+                let endpoint = Endpoint::builder()
+                    .transport_config(transport_config)
+                    .bind()
+                    .await?;
+                Ok::<Endpoint, BoxError>(endpoint)
+            });
+        });
+
+        Ok(Self { client_config })
     }
 
     pub async fn connect(&mut self, dest: &str) -> Result<Iroh3Connection, BoxError> {
@@ -74,19 +82,23 @@ impl Iroh3Connector {
     }
 
     async fn remote_connect(&mut self, addr: EndpointAddr) -> Result<Iroh3Connection, BoxError> {
-        match self.endpoint.connect(addr, b"iroh+h3").await {
-            Ok(conn) => {
-                let quinn_conn = Connection::new(conn);
-                let mut h3_client_builder = h3::client::builder();
-                if let Some(max_field_section_size) = self.client_config.max_field_section_size {
-                    h3_client_builder.max_field_section_size(max_field_section_size);
+        match ENDPOINT.get() {
+            Some(endpoint) => match endpoint.connect(addr, b"iroh+h3").await {
+                Ok(conn) => {
+                    let quinn_conn = Connection::new(conn);
+                    let mut h3_client_builder = h3::client::builder();
+                    if let Some(max_field_section_size) = self.client_config.max_field_section_size
+                    {
+                        h3_client_builder.max_field_section_size(max_field_section_size);
+                    }
+                    if let Some(send_grease) = self.client_config.send_grease {
+                        h3_client_builder.send_grease(send_grease);
+                    }
+                    return Ok(h3_client_builder.build(quinn_conn).await?);
                 }
-                if let Some(send_grease) = self.client_config.send_grease {
-                    h3_client_builder.send_grease(send_grease);
-                }
-                return Ok(h3_client_builder.build(quinn_conn).await?);
-            }
-            Err(e) => Err(e.into()),
+                Err(e) => Err(e.into()),
+            },
+            None => Err("endpoint not initialized".into()),
         }
     }
 }

@@ -53,6 +53,8 @@ use http::header::{Entry, HeaderMap, HeaderValue, ACCEPT, PROXY_AUTHORIZATION, U
 use http::uri::Scheme;
 use http::Uri;
 use hyper_util::client::legacy::connect::HttpConnector;
+#[cfg(feature = "iroh-h3")]
+use iroh::endpoint::VarInt;
 #[cfg(feature = "native-tls")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
@@ -247,15 +249,15 @@ struct Config {
     https_only: bool,
     #[cfg(feature = "http3")]
     tls_enable_early_data: bool,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "h3")]
     quic_max_idle_timeout: Option<Duration>,
-    #[cfg(feature = "http3")]
-    quic_stream_receive_window: Option<VarInt>,
-    #[cfg(feature = "http3")]
-    quic_receive_window: Option<VarInt>,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "h3")]
+    quic_stream_receive_window: Option<u64>,
+    #[cfg(feature = "h3")]
+    quic_receive_window: Option<u64>,
+    #[cfg(feature = "h3")]
     quic_send_window: Option<u64>,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "h3")]
     quic_congestion_bbr: bool,
     #[cfg(feature = "h3")]
     h3_max_field_section_size: Option<u64>,
@@ -374,15 +376,15 @@ impl ClientBuilder {
                 dns_overrides: HashMap::new(),
                 #[cfg(feature = "http3")]
                 tls_enable_early_data: false,
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "h3")]
                 quic_max_idle_timeout: None,
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "h3")]
                 quic_stream_receive_window: None,
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "h3")]
                 quic_receive_window: None,
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "h3")]
                 quic_send_window: None,
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "h3")]
                 quic_congestion_bbr: false,
                 #[cfg(feature = "h3")]
                 h3_max_field_section_size: None,
@@ -522,7 +524,38 @@ impl ClientBuilder {
                     }
                 };
 
-            let build_iroh3_connector = |h3_max_field_section_size, h3_send_grease| {
+            let build_iroh3_connector = |quic_max_idle_timeout: Option<Duration>,
+                                         quic_stream_receive_window,
+                                         quic_receive_window,
+                                         quic_send_window,
+                                         quic_congestion_bbr,
+                                         h3_max_field_section_size,
+                                         h3_send_grease| {
+                let mut transport_config = iroh::endpoint::TransportConfig::default();
+                transport_config.keep_alive_interval(Some(Duration::from_secs(1)));
+                if let Some(max_idle_timeout) = quic_max_idle_timeout {
+                    transport_config.max_idle_timeout(Some(
+                        max_idle_timeout.try_into().map_err(error::builder)?,
+                    ));
+                }
+
+                if let Some(stream_receive_window) = quic_stream_receive_window {
+                    transport_config.stream_receive_window(stream_receive_window);
+                }
+
+                if let Some(receive_window) = quic_receive_window {
+                    transport_config.receive_window(VarInt::from(receive_window));
+                }
+
+                if let Some(send_window) = quic_send_window {
+                    transport_config.send_window(VarInt::from(send_window));
+                }
+
+                if quic_congestion_bbr {
+                    // BbrConfig from iroh-quinn-proto is not compatible with iroh::endpoint::ControllerFactory
+                    // Skip setting congestion controller for now to avoid version mismatch
+                }
+
                 let mut h3_client_config = Iroh3ClientConfig::default();
 
                 if let Some(max_field_section_size) = h3_max_field_section_size {
@@ -533,7 +566,7 @@ impl ClientBuilder {
                     h3_client_config.send_grease = Some(send_grease);
                 }
 
-                let res = Iroh3Connector::new(h3_client_config);
+                let res = Iroh3Connector::new(transport_config, h3_client_config);
 
                 match res {
                     Ok(connector) => Ok(Some(connector)),
@@ -868,6 +901,11 @@ impl ClientBuilder {
                     #[cfg(feature = "iroh-h3")]
                     {
                         iroh3_connector = build_iroh3_connector(
+                            config.quic_max_idle_timeout,
+                            config.quic_stream_receive_window,
+                            config.quic_receive_window,
+                            config.quic_send_window,
+                            config.quic_congestion_bbr,
                             config.h3_max_field_section_size,
                             config.h3_send_grease,
                         )?;
