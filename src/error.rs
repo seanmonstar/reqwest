@@ -76,6 +76,13 @@ impl Error {
         self
     }
 
+    pub(crate) fn if_no_url(mut self, f: impl FnOnce() -> Url) -> Self {
+        if self.inner.url.is_none() {
+            self.inner.url = Some(f());
+        }
+        self
+    }
+
     /// Strip the related url from this error (if, for example, it contains
     /// sensitive information)
     pub fn without_url(mut self) -> Self {
@@ -112,6 +119,12 @@ impl Error {
         while let Some(err) = source {
             if err.is::<TimedOut>() {
                 return true;
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(hyper_err) = err.downcast_ref::<hyper::Error>() {
+                if hyper_err.is_timeout() {
+                    return true;
+                }
             }
             if let Some(io) = err.downcast_ref::<io::Error>() {
                 if io.kind() == io::ErrorKind::TimedOut {
@@ -166,6 +179,11 @@ impl Error {
             Kind::Status(code, _) => Some(code),
             _ => None,
         }
+    }
+
+    /// Returns true if the error is related to a protocol upgrade request
+    pub fn is_upgrade(&self) -> bool {
+        matches!(self.inner.kind, Kind::Upgrade)
     }
 
     // private
@@ -346,17 +364,6 @@ pub(crate) fn upgrade<E: Into<BoxError>>(e: E) -> Error {
 
 // io::Error helpers
 
-#[cfg(any(
-    feature = "gzip",
-    feature = "zstd",
-    feature = "brotli",
-    feature = "deflate",
-    feature = "blocking",
-))]
-pub(crate) fn into_io(e: BoxError) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, e)
-}
-
 #[allow(unused)]
 pub(crate) fn decode_io(e: io::Error) -> Error {
     if e.get_ref().map(|r| r.is::<Error>()).unwrap_or(false) {
@@ -446,7 +453,9 @@ mod tests {
         let err = super::request(super::TimedOut);
         assert!(err.is_timeout());
 
-        let io = io::Error::new(io::ErrorKind::Other, err);
+        // todo: test `hyper::Error::is_timeout` when we can easily construct one
+
+        let io = io::Error::from(io::ErrorKind::TimedOut);
         let nested = super::request(io);
         assert!(nested.is_timeout());
     }

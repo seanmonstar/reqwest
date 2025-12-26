@@ -93,7 +93,7 @@ where
 // ================================
 //
 // The following sections are all configuration types
-// provided by reqwets.
+// provided by reqwest.
 //
 // To add a new config:
 //
@@ -103,8 +103,8 @@ where
 // ================================
 
 #[derive(Clone, Copy)]
-pub(crate) struct RequestTimeout;
+pub(crate) struct TotalTimeout;
 
-impl RequestConfigValue for RequestTimeout {
+impl RequestConfigValue for TotalTimeout {
     type Value = Duration;
 }

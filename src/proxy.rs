@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
 
+use http::uri::Scheme;
 use http::{header::HeaderValue, HeaderMap, Uri};
 use hyper_util::client::proxy::matcher;
 
@@ -123,7 +124,15 @@ pub trait IntoProxy {
 impl<S: IntoUrl> IntoProxy for S {
     fn into_proxy(self) -> crate::Result<Url> {
         match self.as_str().into_url() {
-            Ok(ok) => Ok(ok),
+            Ok(mut url) => {
+                // If the scheme is a SOCKS protocol and no port is specified, set the default
+                if url.port().is_none()
+                    && matches!(url.scheme(), "socks4" | "socks4a" | "socks5" | "socks5h")
+                {
+                    let _ = url.set_port(Some(1080));
+                }
+                Ok(url)
+            }
             Err(e) => {
                 let mut presumed_to_have_scheme = true;
                 let mut source = e.source();
@@ -444,11 +453,12 @@ impl Proxy {
 }
 
 fn cache_maybe_has_http_auth(url: &Url, extra: &Option<HeaderValue>) -> bool {
-    url.scheme() == "http" && (url.password().is_some() || extra.is_some())
+    (url.scheme() == "http" || url.scheme() == "https")
+        && (url.username().len() > 0 || url.password().is_some() || extra.is_some())
 }
 
 fn cache_maybe_has_http_custom_headers(url: &Url, extra: &Option<HeaderMap>) -> bool {
-    url.scheme() == "http" && extra.is_some()
+    (url.scheme() == "http" || url.scheme() == "https") && extra.is_some()
 }
 
 impl fmt::Debug for Proxy {
@@ -542,7 +552,8 @@ impl Matcher {
 
     pub(crate) fn http_non_tunnel_basic_auth(&self, dst: &Uri) -> Option<HeaderValue> {
         if let Some(proxy) = self.intercept(dst) {
-            if proxy.uri().scheme_str() == Some("http") {
+            let scheme = proxy.uri().scheme();
+            if scheme == Some(&Scheme::HTTP) || scheme == Some(&Scheme::HTTPS) {
                 return proxy.basic_auth().cloned();
             }
         }
@@ -556,7 +567,8 @@ impl Matcher {
 
     pub(crate) fn http_non_tunnel_custom_headers(&self, dst: &Uri) -> Option<HeaderMap> {
         if let Some(proxy) = self.intercept(dst) {
-            if proxy.uri().scheme_str() == Some("http") {
+            let scheme = proxy.uri().scheme();
+            if scheme == Some(&Scheme::HTTP) || scheme == Some(&Scheme::HTTPS) {
                 return proxy.custom_headers().cloned();
             }
         }
@@ -903,11 +915,38 @@ mod tests {
         let m = Proxy::all("https://letme:in@yo.local")
             .unwrap()
             .into_matcher();
-        assert!(!m.maybe_has_http_auth(), "https always tunnels");
+        assert!(m.maybe_has_http_auth(), "https forwards");
 
         let m = Proxy::all("http://letme:in@yo.local")
             .unwrap()
             .into_matcher();
         assert!(m.maybe_has_http_auth(), "http forwards");
+
+        let m = Proxy::all("http://:in@yo.local").unwrap().into_matcher();
+        assert!(m.maybe_has_http_auth(), "http forwards with empty username");
+
+        let m = Proxy::all("http://letme:@yo.local").unwrap().into_matcher();
+        assert!(m.maybe_has_http_auth(), "http forwards with empty password");
+    }
+
+    #[test]
+    fn test_socks_proxy_default_port() {
+        {
+            let m = Proxy::all("socks5://example.com").unwrap().into_matcher();
+
+            let http = "http://hyper.rs";
+            let https = "https://hyper.rs";
+
+            assert_eq!(intercepted_uri(&m, http).port_u16(), Some(1080));
+            assert_eq!(intercepted_uri(&m, https).port_u16(), Some(1080));
+
+            // custom port
+            let m = Proxy::all("socks5://example.com:1234")
+                .unwrap()
+                .into_matcher();
+
+            assert_eq!(intercepted_uri(&m, http).port_u16(), Some(1234));
+            assert_eq!(intercepted_uri(&m, https).port_u16(), Some(1234));
+        }
     }
 }

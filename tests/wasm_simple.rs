@@ -28,7 +28,7 @@ async fn simple_example() {
 async fn request_with_timeout() {
     let client = reqwest::Client::new();
     let err = client
-        .get("https://hyper.rs")
+        .get("https://hyper.rs/not-cached")
         .timeout(Duration::from_millis(1))
         .send()
         .await

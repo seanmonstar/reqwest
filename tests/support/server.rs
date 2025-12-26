@@ -11,6 +11,9 @@ use tokio::net::TcpStream;
 use tokio::runtime;
 use tokio::sync::oneshot;
 
+#[cfg(feature = "http3")]
+static CRYPTO_PROVIDER_INSTALLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
 pub struct Server {
     addr: net::SocketAddr,
     panic_rx: std_mpsc::Receiver<()>,
@@ -56,15 +59,20 @@ where
     F: Fn(http::Request<hyper::body::Incoming>) -> Fut + Clone + Send + 'static,
     Fut: Future<Output = http::Response<reqwest::Body>> + Send + 'static,
 {
-    http_with_config(func, |_builder| {})
+    let infall = move |req| {
+        let fut = func(req);
+        async move { Ok::<_, Infallible>(fut.await) }
+    };
+    http_with_config(infall, |_builder| {})
 }
 
 type Builder = hyper_util::server::conn::auto::Builder<hyper_util::rt::TokioExecutor>;
 
-pub fn http_with_config<F1, Fut, F2, Bu>(func: F1, apply_config: F2) -> Server
+pub fn http_with_config<F1, Fut, E, F2, Bu>(func: F1, apply_config: F2) -> Server
 where
     F1: Fn(http::Request<hyper::body::Incoming>) -> Fut + Clone + Send + 'static,
-    Fut: Future<Output = http::Response<reqwest::Body>> + Send + 'static,
+    Fut: Future<Output = Result<http::Response<reqwest::Body>, E>> + Send + 'static,
+    E: Into<Box<dyn std::error::Error + Send + Sync>>,
     F2: FnOnce(&mut Builder) -> Bu + Send + 'static,
 {
     // Spawn new runtime in thread to prevent reactor execution context conflict
@@ -107,10 +115,7 @@ where
                             accepted = listener.accept() => {
                                 let (io, _) = accepted.expect("accepted");
                                 let func = func.clone();
-                                let svc = hyper::service::service_fn(move |req| {
-                                    let fut = func(req);
-                                    async move { Ok::<_, Infallible>(fut.await) }
-                                });
+                                let svc = hyper::service::service_fn(func);
                                 let builder = builder.clone();
                                 let events_tx = events_tx.clone();
                                 let watcher = graceful.watcher();
@@ -193,6 +198,8 @@ impl Http3 {
 
             let cert = std::fs::read("tests/support/server.cert").unwrap().into();
             let key = std::fs::read("tests/support/server.key").unwrap().try_into().unwrap();
+
+            CRYPTO_PROVIDER_INSTALLED.get_or_init(install_default_crypto_provider);
 
             let mut tls_config = rustls::ServerConfig::builder()
                 .with_no_client_auth()
@@ -281,6 +288,24 @@ impl Http3 {
         .join()
         .unwrap()
     }
+}
+
+#[cfg(feature = "http3")]
+fn install_default_crypto_provider() -> bool {
+    #[cfg(not(any(feature = "__rustls-ring", feature = "__rustls-aws-lc-rs")))]
+    panic!("No provider set");
+
+    #[cfg(all(feature = "__rustls-ring", not(feature = "__rustls-aws-lc-rs")))]
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("failed to install the default Ring TLS provider");
+
+    #[cfg(feature = "__rustls-aws-lc-rs")]
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("failed to install the default TLS provider");
+
+    true
 }
 
 pub fn low_level_with_response<F>(do_response: F) -> Server

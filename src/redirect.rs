@@ -346,7 +346,7 @@ impl TowerPolicy<async_impl::body::Body, crate::Error> for TowerRedirectPolicy {
         };
     }
 
-    // This is must implemented to make 307 and 308 redirects work
+    // This must be implemented to make 307 and 308 redirects work
     fn clone_body(&self, body: &async_impl::body::Body) -> Option<async_impl::body::Body> {
         body.try_clone()
     }

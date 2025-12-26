@@ -37,6 +37,14 @@ pub trait Resolve: Send + Sync {
 #[derive(Debug)]
 pub struct Name(pub(super) HyperName);
 
+/// A more general trait implemented for types implementing `Resolve`.
+///
+/// Unnameable, only exported to aid seeing what implements this.
+pub trait IntoResolve {
+    #[doc(hidden)]
+    fn into_resolve(self) -> Arc<dyn Resolve>;
+}
+
 impl Name {
     /// View the name as a string.
     pub fn as_str(&self) -> &str {
@@ -83,7 +91,7 @@ impl DynResolver {
             .port_u16()
             .unwrap_or_else(|| match target.scheme_str() {
                 Some("https") => 443,
-                Some("socks4") | Some("socks4h") | Some("socks5") | Some("socks5h") => 1080,
+                Some("socks4") | Some("socks4a") | Some("socks5") | Some("socks5h") => 1080,
                 _ => 80,
             });
 
@@ -140,6 +148,30 @@ impl Resolve for DnsResolverWithOverrides {
             }
             None => self.dns_resolver.resolve(name),
         }
+    }
+}
+
+impl IntoResolve for Arc<dyn Resolve> {
+    fn into_resolve(self) -> Arc<dyn Resolve> {
+        self
+    }
+}
+
+impl<R> IntoResolve for Arc<R>
+where
+    R: Resolve + 'static,
+{
+    fn into_resolve(self) -> Arc<dyn Resolve> {
+        self
+    }
+}
+
+impl<R> IntoResolve for R
+where
+    R: Resolve + 'static,
+{
+    fn into_resolve(self) -> Arc<dyn Resolve> {
+        Arc::new(self)
     }
 }
 
