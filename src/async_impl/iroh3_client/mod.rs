@@ -1,6 +1,5 @@
 pub mod connect;
 pub mod connection;
-// pub mod endpoint;
 pub mod pool;
 
 use crate::async_impl::body::ResponseBody;

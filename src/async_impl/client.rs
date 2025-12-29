@@ -53,14 +53,12 @@ use http::header::{Entry, HeaderMap, HeaderValue, ACCEPT, PROXY_AUTHORIZATION, U
 use http::uri::Scheme;
 use http::Uri;
 use hyper_util::client::legacy::connect::HttpConnector;
-#[cfg(feature = "iroh-h3")]
-use iroh::endpoint::VarInt;
 #[cfg(feature = "native-tls")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
 #[cfg(feature = "http3")]
 use quinn::TransportConfig;
-#[cfg(feature = "http3")]
+#[cfg(feature = "h3")]
 use quinn::VarInt;
 use tokio::time::Sleep;
 use tower::util::BoxCloneSyncServiceLayer;
@@ -252,15 +250,15 @@ struct Config {
     #[cfg(feature = "h3")]
     quic_max_idle_timeout: Option<Duration>,
     #[cfg(feature = "h3")]
-    quic_stream_receive_window: Option<u64>,
+    quic_stream_receive_window: Option<VarInt>,
     #[cfg(feature = "h3")]
-    quic_receive_window: Option<u64>,
+    quic_receive_window: Option<VarInt>,
     #[cfg(feature = "h3")]
-    quic_send_window: Option<u64>,
+    quic_send_window: Option<VarInt>,
     #[cfg(feature = "h3")]
     quic_congestion_bbr: bool,
     #[cfg(feature = "h3")]
-    h3_max_field_section_size: Option<u64>,
+    h3_max_field_section_size: Option<VarInt>,
     #[cfg(feature = "h3")]
     h3_send_grease: Option<bool>,
     #[cfg(feature = "iroh-h3")]
@@ -544,16 +542,16 @@ impl ClientBuilder {
                 }
 
                 if let Some(receive_window) = quic_receive_window {
-                    transport_config.receive_window(VarInt::from(receive_window));
+                    transport_config.receive_window(receive_window);
                 }
 
                 if let Some(send_window) = quic_send_window {
-                    transport_config.send_window(VarInt::from(send_window));
+                    transport_config.send_window(send_window);
                 }
 
                 if quic_congestion_bbr {
-                    // BbrConfig from iroh-quinn-proto is not compatible with iroh::endpoint::ControllerFactory
-                    // Skip setting congestion controller for now to avoid version mismatch
+                    let factory = Arc::new(quinn::congestion::BbrConfig::default());
+                    transport_config.congestion_controller_factory(factory);
                 }
 
                 let mut h3_client_config = Iroh3ClientConfig::default();
