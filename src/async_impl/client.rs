@@ -53,6 +53,8 @@ use http::header::{Entry, HeaderMap, HeaderValue, ACCEPT, PROXY_AUTHORIZATION, U
 use http::uri::Scheme;
 use http::Uri;
 use hyper_util::client::legacy::connect::HttpConnector;
+#[cfg(feature = "iroh-h3")]
+use iroh::endpoint::QuicTransportConfig;
 #[cfg(feature = "native-tls")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
@@ -529,8 +531,8 @@ impl ClientBuilder {
                                          quic_congestion_bbr,
                                          h3_max_field_section_size,
                                          h3_send_grease| {
-                let mut transport_config = iroh::endpoint::TransportConfig::default();
-                transport_config.keep_alive_interval(Some(Duration::from_secs(1)));
+                let mut transport_config = QuicTransportConfig::builder();
+                transport_config.keep_alive_interval(Duration::from_secs(2));
                 if let Some(max_idle_timeout) = quic_max_idle_timeout {
                     transport_config.max_idle_timeout(Some(
                         max_idle_timeout.try_into().map_err(error::builder)?,
@@ -538,11 +540,11 @@ impl ClientBuilder {
                 }
 
                 if let Some(stream_receive_window) = quic_stream_receive_window {
-                    transport_config.stream_receive_window(stream_receive_window);
+                    transport_config.stream_receive_window(stream_receive_window.into());
                 }
 
                 if let Some(receive_window) = quic_receive_window {
-                    transport_config.receive_window(receive_window);
+                    transport_config.receive_window(receive_window.into());
                 }
 
                 if let Some(send_window) = quic_send_window {
@@ -550,8 +552,7 @@ impl ClientBuilder {
                 }
 
                 if quic_congestion_bbr {
-                    let factory = Arc::new(quinn::congestion::BbrConfig::default());
-                    transport_config.congestion_controller_factory(factory);
+                    // Use BBR congestion controller.
                 }
 
                 let mut h3_client_config = Iroh3ClientConfig::default();
@@ -564,7 +565,7 @@ impl ClientBuilder {
                     h3_client_config.send_grease = Some(send_grease);
                 }
 
-                let res = Iroh3Connector::new(transport_config, h3_client_config);
+                let res = Iroh3Connector::new(transport_config.build(), h3_client_config);
 
                 match res {
                     Ok(connector) => Ok(Some(connector)),

@@ -1,3 +1,5 @@
+#![cfg(feature = "iroh-h3")]
+
 pub mod connect;
 pub mod connection;
 pub mod pool;

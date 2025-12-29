@@ -1,7 +1,7 @@
 use crate::error::BoxError;
 use bytes::Bytes;
 use h3::client::SendRequest;
-use iroh::{Endpoint, EndpointAddr};
+use iroh::{endpoint::QuicTransportConfig, Endpoint, EndpointAddr};
 use iroh_tickets::endpoint::EndpointTicket;
 use std::str::FromStr;
 
@@ -58,7 +58,7 @@ pub(crate) struct Iroh3Connector {
 
 impl Iroh3Connector {
     pub fn new(
-        transport_config: iroh::endpoint::TransportConfig,
+        transport_config: QuicTransportConfig,
         client_config: Iroh3ClientConfig,
     ) -> Result<Iroh3Connector, BoxError> {
         tokio::task::spawn(async move {
@@ -76,12 +76,18 @@ impl Iroh3Connector {
 
     pub async fn connect(&mut self, dest: &str) -> Result<Iroh3Connection, BoxError> {
         match EndpointTicket::from_str(dest) {
-            Ok(ticket) => self.remote_connect(ticket.into()).await,
+            Ok(ticket) => {
+                let addr = ticket.endpoint_addr();
+                self.remote_connect(addr).await
+            }
             Err(e) => Err(e.into()),
         }
     }
 
-    async fn remote_connect(&mut self, addr: EndpointAddr) -> Result<Iroh3Connection, BoxError> {
+    async fn remote_connect(
+        &mut self,
+        addr: impl Into<EndpointAddr>,
+    ) -> Result<Iroh3Connection, BoxError> {
         match ENDPOINT.get() {
             Some(endpoint) => match endpoint.connect(addr, b"iroh+h3").await {
                 Ok(conn) => {
