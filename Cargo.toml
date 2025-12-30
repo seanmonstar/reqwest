@@ -88,7 +88,7 @@ __tls = ["dep:rustls-pki-types", "tokio/io-util"]
 
 # Enables common rustls code.
 __rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls"]
-__rustls-aws-lc-rs = ["hyper-rustls?/aws-lc-rs", "tokio-rustls?/aws-lc-rs", "rustls?/aws-lc-rs", "quinn?/aws-lc-rs"]
+__rustls-aws-lc-rs = ["hyper-rustls?/aws-lc-rs", "tokio-rustls?/aws-lc-rs", "rustls?/aws-lc-rs", "quinn?/rustls-aws-lc-rs"]
 
 # Enables common native-tls code.
 __native-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
@@ -159,7 +159,7 @@ once_cell = { version = "1.18", optional = true }
 # HTTP/3 experimental support
 h3 = { version = "0.0.8", optional = true }
 h3-quinn = { version = "0.0.10", optional = true }
-quinn = { version = "0.11.1", default-features = false, features = ["rustls", "runtime-tokio"], optional = true }
+quinn = { version = "0.11.1", default-features = false, features = ["runtime-tokio"], optional = true }
 futures-channel = { version = "0.3", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
