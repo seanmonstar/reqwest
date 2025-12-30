@@ -380,9 +380,11 @@ jobs:
         with:
           target: aarch64-linux-android
 
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
       - name: Build
-        # disable default-tls feature since cross-compiling openssl is dragons
-        run: cargo build --target aarch64-linux-android --no-default-features
+        run: cargo ndk --target aarch64-linux-android build
 
   wasm:
     name: WASM
