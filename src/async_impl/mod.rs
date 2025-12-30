@@ -7,6 +7,7 @@ pub use self::upgrade::Upgraded;
 pub mod body;
 pub mod client;
 pub mod h3_client;
+pub mod iroh3_client;
 #[cfg(feature = "multipart")]
 pub mod multipart;
 pub(crate) mod request;
