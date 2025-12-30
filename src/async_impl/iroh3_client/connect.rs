@@ -59,22 +59,6 @@ pub(crate) struct Iroh3Connector {
 
 impl Iroh3Connector {
     pub fn new(client_config: Iroh3ClientConfig) -> Result<Iroh3Connector, BoxError> {
-        tokio::task::spawn(async move {
-            // ENDPOINT.get_or_try_init(|| async {
-            //     let endpoint = Endpoint::builder().bind().await?;
-            //     Ok::<Endpoint, BoxError>(endpoint)
-            // });
-            if let Err(e) = ENDPOINT
-                .get_or_try_init(|| async {
-                    let endpoint = Endpoint::builder().bind().await?;
-                    Ok::<Endpoint, BoxError>(endpoint)
-                })
-                .await
-            {
-                eprintln!("failed to bind endpoint: {:?}", e);
-            }
-        });
-
         Ok(Self { client_config })
     }
 
@@ -89,8 +73,15 @@ impl Iroh3Connector {
     }
 
     async fn remote_connect(&mut self, addr: EndpointAddr) -> Result<Iroh3Connection, BoxError> {
-        match ENDPOINT.get() {
-            Some(endpoint) => match endpoint.connect(addr, b"iroh+h3").await {
+        let may_endpoint = ENDPOINT
+            .get_or_try_init(|| async {
+                let endpoint = Endpoint::builder().bind().await?;
+                Ok::<Endpoint, BoxError>(endpoint)
+            })
+            .await;
+
+        match may_endpoint {
+            Ok(endpoint) => match endpoint.connect(addr, b"iroh+h3").await {
                 Ok(conn) => {
                     let quinn_conn = Connection::new(conn);
                     let mut h3_client_builder = h3::client::builder();
@@ -105,7 +96,7 @@ impl Iroh3Connector {
                 }
                 Err(e) => Err(e.into()),
             },
-            None => Err("endpoint not initialized".into()),
+            Err(e) => Err(e.into()),
         }
     }
 }
