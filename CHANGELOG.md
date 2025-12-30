@@ -1,3 +1,7 @@
+## v0.13.1
+
+- Fixes compiling with rustls on Android targets.
+
 # v0.13.0
 
 - **Breaking changes**:
