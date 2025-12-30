@@ -16,6 +16,10 @@ use super::Body;
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::H3Client;
+#[cfg(feature = "iroh-h3")]
+use crate::async_impl::iroh3_client::connect::{Iroh3ClientConfig, Iroh3Connector};
+#[cfg(feature = "iroh-h3")]
+use crate::async_impl::iroh3_client::Iroh3Client;
 use crate::config::{RequestConfig, TotalTimeout};
 #[cfg(unix)]
 use crate::connect::uds::UnixSocketProvider;
@@ -255,13 +259,15 @@ struct Config {
     #[cfg(feature = "http3")]
     quic_receive_window: Option<VarInt>,
     #[cfg(feature = "http3")]
-    quic_send_window: Option<u64>,
+    quic_send_window: Option<VarInt>,
     #[cfg(feature = "http3")]
     quic_congestion_bbr: bool,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "h3")]
     h3_max_field_section_size: Option<u64>,
-    #[cfg(feature = "http3")]
+    #[cfg(feature = "h3")]
     h3_send_grease: Option<bool>,
+    #[cfg(feature = "iroh-h3")]
+    iroh3_endpoint_ticket: Option<String>,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
     dns_resolver: Option<Arc<dyn Resolve>>,
 
@@ -387,10 +393,12 @@ impl ClientBuilder {
                 quic_send_window: None,
                 #[cfg(feature = "http3")]
                 quic_congestion_bbr: false,
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "h3")]
                 h3_max_field_section_size: None,
-                #[cfg(feature = "http3")]
+                #[cfg(feature = "h3")]
                 h3_send_grease: None,
+                #[cfg(feature = "iroh-h3")]
+                iroh3_endpoint_ticket: None,
                 dns_resolver: None,
                 #[cfg(unix)]
                 unix_socket: None,
@@ -424,6 +432,9 @@ impl ClientBuilder {
         #[allow(unused)]
         #[cfg(feature = "http3")]
         let mut h3_connector = None;
+        #[allow(unused)]
+        #[cfg(feature = "iroh-h3")]
+        let mut iroh3_connector = None;
 
         let resolver = {
             let mut resolver: Arc<dyn Resolve> = match config.hickory_dns {
@@ -526,6 +537,26 @@ impl ClientBuilder {
                         }
                     }
                 };
+
+            #[cfg(all(feature = "iroh-h3", feature = "__rustls"))]
+            let build_iroh3_connector = |h3_max_field_section_size, h3_send_grease| {
+                let mut h3_client_config = Iroh3ClientConfig::default();
+
+                if let Some(max_field_section_size) = h3_max_field_section_size {
+                    h3_client_config.max_field_section_size = Some(max_field_section_size);
+                }
+
+                if let Some(send_grease) = h3_send_grease {
+                    h3_client_config.send_grease = Some(send_grease);
+                }
+
+                let res = Iroh3Connector::new(h3_client_config);
+
+                match res {
+                    Ok(connector) => Ok(Some(connector)),
+                    Err(err) => Err(error::builder(err)),
+                }
+            };
 
             #[cfg(feature = "__tls")]
             match config.tls {
@@ -855,6 +886,14 @@ impl ClientBuilder {
                         )?;
                     }
 
+                    #[cfg(feature = "iroh-h3")]
+                    {
+                        iroh3_connector = build_iroh3_connector(
+                            config.h3_max_field_section_size,
+                            config.h3_send_grease,
+                        )?;
+                    }
+
                     ConnectorBuilder::new_rustls_tls(
                         http,
                         tls,
@@ -1077,6 +1116,48 @@ impl ClientBuilder {
                         #[cfg(feature = "deflate")]
                         let svc = svc.deflate(config.accepts.deflate);
                         Some(svc)
+                    }
+                    None => None,
+                },
+                #[cfg(feature = "iroh-h3")]
+                iroh3_client: match iroh3_connector {
+                    Some(iroh3_connector) => {
+                        match config.iroh3_endpoint_ticket {
+                            Some(ticket) => {
+                                let h3_service = Iroh3Client::new(
+                                    iroh3_connector,
+                                    ticket,
+                                    config.pool_idle_timeout,
+                                );
+                                let svc = tower::retry::Retry::new(retry_policy, h3_service);
+                                #[cfg(feature = "cookies")]
+                                let svc = CookieService::new(svc, config.cookie_store);
+                                let svc = FollowRedirect::with_policy(svc, redirect_policy);
+                                #[cfg(any(
+                                    feature = "gzip",
+                                    feature = "brotli",
+                                    feature = "zstd",
+                                    feature = "deflate"
+                                ))]
+                                let svc = Decompression::new(svc)
+                                    // set everything to NO, in case tower-http has it enabled but
+                                    // reqwest does not. then set to config value if cfg allows.
+                                    .no_gzip()
+                                    .no_deflate()
+                                    .no_br()
+                                    .no_zstd();
+                                #[cfg(feature = "gzip")]
+                                let svc = svc.gzip(config.accepts.gzip);
+                                #[cfg(feature = "brotli")]
+                                let svc = svc.br(config.accepts.brotli);
+                                #[cfg(feature = "zstd")]
+                                let svc = svc.zstd(config.accepts.zstd);
+                                #[cfg(feature = "deflate")]
+                                let svc = svc.deflate(config.accepts.deflate);
+                                Some(svc)
+                            }
+                            None => None,
+                        }
                     }
                     None => None,
                 },
@@ -2443,6 +2524,14 @@ impl ClientBuilder {
         self
     }
 
+    /// set iroh endpoint ticket
+    #[cfg(feature = "iroh-h3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "iroh-h3",))))]
+    pub fn iroh3_endpoint_ticket(mut self, ticket: String) -> ClientBuilder {
+        self.config.iroh3_endpoint_ticket = Some(ticket);
+        self
+    }
+
     /// Adds a new Tower [`Layer`](https://docs.rs/tower/latest/tower/trait.Layer.html) to the
     /// base connector [`Service`](https://docs.rs/tower/latest/tower/trait.Service.html) which
     /// is responsible for connection establishment.
@@ -2646,6 +2735,13 @@ impl Client {
                 *req.headers_mut() = headers.clone();
                 let mut h3 = self.inner.h3_client.as_ref().unwrap().clone();
                 ResponseFuture::H3(h3.call(req))
+            }
+            #[cfg(feature = "iroh-h3")]
+            http::Version::HTTP_3 if self.inner.iroh3_client.is_some() => {
+                let mut req = builder.body(body).expect("valid request parts");
+                *req.headers_mut() = headers.clone();
+                let mut h3 = self.inner.iroh3_client.as_ref().unwrap().clone();
+                ResponseFuture::IrohH3(h3.call(req))
             }
             _ => {
                 let mut req = builder.body(body).expect("valid request parts");
@@ -2945,6 +3041,8 @@ struct ClientRef {
     hyper: LayeredService<HyperService>,
     #[cfg(feature = "http3")]
     h3_client: Option<LayeredService<H3Client>>,
+    #[cfg(feature = "iroh-h3")]
+    iroh3_client: Option<LayeredService<Iroh3Client>>,
     referer: bool,
     total_timeout: RequestConfig<TotalTimeout>,
     read_timeout: Option<Duration>,
@@ -3025,6 +3123,8 @@ enum ResponseFuture {
     Default(LayeredFuture<HyperService>),
     #[cfg(feature = "http3")]
     H3(LayeredFuture<H3Client>),
+    #[cfg(feature = "iroh-h3")]
+    IrohH3(LayeredFuture<Iroh3Client>),
 }
 
 impl PendingRequest {
@@ -3096,6 +3196,13 @@ impl Future for PendingRequest {
             },
             #[cfg(feature = "http3")]
             ResponseFuture::H3(r) => match ready!(Pin::new(r).poll(cx)) {
+                Err(e) => {
+                    return Poll::Ready(Err(crate::error::request(e).with_url(self.url.clone())));
+                }
+                Ok(res) => res.map(super::body::boxed),
+            },
+            #[cfg(feature = "iroh-h3")]
+            ResponseFuture::IrohH3(r) => match ready!(Pin::new(r).poll(cx)) {
                 Err(e) => {
                     return Poll::Ready(Err(crate::error::request(e).with_url(self.url.clone())));
                 }
