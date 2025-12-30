@@ -45,9 +45,10 @@ http2 = ["h2", "hyper/http2", "hyper-util/http2", "hyper-rustls?/http2"]
 rustls = ["__rustls-aws-lc-rs", "dep:rustls-platform-verifier", "__rustls"]
 rustls-no-provider = ["dep:rustls-platform-verifier", "__rustls"]
 
-native-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
-native-tls-alpn = ["native-tls", "native-tls-crate?/alpn", "hyper-tls?/alpn"]
-native-tls-vendored = ["native-tls", "native-tls-crate?/vendored"]
+native-tls = ["__native-tls", "__native-tls-alpn"]
+native-tls-no-alpn = ["__native-tls"]
+native-tls-vendored = ["__native-tls", "native-tls-crate?/vendored", "__native-tls-alpn"]
+native-tls-vendored-no-alpn = ["__native-tls", "native-tls-crate?/vendored"]
 
 blocking = ["dep:futures-channel", "futures-channel?/sink", "dep:futures-util", "futures-util?/io", "futures-util?/sink", "tokio/sync"]
 
@@ -88,6 +89,10 @@ __tls = ["dep:rustls-pki-types", "tokio/io-util"]
 # Enables common rustls code.
 __rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls"]
 __rustls-aws-lc-rs = ["hyper-rustls?/aws-lc-rs", "tokio-rustls?/aws-lc-rs", "rustls?/aws-lc-rs", "quinn?/aws-lc-rs"]
+
+# Enables common native-tls code.
+__native-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
+__native-tls-alpn = ["native-tls-crate?/alpn", "hyper-tls?/alpn"]
 
 [dependencies]
 base64 = "0.22"

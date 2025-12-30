@@ -325,7 +325,7 @@ async fn overridden_dns_resolution_with_hickory_dns_multiple() {
     assert_eq!("Hello", text);
 }
 
-#[cfg(any(feature = "native-tls", feature = "__rustls",))]
+#[cfg(any(feature = "__native-tls", feature = "__rustls",))]
 #[test]
 fn use_preconfigured_tls_with_bogus_backend() {
     struct DefinitelyNotTls;
@@ -336,7 +336,7 @@ fn use_preconfigured_tls_with_bogus_backend() {
         .expect_err("definitely is not TLS");
 }
 
-#[cfg(feature = "native-tls")]
+#[cfg(feature = "__native-tls")]
 #[test]
 fn use_preconfigured_native_tls_default() {
     extern crate native_tls_crate;
