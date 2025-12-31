@@ -1,4 +1,4 @@
-#[cfg(any(feature = "native-tls", feature = "__rustls",))]
+#[cfg(any(feature = "__native-tls", feature = "__rustls",))]
 use std::any::Any;
 use std::convert::TryInto;
 use std::fmt;
@@ -31,7 +31,7 @@ use crate::tls;
 use crate::tls::CertificateRevocationList;
 #[cfg(feature = "__tls")]
 use crate::Certificate;
-#[cfg(any(feature = "native-tls", feature = "__rustls"))]
+#[cfg(any(feature = "__native-tls", feature = "__rustls"))]
 use crate::Identity;
 use crate::{async_impl, header, redirect, IntoUrl, Method, Proxy};
 
@@ -864,7 +864,7 @@ impl ClientBuilder {
     ///
     /// This requires the optional `native-tls` or `rustls(-...)` feature to be
     /// enabled.
-    #[cfg(any(feature = "native-tls", feature = "__rustls"))]
+    #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls"))))]
     pub fn identity(self, identity: Identity) -> ClientBuilder {
         self.with_inner(move |inner| inner.identity(identity))
@@ -1014,14 +1014,14 @@ impl ClientBuilder {
     /// # Optional
     ///
     /// This requires the optional `native-tls` feature to be enabled.
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "native-tls")))]
     pub fn tls_backend_native(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.tls_backend_native())
     }
 
     /// Deprecated: use [`ClientBuilder::tls_backend_native()`] instead.
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     pub fn use_native_tls(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.use_native_tls())
     }
@@ -1080,14 +1080,14 @@ impl ClientBuilder {
     ///
     /// This requires one of the optional features `native-tls` or
     /// `rustls(-...)` to be enabled.
-    #[cfg(any(feature = "native-tls", feature = "__rustls",))]
+    #[cfg(any(feature = "__native-tls", feature = "__rustls",))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls"))))]
     pub fn tls_backend_preconfigured(self, tls: impl Any) -> ClientBuilder {
         self.with_inner(move |inner| inner.tls_backend_preconfigured(tls))
     }
 
     /// Deprecated: use [`ClientBuilder::tls_backend_preconfigured()`] instead.
-    #[cfg(any(feature = "native-tls", feature = "__rustls",))]
+    #[cfg(any(feature = "__native-tls", feature = "__rustls",))]
     pub fn use_preconfigured_tls(self, tls: impl Any) -> ClientBuilder {
         self.with_inner(move |inner| inner.use_preconfigured_tls(tls))
     }

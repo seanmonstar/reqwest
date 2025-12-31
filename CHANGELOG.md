@@ -1,3 +1,22 @@
+## v0.13.1
+
+- Fixes compiling with rustls on Android targets.
+
+# v0.13.0
+
+- **Breaking changes**:
+  - `rustls` is now the default TLS backend, instead of `native-tls`.
+  - `rustls` crypto provider defaults to aws-lc instead of _ring_. (`rustls-no-provider` exists if you want a different crypto provider)
+  - `rustls-tls` has been renamed to `rustls`.
+  - rustls roots features removed, `rustls-platform-verifier` is used by default.
+    - To use different roots, call `tls_certs_only(your_roots)`.
+  - `native-tls` now includes ALPN. To disable, use `native-tls-no-alpn`.
+  - `query` and `form` are now crate features, disabled by default.
+  - Long-deprecated methods and crate features have been removed (such as `trust-dns`, which was renamed `hickory-dns` a while ago).
+- Many TLS-related methods renamed to improve autocompletion and discovery, but previous name left in place with a "soft" deprecation. (just documented, no warnings)
+  - For example, prefer `tls_backend_rustls()` over `use_rustls_tls()`.
+
+
 ## v0.12.28
 
 - Fix compiling on Windows if TLS and SOCKS features are not enabled.
