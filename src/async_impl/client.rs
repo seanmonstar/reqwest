@@ -531,7 +531,11 @@ impl ClientBuilder {
                                 tls.request_alpns(&["h2"]);
                             }
                             HttpVersionPref::All => {
-                                tls.request_alpns(&["h2", "http/1.1"]);
+                                tls.request_alpns(&[
+                                    #[cfg(feature = "http2")]
+                                    "h2",
+                                    "http/1.1",
+                                ]);
                             }
                         }
                     }
