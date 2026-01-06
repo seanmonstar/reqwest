@@ -371,7 +371,7 @@ impl quic::RecvStream for RecvStream {
     ) -> Poll<Result<Option<Self::Buf>, StreamErrorIncoming>> {
         if let Some(mut stream) = self.stream.take() {
             self.read_chunk_fut.set(async move {
-                let chunk = stream.read_chunk(usize::MAX, true).await;
+                let chunk = stream.read_chunk(usize::MAX).await;
                 (stream, chunk)
             })
         };

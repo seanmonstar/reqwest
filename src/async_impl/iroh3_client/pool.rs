@@ -99,41 +99,60 @@ impl Pool {
     pub fn connecting(&self, key: &Key) -> Connecting {
         let mut inner = self.inner.lock().unwrap();
 
-        if let Some(sender) = inner.connecting.get(key) {
-            Connecting::InProgress(ConnectingWaiter {
-                receiver: sender.subscribe(),
-            })
+        if let Some(senders) = inner.connecting.get(key) {
+            if let Some(sender) = senders.last() {
+                Connecting::InProgress(ConnectingWaiter {
+                    receiver: sender.subscribe(),
+                })
+            } else {
+                let (tx, _) = watch::channel(None);
+                inner.connecting.entry(key.clone()).or_default().push(tx);
+                Connecting::Acquired(ConnectingLock::new(key.clone(), Arc::clone(&self.inner)))
+            }
         } else {
             let (tx, _) = watch::channel(None);
-            inner.connecting.insert(key.clone(), tx);
+            inner.connecting.entry(key.clone()).or_default().push(tx);
             Connecting::Acquired(ConnectingLock::new(key.clone(), Arc::clone(&self.inner)))
         }
     }
 
     pub fn try_pool(&self, key: &Key) -> Option<PoolClient> {
-        let mut inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock().unwrap();
         let timeout = inner.timeout;
-        if let Some(conn) = inner.idle_conns.get(key) {
-            // We check first if the connection still valid
-            // and if not, we remove it from the pool.
-            if conn.is_invalid() {
-                trace!("pooled HTTP/3 connection is invalid so removing it...");
-                inner.idle_conns.remove(key);
-                return None;
-            }
 
-            if let Some(duration) = timeout {
-                if Instant::now().saturating_duration_since(conn.idle_timeout) > duration {
-                    trace!("pooled connection expired");
-                    return None;
+        let mut valid_idx = None;
+
+        if let Some(conns) = inner.idle_conns.get(key) {
+            for (idx, conn) in conns.iter().enumerate() {
+                if conn.is_invalid() {
+                    trace!("pooled HTTP/3 connection is invalid so removing it...");
+                    continue;
+                }
+
+                if let Some(duration) = timeout {
+                    if Instant::now().saturating_duration_since(conn.idle_timeout) > duration {
+                        trace!("pooled connection expired");
+                        continue;
+                    }
+                }
+
+                valid_idx = Some(idx);
+                break;
+            }
+        }
+
+        drop(inner);
+
+        if let Some(idx) = valid_idx {
+            let mut inner = self.inner.lock().unwrap();
+            if let Some(conns) = inner.idle_conns.get_mut(key) {
+                if idx < conns.len() {
+                    return Some(conns[idx].pool());
                 }
             }
         }
 
-        inner
-            .idle_conns
-            .get_mut(key)
-            .and_then(|conn| Some(conn.pool()))
+        None
     }
 
     pub fn new_connection(
@@ -151,19 +170,17 @@ impl Pool {
 
         let mut inner = self.inner.lock().unwrap();
 
-        // We clean up "connecting" here so we don't have to acquire the lock again.
         let key = lock.forget();
-        let Some(notifier) = inner.connecting.remove(&key) else {
-            unreachable!("there should be one connecting lock at a time");
+        let Some(senders) = inner.connecting.get(&key) else {
+            unreachable!("there should be at least one connecting lock at a time");
         };
+
+        let notifier = senders.last().unwrap();
         let client = PoolClient::new(tx);
 
-        // Send the client to all our awaiters
         let pool_client = if let Err(watch::error::SendError(Some(unsent_client))) =
             notifier.send(Some(client.clone()))
         {
-            // If there are no awaiters, the client is returned to us. As a
-            // micro optimisation, let's reuse it and avoid cloning.
             unsent_client
         } else {
             client.clone()
@@ -177,18 +194,14 @@ impl Pool {
 }
 
 struct PoolInner {
-    connecting: HashMap<Key, watch::Sender<Option<PoolClient>>>,
-    idle_conns: HashMap<Key, PoolConnection>,
+    connecting: HashMap<Key, Vec<watch::Sender<Option<PoolClient>>>>,
+    idle_conns: HashMap<Key, Vec<PoolConnection>>,
     timeout: Option<Duration>,
 }
 
 impl PoolInner {
     fn insert(&mut self, key: Key, conn: PoolConnection) {
-        if self.idle_conns.contains_key(&key) {
-            trace!("connection already exists for key {key:?}");
-        }
-
-        self.idle_conns.insert(key, conn);
+        self.idle_conns.entry(key).or_default().push(conn);
     }
 }
 
