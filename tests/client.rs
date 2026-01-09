@@ -325,7 +325,7 @@ async fn overridden_dns_resolution_with_hickory_dns_multiple() {
     assert_eq!("Hello", text);
 }
 
-#[cfg(any(feature = "native-tls", feature = "__rustls",))]
+#[cfg(any(feature = "__native-tls", feature = "__rustls",))]
 #[test]
 fn use_preconfigured_tls_with_bogus_backend() {
     struct DefinitelyNotTls;
@@ -336,7 +336,7 @@ fn use_preconfigured_tls_with_bogus_backend() {
         .expect_err("definitely is not TLS");
 }
 
-#[cfg(feature = "native-tls")]
+#[cfg(feature = "__native-tls")]
 #[test]
 fn use_preconfigured_native_tls_default() {
     extern crate native_tls_crate;
@@ -369,6 +369,21 @@ fn use_preconfigured_rustls_default() {
         .use_preconfigured_tls(tls)
         .build()
         .expect("preconfigured rustls tls");
+}
+
+#[cfg(all(feature = "__tls", not(any(feature = "http2", feature = "http3")),))]
+#[tokio::test]
+async fn http1_only() {
+    let res = reqwest::Client::builder()
+        .build()
+        .expect("client builder")
+        .get("https://google.com")
+        .send()
+        .await
+        .expect("request");
+
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.version(), reqwest::Version::HTTP_11);
 }
 
 #[cfg(feature = "__rustls")]

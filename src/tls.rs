@@ -68,7 +68,7 @@ pub struct CertificateRevocationList {
 /// Represents a server X509 certificate.
 #[derive(Clone)]
 pub struct Certificate {
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     native: native_tls_crate::Certificate,
     #[cfg(feature = "__rustls")]
     original: Cert,
@@ -84,14 +84,17 @@ enum Cert {
 /// Represents a private key and X509 cert as a client certificate.
 #[derive(Clone)]
 pub struct Identity {
-    #[cfg_attr(not(any(feature = "native-tls", feature = "__rustls")), allow(unused))]
+    #[cfg_attr(
+        not(any(feature = "__native-tls", feature = "__rustls")),
+        allow(unused)
+    )]
     inner: ClientCert,
 }
 
 enum ClientCert {
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     Pkcs12(native_tls_crate::Identity),
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     Pkcs8(native_tls_crate::Identity),
     #[cfg(feature = "__rustls")]
     Pem {
@@ -103,9 +106,9 @@ enum ClientCert {
 impl Clone for ClientCert {
     fn clone(&self) -> Self {
         match self {
-            #[cfg(feature = "native-tls")]
+            #[cfg(feature = "__native-tls")]
             Self::Pkcs8(i) => Self::Pkcs8(i.clone()),
-            #[cfg(feature = "native-tls")]
+            #[cfg(feature = "__native-tls")]
             Self::Pkcs12(i) => Self::Pkcs12(i.clone()),
             #[cfg(feature = "__rustls")]
             ClientCert::Pem { key, certs } => ClientCert::Pem {
@@ -113,7 +116,7 @@ impl Clone for ClientCert {
                 certs: certs.clone(),
             },
             #[cfg_attr(
-                any(feature = "native-tls", feature = "__rustls"),
+                any(feature = "__native-tls", feature = "__rustls"),
                 allow(unreachable_patterns)
             )]
             _ => unreachable!(),
@@ -140,7 +143,7 @@ impl Certificate {
     /// ```
     pub fn from_der(der: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
-            #[cfg(feature = "native-tls")]
+            #[cfg(feature = "__native-tls")]
             native: native_tls_crate::Certificate::from_der(der).map_err(crate::error::builder)?,
             #[cfg(feature = "__rustls")]
             original: Cert::Der(der.to_owned()),
@@ -165,7 +168,7 @@ impl Certificate {
     /// ```
     pub fn from_pem(pem: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
-            #[cfg(feature = "native-tls")]
+            #[cfg(feature = "__native-tls")]
             native: native_tls_crate::Certificate::from_pem(pem).map_err(crate::error::builder)?,
             #[cfg(feature = "__rustls")]
             original: Cert::Pem(pem.to_owned()),
@@ -205,7 +208,7 @@ impl Certificate {
     }
     */
 
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     pub(crate) fn add_to_native_tls(self, tls: &mut native_tls_crate::TlsConnectorBuilder) {
         tls.add_root_certificate(self.native);
     }
@@ -276,7 +279,7 @@ impl Identity {
     /// # Optional
     ///
     /// This requires the `native-tls` Cargo feature enabled.
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     pub fn from_pkcs12_der(der: &[u8], password: &str) -> crate::Result<Identity> {
         Ok(Identity {
             inner: ClientCert::Pkcs12(
@@ -310,7 +313,7 @@ impl Identity {
     /// # Optional
     ///
     /// This requires the `native-tls` Cargo feature enabled.
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     pub fn from_pkcs8_pem(pem: &[u8], key: &[u8]) -> crate::Result<Identity> {
         Ok(Identity {
             inner: ClientCert::Pkcs8(
@@ -388,7 +391,7 @@ impl Identity {
         })
     }
 
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     pub(crate) fn add_to_native_tls(
         self,
         tls: &mut native_tls_crate::TlsConnectorBuilder,
@@ -416,7 +419,7 @@ impl Identity {
             ClientCert::Pem { key, certs } => config_builder
                 .with_client_auth_cert(certs, key)
                 .map_err(crate::error::builder),
-            #[cfg(feature = "native-tls")]
+            #[cfg(feature = "__native-tls")]
             ClientCert::Pkcs12(..) | ClientCert::Pkcs8(..) => {
                 Err(crate::error::builder("incompatible TLS identity type"))
             }
@@ -535,7 +538,7 @@ impl Version {
     /// Version 1.3 of the TLS protocol.
     pub const TLS_1_3: Version = Version(InnerVersion::Tls1_3);
 
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     pub(crate) fn to_native_tls(self) -> Option<native_tls_crate::Protocol> {
         match self.0 {
             InnerVersion::Tls1_0 => Some(native_tls_crate::Protocol::Tlsv10),
@@ -562,30 +565,30 @@ impl Version {
 pub(crate) enum TlsBackend {
     // This is the default and HTTP/3 feature does not use it so suppress it.
     #[allow(dead_code)]
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     NativeTls,
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     BuiltNativeTls(native_tls_crate::TlsConnector),
     #[cfg(feature = "__rustls")]
     Rustls,
     #[cfg(feature = "__rustls")]
     BuiltRustls(rustls::ClientConfig),
-    #[cfg(any(feature = "native-tls", feature = "__rustls",))]
+    #[cfg(any(feature = "__native-tls", feature = "__rustls",))]
     UnknownPreconfigured,
 }
 
 impl fmt::Debug for TlsBackend {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            #[cfg(feature = "native-tls")]
+            #[cfg(feature = "__native-tls")]
             TlsBackend::NativeTls => write!(f, "NativeTls"),
-            #[cfg(feature = "native-tls")]
+            #[cfg(feature = "__native-tls")]
             TlsBackend::BuiltNativeTls(_) => write!(f, "BuiltNativeTls"),
             #[cfg(feature = "__rustls")]
             TlsBackend::Rustls => write!(f, "Rustls"),
             #[cfg(feature = "__rustls")]
             TlsBackend::BuiltRustls(_) => write!(f, "BuiltRustls"),
-            #[cfg(any(feature = "native-tls", feature = "__rustls",))]
+            #[cfg(any(feature = "__native-tls", feature = "__rustls",))]
             TlsBackend::UnknownPreconfigured => write!(f, "UnknownPreconfigured"),
         }
     }
@@ -595,14 +598,14 @@ impl fmt::Debug for TlsBackend {
 impl Default for TlsBackend {
     fn default() -> TlsBackend {
         #[cfg(any(
-            all(feature = "__rustls", not(feature = "native-tls")),
+            all(feature = "__rustls", not(feature = "__native-tls")),
             feature = "http3"
         ))]
         {
             TlsBackend::Rustls
         }
 
-        #[cfg(all(feature = "native-tls", not(feature = "http3")))]
+        #[cfg(all(feature = "__native-tls", not(feature = "http3")))]
         {
             TlsBackend::NativeTls
         }
@@ -619,7 +622,7 @@ pub(crate) fn rustls_store(certs: Vec<Certificate>) -> crate::Result<RootCertSto
 }
 
 #[cfg(feature = "__rustls")]
-#[cfg(any(unix, target_os = "windows"))] // android not supported
+#[cfg(any(all(unix, not(target_os = "android")), target_os = "windows"))]
 pub(crate) fn rustls_der(
     certs: Vec<Certificate>,
 ) -> crate::Result<Vec<rustls_pki_types::CertificateDer<'static>>> {
@@ -782,25 +785,25 @@ impl std::fmt::Debug for TlsInfo {
 mod tests {
     use super::*;
 
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     #[test]
     fn certificate_from_der_invalid() {
         Certificate::from_der(b"not der").unwrap_err();
     }
 
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     #[test]
     fn certificate_from_pem_invalid() {
         Certificate::from_pem(b"not pem").unwrap_err();
     }
 
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     #[test]
     fn identity_from_pkcs12_der_invalid() {
         Identity::from_pkcs12_der(b"not der", "nope").unwrap_err();
     }
 
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     #[test]
     fn identity_from_pkcs8_pem_invalid() {
         Identity::from_pkcs8_pem(b"not pem", b"not key").unwrap_err();

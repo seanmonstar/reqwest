@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.13.0-rc.1"
+version = "0.13.1"
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -40,14 +40,15 @@ default = ["default-tls", "charset", "http2", "system-proxy"]
 
 default-tls = ["rustls"]
 
-http2 = ["h2", "hyper/http2", "hyper-util/http2", "hyper-rustls?/http2"]
+http2 = ["dep:h2", "hyper/http2", "hyper-util/http2", "hyper-rustls?/http2"]
 
 rustls = ["__rustls-aws-lc-rs", "dep:rustls-platform-verifier", "__rustls"]
 rustls-no-provider = ["dep:rustls-platform-verifier", "__rustls"]
 
-native-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
-native-tls-alpn = ["native-tls", "native-tls-crate?/alpn", "hyper-tls?/alpn"]
-native-tls-vendored = ["native-tls", "native-tls-crate?/vendored"]
+native-tls = ["__native-tls", "__native-tls-alpn"]
+native-tls-no-alpn = ["__native-tls"]
+native-tls-vendored = ["__native-tls", "native-tls-crate?/vendored", "__native-tls-alpn"]
+native-tls-vendored-no-alpn = ["__native-tls", "native-tls-crate?/vendored"]
 
 blocking = ["dep:futures-channel", "futures-channel?/sink", "dep:futures-util", "futures-util?/io", "futures-util?/sink", "tokio/sync"]
 
@@ -87,7 +88,11 @@ __tls = ["dep:rustls-pki-types", "tokio/io-util"]
 
 # Enables common rustls code.
 __rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls"]
-__rustls-aws-lc-rs = ["hyper-rustls?/aws-lc-rs", "tokio-rustls?/aws-lc-rs", "rustls?/aws-lc-rs", "quinn?/aws-lc-rs"]
+__rustls-aws-lc-rs = ["hyper-rustls?/aws-lc-rs", "tokio-rustls?/aws-lc-rs", "rustls?/aws-lc-rs", "quinn?/rustls-aws-lc-rs"]
+
+# Enables common native-tls code.
+__native-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
+__native-tls-alpn = ["native-tls-crate?/alpn", "hyper-tls?/alpn"]
 
 [dependencies]
 base64 = "0.22"
@@ -137,8 +142,6 @@ hyper-rustls = { version = "0.27.0", default-features = false, optional = true, 
 rustls = { version = "0.23.4", optional = true, default-features = false, features = ["std", "tls12"] }
 tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["tls12"] }
 rustls-platform-verifier = { version = "0.6", optional = true }
-webpki-roots = { version = "1", optional = true }
-rustls-native-certs = { version = "0.8.0", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.18.0", package = "cookie", optional = true }
@@ -154,7 +157,7 @@ once_cell = { version = "1.18", optional = true }
 # HTTP/3 experimental support
 h3 = { version = "0.0.8", optional = true }
 h3-quinn = { version = "0.0.10", optional = true }
-quinn = { version = "0.11.1", default-features = false, features = ["rustls", "runtime-tokio"], optional = true }
+quinn = { version = "0.11.1", default-features = false, features = ["runtime-tokio"], optional = true }
 futures-channel = { version = "0.3", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]

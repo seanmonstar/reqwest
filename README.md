@@ -11,7 +11,7 @@ An ergonomic, batteries-included HTTP Client for Rust.
 - Plain bodies, JSON, urlencoded, multipart
 - Customizable redirect policy
 - HTTP Proxies
-- HTTPS via system-native TLS (or optionally, rustls)
+- HTTPS via rustls (or optionally, system-native TLS)
 - Cookie Store
 - WASM
 
@@ -23,7 +23,7 @@ optional features, so your `Cargo.toml` could look like this:
 
 ```toml
 [dependencies]
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.13", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -49,22 +49,10 @@ For private advice, support, reviews, access to the maintainer, and the like, re
 
 ## Requirements
 
-On Linux:
-
-- OpenSSL with headers. See https://docs.rs/openssl for supported versions
-  and more details. Alternatively you can enable the `native-tls-vendored`
-  feature to compile a copy of OpenSSL. Or, you can use [rustls](https://github.com/rustls/rustls)
-  via `rustls-tls` or other `rustls-tls-*` features.
-
-On Windows and macOS:
-
-- Nothing.
-
-By default, Reqwest uses [rust-native-tls](https://github.com/sfackler/rust-native-tls),
-which will use the operating system TLS framework if available, meaning Windows
-and macOS. On Linux, it will use the available OpenSSL or fail to build if
-not found.
-
+By default, Reqwest uses [rustls](https://github.com/rustls/rustls), but when the `native-tls` feature is enabled
+it will use the operating system TLS framework if available, meaning Windows and macOS.
+On Linux, it will use the available OpenSSL (see https://docs.rs/openssl for supported versions and more details)
+or fail to build if not found. Alternatively you can enable the `native-tls-vendored` feature to compile a copy of OpenSSL.
 
 ## License
 

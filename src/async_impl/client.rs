@@ -1,4 +1,4 @@
-#[cfg(any(feature = "native-tls", feature = "__rustls",))]
+#[cfg(any(feature = "__native-tls", feature = "__rustls",))]
 use std::any::Any;
 use std::future::Future;
 use std::net::IpAddr;
@@ -42,7 +42,7 @@ use crate::tls::CertificateRevocationList;
 use crate::tls::{self, TlsBackend};
 #[cfg(feature = "__tls")]
 use crate::Certificate;
-#[cfg(any(feature = "native-tls", feature = "__rustls"))]
+#[cfg(any(feature = "__native-tls", feature = "__rustls"))]
 use crate::Identity;
 use crate::{IntoUrl, Method, Proxy, Url};
 
@@ -50,7 +50,7 @@ use http::header::{Entry, HeaderMap, HeaderValue, ACCEPT, PROXY_AUTHORIZATION, U
 use http::uri::Scheme;
 use http::Uri;
 use hyper_util::client::legacy::connect::HttpConnector;
-#[cfg(feature = "native-tls")]
+#[cfg(feature = "__native-tls")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
 #[cfg(feature = "http3")]
@@ -176,7 +176,7 @@ struct Config {
     tcp_keepalive_retries: Option<u32>,
     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
     tcp_user_timeout: Option<Duration>,
-    #[cfg(any(feature = "native-tls", feature = "__rustls"))]
+    #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
     identity: Option<Identity>,
     proxies: Vec<ProxyMatcher>,
     auto_sys_proxy: bool,
@@ -312,7 +312,7 @@ impl ClientBuilder {
                 root_certs: Vec::new(),
                 #[cfg(feature = "__tls")]
                 tls_certs_only: false,
-                #[cfg(any(feature = "native-tls", feature = "__rustls"))]
+                #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
                 identity: None,
                 #[cfg(feature = "__rustls")]
                 crls: vec![],
@@ -516,11 +516,11 @@ impl ClientBuilder {
 
             #[cfg(feature = "__tls")]
             match config.tls {
-                #[cfg(feature = "native-tls")]
+                #[cfg(feature = "__native-tls")]
                 TlsBackend::NativeTls => {
                     let mut tls = TlsConnector::builder();
 
-                    #[cfg(all(feature = "native-tls-alpn", not(feature = "http3")))]
+                    #[cfg(all(feature = "__native-tls-alpn", not(feature = "http3")))]
                     {
                         match config.http_version_pref {
                             HttpVersionPref::Http1 => {
@@ -531,7 +531,11 @@ impl ClientBuilder {
                                 tls.request_alpns(&["h2"]);
                             }
                             HttpVersionPref::All => {
-                                tls.request_alpns(&["h2", "http/1.1"]);
+                                tls.request_alpns(&[
+                                    #[cfg(feature = "http2")]
+                                    "h2",
+                                    "http/1.1",
+                                ]);
                             }
                         }
                     }
@@ -548,13 +552,13 @@ impl ClientBuilder {
                         cert.add_to_native_tls(&mut tls);
                     }
 
-                    #[cfg(feature = "native-tls")]
+                    #[cfg(feature = "__native-tls")]
                     {
                         if let Some(id) = config.identity {
                             id.add_to_native_tls(&mut tls)?;
                         }
                     }
-                    #[cfg(all(feature = "__rustls", not(feature = "native-tls")))]
+                    #[cfg(all(feature = "__rustls", not(feature = "__native-tls")))]
                     {
                         // Default backend + rustls Identity doesn't work.
                         if let Some(_id) = config.identity {
@@ -606,7 +610,7 @@ impl ClientBuilder {
                         config.tls_info,
                     )?
                 }
-                #[cfg(feature = "native-tls")]
+                #[cfg(feature = "__native-tls")]
                 TlsBackend::BuiltNativeTls(conn) => ConnectorBuilder::from_built_native_tls(
                     http,
                     conn,
@@ -745,7 +749,10 @@ impl ClientBuilder {
                             rustls_platform_verifier::Verifier::new(provider.clone())
                                 .map_err(crate::error::builder)?
                         } else {
-                            #[cfg(any(unix, target_os = "windows"))] // android not supported
+                            #[cfg(any(
+                                all(unix, not(target_os = "android")),
+                                target_os = "windows"
+                            ))]
                             {
                                 rustls_platform_verifier::Verifier::new_with_extra_roots(
                                     crate::tls::rustls_der(config.root_certs)?,
@@ -754,7 +761,10 @@ impl ClientBuilder {
                                 .map_err(crate::error::builder)?
                             }
 
-                            #[cfg(not(any(unix, target_os = "windows")))] // android not supported
+                            #[cfg(not(any(
+                                all(unix, not(target_os = "android")),
+                                target_os = "windows"
+                            )))]
                             return Err(crate::error::builder(
                                 "rustls-platform-verifier could not load extra certs",
                             ));
@@ -861,7 +871,7 @@ impl ClientBuilder {
                         config.tls_info,
                     )
                 }
-                #[cfg(any(feature = "native-tls", feature = "__rustls",))]
+                #[cfg(any(feature = "__native-tls", feature = "__rustls",))]
                 TlsBackend::UnknownPreconfigured => {
                     return Err(crate::error::builder(
                         "Unknown TLS backend passed to `use_preconfigured_tls`",
@@ -1918,7 +1928,7 @@ impl ClientBuilder {
     ///
     /// This requires the optional `native-tls` or `rustls(-...)` feature to be
     /// enabled.
-    #[cfg(any(feature = "native-tls", feature = "__rustls"))]
+    #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls"))))]
     pub fn identity(mut self, identity: Identity) -> ClientBuilder {
         self.config.identity = Some(identity);
@@ -2087,7 +2097,7 @@ impl ClientBuilder {
     /// # Optional
     ///
     /// This requires the optional `native-tls` feature to be enabled.
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "native-tls")))]
     pub fn tls_backend_native(mut self) -> ClientBuilder {
         self.config.tls = TlsBackend::NativeTls;
@@ -2095,7 +2105,7 @@ impl ClientBuilder {
     }
 
     /// Deprecated: use [`ClientBuilder::tls_backend_native()`] instead.
-    #[cfg(feature = "native-tls")]
+    #[cfg(feature = "__native-tls")]
     pub fn use_native_tls(self) -> ClientBuilder {
         self.tls_backend_native()
     }
@@ -2147,11 +2157,11 @@ impl ClientBuilder {
     ///
     /// This requires one of the optional features `native-tls` or
     /// `rustls(-...)` to be enabled.
-    #[cfg(any(feature = "native-tls", feature = "__rustls",))]
+    #[cfg(any(feature = "__native-tls", feature = "__rustls",))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls"))))]
     pub fn tls_backend_preconfigured(mut self, tls: impl Any) -> ClientBuilder {
         let mut tls = Some(tls);
-        #[cfg(feature = "native-tls")]
+        #[cfg(feature = "__native-tls")]
         {
             if let Some(conn) = (&mut tls as &mut dyn Any).downcast_mut::<Option<TlsConnector>>() {
                 let tls = conn.take().expect("is definitely Some");
@@ -2178,7 +2188,7 @@ impl ClientBuilder {
     }
 
     /// Deprecated: use [`ClientBuilder::tls_backend_preconfigured()`] instead.
-    #[cfg(any(feature = "native-tls", feature = "__rustls",))]
+    #[cfg(any(feature = "__native-tls", feature = "__rustls",))]
     pub fn use_preconfigured_tls(self, tls: impl Any) -> ClientBuilder {
         self.tls_backend_preconfigured(tls)
     }
