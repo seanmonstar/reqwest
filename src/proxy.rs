@@ -26,6 +26,7 @@ use crate::Url;
 ///
 /// - a URL of how to talk to the proxy
 /// - rules on what `Client` requests should be directed to the proxy
+/// - rules on what extra headers to send to the proxy
 ///
 /// For instance, let's look at `Proxy::http`:
 ///
@@ -54,7 +55,7 @@ use crate::Url;
 /// ```
 #[derive(Clone)]
 pub struct Proxy {
-    extra: Extra,
+    extra: ProxyExtra,
     intercept: Intercept,
     no_proxy: Option<NoProxy>,
 }
@@ -65,8 +66,10 @@ pub struct NoProxy {
     inner: String,
 }
 
-#[derive(Clone)]
-struct Extra {
+/// Extra configuration for a Proxy connection, such as `Proxy-Authorization`
+/// or other custom headers.
+#[derive(Clone, Debug, Default)]
+pub struct ProxyExtra {
     auth: Option<HeaderValue>,
     misc: Option<HeaderMap>,
 }
@@ -75,7 +78,7 @@ struct Extra {
 
 pub(crate) struct Matcher {
     inner: Matcher_,
-    extra: Extra,
+    extra: ProxyExtra,
     maybe_has_http_auth: bool,
     maybe_has_http_custom_headers: bool,
 }
@@ -91,7 +94,7 @@ pub(crate) struct Intercepted {
     inner: matcher::Intercept,
     /// This is because of `reqwest::Proxy`'s design which allows configuring
     /// an explicit auth, besides what might have been in the URL (or Custom).
-    extra: Extra,
+    extra: ProxyExtra,
 }
 
 /*
@@ -117,8 +120,12 @@ impl ProxyScheme {
 /// Trait used for converting into a proxy scheme. This trait supports
 /// parsing from a URL-like type, whilst also supporting proxy schemes
 /// built directly using the factory methods.
-pub trait IntoProxy {
+pub trait IntoProxy: Sized {
     fn into_proxy(self) -> crate::Result<Url>;
+    fn into_proxy_with_extra(self) -> crate::Result<(Url, ProxyExtra)> {
+        let url = self.into_proxy()?;
+        Ok((url, ProxyExtra::new()))
+    }
 }
 
 impl<S: IntoUrl> IntoProxy for S {
@@ -162,6 +169,17 @@ impl<S: IntoUrl> IntoProxy for S {
     }
 }
 
+impl<S: IntoUrl> IntoProxy for (S, ProxyExtra) {
+    fn into_proxy(self) -> crate::Result<Url> {
+        self.0.into_proxy()
+    }
+
+    fn into_proxy_with_extra(self) -> crate::Result<(Url, ProxyExtra)> {
+        let (url, extra) = self;
+        Ok((url.into_proxy()?, extra))
+    }
+}
+
 // These bounds are accidentally leaked by the blanket impl of IntoProxy
 // for all types that implement IntoUrl. So, this function exists to detect
 // if we were to break those bounds for a user.
@@ -189,7 +207,12 @@ impl Proxy {
     /// # fn main() {}
     /// ```
     pub fn http<U: IntoProxy>(proxy_scheme: U) -> crate::Result<Proxy> {
-        Ok(Proxy::new(Intercept::Http(proxy_scheme.into_proxy()?)))
+        let (target, extra) = proxy_scheme.into_proxy_with_extra()?;
+        Ok(Proxy {
+            intercept: Intercept::Http(target),
+            extra,
+            no_proxy: None,
+        })
     }
 
     /// Proxy all HTTPS traffic to the passed URL.
@@ -207,7 +230,12 @@ impl Proxy {
     /// # fn main() {}
     /// ```
     pub fn https<U: IntoProxy>(proxy_scheme: U) -> crate::Result<Proxy> {
-        Ok(Proxy::new(Intercept::Https(proxy_scheme.into_proxy()?)))
+        let (target, extra) = proxy_scheme.into_proxy_with_extra()?;
+        Ok(Proxy {
+            intercept: Intercept::Https(target),
+            extra,
+            no_proxy: None,
+        })
     }
 
     /// Proxy **all** traffic to the passed URL.
@@ -228,12 +256,23 @@ impl Proxy {
     /// # fn main() {}
     /// ```
     pub fn all<U: IntoProxy>(proxy_scheme: U) -> crate::Result<Proxy> {
-        Ok(Proxy::new(Intercept::All(proxy_scheme.into_proxy()?)))
+        let (target, extra) = proxy_scheme.into_proxy_with_extra()?;
+        Ok(Proxy {
+            intercept: Intercept::All(target),
+            extra,
+            no_proxy: None,
+        })
     }
 
     /// Provide a custom function to determine what traffic to proxy to where.
     ///
-    /// # Example
+    /// Optionally set dynamic headers for the proxy connection by returning
+    /// a tuple `(impl IntoUrl, ProxyExtra)` in the callback.
+    ///
+    /// When the callback returns `ProxyExtra`, any set fields will override the
+    /// base fields configured on this `Proxy`.
+    ///
+    /// # Examples
     ///
     /// ```
     /// # extern crate reqwest;
@@ -252,22 +291,48 @@ impl Proxy {
     /// # }
     /// # fn main() {}
     /// ```
+    ///
+    /// You can dynamically set proxy headers when a request is intercepted like
+    /// so:
+    ///
+    /// ```
+    /// # extern crate reqwest;
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # fn new_trace_id() -> reqwest::header::HeaderValue { reqwest::header::HeaderValue::from_static("1234") }
+    /// let target = reqwest::Url::parse("https://my.prox")?;
+    /// let client = reqwest::Client::builder()
+    ///     .proxy(reqwest::Proxy::custom(move |url| {
+    ///         if url.host_str() == Some("hyper.rs") {
+    ///             let auth = reqwest::header::HeaderValue::from_static("alohomora");
+    ///             let headers = reqwest::header::HeaderMap::from_iter([
+    ///                 (reqwest::header::HeaderName::from_static("x-trace-id"), new_trace_id()),
+    ///             ]);
+    ///             let extra = reqwest::ProxyExtra::new()
+    ///                 .custom_http_auth(auth)
+    ///                 .headers(headers);
+    ///             Some((target.clone(), extra))
+    ///         } else {
+    ///             None
+    ///         }
+    ///     }))
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// # fn main() {}
+    /// ```
     pub fn custom<F, U: IntoProxy>(fun: F) -> Proxy
     where
         F: Fn(&Url) -> Option<U> + Send + Sync + 'static,
     {
         Proxy::new(Intercept::Custom(Custom {
-            func: Arc::new(move |url| fun(url).map(IntoProxy::into_proxy)),
+            func: Arc::new(move |url| fun(url).map(IntoProxy::into_proxy_with_extra)),
             no_proxy: None,
         }))
     }
 
     fn new(intercept: Intercept) -> Proxy {
         Proxy {
-            extra: Extra {
-                auth: None,
-                misc: None,
-            },
+            extra: ProxyExtra::new(),
             intercept,
             no_proxy: None,
         }
@@ -319,10 +384,10 @@ impl Proxy {
         self
     }
 
-    /// Adds a Custom Headers to Proxy
-    /// Adds custom headers to this Proxy
+    /// Set custom headers sent to this Proxy
     ///
     /// # Example
+    ///
     /// ```
     /// # extern crate reqwest;
     /// # use reqwest::header::*;
@@ -345,7 +410,7 @@ impl Proxy {
         self
     }
 
-    /// Adds a `No Proxy` exclusion list to this Proxy
+    /// Set a `No Proxy` exclusion list for this Proxy
     ///
     /// # Example
     ///
@@ -360,6 +425,14 @@ impl Proxy {
     /// ```
     pub fn no_proxy(mut self, no_proxy: Option<NoProxy>) -> Proxy {
         self.no_proxy = no_proxy;
+        self
+    }
+
+    /// Set the proxy extras sent to this Proxy
+    ///
+    /// Replaces any custom auth or headers previously set on this Proxy.
+    pub fn extras(mut self, extra: ProxyExtra) -> Proxy {
+        self.extra = extra;
         self
     }
 
@@ -511,14 +584,37 @@ impl NoProxy {
     }
 }
 
+impl ProxyExtra {
+    /// Create a new, empty `ProxyExtra` configuration.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the `Proxy-Authorization` header sent to the proxy using Basic auth.
+    pub fn basic_auth(mut self, username: &str, password: &str) -> Self {
+        let header = encode_basic_auth(username, password);
+        self.auth = Some(header);
+        self
+    }
+
+    /// Set the `Proxy-Authorization` header sent to the proxy to a specified header value.
+    pub fn custom_http_auth(mut self, header_value: HeaderValue) -> Self {
+        self.auth = Some(header_value);
+        self
+    }
+
+    /// Set custom headers to be sent to the proxy.
+    pub fn headers(mut self, headers: HeaderMap) -> Self {
+        self.misc = Some(headers);
+        self
+    }
+}
+
 impl Matcher {
     pub(crate) fn system() -> Self {
         Self {
             inner: Matcher_::Util(matcher::Matcher::from_system()),
-            extra: Extra {
-                auth: None,
-                misc: None,
-            },
+            extra: ProxyExtra::new(),
             // maybe env vars have auth!
             maybe_has_http_auth: true,
             maybe_has_http_custom_headers: true,
@@ -526,15 +622,13 @@ impl Matcher {
     }
 
     pub(crate) fn intercept(&self, dst: &Uri) -> Option<Intercepted> {
-        let inner = match self.inner {
-            Matcher_::Util(ref m) => m.intercept(dst),
-            Matcher_::Custom(ref c) => c.call(dst),
-        };
-
-        inner.map(|inner| Intercepted {
-            inner,
-            extra: self.extra.clone(),
-        })
+        match self.inner {
+            Matcher_::Util(ref m) => m.intercept(dst).map(|inner| Intercepted {
+                inner,
+                extra: self.extra.clone(),
+            }),
+            Matcher_::Custom(ref c) => c.call(dst).map(|i| i.or_extra(&self.extra)),
+        }
     }
 
     /// Return whether this matcher might provide HTTP (not s) auth.
@@ -608,6 +702,16 @@ impl Intercepted {
     #[cfg(feature = "socks")]
     pub(crate) fn raw_auth(&self) -> Option<(&str, &str)> {
         self.inner.raw_auth()
+    }
+
+    fn or_extra(self, base: &ProxyExtra) -> Self {
+        Intercepted {
+            inner: self.inner,
+            extra: ProxyExtra {
+                auth: self.extra.auth.or_else(|| base.auth.clone()),
+                misc: self.extra.misc.or_else(|| base.misc.clone()),
+            },
+        }
     }
 }
 
@@ -771,12 +875,12 @@ fn url_auth(url: &mut Url, username: &str, password: &str) {
 
 #[derive(Clone)]
 struct Custom {
-    func: Arc<dyn Fn(&Url) -> Option<crate::Result<Url>> + Send + Sync + 'static>,
+    func: Arc<dyn Fn(&Url) -> Option<crate::Result<(Url, ProxyExtra)>> + Send + Sync + 'static>,
     no_proxy: Option<NoProxy>,
 }
 
 impl Custom {
-    fn call(&self, uri: &http::Uri) -> Option<matcher::Intercept> {
+    fn call(&self, uri: &http::Uri) -> Option<Intercepted> {
         let url = format!(
             "{}://{}{}{}",
             uri.scheme()?,
@@ -787,16 +891,11 @@ impl Custom {
         .parse()
         .expect("should be valid Url");
 
-        (self.func)(&url)
-            .and_then(|result| result.ok())
-            .and_then(|target| {
-                let m = matcher::Matcher::builder()
-                    .all(String::from(target))
-                    .build();
-
-                m.intercept(uri)
-            })
-        //.map(|scheme| scheme.if_no_auth(&self.auth))
+        let (target, extra) = (self.func)(&url)?.ok()?;
+        let m = matcher::Matcher::builder()
+            .all(String::from(target))
+            .build();
+        m.intercept(uri).map(|inner| Intercepted { inner, extra })
     }
 }
 
@@ -867,11 +966,11 @@ mod tests {
         let target2 = "https://example.domain/";
         let p = Proxy::custom(move |url| {
             if url.host_str() == Some("hyper.rs") {
-                target1.parse().ok()
+                Some(target1)
             } else if url.scheme() == "http" {
-                target2.parse().ok()
+                Some(target2)
             } else {
-                None::<Url>
+                None
             }
         })
         .into_matcher();
@@ -901,13 +1000,42 @@ mod tests {
     #[test]
     fn test_custom_with_custom_auth_header() {
         let target = "http://example.domain/";
-        let p = Proxy::custom(move |_| target.parse::<Url>().ok())
+        let p = Proxy::custom(move |_| Some(target))
             .custom_http_auth(http::HeaderValue::from_static("testme"))
             .into_matcher();
 
         let got = p.intercept(&url("http://anywhere.local")).unwrap();
         let auth = got.basic_auth().unwrap();
         assert_eq!(auth, "testme");
+    }
+
+    #[test]
+    fn test_custom_with_dynamic_auth_header() {
+        let target = Url::parse("http://example.domain/").unwrap();
+        let p = Proxy::custom(move |url| {
+            if url.host_str() == Some("hyper.rs") {
+                let auth = http::HeaderValue::from_static("new-token");
+                let trace_id = http::HeaderValue::from_static("random-id");
+                let extra = ProxyExtra::new().custom_http_auth(auth).headers({
+                    let mut headers = HeaderMap::new();
+                    headers.insert("x-trace-id", trace_id);
+                    headers
+                });
+                Some((target.clone(), extra))
+            } else {
+                None
+            }
+        })
+        .into_matcher();
+
+        let got = p.intercept(&url("http://hyper.rs/foo")).unwrap();
+        assert_eq!(got.uri().to_string(), "http://example.domain/");
+        assert_eq!(got.basic_auth().unwrap(), "new-token");
+        let headers = got.custom_headers().unwrap();
+        assert_eq!(headers.get("x-trace-id").unwrap(), "random-id");
+
+        let got = p.intercept(&url("http://notfound.local"));
+        assert!(got.is_none());
     }
 
     #[test]
