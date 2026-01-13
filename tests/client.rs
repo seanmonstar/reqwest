@@ -4,7 +4,10 @@ mod support;
 
 use support::server;
 
-use http::header::{CONTENT_LENGTH, CONTENT_TYPE, TRANSFER_ENCODING};
+use http::{
+    header::{CONTENT_LENGTH, CONTENT_TYPE, TRANSFER_ENCODING},
+    HeaderMap, HeaderValue,
+};
 #[cfg(feature = "json")]
 use std::collections::HashMap;
 
@@ -546,4 +549,22 @@ async fn error_has_url() {
     let u = "http://does.not.exist.local/ever";
     let err = reqwest::get(u).await.unwrap_err();
     assert_eq!(err.url().map(AsRef::as_ref), Some(u), "{err:?}");
+}
+
+#[test]
+fn client_request_builder_includes_default_headers() {
+    let mut headers = HeaderMap::new();
+    headers.insert("X-MY-HEADER", HeaderValue::from_static("value"));
+    let client = Client::builder()
+        .default_headers(headers)
+        .build()
+        .expect("build client");
+    let req = client
+        .get("http://google.com")
+        .build()
+        .expect("build request");
+    assert!(req
+        .headers()
+        .get("X-MY-HEADER")
+        .is_some_and(|v| v == HeaderValue::from_static("value")));
 }
