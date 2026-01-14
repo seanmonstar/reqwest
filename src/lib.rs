@@ -195,7 +195,7 @@
 //! - **rustls**: Enables TLS functionality provided by `rustls`.
 //! - **native-tls**: Enables TLS functionality provided by `native-tls`.
 //! - **native-tls-vendored**: Enables the `vendored` feature of `native-tls`.
-//! - **native-tls-alpn**: Enables the `alpn` feature of `native-tls`.
+//! - **native-tls-no-alpn**: Enables `native-tls` without its `alpn` feature.
 //! - **blocking**: Provides the [blocking][] client API.
 //! - **charset** *(enabled by default)*: Improved support for decoding text.
 //! - **cookies**: Provides cookie session support.
