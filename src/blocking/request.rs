@@ -525,7 +525,7 @@ impl RequestBuilder {
                 Ok(body) => {
                     req.headers_mut()
                         .entry(CONTENT_TYPE)
-                        .or_insert(HeaderValue::from_static("application/json"));
+                        .or_insert_with(|| HeaderValue::from_static("application/json"));
                     *req.body_mut() = Some(body.into());
                 }
                 Err(err) => error = Some(crate::error::builder(err)),
