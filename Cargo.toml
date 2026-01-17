@@ -71,6 +71,8 @@ hickory-dns = ["dep:hickory-resolver", "dep:once_cell"]
 
 stream = ["tokio/fs", "dep:futures-util", "dep:tokio-util", "dep:wasm-streams"]
 
+sse = ["stream"]
+
 socks = []
 
 # Use the system's proxy configuration.
@@ -285,3 +287,8 @@ required-features = ["deflate", "stream"]
 name = "multipart"
 path = "tests/multipart.rs"
 required-features = ["multipart"]
+
+[[test]]
+name = "sse"
+path = "tests/sse.rs"
+required-features = ["sse"]
