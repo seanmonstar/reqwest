@@ -2693,6 +2693,16 @@ impl Client {
             }
         }
     }
+
+    /// If a `CookieStore` is configured for the `Client`, clear any stored
+    /// `Cookie`s.
+    #[cfg(feature = "cookies")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "cookies")))]
+    pub fn clear_cookies(&self) {
+        if let Some(cookie_store) = self.inner.cookie_store.as_ref() {
+            cookie_store.clear();
+        }
+    }
 }
 
 impl fmt::Debug for Client {
