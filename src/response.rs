@@ -3,6 +3,10 @@ use url::Url;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ResponseUrl(pub Url);
 
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Trailers(pub http::HeaderMap);
+
 /// Extension trait for http::response::Builder objects
 ///
 /// Allows the user to add a `Url` to the http::Response
