@@ -371,6 +371,9 @@ if_hyper! {
     #[cfg(feature = "blocking")]
     pub mod blocking;
     mod connect;
+    #[cfg(feature = "custom-hyper-connector")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "custom-hyper-connector")))]
+    pub mod connector;
     #[cfg(feature = "cookies")]
     pub mod cookie;
     pub mod dns;
