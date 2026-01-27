@@ -208,6 +208,7 @@
 //! - **json**: Provides serialization and deserialization for JSON bodies.
 //! - **multipart**: Provides functionality for multipart forms.
 //! - **stream**: Adds support for `futures::Stream`.
+//! - **sse**: Adds Server-Sent Events helpers.
 //! - **socks**: Provides SOCKS5 proxy support.
 //! - **hickory-dns**: Enables a hickory-dns async resolver instead of default
 //!   threadpool using `getaddrinfo`.
@@ -288,10 +289,15 @@ if_hyper! {
 }
 mod into_url;
 mod response;
+/// Server-Sent Events helpers and types.
+#[cfg(feature = "sse")]
+pub mod sse;
 
 pub use self::error::{Error, Result};
 pub use self::into_url::IntoUrl;
 pub use self::response::ResponseBuilderExt;
+#[cfg(feature = "sse")]
+pub use self::sse::{SseEvent, SseStream};
 
 /// Shortcut method to quickly make a `GET` request.
 ///
