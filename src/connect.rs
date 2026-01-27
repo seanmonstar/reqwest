@@ -40,6 +40,9 @@ pub(crate) enum Connector {
     // at least one custom layer along with maybe an outer timeout layer
     // from `builder.connect_timeout()`
     WithLayers(BoxCloneSyncService<Unnameable, Conn, BoxError>),
+    // custom user-provided connector
+    #[cfg(feature = "custom-hyper-connector")]
+    Custom(BoxCloneSyncService<Uri, Conn, BoxError>),
 }
 
 impl Service<Uri> for Connector {
@@ -51,6 +54,8 @@ impl Service<Uri> for Connector {
         match self {
             Connector::Simple(service) => service.poll_ready(cx),
             Connector::WithLayers(service) => service.poll_ready(cx),
+            #[cfg(feature = "custom-hyper-connector")]
+            Connector::Custom(service) => service.poll_ready(cx),
         }
     }
 
@@ -58,6 +63,8 @@ impl Service<Uri> for Connector {
         match self {
             Connector::Simple(service) => service.call(dst),
             Connector::WithLayers(service) => service.call(Unnameable(dst)),
+            #[cfg(feature = "custom-hyper-connector")]
+            Connector::Custom(service) => service.call(dst),
         }
     }
 }
@@ -1265,6 +1272,71 @@ impl TlsInfoFactory
     }
 }
 
+// Wrapper type for custom connectors that provides TlsInfoFactory
+#[cfg(feature = "custom-hyper-connector")]
+pin_project! {
+    pub(crate) struct CustomConn<T> {
+        #[pin]
+        inner: T,
+    }
+}
+
+#[cfg(feature = "custom-hyper-connector")]
+impl<T: Connection> Connection for CustomConn<T> {
+    fn connected(&self) -> Connected {
+        self.inner.connected()
+    }
+}
+
+#[cfg(feature = "custom-hyper-connector")]
+impl<T: Read + Unpin> Read for CustomConn<T> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: ReadBufCursor<'_>,
+    ) -> Poll<io::Result<()>> {
+        self.project().inner.poll_read(cx, buf)
+    }
+}
+
+#[cfg(feature = "custom-hyper-connector")]
+impl<T: Write + Unpin> Write for CustomConn<T> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        self.project().inner.poll_write(cx, buf)
+    }
+
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> Poll<Result<usize, io::Error>> {
+        self.project().inner.poll_write_vectored(cx, bufs)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.inner.is_write_vectored()
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        self.project().inner.poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        self.project().inner.poll_shutdown(cx)
+    }
+}
+
+#[cfg(all(feature = "custom-hyper-connector", feature = "__tls"))]
+impl<T> TlsInfoFactory for CustomConn<T> {
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        // Custom connectors handle their own TLS, no info available from reqwest's perspective
+        None
+    }
+}
 pub(crate) trait AsyncConn:
     Read + Write + Connection + Send + Sync + Unpin + 'static
 {
@@ -1364,6 +1436,21 @@ pub(crate) mod sealed {
         fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
             let this = self.project();
             Write::poll_shutdown(this.inner, cx)
+        }
+    }
+
+    impl Conn {
+        /// Creates a connection from a custom connector's output.
+        #[cfg(feature = "custom-hyper-connector")]
+        pub(crate) fn custom<T>(io: T) -> Self
+        where
+            T: Read + Write + Connection + Send + Sync + Unpin + 'static,
+        {
+            Conn {
+                inner: Box::new(super::CustomConn { inner: io }),
+                is_proxy: false,
+                tls_info: false,
+            }
         }
     }
 }
