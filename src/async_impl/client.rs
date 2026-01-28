@@ -562,7 +562,7 @@ impl ClientBuilder {
                     {
                         // Default backend + rustls Identity doesn't work.
                         if let Some(_id) = config.identity {
-                            return Err(crate::error::builder("incompatible TLS identity type"));
+                            return Err(crate::error::builder("Default backend doesn't support identity with rustls. Create a client with use_rustls_tls."));
                         }
                     }
 
