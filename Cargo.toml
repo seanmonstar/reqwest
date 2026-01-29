@@ -80,6 +80,9 @@ system-proxy = ["hyper-util/client-proxy-system"]
 http3 = ["rustls", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
 
 
+# Only works on Rust version > 1.64
+into_future = []
+
 # Internal (PRIVATE!) features used to aid testing.
 # Don't rely on these whatsoever. They may disappear at any time.
 
