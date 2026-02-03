@@ -166,6 +166,14 @@ impl Kind {
     }
 }
 
+impl From<()> for Body {
+    #[inline]
+    fn from(_: ()) -> Body {
+        // useful for `TryFrom<http::Request<()>>`
+        Body::empty()
+    }
+}
+
 impl From<Vec<u8>> for Body {
     #[inline]
     fn from(v: Vec<u8>) -> Body {
