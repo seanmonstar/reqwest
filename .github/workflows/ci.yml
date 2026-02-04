@@ -22,7 +22,8 @@ jobs:
       - features
       - unstable
       - nightly
-      - msrv
+      - msrv_default
+      - msrv_oldest
       - android
       - wasm
       - docs
@@ -36,7 +37,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@stable
@@ -56,42 +57,50 @@ jobs:
 
     runs-on: ${{ matrix.os || 'ubuntu-latest' }}
 
+    env:
+      AWS_LC_SYS_PREBUILT_NASM: ${{ matrix.aws_lc_sys_prebuilt_nasm || 0 }}
+
     # The build matrix does not yet support 'allow failures' at job level.
     # See `jobs.nightly` for the active nightly job definition.
     strategy:
       matrix:
         name:
           - linux / stable
+          - linux / stable-aarch64-gnu
           - linux / beta
           # - linux / nightly
           - macOS / stable
           - windows / stable-x86_64-msvc
           - windows / stable-i686-msvc
+          - windows / stable-aarch64-msvc
           - windows / stable-x86_64-gnu
           - windows / stable-i686-gnu
           - "feat.: default-tls disabled"
-          - "feat.: rustls-tls"
-          - "feat.: rustls-tls-manual-roots"
-          - "feat.: rustls-tls-native-roots"
-          - "feat.: rustls-tls-no-provider"
+          - "feat.: rustls"
+          - "feat.: rustls-no-provider"
           - "feat.: native-tls"
-          - "feat.: default-tls and rustls-tls"
-          - "feat.: rustls-tls and rustls-tls-no-provider"
+          - "feat.: default-tls and native-tls"
+          - "feat.: rustls and rustls-no-provider"
           - "feat.: cookies"
           - "feat.: blocking"
           - "feat.: blocking only"
           - "feat.: gzip"
           - "feat.: brotli"
           - "feat.: deflate"
+          - "feat.: query"
+          - "feat.: form"
           - "feat.: json"
           - "feat.: multipart"
           - "feat.: stream"
           - "feat.: socks/default-tls"
-          - "feat.: socks/rustls-tls"
+          - "feat.: socks/native-tls"
           - "feat.: hickory-dns"
 
         include:
           - name: linux / stable
+          - name: linux / stable-aarch64-gnu
+            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
           - name: linux / beta
             rust: beta
           # - name: linux / nightly
@@ -102,42 +111,46 @@ jobs:
           - name: windows / stable-x86_64-msvc
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart,stream"
+            features: "--features blocking,gzip,brotli,zstd,deflate,query,form,json,multipart,stream"
+            aws_lc_sys_prebuilt_nasm: 1
           - name: windows / stable-i686-msvc
             os: windows-latest
             target: i686-pc-windows-msvc
-            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart,stream"
+            features: "--features blocking,gzip,brotli,zstd,deflate,query,form,json,multipart,stream"
+            aws_lc_sys_prebuilt_nasm: 1
+          - name: windows / stable-aarch64-msvc
+            os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            features: "--features blocking,gzip,brotli,zstd,deflate,query,form,json,multipart,stream"
+            aws_lc_sys_prebuilt_nasm: 1
           - name: windows / stable-x86_64-gnu
             os: windows-latest
             rust: stable-x86_64-pc-windows-gnu
             target: x86_64-pc-windows-gnu
-            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart,stream"
+            features: "--features blocking,gzip,brotli,zstd,deflate,query,form,json,multipart,stream"
             package_name: mingw-w64-x86_64-gcc
             mingw64_path: "C:\\msys64\\mingw64\\bin"
+            aws_lc_sys_prebuilt_nasm: 1
           - name: windows / stable-i686-gnu
             os: windows-latest
             rust: stable-i686-pc-windows-gnu
             target: i686-pc-windows-gnu
-            features: "--features blocking,gzip,brotli,zstd,deflate,json,multipart,stream"
+            features: "--no-default-features --features blocking,gzip,brotli,zstd,deflate,query,form,json,multipart,stream,native-tls,http2"
             package_name: mingw-w64-i686-gcc
             mingw64_path: "C:\\msys64\\mingw32\\bin"
 
           - name: "feat.: default-tls disabled"
             features: "--no-default-features"
-          - name: "feat.: rustls-tls"
-            features: "--no-default-features --features rustls-tls"
-          - name: "feat.: rustls-tls-manual-roots"
-            features: "--no-default-features --features rustls-tls-manual-roots"
-          - name: "feat.: rustls-tls-native-roots"
-            features: "--no-default-features --features rustls-tls-native-roots"
-          - name: "feat.: rustls-tls-no-provider"
-            features: "--no-default-features --features rustls-tls-no-provider"
+          - name: "feat.: rustls"
+            features: "--no-default-features --features rustls"
+          - name: "feat.: rustls-no-provider"
+            features: "--no-default-features --features rustls-no-provider"
           - name: "feat.: native-tls"
             features: "--features native-tls"
-          - name: "feat.: rustls-tls and rustls-tls-no-provider"
-            features: "--features rustls-tls,rustls-tls-no-provider"
-          - name: "feat.: default-tls and rustls-tls"
-            features: "--features rustls-tls"
+          - name: "feat.: rustls and rustls-no-provider"
+            features: "--features rustls,rustls-no-provider"
+          - name: "feat.: default-tls and native-tls"
+            features: "--features native-tls"
           - name: "feat.: cookies"
             features: "--features cookies"
           - name: "feat.: blocking"
@@ -152,6 +165,10 @@ jobs:
             features: "--features zstd,stream"
           - name: "feat.: deflate"
             features: "--features deflate,stream"
+          - name: "feat.: query"
+            features: "--features query"
+          - name: "feat.: form"
+            features: "--features form"
           - name: "feat.: json"
             features: "--features json"
           - name: "feat.: multipart"
@@ -160,14 +177,14 @@ jobs:
             features: "--features stream"
           - name: "feat.: socks/default-tls"
             features: "--features socks"
-          - name: "feat.: socks/rustls-tls"
-            features: "--features socks,rustls-tls"
+          - name: "feat.: socks/native-tls"
+            features: "--features socks,native-tls"
           - name: "feat.: hickory-dns"
             features: "--features hickory-dns"
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@master
@@ -180,6 +197,16 @@ jobs:
           echo "${{ matrix.mingw64_path }}" >> $GITHUB_PATH
           echo "C:\msys64\usr\bin" >> $GITHUB_PATH
         if: matrix.mingw64_path
+        shell: bash
+
+      - name: Install x86_64 Clang & NASM
+        if: ${{ matrix.target == 'x86_64-pc-windows-gnu' }}
+        run: pacman.exe -Sy --noconfirm mingw-w64-x86_64-clang mingw-w64-x86_64-nasm
+        shell: bash
+
+      - name: Add libclang to the environment for windows x86_64-gnu
+        run: echo "LIBCLANG_PATH=C:\msys64\mingw64\bin" >> $env:GITHUB_ENV
+        if: ${{ matrix.target == 'x86_64-pc-windows-gnu' }}
         shell: bash
 
       - name: Update gcc
@@ -208,7 +235,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -219,7 +246,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: check --feature-powerset
-        run: cargo hack --no-dev-deps check --feature-powerset --depth 2 --skip http3,__tls,__rustls,__rustls-ring,native-tls-vendored,trust-dns
+        run: cargo hack --no-dev-deps check --feature-powerset --depth 2 --skip http3,__tls,__rustls,__rustls-aws-lc-rs,native-tls-vendored,trust-dns
         env:
           RUSTFLAGS: "-D dead_code -D unused_imports"
 
@@ -229,7 +256,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@master
@@ -249,7 +276,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -269,7 +296,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@nightly
@@ -284,20 +311,49 @@ jobs:
           cargo clean
           cargo update -Z minimal-versions
           cargo update -p proc-macro2 --precise 1.0.87
+          cargo update -p aws-lc-rs --precise 1.13.1
+          cargo update -p aws-lc-sys --precise 0.29.0
           cargo update -p openssl-sys
           cargo update -p openssl
           cargo check
           cargo check --all-features
 
-  msrv:
-    name: MSRV
+  msrv_default:
+    name: MSRV Default
     needs: [style]
 
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve MSRV aware dependencies
+        run: cargo update
+        env:
+          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+
+      # required by rustls-platform-verifier
+      - name: Install rust (1.71.0)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.71.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check
+        run: cargo check
+
+  msrv_oldest:
+    name: MSRV Oldest
+    needs: [style]
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
       - name: Resolve MSRV aware dependencies
@@ -317,7 +373,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Check
-        run: cargo check
+        run: cargo check --no-default-features --features="http2,charset,native-tls"
 
   android:
     name: Android
@@ -327,16 +383,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@stable
         with:
           target: aarch64-linux-android
 
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
       - name: Build
-        # disable default-tls feature since cross-compiling openssl is dragons
-        run: cargo build --target aarch64-linux-android --no-default-features
+        run: cargo ndk --target aarch64-linux-android build
 
   wasm:
     name: WASM
@@ -346,7 +404,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@stable

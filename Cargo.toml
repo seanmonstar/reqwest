@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.12.24"
+version = "0.13.1"
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -29,6 +29,8 @@ targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 features = [
     "blocking",
     "cookies",
+    "query",
+    "form",
     "json",
     "multipart",
 ]
@@ -36,27 +38,17 @@ features = [
 [features]
 default = ["default-tls", "charset", "http2", "system-proxy"]
 
-# Note: this doesn't enable the 'native-tls' feature, which adds specific
-# functionality for it.
-default-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
+default-tls = ["rustls"]
 
-http2 = ["h2", "hyper/http2", "hyper-util/http2", "hyper-rustls?/http2"]
+http2 = ["dep:h2", "hyper/http2", "hyper-util/http2", "hyper-rustls?/http2"]
 
-# Enables native-tls specific functionality not available by default.
-native-tls = ["default-tls"]
-native-tls-alpn = ["native-tls", "native-tls-crate?/alpn", "hyper-tls?/alpn"]
-native-tls-vendored = ["native-tls", "native-tls-crate?/vendored"]
+rustls = ["__rustls-aws-lc-rs", "dep:rustls-platform-verifier", "__rustls"]
+rustls-no-provider = ["dep:rustls-platform-verifier", "__rustls"]
 
-rustls-tls = ["rustls-tls-webpki-roots"]
-rustls-tls-no-provider = ["rustls-tls-manual-roots-no-provider"]
-
-rustls-tls-manual-roots-no-provider = ["__rustls"]
-rustls-tls-webpki-roots-no-provider = ["dep:webpki-roots", "hyper-rustls?/webpki-tokio", "__rustls"]
-rustls-tls-native-roots-no-provider = ["dep:rustls-native-certs", "hyper-rustls?/native-tokio", "__rustls"]
-
-rustls-tls-manual-roots = ["rustls-tls-manual-roots-no-provider", "__rustls-ring"]
-rustls-tls-webpki-roots = ["rustls-tls-webpki-roots-no-provider", "__rustls-ring"]
-rustls-tls-native-roots = ["rustls-tls-native-roots-no-provider", "__rustls-ring"]
+native-tls = ["__native-tls", "__native-tls-alpn"]
+native-tls-no-alpn = ["__native-tls"]
+native-tls-vendored = ["__native-tls", "native-tls-crate?/vendored", "__native-tls-alpn"]
+native-tls-vendored-no-alpn = ["__native-tls", "native-tls-crate?/vendored"]
 
 blocking = ["dep:futures-channel", "futures-channel?/sink", "dep:futures-util", "futures-util?/io", "futures-util?/sink", "tokio/sync"]
 
@@ -64,20 +56,17 @@ charset = ["dep:encoding_rs", "dep:mime"]
 
 cookies = ["dep:cookie_crate", "dep:cookie_store"]
 
-gzip = ["dep:async-compression", "async-compression?/gzip", "dep:futures-util", "dep:tokio-util"]
+gzip = ["tower-http/decompression-gzip"]
+brotli = ["tower-http/decompression-br"]
+zstd = ["tower-http/decompression-zstd"]
+deflate = ["tower-http/decompression-deflate"]
 
-brotli = ["dep:async-compression", "async-compression?/brotli", "dep:futures-util", "dep:tokio-util"]
-
-zstd = ["dep:async-compression", "async-compression?/zstd", "dep:futures-util", "dep:tokio-util"]
-
-deflate = ["dep:async-compression", "async-compression?/zlib", "dep:futures-util", "dep:tokio-util"]
-
-json = ["dep:serde_json"]
+query = ["dep:serde", "dep:serde_urlencoded"]
+form = ["dep:serde", "dep:serde_urlencoded"]
+json = ["dep:serde", "dep:serde_json"]
 
 multipart = ["dep:mime_guess", "dep:futures-util"]
 
-# Deprecated, remove this feature while bumping minor versions.
-trust-dns = []
 hickory-dns = ["dep:hickory-resolver", "dep:once_cell"]
 
 stream = ["tokio/fs", "dep:futures-util", "dep:tokio-util", "dep:wasm-streams"]
@@ -87,11 +76,8 @@ socks = []
 # Use the system's proxy configuration.
 system-proxy = ["hyper-util/client-proxy-system"]
 
-# Deprecated, switch to system-proxy.
-macos-system-configuration = ["system-proxy"]
-
 # Experimental HTTP/3 client.
-http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
+http3 = ["rustls", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
 
 
 # Internal (PRIVATE!) features used to aid testing.
@@ -101,23 +87,27 @@ http3 = ["rustls-tls-manual-roots", "dep:h3", "dep:h3-quinn", "dep:quinn", "toki
 __tls = ["dep:rustls-pki-types", "tokio/io-util"]
 
 # Enables common rustls code.
-# Equivalent to rustls-tls-manual-roots but shorter :)
 __rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls"]
-__rustls-ring = ["hyper-rustls?/ring", "tokio-rustls?/ring", "rustls?/ring", "quinn?/ring"]
+__rustls-aws-lc-rs = ["hyper-rustls?/aws-lc-rs", "tokio-rustls?/aws-lc-rs", "rustls?/aws-lc-rs", "quinn?/rustls-aws-lc-rs"]
+
+# Enables common native-tls code.
+__native-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
+__native-tls-alpn = ["native-tls-crate?/alpn", "hyper-tls?/alpn"]
 
 [dependencies]
 base64 = "0.22"
 http = "1.1"
 url = "2.4"
 bytes = "1.2"
-serde = "1.0"
-serde_urlencoded = "0.7.1"
 futures-core = { version = "0.3.28", default-features = false }
 futures-util = { version = "0.3.28", default-features = false, optional = true }
 sync_wrapper = { version = "1.0", features = ["futures"] }
 
 # Optional deps...
 
+serde = { version = "1.0", optional = true }
+## query/form
+serde_urlencoded = { version = "0.7.1", optional = true }
 ## json
 serde_json = { version = "1.0", optional = true }
 ## multipart
@@ -126,7 +116,7 @@ mime_guess = { version = "2.0", default-features = false, optional = true }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 encoding_rs = { version = "0.8", optional = true }
 http-body = "1"
-http-body-util = "0.1"
+http-body-util = "0.1.2"
 hyper = { version = "1.1", features = ["http1", "client"] }
 hyper-util = { version = "0.1.12", features = ["http1", "client", "client-legacy", "client-proxy", "tokio"] }
 h2 = { version = "0.4", optional = true }
@@ -135,32 +125,30 @@ percent-encoding = "2.3"
 tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
 tower = { version = "0.5.2", default-features = false, features = ["retry", "timeout", "util"] }
 tower-service = "0.3"
-tower-http = { version = "0.6.5", default-features = false, features = ["follow-redirect"] }
+tower-http = { version = "0.6.8", default-features = false, features = ["follow-redirect"] }
 pin-project-lite = "0.2.11"
 
 # Optional deps...
 rustls-pki-types = { version = "1.9.0", features = ["std"], optional = true }
 mime = { version = "0.3.16", optional = true }
 
-## default-tls
+# native-tls
 hyper-tls = { version = "0.6", optional = true }
 native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls" }
 tokio-native-tls = { version = "0.3.0", optional = true }
 
-# rustls-tls
+# default rustls
 hyper-rustls = { version = "0.27.0", default-features = false, optional = true, features = ["http1", "tls12"] }
 rustls = { version = "0.23.4", optional = true, default-features = false, features = ["std", "tls12"] }
 tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["tls12"] }
-webpki-roots = { version = "1", optional = true }
-rustls-native-certs = { version = "0.8.0", optional = true }
+rustls-platform-verifier = { version = "0.6", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.18.0", package = "cookie", optional = true }
-cookie_store = { version = "0.21.0", optional = true }
+cookie_store = { version = "0.22.0", optional = true }
 
-## compression
-async-compression = { version = "0.4.0", default-features = false, features = ["tokio"], optional = true }
-tokio-util = { version = "0.7.9", default-features = false, features = ["codec", "io"], optional = true }
+## stream
+tokio-util = { version = "0.7.9", default-features = false, features = ["io"], optional = true }
 
 ## hickory-dns
 hickory-resolver = { version = "0.25", optional = true, features = ["tokio"] }
@@ -169,7 +157,7 @@ once_cell = { version = "1.18", optional = true }
 # HTTP/3 experimental support
 h3 = { version = "0.0.8", optional = true }
 h3-quinn = { version = "0.0.10", optional = true }
-quinn = { version = "0.11.1", default-features = false, features = ["rustls", "runtime-tokio"], optional = true }
+quinn = { version = "0.11.1", default-features = false, features = ["runtime-tokio"], optional = true }
 futures-channel = { version = "0.3", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
@@ -188,10 +176,9 @@ futures-util = { version = "0.3.28", default-features = false, features = ["std"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3.77"
-serde_json = "1.0"
 wasm-bindgen = "0.2.89"
 wasm-bindgen-futures = "0.4.18"
-wasm-streams = { version = "0.4", optional = true }
+wasm-streams = { version = "0.5", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3.28"
@@ -249,6 +236,7 @@ required-features = ["socks"]
 [[example]]
 name = "form"
 path = "examples/form.rs"
+required-features = ["form"]
 
 [[example]]
 name = "simple"
@@ -257,7 +245,7 @@ path = "examples/simple.rs"
 [[example]]
 name = "h3_simple"
 path = "examples/h3_simple.rs"
-required-features = ["http3", "rustls-tls"]
+required-features = ["http3", "rustls"]
 
 [[example]]
 name = "connect_via_lower_priority_tokio_runtime"

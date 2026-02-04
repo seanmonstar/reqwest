@@ -1,10 +1,11 @@
 use http::header::USER_AGENT;
 use http::{HeaderMap, HeaderValue, Method};
-use js_sys::{Promise, JSON};
+use js_sys::Promise;
 use std::convert::TryInto;
 use std::{fmt, future::Future, sync::Arc};
 use url::Url;
 use wasm_bindgen::prelude::{wasm_bindgen, UnwrapThrowExt as _};
+use wasm_bindgen::JsCast;
 
 use super::{AbortGuard, Request, RequestBuilder, Response};
 use crate::IntoUrl;
@@ -30,24 +31,30 @@ fn js_fetch(req: &web_sys::Request) -> Promise {
     }
 }
 
-/// dox
+/// An HTTP Client for WebAssembly.
+///
+/// Uses the browser's Fetch API to make requests. The `Client` holds
+/// configuration that applies to all requests. To configure a `Client`,
+/// use `Client::builder()`.
 #[derive(Clone)]
 pub struct Client {
     config: Arc<Config>,
 }
 
-/// dox
+/// A `ClientBuilder` can be used to create a `Client` with custom configuration.
 pub struct ClientBuilder {
     config: Config,
 }
 
 impl Client {
-    /// dox
+    /// Constructs a new `Client`.
     pub fn new() -> Self {
         Client::builder().build().unwrap_throw()
     }
 
-    /// dox
+    /// Creates a `ClientBuilder` to configure a `Client`.
+    ///
+    /// This is the same as `ClientBuilder::new()`.
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }
@@ -255,17 +262,20 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     let url = Url::parse(&js_resp.url()).expect_throw("url parse");
 
     let js_headers = js_resp.headers();
-    let js_iter = js_sys::try_iter(&js_headers)
-        .expect_throw("headers try_iter")
-        .expect_throw("headers have an iterator");
-
-    for item in js_iter {
+    for item in js_headers.entries() {
         let item = item.expect_throw("headers iterator doesn't throw");
-        let serialized_headers: String = JSON::stringify(&item)
-            .expect_throw("serialized headers")
-            .into();
-        let [name, value]: [String; 2] = serde_json::from_str(&serialized_headers)
-            .expect_throw("deserializable serialized headers");
+        let item: js_sys::Array = item.dyn_into().expect_throw("header item is an array");
+
+        let name = item
+            .get(0)
+            .as_string()
+            .expect_throw("header name is a string");
+
+        let value = item
+            .get(1)
+            .as_string()
+            .expect_throw("header value is a string");
+
         resp = resp.header(&name, &value);
     }
 
@@ -277,7 +287,9 @@ async fn fetch(req: Request) -> crate::Result<Response> {
 // ===== impl ClientBuilder =====
 
 impl ClientBuilder {
-    /// dox
+    /// Constructs a new `ClientBuilder`.
+    ///
+    /// This is the same as `Client::builder()`.
     pub fn new() -> Self {
         ClientBuilder {
             config: Config::default(),

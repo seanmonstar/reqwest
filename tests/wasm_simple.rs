@@ -28,7 +28,7 @@ async fn simple_example() {
 async fn request_with_timeout() {
     let client = reqwest::Client::new();
     let err = client
-        .get("https://hyper.rs")
+        .get("https://hyper.rs/not-cached")
         .timeout(Duration::from_millis(1))
         .send()
         .await
@@ -36,4 +36,42 @@ async fn request_with_timeout() {
 
     assert!(err.is_request());
     assert!(err.is_timeout());
+}
+
+#[wasm_bindgen_test]
+#[cfg(feature = "json")]
+fn preserve_content_type_if_set_manually() {
+    use http::{header::CONTENT_TYPE, HeaderValue};
+    use reqwest::Client;
+    use std::collections::HashMap;
+
+    let mut map = HashMap::new();
+    map.insert("body", "json");
+    let content_type = HeaderValue::from_static("application/vnd.api+json");
+    let req = Client::new()
+        .post("https://google.com/")
+        .header(CONTENT_TYPE, &content_type)
+        .json(&map)
+        .build()
+        .expect("request is not valid");
+
+    assert_eq!(content_type, req.headers().get(CONTENT_TYPE).unwrap());
+}
+
+#[wasm_bindgen_test]
+#[cfg(feature = "json")]
+fn add_default_json_content_type_if_not_set_manually() {
+    use http::header::CONTENT_TYPE;
+    use reqwest::Client;
+    use std::collections::HashMap;
+
+    let mut map = HashMap::new();
+    map.insert("body", "json");
+    let req = Client::new()
+        .post("https://google.com/")
+        .json(&map)
+        .build()
+        .expect("request is not valid");
+
+    assert_eq!("application/json", req.headers().get(CONTENT_TYPE).unwrap());
 }
