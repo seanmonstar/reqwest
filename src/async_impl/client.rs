@@ -16,7 +16,7 @@ use super::Body;
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::H3Client;
-use crate::config::{RequestConfig, TotalTimeout};
+use crate::config::{ReadTimeout, RequestConfig, TotalTimeout};
 #[cfg(unix)]
 use crate::connect::uds::UnixSocketProvider;
 #[cfg(target_os = "windows")]
@@ -1082,7 +1082,7 @@ impl ClientBuilder {
                 },
                 headers: config.headers,
                 referer: config.referer,
-                read_timeout: config.read_timeout,
+                read_timeout: RequestConfig::new(config.read_timeout),
                 total_timeout: RequestConfig::new(config.timeout),
                 hyper,
                 proxies,
@@ -2629,11 +2629,8 @@ impl Client {
             .map(tokio::time::sleep)
             .map(Box::pin);
 
-        let read_timeout_fut = self
-            .inner
-            .read_timeout
-            .map(tokio::time::sleep)
-            .map(Box::pin);
+        let read_timeout = self.inner.read_timeout.fetch(&extensions).copied();
+        let read_timeout_fut = read_timeout.map(tokio::time::sleep).map(Box::pin);
 
         Pending {
             inner: PendingInner::Request(Box::pin(PendingRequest {
@@ -2646,7 +2643,7 @@ impl Client {
                 in_flight,
                 total_timeout,
                 read_timeout_fut,
-                read_timeout: self.inner.read_timeout,
+                read_timeout,
             })),
         }
     }
@@ -2913,7 +2910,7 @@ struct ClientRef {
     h3_client: Option<LayeredService<H3Client>>,
     referer: bool,
     total_timeout: RequestConfig<TotalTimeout>,
-    read_timeout: Option<Duration>,
+    read_timeout: RequestConfig<ReadTimeout>,
     proxies: Arc<Vec<ProxyMatcher>>,
     proxies_maybe_http_auth: bool,
     proxies_maybe_http_custom_headers: bool,
@@ -2949,11 +2946,8 @@ impl ClientRef {
 
         f.field("default_headers", &self.headers);
 
+        self.read_timeout.fmt_as_field(f);
         self.total_timeout.fmt_as_field(f);
-
-        if let Some(ref d) = self.read_timeout {
-            f.field("read_timeout", d);
-        }
     }
 }
 
