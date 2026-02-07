@@ -613,6 +613,29 @@ where
     }
 }
 
+impl TryFrom<HttpRequest<()>> for Request {
+    type Error = crate::Error;
+
+    fn try_from(req: HttpRequest<()>) -> crate::Result<Self> {
+        let (parts, body) = req.into_parts();
+        let Parts {
+            method,
+            uri,
+            headers,
+            ..
+        } = parts;
+        let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
+        Ok(Request {
+            method,
+            url,
+            headers,
+            body: None,
+            cors: true,
+            credentials: None,
+        })
+    }
+}
+
 impl TryFrom<Request> for HttpRequest<Body> {
     type Error = crate::Error;
 
