@@ -15,9 +15,9 @@ use tokio::time::Sleep;
 use url::Url;
 
 use super::body::Body;
-use crate::async_impl::body::ResponseBody;
 #[cfg(feature = "cookies")]
 use crate::cookie;
+use crate::{async_impl::body::ResponseBody, response::Trailers};
 
 #[cfg(feature = "charset")]
 use encoding_rs::{Encoding, UTF_8};
@@ -73,6 +73,20 @@ impl Response {
     #[inline]
     pub fn headers_mut(&mut self) -> &mut HeaderMap {
         self.res.headers_mut()
+    }
+
+    /// Get the trailers of this `Response`.
+    pub fn trailers(&self) -> Option<&HeaderMap> {
+        self.extensions()
+            .get::<Trailers>()
+            .map(|trailers| &trailers.0)
+    }
+
+    /// Get a mutable reference to the trailers of this `Response`.
+    pub fn trailers_mut(&mut self) -> Option<&mut HeaderMap> {
+        self.extensions_mut()
+            .get_mut::<Trailers>()
+            .map(|trailers| &mut trailers.0)
     }
 
     /// Get the content length of the response, if it is known.
@@ -313,16 +327,22 @@ impl Response {
     /// # }
     /// ```
     pub async fn chunk(&mut self) -> crate::Result<Option<Bytes>> {
+        use http_body::Frame;
         use http_body_util::BodyExt;
 
         // loop to ignore unrecognized frames
         loop {
             if let Some(res) = self.res.body_mut().frame().await {
                 let frame = res.map_err(crate::error::decode)?;
-                if let Ok(buf) = frame.into_data() {
-                    return Ok(Some(buf));
+                match frame.into_data().map_err(Frame::into_trailers) {
+                    Ok(buf) => {
+                        return Ok(Some(buf));
+                    }
+                    Err(Ok(trailers)) => {
+                        self.extensions_mut().insert(Trailers(trailers));
+                    }
+                    Err(Err(_)) => (),
                 }
-                // else continue
             } else {
                 return Ok(None);
             }
