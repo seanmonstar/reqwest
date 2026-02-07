@@ -547,3 +547,61 @@ async fn error_has_url() {
     let err = reqwest::get(u).await.unwrap_err();
     assert_eq!(err.url().map(AsRef::as_ref), Some(u), "{err:?}");
 }
+
+#[test]
+fn client_cannot_be_built_with_relative_base_url() {
+    let result = reqwest::Client::builder().base_url("/users/123").build();
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn client_can_be_built_with_absolute_base_url() {
+    let result = reqwest::Client::builder()
+        .base_url("http://example.com/users/123")
+        .build();
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn client_with_base_url_accepts_relative_urls() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
+
+    let server_base_url = format!("http://{}", server.addr());
+    let client = reqwest::Client::builder()
+        .base_url(server_base_url)
+        .no_proxy()
+        .build()
+        .expect("client builder");
+
+    // use a relative url on request
+    let req = client.get("/hello");
+    let res = req.send().await.expect("request");
+
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    let text = res.text().await.expect("Failed to get text");
+    assert_eq!("Hello", text);
+}
+
+#[tokio::test]
+async fn client_with_base_url_accepts_absolute_urls() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
+
+    let client = reqwest::Client::builder()
+        .base_url("http://example.com")
+        .no_proxy()
+        .build()
+        .expect("client builder");
+
+    // use an absolute url on request
+    let request_absolute_url = format!("http://{}/hello", server.addr());
+    let req = client.get(request_absolute_url);
+    let res = req.send().await.expect("request");
+
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    let text = res.text().await.expect("Failed to get text");
+    assert_eq!("Hello", text);
+}
