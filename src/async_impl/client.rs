@@ -69,6 +69,44 @@ use tower::{Layer, Service};
 use tower_http::decompression::Decompression;
 use tower_http::follow_redirect::FollowRedirect;
 
+/// A wrapper service that adapts a user's custom connector to produce `Conn` types.
+#[cfg(feature = "custom-hyper-connector")]
+#[derive(Clone)]
+struct CustomConnectorService<C> {
+    inner: C,
+}
+
+#[cfg(feature = "custom-hyper-connector")]
+impl<C, IO> Service<Uri> for CustomConnectorService<C>
+where
+    C: Service<Uri, Response = IO> + Clone + Send + Sync + 'static,
+    C::Error: Into<BoxError>,
+    C::Future: Send + 'static,
+    IO: hyper::rt::Read
+        + hyper::rt::Write
+        + hyper_util::client::legacy::connect::Connection
+        + Send
+        + Sync
+        + Unpin
+        + 'static,
+{
+    type Response = Conn;
+    type Error = BoxError;
+    type Future = Pin<Box<dyn Future<Output = Result<Conn, BoxError>> + Send>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx).map_err(Into::into)
+    }
+
+    fn call(&mut self, req: Uri) -> Self::Future {
+        let fut = self.inner.call(req);
+        Box::pin(async move {
+            let io = fut.await.map_err(Into::into)?;
+            Ok(Conn::custom(io))
+        })
+    }
+}
+
 /// An asynchronous `Client` to make Requests with.
 ///
 /// The Client has various configuration values to tweak, but the defaults
@@ -265,6 +303,9 @@ struct Config {
     unix_socket: Option<Arc<std::path::Path>>,
     #[cfg(target_os = "windows")]
     windows_named_pipe: Option<Arc<std::ffi::OsStr>>,
+
+    #[cfg(feature = "custom-hyper-connector")]
+    custom_connector: Option<crate::connect::Connector>,
 }
 
 impl Default for ClientBuilder {
@@ -388,6 +429,8 @@ impl ClientBuilder {
                 unix_socket: None,
                 #[cfg(target_os = "windows")]
                 windows_named_pipe: None,
+                #[cfg(feature = "custom-hyper-connector")]
+                custom_connector: None,
             },
         }
     }
@@ -999,7 +1042,17 @@ impl ClientBuilder {
             Some(format!("{:?}", &config.redirect_policy))
         };
 
-        let hyper_client = builder.build(connector_builder.build(config.connector_layers));
+        // Use custom connector if provided, otherwise use the built connector
+        #[cfg(feature = "custom-hyper-connector")]
+        let connector = if let Some(custom) = config.custom_connector {
+            custom
+        } else {
+            connector_builder.build(config.connector_layers)
+        };
+        #[cfg(not(feature = "custom-hyper-connector"))]
+        let connector = connector_builder.build(config.connector_layers);
+
+        let hyper_client = builder.build(connector);
         let hyper_service = HyperService {
             hyper: hyper_client,
         };
@@ -2443,6 +2496,57 @@ impl ClientBuilder {
 
         self.config.connector_layers.push(layer);
 
+        self
+    }
+
+    /// Set a custom connector to use for making HTTP connections.
+    ///
+    /// This allows you to provide a custom transport layer that handles
+    /// both connection establishment and TLS (if needed). This is useful
+    /// for scenarios like:
+    /// - Using WireGuard tunnels for connections
+    /// - Custom TLS implementations
+    /// - Network virtualization
+    ///
+    /// The connector must implement `Service<Uri>` and return a connection
+    /// type that implements the required hyper I/O traits.
+    ///
+    /// **Note**: When using a custom connector:
+    /// - TLS must be handled by the connector itself
+    /// - HTTP/3 is not supported
+    /// - Proxy settings are not applied (the connector is responsible for routing)
+    /// - `connector_layer()` settings are ignored
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use reqwest::Client;
+    ///
+    /// let client = Client::builder()
+    ///     .custom_connector(my_wireguard_connector)
+    ///     .build()
+    ///     .unwrap();
+    /// ```
+    #[cfg(feature = "custom-hyper-connector")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "custom-hyper-connector")))]
+    pub fn custom_connector<C, IO>(mut self, connector: C) -> ClientBuilder
+    where
+        C: Service<Uri, Response = IO> + Clone + Send + Sync + 'static,
+        C::Error: Into<BoxError>,
+        C::Future: Send + 'static,
+        IO: hyper::rt::Read
+            + hyper::rt::Write
+            + hyper_util::client::legacy::connect::Connection
+            + Send
+            + Sync
+            + Unpin
+            + 'static,
+    {
+        use tower::util::BoxCloneSyncService;
+
+        let wrapper = CustomConnectorService { inner: connector };
+        let boxed = BoxCloneSyncService::new(wrapper);
+        self.config.custom_connector = Some(Connector::Custom(boxed));
         self
     }
 }
