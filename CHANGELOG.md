@@ -1,3 +1,9 @@
+## v0.13.2
+
+- Fix HTTP/2 and native-tls ALPN feature combinations.
+- Fix HTTP/3 to send h3 ALPN.
+- (wasm) fix `RequestBuilder::json()` from override previously set content-type.
+
 ## v0.13.1
 
 - Fixes compiling with rustls on Android targets.
