@@ -55,7 +55,11 @@ impl Iterator for SocketAddrs {
 /// The options are overridden to look up for both IPv4 and IPv6 addresses
 /// to work with "happy eyeballs" algorithm.
 fn new_resolver() -> TokioResolver {
-    let mut builder = TokioResolver::builder_tokio().unwrap_or_else(|_| {
+    let mut builder = TokioResolver::builder_tokio().unwrap_or_else(|err| {
+        log::debug!(
+            "hickory-dns: failed to load system DNS configuration; falling back to hickory_resolver defaults: {:?}",
+            err
+        );
         TokioResolver::builder_with_config(
             ResolverConfig::default(),
             TokioConnectionProvider::default(),
