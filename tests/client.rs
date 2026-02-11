@@ -547,3 +547,156 @@ async fn error_has_url() {
     let err = reqwest::get(u).await.unwrap_err();
     assert_eq!(err.url().map(AsRef::as_ref), Some(u), "{err:?}");
 }
+
+#[test]
+fn request_builder_as_bytes() {
+    let client = Client::new();
+    let builder = client
+        .post("https://httpbin.org/post")
+        .header("X-Custom-Header", "test-value")
+        .body("test body");
+
+    let bytes = builder.as_bytes().unwrap();
+    assert!(bytes.is_some());
+    let bytes = bytes.unwrap();
+
+    // Verify it's valid HTTP/1.1 wire format
+    let request_str = String::from_utf8_lossy(&bytes);
+    assert!(request_str.starts_with("POST /post HTTP/1.1\r\n"));
+    assert!(request_str.contains("X-Custom-Header: test-value\r\n"));
+    assert!(request_str.contains("\r\n\r\ntest body"));
+}
+
+#[test]
+fn request_builder_as_bytes_with_json() {
+    #[cfg(feature = "json")]
+    {
+        let client = Client::new();
+        let builder = client
+            .post("https://httpbin.org/post")
+            .json(&serde_json::json!({"key": "value"}));
+
+        let bytes = builder.as_bytes().unwrap();
+        assert!(bytes.is_some());
+        let bytes = bytes.unwrap();
+
+        let request_str = String::from_utf8_lossy(&bytes);
+        assert!(request_str.starts_with("POST /post HTTP/1.1\r\n"));
+        assert!(request_str.contains("Content-Type: application/json\r\n"));
+        assert!(request_str.contains(r#"{"key":"value"}"#));
+    }
+}
+
+#[test]
+fn request_builder_as_bytes_streaming_body() {
+    #[cfg(feature = "stream")]
+    {
+        use reqwest::Body;
+
+        let client = Client::new();
+        let stream = futures_util::stream::iter(vec![
+            Ok::<_, std::convert::Infallible>("hello"),
+            Ok::<_, std::convert::Infallible>(" "),
+            Ok::<_, std::convert::Infallible>("world"),
+        ]);
+        let builder = client
+            .post("https://httpbin.org/post")
+            .body(Body::wrap_stream(stream));
+
+        // Streaming bodies should return None
+        let bytes = builder.as_bytes().unwrap();
+        assert!(bytes.is_none());
+    }
+}
+
+#[test]
+fn client_request_bytes() {
+    let client = Client::new();
+    let request = client
+        .post("https://httpbin.org/post")
+        .header("X-Custom-Header", "test-value")
+        .body("test body")
+        .build()
+        .unwrap();
+
+    let bytes = client.request_bytes(&request).unwrap();
+    assert!(bytes.is_some());
+    let bytes = bytes.unwrap();
+
+    // Verify it's valid HTTP/1.1 wire format
+    let request_str = String::from_utf8_lossy(&bytes);
+    assert!(request_str.starts_with("POST /post HTTP/1.1\r\n"));
+    assert!(request_str.contains("X-Custom-Header: test-value\r\n"));
+    assert!(request_str.contains("\r\n\r\ntest body"));
+}
+
+#[test]
+fn client_request_bytes_with_default_headers() {
+    let client = Client::builder()
+        .user_agent("test-agent/1.0")
+        .build()
+        .unwrap();
+
+    let request = client.get("https://httpbin.org/get").build().unwrap();
+
+    let bytes = client.request_bytes(&request).unwrap();
+    assert!(bytes.is_some());
+    let bytes = bytes.unwrap();
+
+    let request_str = String::from_utf8_lossy(&bytes);
+    // Should include the default user-agent header
+    assert!(request_str.contains("User-Agent: test-agent/1.0\r\n"));
+    // Should include the default accept header
+    assert!(request_str.contains("Accept: */*\r\n"));
+}
+
+#[test]
+fn client_request_bytes_streaming_body() {
+    #[cfg(feature = "stream")]
+    {
+        use reqwest::Body;
+
+        let client = Client::new();
+        let stream = futures_util::stream::iter(vec![
+            Ok::<_, std::convert::Infallible>("hello"),
+            Ok::<_, std::convert::Infallible>(" "),
+            Ok::<_, std::convert::Infallible>("world"),
+        ]);
+        let request = client
+            .post("https://httpbin.org/post")
+            .body(Body::wrap_stream(stream))
+            .build()
+            .unwrap();
+
+        // Streaming bodies should return None
+        let bytes = client.request_bytes(&request).unwrap();
+        assert!(bytes.is_none());
+    }
+}
+
+#[test]
+fn request_bytes_format() {
+    let client = Client::new();
+    let request = client
+        .post("https://example.com/path?query=value")
+        .header("Content-Type", "application/json")
+        .body(r#"{"test": "data"}"#)
+        .build()
+        .unwrap();
+
+    let bytes = client.request_bytes(&request).unwrap().unwrap();
+    let request_str = String::from_utf8_lossy(&bytes);
+
+    // Verify request line format
+    assert!(request_str.starts_with("POST /path?query=value HTTP/1.1\r\n"));
+
+    // Verify headers are present
+    assert!(request_str.contains("Content-Type: application/json\r\n"));
+
+    // Verify header/body separator
+    let parts: Vec<&str> = request_str.split("\r\n\r\n").collect();
+    assert_eq!(parts.len(), 2);
+
+    // Verify body
+    assert_eq!(parts[1], r#"{"test": "data"}"#);
+}

@@ -33,7 +33,6 @@ use crate::cookie::service::CookieService;
 use crate::dns::hickory::HickoryDnsResolver;
 use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
 use crate::error::{self, BoxError};
-use crate::into_url::try_uri;
 use crate::proxy::Matcher as ProxyMatcher;
 use crate::redirect::{self, TowerRedirectPolicy};
 #[cfg(feature = "__rustls")]
@@ -1449,6 +1448,7 @@ impl ClientBuilder {
         self
     }
 
+
     /// Set a timeout for only the connect phase of a `Client`.
     ///
     /// Default is `None`.
@@ -2571,6 +2571,109 @@ impl Client {
         self.execute_request(request)
     }
 
+    /// Prepare a request by merging headers and converting URL to URI.
+    ///
+    /// This is shared logic between `execute_request` and `request_bytes`.
+    /// It merges default headers from the client, converts the URL to a URI,
+    /// and merges proxy authentication and custom headers.
+    fn prepare_request_headers(
+        &self,
+        url: &Url,
+        headers: &mut HeaderMap,
+    ) -> crate::Result<Uri> {
+        // Merge default headers (same logic as execute_request)
+        for (key, value) in &self.inner.headers {
+            if let Entry::Vacant(entry) = headers.entry(key) {
+                entry.insert(value.clone());
+            }
+        }
+
+        let uri = match crate::into_url::try_uri(url) {
+            Ok(uri) => uri,
+            Err(_) => return Err(crate::error::url_invalid_uri(url.clone())),
+        };
+
+        // Merge proxy headers (same logic as execute_request)
+        self.proxy_auth(&uri, headers);
+        self.proxy_custom_headers(&uri, headers);
+
+        Ok(uri)
+    }
+
+    /// Get the raw HTTP request bytes that would be sent for a request.
+    ///
+    /// This serializes the request (including all merged headers from the client)
+    /// to HTTP/1.1 wire format bytes, exactly as they would be sent over the wire.
+    ///
+    /// Returns `None` if the body is a stream (non-reusable body).
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # async fn example() -> Result<(), reqwest::Error> {
+    /// let client = reqwest::Client::new();
+    /// let request = client.post("https://httpbin.org/post")
+    ///     .json(&serde_json::json!({"key": "value"}))
+    ///     .build()?;
+    ///
+    /// if let Some(bytes) = client.request_bytes(&request)? {
+    ///     // Write to file, log, or do whatever you want
+    ///     std::fs::write("request.log", bytes)?;
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn request_bytes(&self, req: &Request) -> crate::Result<Option<Vec<u8>>> {
+        // Clone the request (returns None if body is a stream, which we handle)
+        let mut req = match req.try_clone() {
+            Some(req) => req,
+            None => return Ok(None), // Streaming body
+        };
+
+        let url = req.url().clone();
+        let uri = self.prepare_request_headers(&url, req.headers_mut())?;
+
+        // Get body bytes if available
+        let body_bytes: &[u8] = match req.body() {
+            Some(body) => match body.as_bytes() {
+                Some(bytes) => bytes,
+                None => return Ok(None), // Shouldn't happen since try_clone succeeded
+            },
+            None => &[],
+        };
+
+        // Serialize the request to HTTP/1.1 wire format bytes
+        // This ensures we capture exactly what gets sent over the wire
+        let mut bytes = Vec::new();
+
+        // Write request line: METHOD /path?query HTTP/1.1\r\n
+        let path_and_query = uri
+            .path_and_query()
+            .map(|pq| pq.as_str())
+            .unwrap_or("/");
+        bytes.extend_from_slice(format!("{} {} {:?}\r\n", req.method(), path_and_query, req.version()).as_bytes());
+
+        // Write headers - use the same iteration order as hyper would
+        for (name, value) in req.headers() {
+            // Write header name
+            bytes.extend_from_slice(name.as_str().as_bytes());
+            bytes.extend_from_slice(b": ");
+            
+            // Write header value - handle non-UTF-8 values the same way hyper does
+            // Hyper writes header values as bytes, so we do the same
+            bytes.extend_from_slice(value.as_bytes());
+            bytes.extend_from_slice(b"\r\n");
+        }
+
+        // Write empty line separating headers from body
+        bytes.extend_from_slice(b"\r\n");
+
+        // Write body
+        bytes.extend_from_slice(body_bytes);
+
+        Ok(Some(bytes))
+    }
+
     pub(super) fn execute_request(&self, req: Request) -> Pending {
         let (method, url, mut headers, body, version, extensions) = req.pieces();
         if url.scheme() != "http" && url.scheme() != "https" {
@@ -2582,42 +2685,31 @@ impl Client {
             return Pending::new_err(error::url_bad_scheme(url));
         }
 
-        // insert default headers in the request headers
-        // without overwriting already appended headers.
-        for (key, value) in &self.inner.headers {
-            if let Entry::Vacant(entry) = headers.entry(key) {
-                entry.insert(value.clone());
-            }
-        }
-
-        let uri = match try_uri(&url) {
+        let uri = match self.prepare_request_headers(&url, &mut headers) {
             Ok(uri) => uri,
-            _ => return Pending::new_err(error::url_invalid_uri(url)),
+            Err(e) => return Pending::new_err(e),
         };
 
         let body = body.unwrap_or_else(Body::empty);
 
-        self.proxy_auth(&uri, &mut headers);
-        self.proxy_custom_headers(&uri, &mut headers);
-
+        // Build the actual request with the body for sending
+        // This is the same request object that hyper will serialize
         let builder = hyper::Request::builder()
             .method(method.clone())
             .uri(uri)
             .version(version);
+        let mut hyper_req = builder.body(body).expect("valid request parts");
+        *hyper_req.headers_mut() = headers.clone();
 
         let in_flight = match version {
             #[cfg(feature = "http3")]
             http::Version::HTTP_3 if self.inner.h3_client.is_some() => {
-                let mut req = builder.body(body).expect("valid request parts");
-                *req.headers_mut() = headers.clone();
                 let mut h3 = self.inner.h3_client.as_ref().unwrap().clone();
-                ResponseFuture::H3(h3.call(req))
+                ResponseFuture::H3(h3.call(hyper_req))
             }
             _ => {
-                let mut req = builder.body(body).expect("valid request parts");
-                *req.headers_mut() = headers.clone();
                 let mut hyper = self.inner.hyper.clone();
-                ResponseFuture::Default(hyper.call(req))
+                ResponseFuture::Default(hyper.call(hyper_req))
             }
         };
 

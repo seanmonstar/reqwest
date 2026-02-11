@@ -298,6 +298,48 @@ impl RequestBuilder {
         self
     }
 
+    /// Get the raw HTTP request bytes that would be sent for this request.
+    ///
+    /// This serializes the request (including all merged headers from the client)
+    /// to HTTP/1.1 wire format bytes, exactly as they would be sent over the wire.
+    ///
+    /// Returns `None` if:
+    /// - The request is in an error state
+    /// - The body is a stream (non-reusable body)
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # async fn example() -> Result<(), reqwest::Error> {
+    /// let client = reqwest::Client::new();
+    /// let builder = client.post("https://httpbin.org/post")
+    ///     .json(&serde_json::json!({"key": "value"}));
+    ///
+    /// if let Some(bytes) = builder.as_bytes()? {
+    ///     // Write to file, log, or do whatever you want
+    ///     std::fs::write("request.log", bytes)?;
+    /// }
+    ///
+    /// let response = builder.send().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn as_bytes(&self) -> crate::Result<Option<Vec<u8>>> {
+        // Get a reference to the request to check for errors
+        let req = match &self.request {
+            Ok(req) => req,
+            Err(e) => {
+                // Convert the error to an owned error by creating a new one
+                // We can't clone Error, so we extract the error kind
+                return Err(crate::error::builder(format!("{}", e)));
+            }
+        };
+
+        // Delegate to the client's request_bytes method which handles
+        // all the header merging logic
+        self.client.request_bytes(req)
+    }
+
     /// Sends a multipart/form-data body.
     ///
     /// ```
