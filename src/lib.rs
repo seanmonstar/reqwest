@@ -193,9 +193,11 @@
 //! - **default-tls** *(enabled by default)*: Provides TLS support to connect
 //!   over HTTPS.
 //! - **rustls**: Enables TLS functionality provided by `rustls`.
+//! - **rustls-no-provider**: Enables TLS provided by `rustls` without specifying a crypto provider.
 //! - **native-tls**: Enables TLS functionality provided by `native-tls`.
 //! - **native-tls-vendored**: Enables the `vendored` feature of `native-tls`.
 //! - **native-tls-no-alpn**: Enables `native-tls` without its `alpn` feature.
+//! - **native-tls-vendored-no-alpn**: Enables `native-tls-vendored` without its `alpn` feature.
 //! - **blocking**: Provides the [blocking][] client API.
 //! - **charset** *(enabled by default)*: Improved support for decoding text.
 //! - **cookies**: Provides cookie session support.

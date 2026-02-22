@@ -126,6 +126,7 @@ impl Pool {
             if let Some(duration) = timeout {
                 if Instant::now().saturating_duration_since(conn.idle_timeout) > duration {
                     trace!("pooled connection expired");
+                    inner.idle_conns.remove(&key);
                     return None;
                 }
             }

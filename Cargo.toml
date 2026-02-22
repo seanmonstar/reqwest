@@ -1,6 +1,6 @@
 [package]
 name = "reqwest"
-version = "0.13.1"
+version = "0.13.2"
 description = "higher level HTTP client library"
 keywords = ["http", "request", "client"]
 categories = ["web-programming::http-client", "wasm"]
@@ -185,7 +185,7 @@ tor-rtcompat = { version = "0.37", default-features = false, features = ["tokio"
 js-sys = "0.3.77"
 wasm-bindgen = "0.2.89"
 wasm-bindgen-futures = "0.4.18"
-wasm-streams = { version = "0.4", optional = true }
+wasm-streams = { version = "0.5", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3.28"
