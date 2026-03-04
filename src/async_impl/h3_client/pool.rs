@@ -230,6 +230,10 @@ impl PoolClient {
                     Some(Ok(frame)) => {
                         if let Ok(b) = frame.into_data() {
                             if let Err(e) = send.send_data(Bytes::copy_from_slice(&b)).await {
+                                if is_stop_sending(&e) {
+                                    let _ = tx.send(Ok(()));
+                                    return;
+                                }
                                 if let Err(e) = tx.send(Err(e.into())) {
                                     error!("Failed to communicate send.send_data() error: {e:?}");
                                 }
@@ -249,10 +253,12 @@ impl PoolClient {
             }
 
             if let Err(e) = send.finish().await {
-                if let Err(e) = tx.send(Err(e.into())) {
-                    error!("Failed to communicate send.finish read error: {e:?}");
+                if !is_stop_sending(&e) {
+                    if let Err(e) = tx.send(Err(e.into())) {
+                        error!("Failed to communicate send.finish read error: {e:?}");
+                    }
+                    return;
                 }
-                return;
             }
 
             let _ = tx.send(Ok(()));
@@ -370,4 +376,12 @@ pub(crate) fn domain_as_uri((scheme, auth): Key) -> Uri {
         .path_and_query("/")
         .build()
         .expect("domain is valid Uri")
+}
+
+/// Indicates the remote requested the peer to stop sending data without error.
+fn is_stop_sending(e: &h3::error::StreamError) -> bool {
+    matches!(
+        e,
+        h3::error::StreamError::RemoteTerminate { code: h3::error::Code::H3_NO_ERROR, .. }
+    )
 }
