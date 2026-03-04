@@ -171,19 +171,16 @@ async fn http3_test_h3_stop_sending_before_response_no_error() {
         move |_| {
             let server_response_rx = server_response_rx.clone();
             async move {
-                let response_rx = server_response_rx
-                    .lock()
-                    .unwrap()
-                    .take()
-                    .unwrap();
-                let response_stream = futures_util::stream::unfold(response_rx, |mut rx| async move {
-                    rx.recv().await.map(|chunk| {
-                        (
-                            Ok::<_, std::convert::Infallible>(hyper::body::Frame::data(chunk)),
-                            rx,
-                        )
-                    })
-                });
+                let response_rx = server_response_rx.lock().unwrap().take().unwrap();
+                let response_stream =
+                    futures_util::stream::unfold(response_rx, |mut rx| async move {
+                        rx.recv().await.map(|chunk| {
+                            (
+                                Ok::<_, std::convert::Infallible>(hyper::body::Frame::data(chunk)),
+                                rx,
+                            )
+                        })
+                    });
                 let response_body =
                     reqwest::Body::wrap(http_body_util::StreamBody::new(response_stream));
                 http::Response::new(response_body)
@@ -267,19 +264,16 @@ async fn http3_test_h3_stop_sending_before_response_no_error_request_body() {
         move |_| {
             let server_response_rx = server_response_rx.clone();
             async move {
-                let response_rx = server_response_rx
-                    .lock()
-                    .unwrap()
-                    .take()
-                    .unwrap();
-                let response_stream = futures_util::stream::unfold(response_rx, |mut rx| async move {
-                    rx.recv().await.map(|chunk| {
-                        (
-                            Ok::<_, std::convert::Infallible>(hyper::body::Frame::data(chunk)),
-                            rx,
-                        )
-                    })
-                });
+                let response_rx = server_response_rx.lock().unwrap().take().unwrap();
+                let response_stream =
+                    futures_util::stream::unfold(response_rx, |mut rx| async move {
+                        rx.recv().await.map(|chunk| {
+                            (
+                                Ok::<_, std::convert::Infallible>(hyper::body::Frame::data(chunk)),
+                                rx,
+                            )
+                        })
+                    });
                 let response_body =
                     reqwest::Body::wrap(http_body_util::StreamBody::new(response_stream));
                 http::Response::new(response_body)
@@ -365,19 +359,16 @@ async fn http3_test_h3_stop_sending_before_response_internal_error() {
         move |_| {
             let server_response_rx = server_response_rx.clone();
             async move {
-                let response_rx = server_response_rx
-                    .lock()
-                    .unwrap()
-                    .take()
-                    .unwrap();
-                let response_stream = futures_util::stream::unfold(response_rx, |mut rx| async move {
-                    rx.recv().await.map(|chunk| {
-                        (
-                            Ok::<_, std::convert::Infallible>(hyper::body::Frame::data(chunk)),
-                            rx,
-                        )
-                    })
-                });
+                let response_rx = server_response_rx.lock().unwrap().take().unwrap();
+                let response_stream =
+                    futures_util::stream::unfold(response_rx, |mut rx| async move {
+                        rx.recv().await.map(|chunk| {
+                            (
+                                Ok::<_, std::convert::Infallible>(hyper::body::Frame::data(chunk)),
+                                rx,
+                            )
+                        })
+                    });
                 let response_body =
                     reqwest::Body::wrap(http_body_util::StreamBody::new(response_stream));
                 http::Response::new(response_body)
@@ -433,10 +424,7 @@ async fn http3_test_h3_stop_sending_before_response_internal_error() {
         .unwrap();
     drop(response_tx);
 
-    let err = res
-        .chunk()
-        .await
-        .unwrap_err();
+    let err = res.chunk().await.unwrap_err();
     assert!(err.is_decode());
     let err = err
         .source()

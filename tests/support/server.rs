@@ -184,7 +184,11 @@ impl Http3 {
         self.build_server(func, None)
     }
 
-    pub fn build_with_stop_sending_before_response<F1, Fut>(self, func: F1, code: h3::error::Code) -> Server
+    pub fn build_with_stop_sending_before_response<F1, Fut>(
+        self,
+        func: F1,
+        code: h3::error::Code,
+    ) -> Server
     where
         F1: Fn(
                 http::Request<
