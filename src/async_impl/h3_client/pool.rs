@@ -382,6 +382,9 @@ pub(crate) fn domain_as_uri((scheme, auth): Key) -> Uri {
 fn is_stop_sending(e: &h3::error::StreamError) -> bool {
     matches!(
         e,
-        h3::error::StreamError::RemoteTerminate { code: h3::error::Code::H3_NO_ERROR, .. }
+        h3::error::StreamError::RemoteTerminate {
+            code: h3::error::Code::H3_NO_ERROR,
+            ..
+        }
     )
 }
