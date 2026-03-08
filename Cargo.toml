@@ -239,6 +239,10 @@ path = "examples/form.rs"
 required-features = ["form"]
 
 [[example]]
+name = "retry"
+path = "examples/retry.rs"
+
+[[example]]
 name = "simple"
 path = "examples/simple.rs"
 
