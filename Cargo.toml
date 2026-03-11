@@ -196,7 +196,7 @@ once_cell = { version = "1.18", optional = true }
 # HTTP/3 experimental support
 h3 = { version = "0.0.8", optional = true }
 h3-quinn = { version = "0.0.10", optional = true }
-quinn = { version = "0.11.1", default-features = false, features = [
+quinn = { version = "0.11.4", default-features = false, features = [
     "runtime-tokio",
 ], optional = true }
 futures-channel = { version = "0.3", optional = true }
