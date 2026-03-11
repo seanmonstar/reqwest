@@ -17,7 +17,7 @@ include = [
     "Cargo.toml",
     "LICENSE-APACHE",
     "LICENSE-MIT",
-    "src/**/*.rs"
+    "src/**/*.rs",
 ]
 
 [package.metadata.docs.rs]
@@ -26,14 +26,7 @@ rustdoc-args = ["--cfg", "docsrs", "--cfg", "reqwest_unstable"]
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [package.metadata.playground]
-features = [
-    "blocking",
-    "cookies",
-    "query",
-    "form",
-    "json",
-    "multipart",
-]
+features = ["blocking", "cookies", "query", "form", "json", "multipart"]
 
 [features]
 default = ["default-tls", "charset", "http2", "system-proxy"]
@@ -47,10 +40,21 @@ rustls-no-provider = ["dep:rustls-platform-verifier", "__rustls"]
 
 native-tls = ["__native-tls", "__native-tls-alpn"]
 native-tls-no-alpn = ["__native-tls"]
-native-tls-vendored = ["__native-tls", "native-tls-crate?/vendored", "__native-tls-alpn"]
+native-tls-vendored = [
+    "__native-tls",
+    "native-tls-crate?/vendored",
+    "__native-tls-alpn",
+]
 native-tls-vendored-no-alpn = ["__native-tls", "native-tls-crate?/vendored"]
 
-blocking = ["dep:futures-channel", "futures-channel?/sink", "dep:futures-util", "futures-util?/io", "futures-util?/sink", "tokio/sync"]
+blocking = [
+    "dep:futures-channel",
+    "futures-channel?/sink",
+    "dep:futures-util",
+    "futures-util?/io",
+    "futures-util?/sink",
+    "tokio/sync",
+]
 
 charset = ["dep:encoding_rs", "dep:mime"]
 
@@ -88,10 +92,20 @@ __tls = ["dep:rustls-pki-types", "tokio/io-util"]
 
 # Enables common rustls code.
 __rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls"]
-__rustls-aws-lc-rs = ["hyper-rustls?/aws-lc-rs", "tokio-rustls?/aws-lc-rs", "rustls?/aws-lc-rs", "quinn?/rustls-aws-lc-rs"]
+__rustls-aws-lc-rs = [
+    "hyper-rustls?/aws-lc-rs",
+    "tokio-rustls?/aws-lc-rs",
+    "rustls?/aws-lc-rs",
+    "quinn?/rustls-aws-lc-rs",
+]
 
 # Enables common native-tls code.
-__native-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
+__native-tls = [
+    "dep:hyper-tls",
+    "dep:native-tls-crate",
+    "__tls",
+    "dep:tokio-native-tls",
+]
 __native-tls-alpn = ["native-tls-crate?/alpn", "hyper-tls?/alpn"]
 
 [dependencies]
@@ -118,14 +132,29 @@ encoding_rs = { version = "0.8", optional = true }
 http-body = "1"
 http-body-util = "0.1.2"
 hyper = { version = "1.1", features = ["http1", "client"] }
-hyper-util = { version = "0.1.12", features = ["http1", "client", "client-legacy", "client-proxy", "tokio"] }
+hyper-util = { version = "0.1.12", features = [
+    "http1",
+    "client",
+    "client-legacy",
+    "client-proxy",
+    "tokio",
+] }
 h2 = { version = "0.4", optional = true }
 log = "0.4.17"
 percent-encoding = "2.3"
-tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
-tower = { version = "0.5.2", default-features = false, features = ["retry", "timeout", "util"] }
+tokio = { version = "1.0", default-features = false, features = [
+    "net",
+    "time",
+] }
+tower = { version = "0.5.2", default-features = false, features = [
+    "retry",
+    "timeout",
+    "util",
+] }
 tower-service = "0.3"
-tower-http = { version = "0.6.8", default-features = false, features = ["follow-redirect"] }
+tower-http = { version = "0.6.8", default-features = false, features = [
+    "follow-redirect",
+] }
 pin-project-lite = "0.2.11"
 
 # Optional deps...
@@ -138,9 +167,17 @@ native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls"
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # default rustls
-hyper-rustls = { version = "0.27.0", default-features = false, optional = true, features = ["http1", "tls12"] }
-rustls = { version = "0.23.4", optional = true, default-features = false, features = ["std", "tls12"] }
-tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["tls12"] }
+hyper-rustls = { version = "0.27.0", default-features = false, optional = true, features = [
+    "http1",
+    "tls12",
+] }
+rustls = { version = "0.23.4", optional = true, default-features = false, features = [
+    "std",
+    "tls12",
+] }
+tokio-rustls = { version = "0.26", optional = true, default-features = false, features = [
+    "tls12",
+] }
 rustls-platform-verifier = { version = "0.6", optional = true }
 
 ## cookies
@@ -148,7 +185,9 @@ cookie_crate = { version = "0.18.0", package = "cookie", optional = true }
 cookie_store = { version = "0.22.0", optional = true }
 
 ## stream
-tokio-util = { version = "0.7.9", default-features = false, features = ["io"], optional = true }
+tokio-util = { version = "0.7.9", default-features = false, features = [
+    "io",
+], optional = true }
 
 ## hickory-dns
 hickory-resolver = { version = "0.25", optional = true, features = ["tokio"] }
@@ -157,20 +196,41 @@ once_cell = { version = "1.18", optional = true }
 # HTTP/3 experimental support
 h3 = { version = "0.0.8", optional = true }
 h3-quinn = { version = "0.0.10", optional = true }
-quinn = { version = "0.11.1", default-features = false, features = ["runtime-tokio"], optional = true }
+quinn = { version = "0.11.1", default-features = false, features = [
+    "runtime-tokio",
+], optional = true }
 futures-channel = { version = "0.3", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 env_logger = "0.10"
-hyper = { version = "1.1.0", default-features = false, features = ["http1", "http2", "client", "server"] }
-hyper-util = { version = "0.1.12", features = ["http1", "http2", "client", "client-legacy", "server-auto", "server-graceful", "tokio"] }
+hyper = { version = "1.1.0", default-features = false, features = [
+    "http1",
+    "http2",
+    "client",
+    "server",
+] }
+hyper-util = { version = "0.1.12", features = [
+    "http1",
+    "http2",
+    "client",
+    "client-legacy",
+    "server-auto",
+    "server-graceful",
+    "tokio",
+] }
 serde = { version = "1.0", features = ["derive"] }
 flate2 = "1.0.13"
 brotli_crate = { package = "brotli", version = "8" }
 zstd_crate = { package = "zstd", version = "0.13" }
 doc-comment = "0.3"
-tokio = { version = "1.0", default-features = false, features = ["macros", "rt-multi-thread"] }
-futures-util = { version = "0.3.28", default-features = false, features = ["std", "alloc"] }
+tokio = { version = "1.0", default-features = false, features = [
+    "macros",
+    "rt-multi-thread",
+] }
+futures-util = { version = "0.3.28", default-features = false, features = [
+    "std",
+    "alloc",
+] }
 
 # wasm
 
@@ -198,7 +258,7 @@ features = [
     "RequestCredentials",
     "File",
     "ReadableStream",
-    "RequestCache"
+    "RequestCache",
 ]
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
