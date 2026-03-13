@@ -677,6 +677,24 @@ where
     }
 }
 
+impl TryFrom<HttpRequest<()>> for Request {
+    type Error = crate::Error;
+
+    fn try_from(req: HttpRequest<()>) -> crate::Result<Self> {
+        let (parts, body) = req.into_parts();
+        let Parts {
+            method,
+            uri,
+            headers,
+            ..
+        } = parts;
+        let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
+        let mut inner = async_impl::Request::new(method, url);
+        crate::util::replace_headers(inner.headers_mut(), headers);
+        Ok(Request { body: None, inner })
+    }
+}
+
 impl fmt::Debug for Request {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt_request_fields(&mut f.debug_struct("Request"), self).finish()
@@ -1043,6 +1061,17 @@ mod tests {
         assert_eq!(headers.get("User-Agent").unwrap(), "my-awesome-agent/1.0");
         assert_eq!(req.method(), Method::GET);
         assert_eq!(req.url().as_str(), "http://localhost/");
+    }
+
+    #[test]
+    fn convert_from_http_request_without_body() {
+        let http_request = HttpRequest::builder()
+            .method("GET")
+            .uri("http://localhost/")
+            .body(())
+            .unwrap();
+        let req: Request = Request::try_from(http_request).unwrap();
+        assert!(req.body().is_none());
     }
 
     #[test]
