@@ -781,7 +781,8 @@ impl ConnectorService {
     }
 
     async fn connect_via_proxy(self, dst: Uri, proxy: Intercepted) -> Result<Conn, BoxError> {
-        log::debug!("proxy({proxy:?}) intercepts '{dst:?}'");
+        let host = dst.host();
+        log::debug!("starting new connection '{host:?}'");
 
         #[cfg(feature = "socks")]
         match proxy.uri().scheme_str().ok_or("proxy scheme expected")? {
@@ -926,7 +927,8 @@ impl Service<Uri> for ConnectorService {
     }
 
     fn call(&mut self, dst: Uri) -> Self::Future {
-        log::debug!("starting new connection: {dst:?}");
+        let host = dst.host();
+        log::debug!("starting new connection '{host:?}'");
         let timeout = self.simple_timeout;
 
         // Local transports (UDS, Windows Named Pipes) skip proxies
