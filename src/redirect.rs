@@ -494,8 +494,14 @@ fn test_sanitize_location_encodes_bracket() {
     // Bare `[` in a path causes URI parsers to reject the whole value,
     // which would cause the redirect to be silently dropped.
     let sanitized = sanitize_location("https://example.com/path/[*.csv");
-    assert!(!sanitized.contains('['), "bare `[` should have been encoded");
-    assert!(!sanitized.contains(']'), "bare `]` should have been encoded");
+    assert!(
+        !sanitized.contains('['),
+        "bare `[` should have been encoded"
+    );
+    assert!(
+        !sanitized.contains(']'),
+        "bare `]` should have been encoded"
+    );
     // The result must now be parseable as a URL.
     assert!(
         Url::parse(sanitized.as_ref()).is_ok(),
