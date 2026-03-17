@@ -544,7 +544,7 @@ impl Version {
             InnerVersion::Tls1_0 => Some(native_tls_crate::Protocol::Tlsv10),
             InnerVersion::Tls1_1 => Some(native_tls_crate::Protocol::Tlsv11),
             InnerVersion::Tls1_2 => Some(native_tls_crate::Protocol::Tlsv12),
-            InnerVersion::Tls1_3 => None,
+            InnerVersion::Tls1_3 => Some(native_tls_crate::Protocol::Tlsv13),
         }
     }
 
