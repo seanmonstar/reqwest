@@ -119,7 +119,6 @@ impl Request {
         self.inner.timeout_mut()
     }
 
-
     /// Get the http version.
     #[inline]
     pub fn version(&self) -> Version {
