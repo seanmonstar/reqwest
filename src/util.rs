@@ -3,8 +3,8 @@ use std::fmt;
 
 pub fn basic_auth<U, P>(username: U, password: Option<P>) -> HeaderValue
 where
-    U: std::fmt::Display,
-    P: std::fmt::Display,
+    U: fmt::Display,
+    P: fmt::Display,
 {
     use base64::prelude::BASE64_STANDARD;
     use base64::write::EncoderWriter;
@@ -107,7 +107,7 @@ impl fmt::Debug for Escape<'_> {
 impl fmt::Display for Escape<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for &c in self.0 {
-            // https://doc.rust-lang.org/reference.html#byte-escapes
+            // https://doc.rust-lang.org/reference/tokens.html#byte-escapes
             if c == b'\n' {
                 write!(f, "\\n")?;
             } else if c == b'\r' {
