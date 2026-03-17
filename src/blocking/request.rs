@@ -94,13 +94,13 @@ impl Request {
     /// Get the extensions.
     #[inline]
     pub(crate) fn extensions(&self) -> &Extensions {
-        &self.inner.extensions
+        &self.inner.extensions()
     }
 
     /// Get a mutable reference to the extensions.
     #[inline]
     pub(crate) fn extensions_mut(&mut self) -> &mut Extensions {
-        &mut self.inner.extensions
+        &mut self.inner.extensions()
     }
 
     /// Get the timeout.
@@ -440,7 +440,7 @@ impl RequestBuilder {
     /// Set HTTP version
     pub fn version(mut self, version: Version) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            req.version = version;
+            *req.version_mut() = version;
         }
         self
     }
@@ -684,8 +684,8 @@ where
         } = parts;
         let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
         let mut inner = async_impl::Request::new(method, url);
-        inner.version_mut() = version.clone();
-        inner.extensions_mut() = extensions.clone();
+        *inner.version_mut() = version.clone();
+        *inner.extensions_mut() = extensions.clone();
         crate::util::replace_headers(inner.headers_mut(), headers);
         Ok(Request {
             body: Some(body.into()),
