@@ -100,7 +100,7 @@ impl Request {
     /// Get a mutable reference to the extensions.
     #[inline]
     pub(crate) fn extensions_mut(&mut self) -> &mut Extensions {
-        &mut self.inner.extensions()
+        self.inner.extensions_mut()
     }
 
     /// Get the timeout.
