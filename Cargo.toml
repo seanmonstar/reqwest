@@ -10,7 +10,7 @@ authors = ["Sean McArthur <sean@seanmonstar.com>"]
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 edition = "2021"
-rust-version = "1.83.0"
+rust-version = "1.80.0"
 autotests = true
 include = [
     "README.md",
