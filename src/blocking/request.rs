@@ -722,6 +722,7 @@ mod tests {
     use std::collections::BTreeMap;
     #[cfg(feature = "form")]
     use std::collections::HashMap;
+    use http::Version;
 
     #[test]
     fn basic_get_request() {
