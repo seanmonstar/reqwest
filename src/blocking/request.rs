@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::time::Duration;
 
-use http::{request::Parts, Request as HttpRequest, Version};
+use http::{request::Parts, Extensions, Request as HttpRequest, Version};
 #[cfg(any(feature = "query", feature = "form", feature = "json"))]
 use serde::Serialize;
 #[cfg(feature = "json")]
@@ -21,6 +21,8 @@ use crate::{async_impl, Method, Url};
 pub struct Request {
     body: Option<Body>,
     inner: async_impl::Request,
+    version: Version,
+    extensions: Extensions,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -40,6 +42,8 @@ impl Request {
         Request {
             body: None,
             inner: async_impl::Request::new(method, url),
+            version: Version::default(),
+            extensions: Extensions::new(),
         }
     }
 
@@ -79,18 +83,6 @@ impl Request {
         self.inner.headers_mut()
     }
 
-    /// Get the http version.
-    #[inline]
-    pub fn version(&self) -> Version {
-        self.inner.version()
-    }
-
-    /// Get a mutable reference to the http version.
-    #[inline]
-    pub fn version_mut(&mut self) -> &mut Version {
-        self.inner.version_mut()
-    }
-
     /// Get the body.
     #[inline]
     pub fn body(&self) -> Option<&Body> {
@@ -103,6 +95,18 @@ impl Request {
         &mut self.body
     }
 
+    /// Get the extensions.
+    #[inline]
+    pub(crate) fn extensions(&self) -> &Extensions {
+        &self.extensions
+    }
+
+    /// Get a mutable reference to the extensions.
+    #[inline]
+    pub(crate) fn extensions_mut(&mut self) -> &mut Extensions {
+        &mut self.extensions
+    }
+
     /// Get the timeout.
     #[inline]
     pub fn timeout(&self) -> Option<&Duration> {
@@ -113,6 +117,19 @@ impl Request {
     #[inline]
     pub fn timeout_mut(&mut self) -> &mut Option<Duration> {
         self.inner.timeout_mut()
+    }
+
+
+    /// Get the http version.
+    #[inline]
+    pub fn version(&self) -> Version {
+        self.inner.version()
+    }
+
+    /// Get a mutable reference to the http version.
+    #[inline]
+    pub fn version_mut(&mut self) -> &mut Version {
+        self.inner.version_mut()
     }
 
     /// Attempts to clone the `Request`.
@@ -133,6 +150,7 @@ impl Request {
         *req.timeout_mut() = self.timeout().copied();
         *req.headers_mut() = self.headers().clone();
         *req.version_mut() = self.version().clone();
+        *req.extensions_mut() = self.extensions().clone();
         req.body = body;
         Some(req)
     }
@@ -427,7 +445,7 @@ impl RequestBuilder {
     /// Set HTTP version
     pub fn version(mut self, version: Version) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            *req.version_mut() = version;
+            req.version = version;
         }
         self
     }
@@ -675,6 +693,8 @@ where
         Ok(Request {
             body: Some(body.into()),
             inner,
+            version,
+            extensions,
         })
     }
 }
