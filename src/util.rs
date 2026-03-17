@@ -107,7 +107,7 @@ impl fmt::Debug for Escape<'_> {
 impl fmt::Display for Escape<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for &c in self.0 {
-            // https://doc.rust-lang.org/reference.html#byte-escapes
+            // https://doc.rust-lang.org/reference/tokens.html#byte-escapes
             if c == b'\n' {
                 write!(f, "\\n")?;
             } else if c == b'\r' {
