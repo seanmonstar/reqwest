@@ -10,11 +10,52 @@ use std::{error::Error as StdError, sync::Arc};
 use crate::header::{AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, REFERER, WWW_AUTHENTICATE};
 use http::{HeaderMap, HeaderValue};
 use hyper::StatusCode;
+use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 
 use crate::{async_impl, Url};
 use tower_http::follow_redirect::policy::{
     Action as TowerAction, Attempt as TowerAttempt, Policy as TowerPolicy,
 };
+
+/// Characters that are invalid in a URI path per RFC 3986 and must be
+/// percent-encoded when found in a `Location` redirect header.
+///
+/// RFC 3986 §2.3 defines unreserved characters as:
+///   ALPHA / DIGIT / "-" / "." / "_" / "~"
+///
+/// Characters such as `[` and `]` are gen-delimiters only valid in the host
+/// component (IPv6 literals), not in path segments. When a server returns a
+/// `Location` header containing bare `[`, `]`, or other non-URI characters,
+/// strict parsers reject the entire value, causing the redirect to be silently
+/// dropped. We follow browser convention and percent-encode such characters
+/// before parsing.
+const LOCATION_ENCODE_SET: &AsciiSet = &CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'<')
+    .add(b'>')
+    .add(b'[')
+    .add(b']')
+    .add(b'^')
+    .add(b'`')
+    .add(b'{')
+    .add(b'|')
+    .add(b'}');
+
+/// Percent-encode characters in a `Location` header value that are not valid
+/// in a URI, so that the value can be successfully parsed.
+///
+/// Some servers (in violation of RFC 3986) send redirect `Location` headers
+/// containing bare characters such as `[`, `]`, spaces, or other non-ASCII
+/// bytes. Strict URI parsers reject these, causing the redirect to be silently
+/// dropped and the raw 3xx response to be returned to the caller instead.
+///
+/// This function sanitizes the value the same way browsers do: any character
+/// that is not valid unencoded in a URI is percent-encoded before the string
+/// is handed to the parser.
+fn sanitize_location(location: &str) -> std::borrow::Cow<'_, str> {
+    utf8_percent_encode(location, LOCATION_ENCODE_SET).into()
+}
 
 /// A type that controls the policy on how to handle the following of redirects.
 ///
@@ -307,7 +348,22 @@ impl TowerPolicy<async_impl::body::Body, crate::Error> for TowerRedirectPolicy {
         let previous_url =
             Url::parse(&attempt.previous().to_string()).expect("Previous URL must be valid");
 
-        let next_url = match Url::parse(&attempt.location().to_string()) {
+        // Sanitize the Location header value before parsing it as a URL.
+        //
+        // Some servers (in violation of RFC 3986) include characters such as
+        // `[`, `]`, `*`, or spaces in redirect Location values without
+        // percent-encoding them. `[` in particular is a gen-delimiter that is
+        // only valid in the host component (IPv6 literals); its presence
+        // anywhere else causes strict URI parsers to reject the entire value.
+        // When that happens, `Url::parse` returns an error and the redirect is
+        // never followed — the raw 3xx leaks back to the caller.
+        //
+        // We match browser behaviour by percent-encoding any such characters
+        // before handing the string to the parser.
+        let location_raw = attempt.location().to_string();
+        let location_sanitized = sanitize_location(&location_raw);
+
+        let next_url = match Url::parse(location_sanitized.as_ref()) {
             Ok(url) => url,
             Err(e) => return Err(crate::error::builder(e)),
         };
@@ -430,4 +486,37 @@ fn test_remove_sensitive_headers() {
 
     remove_sensitive_headers(&mut headers, &next, &prev);
     assert_eq!(headers, filtered_headers);
+}
+
+#[test]
+fn test_sanitize_location_encodes_bracket() {
+    // `[` is a gen-delimiter only valid in the host component (IPv6 literals).
+    // Bare `[` in a path causes URI parsers to reject the whole value,
+    // which would cause the redirect to be silently dropped.
+    let sanitized = sanitize_location("https://example.com/path/[*.csv");
+    assert!(
+        !sanitized.contains('['),
+        "bare `[` should have been encoded"
+    );
+    assert!(
+        !sanitized.contains(']'),
+        "bare `]` should have been encoded"
+    );
+    // The result must now be parseable as a URL.
+    assert!(
+        Url::parse(sanitized.as_ref()).is_ok(),
+        "sanitized location must parse as a valid URL"
+    );
+}
+
+#[test]
+fn test_sanitize_location_leaves_safe_chars_alone() {
+    // Unreserved characters (RFC 3986 §2.3) must not be encoded.
+    let input = "https://example.com/path/-.csv";
+    let sanitized = sanitize_location(input);
+    assert_eq!(
+        sanitized.as_ref(),
+        input,
+        "safe unreserved characters must not be altered"
+    );
 }
