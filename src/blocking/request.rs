@@ -665,6 +665,8 @@ where
             method,
             uri,
             headers,
+            version,
+            extensions,
             ..
         } = parts;
         let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
