@@ -3,8 +3,8 @@ use std::fmt;
 
 pub fn basic_auth<U, P>(username: U, password: Option<P>) -> HeaderValue
 where
-    U: std::fmt::Display,
-    P: std::fmt::Display,
+    U: fmt::Display,
+    P: fmt::Display,
 {
     use base64::prelude::BASE64_STANDARD;
     use base64::write::EncoderWriter;
