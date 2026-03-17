@@ -21,8 +21,6 @@ use crate::{async_impl, Method, Url};
 pub struct Request {
     body: Option<Body>,
     inner: async_impl::Request,
-    version: Version,
-    extensions: Extensions,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -42,8 +40,6 @@ impl Request {
         Request {
             body: None,
             inner: async_impl::Request::new(method, url),
-            version: Version::default(),
-            extensions: Extensions::new(),
         }
     }
 
@@ -98,13 +94,13 @@ impl Request {
     /// Get the extensions.
     #[inline]
     pub(crate) fn extensions(&self) -> &Extensions {
-        &self.extensions
+        &self.inner.extensions
     }
 
     /// Get a mutable reference to the extensions.
     #[inline]
     pub(crate) fn extensions_mut(&mut self) -> &mut Extensions {
-        &mut self.extensions
+        &mut self.inner.extensions
     }
 
     /// Get the timeout.
@@ -688,12 +684,12 @@ where
         } = parts;
         let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
         let mut inner = async_impl::Request::new(method, url);
+        inner.version_mut() = version.clone();
+        inner.extensions_mut() = extensions.clone();
         crate::util::replace_headers(inner.headers_mut(), headers);
         Ok(Request {
             body: Some(body.into()),
             inner,
-            version,
-            extensions,
         })
     }
 }
