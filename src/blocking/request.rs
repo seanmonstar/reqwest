@@ -684,8 +684,8 @@ where
         } = parts;
         let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
         let mut inner = async_impl::Request::new(method, url);
-        *inner.version_mut() = version.clone();
-        *inner.extensions_mut() = extensions.clone();
+        *inner.version_mut() = version;
+        *inner.extensions_mut() = extensions;
         crate::util::replace_headers(inner.headers_mut(), headers);
         Ok(Request {
             body: Some(body.into()),
