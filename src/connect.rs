@@ -511,7 +511,7 @@ enum Inner {
     Http(HttpConnector),
     #[cfg(feature = "__native-tls")]
     NativeTls(HttpConnector, TlsConnector),
-    #[cfg(any(feature = "__rustls"))]
+    #[cfg(feature = "__rustls")]
     RustlsTls {
         http: HttpConnector,
         tls: Arc<rustls::ClientConfig>,
