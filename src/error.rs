@@ -300,9 +300,9 @@ pub(crate) enum Kind {
     Builder,
     Request,
     Redirect,
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
     Status(StatusCode, Option<hyper::ext::ReasonPhrase>),
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
     Status(StatusCode),
     Body,
     Decode,
