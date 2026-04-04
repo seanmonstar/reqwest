@@ -105,11 +105,11 @@ impl Error {
 
     /// Returns true if the error is from `Response::error_for_status`.
     pub fn is_status(&self) -> bool {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
         {
             matches!(self.inner.kind, Kind::Status(_, _))
         }
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
         {
             matches!(self.inner.kind, Kind::Status(_))
         }
@@ -123,7 +123,10 @@ impl Error {
             if err.is::<TimedOut>() {
                 return true;
             }
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(
+                target_arch = "wasm32",
+                any(target_os = "unknown", target_os = "none")
+            )))]
             if let Some(hyper_err) = err.downcast_ref::<hyper::Error>() {
                 if hyper_err.is_timeout() {
                     return true;
@@ -145,7 +148,7 @@ impl Error {
         matches!(self.inner.kind, Kind::Request)
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
     /// Returns true if the error is related to connect
     pub fn is_connect(&self) -> bool {
         let mut source = self.source();
@@ -176,9 +179,12 @@ impl Error {
     /// Returns the status code, if the error was generated from a response.
     pub fn status(&self) -> Option<StatusCode> {
         match self.inner.kind {
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
             Kind::Status(code) => Some(code),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(
+                target_arch = "wasm32",
+                any(target_os = "unknown", target_os = "none")
+            )))]
             Kind::Status(code, _) => Some(code),
             _ => None,
         }
@@ -236,7 +242,7 @@ impl fmt::Display for Error {
             Kind::Decode => f.write_str("error decoding response body")?,
             Kind::Redirect => f.write_str("error following redirect")?,
             Kind::Upgrade => f.write_str("error upgrading connection")?,
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
             Kind::Status(ref code) => {
                 let prefix = if code.is_client_error() {
                     "HTTP status client error"
@@ -246,7 +252,10 @@ impl fmt::Display for Error {
                 };
                 write!(f, "{prefix} ({code})")?;
             }
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(
+                target_arch = "wasm32",
+                any(target_os = "unknown", target_os = "none")
+            )))]
             Kind::Status(ref code, ref reason) => {
                 let prefix = if code.is_client_error() {
                     "HTTP status client error"
