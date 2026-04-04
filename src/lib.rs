@@ -264,14 +264,14 @@ use sync_wrapper as _;
 
 macro_rules! if_wasm {
     ($($item:item)*) => {$(
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
         $item
     )*}
 }
 
 macro_rules! if_hyper {
     ($($item:item)*) => {$(
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
         $item
     )*}
 }
