@@ -334,12 +334,15 @@ pub(crate) fn redirect<E: Into<BoxError>>(e: E, url: Url) -> Error {
 pub(crate) fn status_code(
     url: Url,
     status: StatusCode,
-    #[cfg(not(target_arch = "wasm32"))] reason: Option<hyper::ext::ReasonPhrase>,
+    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))] reason: Option<hyper::ext::ReasonPhrase>,
 ) -> Error {
     Error::new(
         Kind::Status(
             status,
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(
+                target_arch = "wasm32",
+                any(target_os = "unknown", target_os = "none")
+            )))]
             reason,
         ),
         None::<Error>,
