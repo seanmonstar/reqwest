@@ -135,10 +135,11 @@ impl H3Connector {
         }
 
         if ipv6_addrs.is_empty() {
-            return Self::try_addresses_static(&self.endpoint,
+            return Self::try_addresses_static(
+                &self.endpoint,
                 &ipv4_addrs,
                 server_name,
-                &self.client_config
+                &self.client_config,
             )
             .await;
         }
@@ -147,7 +148,7 @@ impl H3Connector {
                 &self.endpoint,
                 &ipv6_addrs,
                 server_name,
-                &self.client_config
+                &self.client_config,
             )
             .await;
         }
@@ -155,12 +156,12 @@ impl H3Connector {
         let endpoint = self.endpoint.clone();
         let client_config = self.client_config.clone();
 
-        match Self::try_addresses_static(&endpoint, &ipv6_addrs, server_name, &client_config).await 
+        match Self::try_addresses_static(&endpoint, &ipv6_addrs, server_name, &client_config).await
         {
             Ok(conn) => Ok(conn),
             Err(_) => {
                 Self::try_addresses_static(&endpoint, &ipv4_addrs, server_name, &client_config)
-                .await
+                    .await
             }
         }
     }
