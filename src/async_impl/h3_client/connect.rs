@@ -59,6 +59,7 @@ pub(crate) struct H3Connector {
     resolver: DynResolver,
     endpoint: Endpoint,
     client_config: H3ClientConfig,
+    local_addr: Option<IpAddr>,
 }
 
 impl H3Connector {
@@ -86,6 +87,7 @@ impl H3Connector {
             resolver,
             endpoint,
             client_config,
+            local_addr,
         })
     }
 
@@ -117,28 +119,74 @@ impl H3Connector {
         addrs: Vec<SocketAddr>,
         server_name: &str,
     ) -> Result<H3Connection, BoxError> {
-        let mut err = None;
-        for addr in addrs {
-            match self.endpoint.connect(addr, server_name)?.await {
-                Ok(new_conn) => {
-                    let quinn_conn = Connection::new(new_conn);
-                    let mut h3_client_builder = h3::client::builder();
-                    if let Some(max_field_section_size) = self.client_config.max_field_section_size
-                    {
-                        h3_client_builder.max_field_section_size(max_field_section_size);
-                    }
-                    if let Some(send_grease) = self.client_config.send_grease {
-                        h3_client_builder.send_grease(send_grease);
-                    }
-                    return Ok(h3_client_builder.build(quinn_conn).await?);
-                }
-                Err(e) => err = Some(e),
+        if addrs.is_empty() {
+            return Err("no addresses to connect to".into());
+        }
+
+        let (mut ipv6_addrs, mut ipv4_addrs): (Vec<SocketAddr>, Vec<SocketAddr>) =
+            addrs.into_iter().partition(|addr| addr.is_ipv6());
+
+        if let Some(local_ip) = self.local_addr {
+            if local_ip.is_ipv6() {
+                ipv4_addrs.clear();
+            } else {
+                ipv6_addrs.clear();
             }
         }
 
-        match err {
-            Some(e) => Err(Box::new(e) as BoxError),
-            None => Err("failed to establish connection for HTTP/3 request".into()),
+        if ipv6_addrs.is_empty() {
+            return Self::try_addresses_static(&self.endpoint, &ipv4_addrs, server_name, &self.client_config).await;
         }
+        if ipv4_addrs.is_empty() {
+            return Self::try_addresses_static(&self.endpoint, &ipv6_addrs, server_name, &self.client_config).await;
+        }
+
+        let endpoint = self.endpoint.clone();
+        let client_config = self.client_config.clone();
+
+        match Self::try_addresses_static(&endpoint, &ipv6_addrs, server_name, &client_config).await {
+            Ok(conn) => Ok(conn),
+            Err(_) => {
+                Self::try_addresses_static(&endpoint, &ipv4_addrs, server_name, &client_config).await
+            }
+        }
+    }
+
+    async fn try_addresses_static(
+        endpoint: &Endpoint,
+        addrs: &[SocketAddr],
+        server_name: &str,
+        client_config: &H3ClientConfig,
+    ) -> Result<H3Connection, BoxError> {
+        let mut last_err: Option<BoxError> = None;
+
+        for addr in addrs {
+            match endpoint.connect(*addr, server_name) {
+                Ok(connecting) => {
+                    match connecting.await {
+                        Ok(new_conn) => {
+                            let quinn_conn = Connection::new(new_conn);
+                            let mut h3_client_builder = h3::client::builder();
+                            if let Some(max_field_section_size) = client_config.max_field_section_size
+                            {
+                                h3_client_builder.max_field_section_size(max_field_section_size);
+                            }
+                            if let Some(send_grease) = client_config.send_grease {
+                                h3_client_builder.send_grease(send_grease);
+                            }
+                            return Ok(h3_client_builder.build(quinn_conn).await?);
+                        }
+                        Err(e) => {
+                            last_err = Some(Box::new(e) as BoxError);
+                        }
+                    }
+                }
+                Err(e) => {
+                    last_err = Some(Box::new(e) as BoxError);
+                }
+            }
+        }
+
+        Err(last_err.unwrap_or_else(|| "no addresses available".into()))
     }
 }

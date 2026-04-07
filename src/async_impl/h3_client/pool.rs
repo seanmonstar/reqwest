@@ -364,7 +364,22 @@ where
 pub(crate) fn extract_domain(uri: &mut Uri) -> Result<Key, Error> {
     let uri_clone = uri.clone();
     match (uri_clone.scheme(), uri_clone.authority()) {
-        (Some(scheme), Some(auth)) => Ok((scheme.clone(), auth.clone())),
+        (Some(scheme), Some(auth)) => {
+            let scheme_str = scheme.as_str();
+            if scheme_str != "https" && scheme_str != "h3" {
+                return Err(Error::new(
+                    Kind::Request,
+                    Some(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!(
+                            "HTTP/3 only supports 'https' or 'h3' schemes, got: {}",
+                            scheme_str
+                        ),
+                    ))),
+                ));
+            }
+            Ok((scheme.clone(), auth.clone()))
+        }
         _ => Err(Error::new(Kind::Request, None::<Error>)),
     }
 }
