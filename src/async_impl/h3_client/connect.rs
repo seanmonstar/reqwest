@@ -135,19 +135,32 @@ impl H3Connector {
         }
 
         if ipv6_addrs.is_empty() {
-            return Self::try_addresses_static(&self.endpoint, &ipv4_addrs, server_name, &self.client_config).await;
+            return Self::try_addresses_static(&self.endpoint,
+                &ipv4_addrs,
+                server_name,
+                &self.client_config
+            )
+            .await;
         }
         if ipv4_addrs.is_empty() {
-            return Self::try_addresses_static(&self.endpoint, &ipv6_addrs, server_name, &self.client_config).await;
+            return Self::try_addresses_static(
+                &self.endpoint,
+                &ipv6_addrs,
+                server_name,
+                &self.client_config
+            )
+            .await;
         }
 
         let endpoint = self.endpoint.clone();
         let client_config = self.client_config.clone();
 
-        match Self::try_addresses_static(&endpoint, &ipv6_addrs, server_name, &client_config).await {
+        match Self::try_addresses_static(&endpoint, &ipv6_addrs, server_name, &client_config).await 
+        {
             Ok(conn) => Ok(conn),
             Err(_) => {
-                Self::try_addresses_static(&endpoint, &ipv4_addrs, server_name, &client_config).await
+                Self::try_addresses_static(&endpoint, &ipv4_addrs, server_name, &client_config)
+                .await
             }
         }
     }
@@ -162,25 +175,22 @@ impl H3Connector {
 
         for addr in addrs {
             match endpoint.connect(*addr, server_name) {
-                Ok(connecting) => {
-                    match connecting.await {
-                        Ok(new_conn) => {
-                            let quinn_conn = Connection::new(new_conn);
-                            let mut h3_client_builder = h3::client::builder();
-                            if let Some(max_field_section_size) = client_config.max_field_section_size
-                            {
-                                h3_client_builder.max_field_section_size(max_field_section_size);
-                            }
-                            if let Some(send_grease) = client_config.send_grease {
-                                h3_client_builder.send_grease(send_grease);
-                            }
-                            return Ok(h3_client_builder.build(quinn_conn).await?);
+                Ok(connecting) => match connecting.await {
+                    Ok(new_conn) => {
+                        let quinn_conn = Connection::new(new_conn);
+                        let mut h3_client_builder = h3::client::builder();
+                        if let Some(max_field_section_size) = client_config.max_field_section_size {
+                            h3_client_builder.max_field_section_size(max_field_section_size);
                         }
-                        Err(e) => {
-                            last_err = Some(Box::new(e) as BoxError);
+                        if let Some(send_grease) = client_config.send_grease {
+                            h3_client_builder.send_grease(send_grease);
                         }
+                        return Ok(h3_client_builder.build(quinn_conn).await?);
                     }
-                }
+                    Err(e) => {
+                        last_err = Some(Box::new(e) as BoxError);
+                    }
+                },
                 Err(e) => {
                     last_err = Some(Box::new(e) as BoxError);
                 }
