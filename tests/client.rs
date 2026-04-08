@@ -2,13 +2,18 @@
 #![cfg(not(feature = "rustls-no-provider"))]
 mod support;
 
+use bytes::Bytes;
+use http_body_util::{BodyExt, Full};
 use support::server;
 
-use http::header::{CONTENT_LENGTH, CONTENT_TYPE, TRANSFER_ENCODING};
+use http::{
+    header::{self, CONTENT_LENGTH, CONTENT_TYPE, TRANSFER_ENCODING},
+    StatusCode,
+};
 #[cfg(feature = "json")]
 use std::collections::HashMap;
 
-use reqwest::Client;
+use reqwest::{Body, Client};
 use tokio::io::AsyncWriteExt;
 
 #[tokio::test]
@@ -546,4 +551,57 @@ async fn error_has_url() {
     let u = "http://does.not.exist.local/ever";
     let err = reqwest::get(u).await.unwrap_err();
     assert_eq!(err.url().map(AsRef::as_ref), Some(u), "{err:?}");
+}
+
+#[tokio::test]
+async fn response_trailers() {
+    let server = server::http(move |req| async move {
+        assert_eq!(req.uri().path(), "/trailers");
+
+        let body = Full::new(Bytes::from("HelloWorld!")).with_trailers(async move {
+            let mut trailers = http::HeaderMap::new();
+            trailers.insert(
+                "chunky-trailer1",
+                header::HeaderValue::from_static("value1"),
+            );
+            trailers.insert(
+                "chunky-trailer2",
+                header::HeaderValue::from_static("value2"),
+            );
+            Some(Ok(trailers))
+        });
+        let mut resp = http::Response::new(Body::wrap(body));
+        resp.headers_mut().insert(
+            header::TRAILER,
+            header::HeaderValue::from_static("chunky-trailer1, chunky-trailer2"),
+        );
+        resp.headers_mut().insert(
+            header::TRANSFER_ENCODING,
+            header::HeaderValue::from_static("chunked"),
+        );
+
+        resp
+    });
+
+    let mut res = reqwest::Client::new()
+        .get(format!("http://{}/trailers", server.addr()))
+        .header(header::TE, "trailers")
+        .send()
+        .await
+        .expect("Failed to get response");
+
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // Read the body using chunk() to preserve response ownership
+    let mut body_content = Vec::new();
+    while let Some(chunk) = res.chunk().await.expect("Failed to read chunk") {
+        body_content.extend_from_slice(&chunk);
+    }
+
+    let body = String::from_utf8(body_content).expect("Invalid UTF-8");
+    assert_eq!(body, "HelloWorld!");
+
+    let trailers = res.trailers().expect("Expected trailers but got None");
+    assert_eq!(trailers["chunky-trailer1"], "value1");
+    assert_eq!(trailers["chunky-trailer2"], "value2");
 }
