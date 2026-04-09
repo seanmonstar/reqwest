@@ -59,7 +59,7 @@ pub(crate) struct H3Connector {
     resolver: DynResolver,
     endpoint: Endpoint,
     client_config: H3ClientConfig,
-    local_addr: Option<IpAddr>,
+    bound_addr: IpAddr,
 }
 
 impl H3Connector {
@@ -75,19 +75,23 @@ impl H3Connector {
         // FIXME: Replace this when there is a setter.
         config.transport_config(Arc::new(transport_config));
 
+        // Pipe the local address through to the endpoint creation
         let socket_addr = match local_addr {
             Some(ip) => SocketAddr::new(ip, 0),
-            None => "[::]:0".parse::<SocketAddr>().unwrap(),
+            None => "0.0.0.0:0".parse::<SocketAddr>().unwrap(),
         };
 
         let mut endpoint = Endpoint::client(socket_addr)?;
         endpoint.set_default_client_config(config);
 
+        // Get the actual bound address from the endpoint
+        let bound_addr = endpoint.local_addr()?.ip();
+
         Ok(Self {
             resolver,
             endpoint,
             client_config,
-            local_addr,
+            bound_addr,
         })
     }
 
@@ -126,12 +130,10 @@ impl H3Connector {
         let (mut ipv6_addrs, mut ipv4_addrs): (Vec<SocketAddr>, Vec<SocketAddr>) =
             addrs.into_iter().partition(|addr| addr.is_ipv6());
 
-        if let Some(local_ip) = self.local_addr {
-            if local_ip.is_ipv6() {
-                ipv4_addrs.clear();
-            } else {
-                ipv6_addrs.clear();
-            }
+        if self.bound_addr.is_ipv6() {
+            ipv4_addrs.clear();
+        } else {
+            ipv6_addrs.clear();
         }
 
         if ipv6_addrs.is_empty() {
