@@ -357,6 +357,19 @@ impl Response {
         http_body_util::BodyDataStream::new(self.res.into_body().map_err(crate::error::decode))
     }
 
+    /// Convert the response into a stream of Server-Sent Events.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `sse` feature to be enabled.
+    #[cfg(feature = "sse")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sse")))]
+    pub fn sse(
+        self,
+    ) -> crate::sse::SseStream<impl futures_core::Stream<Item = crate::Result<Bytes>>> {
+        crate::sse::SseStream::new(self.bytes_stream())
+    }
+
     // util methods
 
     /// Turn a response into an error if the server returned an error.
