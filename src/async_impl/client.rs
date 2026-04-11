@@ -167,6 +167,8 @@ struct Config {
     certs_verification: bool,
     #[cfg(feature = "__tls")]
     tls_sni: bool,
+    #[cfg(feature = "__rustls")]
+    tls_sslkeylogfile: bool,
     connect_timeout: Option<Duration>,
     connection_verbose: bool,
     pool_idle_timeout: Option<Duration>,
@@ -292,6 +294,8 @@ impl ClientBuilder {
                 certs_verification: true,
                 #[cfg(feature = "__tls")]
                 tls_sni: true,
+                #[cfg(feature = "__rustls")]
+                tls_sslkeylogfile: false,
                 connect_timeout: None,
                 connection_verbose: false,
                 pool_idle_timeout: Some(Duration::from_secs(90)),
@@ -809,6 +813,10 @@ impl ClientBuilder {
                     };
 
                     tls.enable_sni = config.tls_sni;
+
+                    if config.tls_sslkeylogfile {
+                        tls.key_log = Arc::new(rustls::KeyLogFile::new());
+                    }
 
                     // ALPN protocol
                     match config.http_version_pref {
@@ -2031,6 +2039,24 @@ impl ClientBuilder {
         self
     }
 
+    /// Controls if the SSLKEYLOGFILE environment variable is respected.
+    ///
+    /// When enabled, if the environment variable `SSLKEYLOGFILE` is present at runtime,
+    /// TLS keys will be logged to the file at the path described in the variable.
+    /// This can be used by end-users to allow debugging TLS connections.
+    ///
+    /// Defaults to `false`.
+    ///
+    /// # Optional
+    ///
+    /// This requires the `rustls(-...)` Cargo feature enabled.
+    #[cfg(feature = "__rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
+    pub fn tls_sslkeylogfile(mut self, on: bool) -> ClientBuilder {
+        self.config.tls_sslkeylogfile = on;
+        self
+    }
+
     /// Set the minimum required TLS version for connections.
     ///
     /// By default, the TLS backend's own default is used.
@@ -2848,6 +2874,11 @@ impl Config {
             f.field("tls_sni", &self.tls_sni);
 
             f.field("tls_info", &self.tls_info);
+        }
+
+        #[cfg(feature = "__rustls")]
+        {
+            f.field("tls_sslkeylogfile", &self.tls_sslkeylogfile);
         }
 
         #[cfg(all(feature = "default-tls", feature = "__rustls"))]
