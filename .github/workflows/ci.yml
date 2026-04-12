@@ -335,10 +335,10 @@ jobs:
           CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
 
       # required by rustls-platform-verifier
-      - name: Install rust (1.71.0)
+      - name: Install rust (1.85.1)
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.71.0
+          toolchain: 1.85.1
 
       - uses: Swatinem/rust-cache@v2
 
