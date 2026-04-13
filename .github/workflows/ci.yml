@@ -342,6 +342,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Downgrade rustls-platform-verifier
+        run: cargo update -p rustls-platform-verifier --precise 0.6.2
+
       - name: Check
         run: cargo check
 
