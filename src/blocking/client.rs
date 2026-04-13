@@ -1225,6 +1225,11 @@ impl Client {
         ClientBuilder::new()
     }
 
+    /// Get the headers this `Client` will add to all its `Request`s.
+    pub fn headers(&self) -> &crate::header::HeaderMap {
+        &self.inner.headers
+    }
+
     /// Convenience method to make a `GET` request to a URL.
     ///
     /// # Errors
@@ -1328,6 +1333,7 @@ impl fmt::Debug for ClientBuilder {
 #[derive(Clone)]
 struct ClientHandle {
     timeout: Timeout,
+    headers: crate::header::HeaderMap,
     inner: Arc<InnerClientHandle>,
 }
 
@@ -1358,6 +1364,7 @@ impl Drop for InnerClientHandle {
 impl ClientHandle {
     fn new(builder: ClientBuilder) -> crate::Result<ClientHandle> {
         let timeout = builder.timeout;
+        let headers = builder.inner.config.headers.clone();
         let builder = builder.inner;
         let (tx, rx) = mpsc::unbounded_channel::<(async_impl::Request, OneshotResponse)>();
         let (spawn_tx, spawn_rx) = oneshot::channel::<crate::Result<()>>();
@@ -1426,6 +1433,7 @@ impl ClientHandle {
 
         Ok(ClientHandle {
             timeout,
+            headers,
             inner: inner_handle,
         })
     }

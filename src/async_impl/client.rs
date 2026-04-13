@@ -97,7 +97,7 @@ pub struct Client {
 /// A `ClientBuilder` can be used to create a `Client` with custom configuration.
 #[must_use]
 pub struct ClientBuilder {
-    config: Config,
+    pub(crate) config: Config,
 }
 
 enum HttpVersionPref {
@@ -157,10 +157,10 @@ impl Service<hyper::Request<crate::async_impl::body::Body>> for HyperService {
     }
 }
 
-struct Config {
+pub(crate) struct Config {
     // NOTE: When adding a new field, update `fmt::Debug for ClientBuilder`
     accepts: Accepts,
-    headers: HeaderMap,
+    pub(crate) headers: HeaderMap,
     #[cfg(feature = "__tls")]
     hostname_verification: bool,
     #[cfg(feature = "__tls")]
@@ -2483,6 +2483,11 @@ impl Client {
     /// This is the same as `ClientBuilder::new()`.
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
+    }
+
+    /// Get the headers this `Client` will add to all its `Request`s.
+    pub fn headers(&self) -> &crate::header::HeaderMap {
+        &self.inner.as_ref().headers
     }
 
     /// Convenience method to make a `GET` request to a URL.
