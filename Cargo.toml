@@ -151,7 +151,7 @@ cookie_store = { version = "0.22.0", optional = true }
 tokio-util = { version = "0.7.9", default-features = false, features = ["io"], optional = true }
 
 ## hickory-dns
-hickory-resolver = { version = "0.25", optional = true, features = ["tokio"] }
+hickory-resolver = { version = "0.26", optional = true, features = ["tokio"] }
 once_cell = { version = "1.18", optional = true }
 
 # HTTP/3 experimental support
