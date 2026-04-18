@@ -1,4 +1,7 @@
-#![cfg_attr(target_arch = "wasm32", allow(unused))]
+#![cfg_attr(
+    all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+    allow(unused)
+)]
 use std::error::Error as StdError;
 use std::fmt;
 use std::io;
@@ -102,11 +105,11 @@ impl Error {
 
     /// Returns true if the error is from `Response::error_for_status`.
     pub fn is_status(&self) -> bool {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
         {
             matches!(self.inner.kind, Kind::Status(_, _))
         }
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
         {
             matches!(self.inner.kind, Kind::Status(_))
         }
@@ -120,7 +123,10 @@ impl Error {
             if err.is::<TimedOut>() {
                 return true;
             }
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(
+                target_arch = "wasm32",
+                any(target_os = "unknown", target_os = "none")
+            )))]
             if let Some(hyper_err) = err.downcast_ref::<hyper::Error>() {
                 if hyper_err.is_timeout() {
                     return true;
@@ -142,7 +148,7 @@ impl Error {
         matches!(self.inner.kind, Kind::Request)
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
     /// Returns true if the error is related to connect
     pub fn is_connect(&self) -> bool {
         let mut source = self.source();
@@ -173,9 +179,12 @@ impl Error {
     /// Returns the status code, if the error was generated from a response.
     pub fn status(&self) -> Option<StatusCode> {
         match self.inner.kind {
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
             Kind::Status(code) => Some(code),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(
+                target_arch = "wasm32",
+                any(target_os = "unknown", target_os = "none")
+            )))]
             Kind::Status(code, _) => Some(code),
             _ => None,
         }
@@ -198,7 +207,7 @@ impl Error {
 /// internal equivalents.
 ///
 /// Currently only is used for `tower::timeout::error::Elapsed`.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 pub(crate) fn cast_to_internal_error(error: BoxError) -> BoxError {
     if error.is::<tower::timeout::error::Elapsed>() {
         Box::new(crate::error::TimedOut) as BoxError
@@ -233,7 +242,7 @@ impl fmt::Display for Error {
             Kind::Decode => f.write_str("error decoding response body")?,
             Kind::Redirect => f.write_str("error following redirect")?,
             Kind::Upgrade => f.write_str("error upgrading connection")?,
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
             Kind::Status(ref code) => {
                 let prefix = if code.is_client_error() {
                     "HTTP status client error"
@@ -243,7 +252,10 @@ impl fmt::Display for Error {
                 };
                 write!(f, "{prefix} ({code})")?;
             }
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(
+                target_arch = "wasm32",
+                any(target_os = "unknown", target_os = "none")
+            )))]
             Kind::Status(ref code, ref reason) => {
                 let prefix = if code.is_client_error() {
                     "HTTP status client error"
@@ -278,14 +290,14 @@ impl StdError for Error {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
 impl From<crate::error::Error> for wasm_bindgen::JsValue {
     fn from(err: Error) -> wasm_bindgen::JsValue {
         js_sys::Error::from(err).into()
     }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
 impl From<crate::error::Error> for js_sys::Error {
     fn from(err: Error) -> js_sys::Error {
         js_sys::Error::new(&format!("{err}"))
@@ -297,9 +309,9 @@ pub(crate) enum Kind {
     Builder,
     Request,
     Redirect,
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
     Status(StatusCode, Option<hyper::ext::ReasonPhrase>),
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
     Status(StatusCode),
     Body,
     Decode,
@@ -331,12 +343,15 @@ pub(crate) fn redirect<E: Into<BoxError>>(e: E, url: Url) -> Error {
 pub(crate) fn status_code(
     url: Url,
     status: StatusCode,
-    #[cfg(not(target_arch = "wasm32"))] reason: Option<hyper::ext::ReasonPhrase>,
+    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))] reason: Option<hyper::ext::ReasonPhrase>,
 ) -> Error {
     Error::new(
         Kind::Status(
             status,
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(
+                target_arch = "wasm32",
+                any(target_os = "unknown", target_os = "none")
+            )))]
             reason,
         ),
         None::<Error>,
