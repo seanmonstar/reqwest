@@ -88,6 +88,30 @@ async fn connect_timeout() {
     assert!(err.is_connect() && err.is_timeout());
 }
 
+#[tokio::test]
+async fn request_connect_timeout() {
+    let _ = env_logger::try_init();
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .no_proxy()
+        .build()
+        .unwrap();
+
+    let url = "http://192.0.2.1:81/slow";
+
+    let res = client
+        .get(url)
+        .connect_timeout(Duration::from_millis(100))
+        .timeout(Duration::from_millis(1000))
+        .send()
+        .await;
+
+    let err = res.unwrap_err();
+
+    assert!(err.is_connect() && err.is_timeout());
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::test]
 async fn connect_many_timeout_succeeds() {
