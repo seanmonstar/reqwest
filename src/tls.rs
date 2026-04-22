@@ -622,7 +622,7 @@ pub(crate) fn rustls_store(certs: Vec<Certificate>) -> crate::Result<RootCertSto
     Ok(root_cert_store)
 }
 
-#[cfg(feature = "__rustls")]
+#[cfg(feature = "rustls-platform-verifier")]
 #[cfg(any(all(unix, not(target_os = "android")), target_os = "windows"))]
 pub(crate) fn rustls_der(
     certs: Vec<Certificate>,
