@@ -192,8 +192,14 @@
 //! - **http2** *(enabled by default)*: Enables HTTP/2 support.
 //! - **default-tls** *(enabled by default)*: Provides TLS support to connect
 //!   over HTTPS.
-//! - **rustls**: Enables TLS functionality provided by `rustls`.
-//! - **rustls-no-provider**: Enables TLS provided by `rustls` without specifying a crypto provider.
+//! - **rustls**: Enables TLS functionality provided by `rustls`, using
+//!   `aws-lc-rs` as the crypto provider.
+//! - **rustls-no-provider**: Enables TLS functionality provided by `rustls`
+//!   without specifying a crypto provider.
+//! - **rustls-platform-verifier**: Enables certificate verification against the
+//!   native OS trust store via `rustls-platform-verifier`. Required unless the
+//!   caller supplies trust roots via
+//!   [`ClientBuilder::tls_certs_only()`][crate::ClientBuilder::tls_certs_only].
 //! - **native-tls**: Enables TLS functionality provided by `native-tls`.
 //! - **native-tls-vendored**: Enables the `vendored` feature of `native-tls`.
 //! - **native-tls-no-alpn**: Enables `native-tls` without its `alpn` feature.

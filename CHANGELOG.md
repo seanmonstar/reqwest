@@ -1,3 +1,13 @@
+## Unreleased
+
+- **Breaking**: `rustls-platform-verifier` is now its own feature rather than
+  being pulled in unconditionally by `rustls`/`rustls-no-provider`. It is
+  still enabled by default (via `default-tls`), so callers using default
+  features are unaffected. Callers that set `default-features = false`
+  together with `features = ["rustls"]` (or `rustls-no-provider`) must now
+  either also enable `rustls-platform-verifier` to keep using OS trust, or
+  configure roots manually with `tls_certs_only()`.
+
 ## v0.13.2
 
 - Fix HTTP/2 and native-tls ALPN feature combinations.
