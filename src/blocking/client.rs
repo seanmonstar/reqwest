@@ -1062,6 +1062,22 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.tls_info(tls_info))
     }
 
+    /// If Some, value to use as TLS ServerName instead of URL's host.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls(-...)`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls")))
+    )]
+    pub fn tls_server_name(mut self, tls_server_name: Option<String>) -> ClientBuilder {
+        self.config.tls_server_name = tls_server_name;
+        self
+    }
+
     /// Use a preconfigured TLS backend.
     ///
     /// If the passed `Any` argument is not a TLS backend that reqwest

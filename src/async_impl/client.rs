@@ -158,7 +158,7 @@ impl Service<hyper::Request<crate::async_impl::body::Body>> for HyperService {
 }
 
 struct Config {
-    // NOTE: When adding a new field, update `fmt::Debug for ClientBuilder`
+    // NOTE: When adding a new field, update `Config::fmt_fields`
     accepts: Accepts,
     headers: HeaderMap,
     #[cfg(feature = "__tls")]
@@ -197,6 +197,8 @@ struct Config {
     max_tls_version: Option<tls::Version>,
     #[cfg(feature = "__tls")]
     tls_info: bool,
+    #[cfg(feature = "__tls")]
+    tls_server_name: Option<String>,
     #[cfg(feature = "__tls")]
     tls: TlsBackend,
     connector_layers: Vec<BoxedConnectorLayer>,
@@ -322,6 +324,8 @@ impl ClientBuilder {
                 max_tls_version: None,
                 #[cfg(feature = "__tls")]
                 tls_info: false,
+                #[cfg(feature = "__tls")]
+                tls_server_name: None,
                 #[cfg(feature = "__tls")]
                 tls: TlsBackend::default(),
                 connector_layers: Vec::new(),
@@ -608,6 +612,7 @@ impl ClientBuilder {
                         config.interface.as_deref(),
                         config.nodelay,
                         config.tls_info,
+                        config.tls_server_name,
                     )?
                 }
                 #[cfg(feature = "__native-tls")]
@@ -632,6 +637,7 @@ impl ClientBuilder {
                     config.interface.as_deref(),
                     config.nodelay,
                     config.tls_info,
+                    config.tls_server_name,
                 ),
                 #[cfg(feature = "__rustls")]
                 TlsBackend::BuiltRustls(conn) => {
@@ -676,6 +682,7 @@ impl ClientBuilder {
                         config.interface.as_deref(),
                         config.nodelay,
                         config.tls_info,
+                        config.tls_server_name,
                     )
                 }
                 #[cfg(feature = "__rustls")]
@@ -876,6 +883,7 @@ impl ClientBuilder {
                         config.interface.as_deref(),
                         config.nodelay,
                         config.tls_info,
+                        config.tls_server_name,
                     )
                 }
                 #[cfg(any(feature = "__native-tls", feature = "__rustls",))]
@@ -2216,6 +2224,22 @@ impl ClientBuilder {
         self
     }
 
+    /// If Some, value to use as TLS ServerName instead of URL's host.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `default-tls`, `native-tls`, or `rustls(-...)`
+    /// feature to be enabled.
+    #[cfg(feature = "__tls")]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "default-tls", feature = "native-tls", feature = "rustls")))
+    )]
+    pub fn tls_server_name(mut self, tls_server_name: Option<String>) -> ClientBuilder {
+        self.config.tls_server_name = tls_server_name;
+        self
+    }
+
     /// Restrict the Client to be used with HTTPS only requests.
     ///
     /// Defaults to false.
@@ -2848,6 +2872,8 @@ impl Config {
             f.field("tls_sni", &self.tls_sni);
 
             f.field("tls_info", &self.tls_info);
+
+            f.field("tls_server_name", &self.tls_server_name);
         }
 
         #[cfg(all(feature = "default-tls", feature = "__rustls"))]
