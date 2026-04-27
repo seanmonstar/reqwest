@@ -42,6 +42,28 @@
 //! This backend uses the [rustls][] crate, a TLS library written in Rust.
 //!
 //! [rustls]: https://crates.io/crates/rustls
+//!
+//! ## rustls-no-provider
+//!
+//! Like `rustls`, but without a built-in crypto provider. This is useful when
+//! you want to supply your own [rustls CryptoProvider][], for example to use
+//! [ring][] instead of the default `aws-lc-rs`.
+//!
+//! **You must install a crypto provider before building a `Client`.** If none
+//! is installed the client will panic at construction time. Install one via
+//! [`CryptoProvider::install_default`][]:
+//!
+//! ```rust,ignore
+//! rustls::crypto::ring::default_provider()
+//!     .install_default()
+//!     .expect("Failed to install rustls crypto provider");
+//!
+//! let client = reqwest::Client::new();
+//! ```
+//!
+//! [rustls CryptoProvider]: https://docs.rs/rustls/latest/rustls/crypto/struct.CryptoProvider.html
+//! [ring]: https://crates.io/crates/ring
+//! [`CryptoProvider::install_default`]: https://docs.rs/rustls/latest/rustls/crypto/struct.CryptoProvider.html#method.install_default
 
 #[cfg(feature = "__rustls")]
 use rustls::{
