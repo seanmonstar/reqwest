@@ -633,6 +633,30 @@ where
     }
 }
 
+impl TryFrom<HttpRequest<()>> for Request {
+    type Error = crate::Error;
+
+    fn try_from(req: HttpRequest<()>) -> crate::Result<Self> {
+        let (parts, _) = req.into_parts();
+        let Parts {
+            method,
+            uri,
+            headers,
+            version,
+            ..
+        } = parts;
+        let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
+        Ok(Request {
+            method,
+            url,
+            headers,
+            body: None,
+            timeout: None,
+            version,
+        })
+    }
+}
+
 impl TryFrom<Request> for HttpRequest<Body> {
     type Error = crate::Error;
 
@@ -906,6 +930,17 @@ mod tests {
         assert_eq!(headers.get("User-Agent").unwrap(), "my-awesome-agent/1.0");
         assert_eq!(req.method(), Method::GET);
         assert_eq!(req.url().as_str(), "http://localhost/");
+    }
+
+    #[test]
+    fn convert_from_http_request_without_body() {
+        let http_request = HttpRequest::builder()
+            .method("GET")
+            .uri("http://localhost/")
+            .body(())
+            .unwrap();
+        let req: Request = Request::try_from(http_request).unwrap();
+        assert!(req.body().is_none());
     }
 
     #[test]
