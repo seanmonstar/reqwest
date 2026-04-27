@@ -1,3 +1,14 @@
+## v0.13.3
+
+- Fix CertificateRevocationList parsing of PEM values.
+- Fix logging in resolver to only show host, not full URL.
+- Fix hickory-dns to fallback to a default if `/etc/resolv.conf` fails.
+- Fix HTTP/3 to handle `STOP_SENDING` as not an error.
+- Fix HTTP/3 pool to remove timed out QUIC connections.
+- Fix HTTP/3 connection establishment picking IPv4 and IPv6.
+- Upgrade rustls-platform-verifier.
+- (wasm) Only use wasm-bindgen on unknown-* targets.
+
 ## v0.13.2
 
 - Fix HTTP/2 and native-tls ALPN feature combinations.
