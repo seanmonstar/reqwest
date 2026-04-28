@@ -4,7 +4,7 @@ use std::future::Future;
 use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
 use std::{fmt, str};
@@ -16,7 +16,7 @@ use super::Body;
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::H3Client;
-use crate::config::{RequestConfig, TotalTimeout};
+use crate::config::{ConnectTimeout, RequestConfig, TotalTimeout};
 #[cfg(unix)]
 use crate::connect::uds::UnixSocketProvider;
 #[cfg(target_os = "windows")]
@@ -1082,6 +1082,7 @@ impl ClientBuilder {
                 },
                 headers: config.headers,
                 referer: config.referer,
+                connect_timeout: RequestConfig::new(config.connect_timeout),
                 read_timeout: config.read_timeout,
                 total_timeout: RequestConfig::new(config.timeout),
                 hyper,
@@ -2634,6 +2635,7 @@ impl Client {
             .copied()
             .map(tokio::time::sleep)
             .map(Box::pin);
+        let connect_timeout = self.inner.connect_timeout.fetch(&extensions).copied();
 
         let read_timeout_fut = self
             .inner
@@ -2653,6 +2655,7 @@ impl Client {
                 total_timeout,
                 read_timeout_fut,
                 read_timeout: self.inner.read_timeout,
+                connect_timeout,
             })),
         }
     }
@@ -2918,6 +2921,7 @@ struct ClientRef {
     #[cfg(feature = "http3")]
     h3_client: Option<LayeredService<H3Client>>,
     referer: bool,
+    connect_timeout: RequestConfig<ConnectTimeout>,
     total_timeout: RequestConfig<TotalTimeout>,
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<ProxyMatcher>>,
@@ -2955,6 +2959,7 @@ impl ClientRef {
 
         f.field("default_headers", &self.headers);
 
+        self.connect_timeout.fmt_as_field(f);
         self.total_timeout.fmt_as_field(f);
 
         if let Some(ref d) = self.read_timeout {
@@ -2990,6 +2995,7 @@ pin_project! {
         #[pin]
         read_timeout_fut: Option<Pin<Box<Sleep>>>,
         read_timeout: Option<Duration>,
+        connect_timeout: Option<Duration>,
     }
 }
 
@@ -3059,20 +3065,32 @@ impl Future for PendingRequest {
             }
         }
 
-        let res = match self.as_mut().in_flight().get_mut() {
-            ResponseFuture::Default(r) => match ready!(Pin::new(r).poll(cx)) {
-                Err(e) => {
-                    return Poll::Ready(Err(e.if_no_url(|| self.url.clone())));
-                }
-                Ok(res) => res.map(super::body::boxed),
-            },
-            #[cfg(feature = "http3")]
-            ResponseFuture::H3(r) => match ready!(Pin::new(r).poll(cx)) {
-                Err(e) => {
-                    return Poll::Ready(Err(crate::error::request(e).with_url(self.url.clone())));
-                }
-                Ok(res) => res.map(super::body::boxed),
-            },
+        let connect_timeout = {
+            let this = self.as_mut().project();
+            *this.connect_timeout
+        };
+
+        let res = crate::connect::with_connect_timeout_override(connect_timeout, || {
+            match self.as_mut().in_flight().get_mut() {
+                ResponseFuture::Default(r) => match Pin::new(r).poll(cx) {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(Err(e)) => Poll::Ready(Err(e.if_no_url(|| self.url.clone()))),
+                    Poll::Ready(Ok(res)) => Poll::Ready(Ok(res.map(super::body::boxed))),
+                },
+                #[cfg(feature = "http3")]
+                ResponseFuture::H3(r) => match Pin::new(r).poll(cx) {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(Err(e)) => {
+                        Poll::Ready(Err(crate::error::request(e).with_url(self.url.clone())))
+                    }
+                    Poll::Ready(Ok(res)) => Poll::Ready(Ok(res.map(super::body::boxed))),
+                },
+            }
+        });
+        let res = match res {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Ok(res)) => res,
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
         };
 
         if let Some(url) = &res

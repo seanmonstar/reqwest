@@ -13,7 +13,7 @@ use super::client::{Client, Pending};
 #[cfg(feature = "multipart")]
 use super::multipart;
 use super::response::Response;
-use crate::config::{RequestConfig, TotalTimeout};
+use crate::config::{ConnectTimeout, RequestConfig, TotalTimeout};
 #[cfg(feature = "multipart")]
 use crate::header::CONTENT_LENGTH;
 #[cfg(any(feature = "multipart", feature = "form", feature = "json"))]
@@ -127,6 +127,18 @@ impl Request {
         RequestConfig::<TotalTimeout>::get_mut(&mut self.extensions)
     }
 
+    /// Get the connect timeout.
+    #[inline]
+    pub fn connect_timeout(&self) -> Option<&Duration> {
+        RequestConfig::<ConnectTimeout>::get(&self.extensions)
+    }
+
+    /// Get a mutable reference to the connect timeout.
+    #[inline]
+    pub fn connect_timeout_mut(&mut self) -> &mut Option<Duration> {
+        RequestConfig::<ConnectTimeout>::get_mut(&mut self.extensions)
+    }
+
     /// Get the http version.
     #[inline]
     pub fn version(&self) -> Version {
@@ -149,6 +161,7 @@ impl Request {
         };
         let mut req = Request::new(self.method().clone(), self.url().clone());
         *req.timeout_mut() = self.timeout().copied();
+        *req.connect_timeout_mut() = self.connect_timeout().copied();
         *req.headers_mut() = self.headers().clone();
         *req.version_mut() = self.version();
         *req.extensions_mut() = self.extensions().clone();
@@ -294,6 +307,18 @@ impl RequestBuilder {
     pub fn timeout(mut self, timeout: Duration) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             *req.timeout_mut() = Some(timeout);
+        }
+        self
+    }
+
+    /// Enables a request connect timeout.
+    ///
+    /// The timeout is applied while a new connection is being established. It
+    /// affects only this request and overrides the timeout configured using
+    /// `ClientBuilder::connect_timeout()`.
+    pub fn connect_timeout(mut self, timeout: Duration) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *req.connect_timeout_mut() = Some(timeout);
         }
         self
     }
@@ -938,6 +963,20 @@ mod tests {
         let request = inner.unwrap();
         let builder = RequestBuilder::from_parts(client, request);
         builder.build().unwrap();
+    }
+
+    #[test]
+    fn request_connect_timeout_round_trips_through_clone() {
+        let mut request = Request::new(Method::GET, "https://example.com".try_into().unwrap());
+        *request.timeout_mut() = Some(Duration::from_secs(42));
+        *request.connect_timeout_mut() = Some(Duration::from_secs(7));
+        *request.version_mut() = Version::HTTP_11;
+
+        let clone = request.try_clone().unwrap();
+        assert_eq!(request.version(), clone.version());
+        assert_eq!(request.headers(), clone.headers());
+        assert_eq!(request.timeout(), clone.timeout());
+        assert_eq!(request.connect_timeout(), clone.connect_timeout());
     }
 
     /*
