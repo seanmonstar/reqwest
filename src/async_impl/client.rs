@@ -568,9 +568,11 @@ impl ClientBuilder {
 
                     if let Some(min_tls_version) = config.min_tls_version {
                         let protocol = min_tls_version.to_native_tls().ok_or_else(|| {
-                            // TLS v1.3. This would be entirely reasonable,
-                            // native-tls just doesn't support it.
-                            // https://github.com/sfackler/rust-native-tls/issues/140
+                            // native-tls added support for TLS v1.3 in 0.2.16 🎉
+                            // `to_native_tls` could arguably return the value directly
+                            // instead of making us check for an impossible None here,
+                            // but given that 1.4 does not exist yet, that might get
+                            // messy in the future.
                             crate::error::builder("invalid minimum TLS version for backend")
                         })?;
                         tls.min_protocol_version(Some(protocol));
@@ -578,7 +580,6 @@ impl ClientBuilder {
 
                     if let Some(max_tls_version) = config.max_tls_version {
                         let protocol = max_tls_version.to_native_tls().ok_or_else(|| {
-                            // TLS v1.3.
                             // We could arguably do max_protocol_version(None), given
                             // that 1.4 does not exist yet, but that'd get messy in the
                             // future.
@@ -2035,12 +2036,9 @@ impl ClientBuilder {
     ///
     /// By default, the TLS backend's own default is used.
     ///
-    /// # Errors
-    ///
-    /// A value of `tls::Version::TLS_1_3` will cause an error with the
-    /// `native-tls` backend. This does not mean the version
-    /// isn't supported, just that it can't be set as a minimum due to
-    /// technical limitations.
+    /// On Apple platforms, a value of `tls::Version::TLS_1_3` may cause requests
+    /// to fail (with error -9830) with the `native-tls` backend due to lack of
+    /// TLS 1.3 support.
     ///
     /// # Optional
     ///
@@ -2066,12 +2064,11 @@ impl ClientBuilder {
     ///
     /// By default, there's no maximum.
     ///
-    /// # Errors
+    /// On Apple platforms, a value of `tls::Version::TLS_1_3` may cause requests
+    /// to fall back to TLS 1.2 if allowed by `tls_version_min`, or fail (with error
+    /// -9830) with the `native-tls` backend due to lack of TLS 1.3 support.
     ///
-    /// A value of `tls::Version::TLS_1_3` will cause an error with the
-    /// `native-tls` backend. This does not mean the version
-    /// isn't supported, just that it can't be set as a maximum due to
-    /// technical limitations.
+    /// # Errors
     ///
     /// Cannot set a maximum outside the protocol versions supported by
     /// `rustls` with the `rustls` backend.
