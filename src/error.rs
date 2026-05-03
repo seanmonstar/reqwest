@@ -478,4 +478,20 @@ mod tests {
         let nested = super::request(io);
         assert!(nested.is_timeout());
     }
+
+    #[test]
+    fn test_display_source() {
+        let url = Url::parse("ssh://example.com").unwrap();
+
+        // `url_bad_scheme` returns a new `Error` with the kind `Kind::Builder`
+        // and a `BadScheme` error as its source.
+        let error = url_bad_scheme(url);
+
+        // The string representation for the error should include information
+        // from the underlying `BadScheme` error.
+        assert_eq!(
+            error.to_string(),
+            "builder error for url (ssh://example.com): URL scheme is not allowed"
+        )
+    }
 }
