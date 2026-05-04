@@ -1351,16 +1351,17 @@ enum InnerClientJointHandle {
     Thread(Option<thread::JoinHandle<()>>),
     TokioTask {
         handle: tokio::runtime::Handle,
-        task: tokio::task::JoinHandle,
+        task: tokio::task::JoinHandle<()>,
     },
 }
 
 impl Drop for InnerClientHandle {
     fn drop(&mut self) {
+        use InnerClientJointHandle::*;
+
         match self.joint_handle {
             Thread(thread) => {
-                let id = self
-                    .thread
+                let id = thread
                     .as_ref()
                     .map(|h| h.thread().id())
                     .expect("thread not dropped yet");
