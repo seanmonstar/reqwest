@@ -1278,7 +1278,6 @@ impl From<async_impl::ClientBuilder> for ClientBuilder {
     }
 }
 
-
 impl From<async_impl::Client> for Client {
     fn from(builder: async_impl::Client) -> Self {
         Self {
@@ -1554,7 +1553,7 @@ impl ClientHandle {
                 let req_fut = client.execute(req);
                 tokio::spawn(forward(req_fut, req_tx));
             }
-    
+
             trace!("({:?}) Receiver is shutdown", tokio::task::id());
         });
 
