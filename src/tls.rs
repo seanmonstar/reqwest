@@ -189,6 +189,17 @@ impl Certificate {
     /// # }
     /// ```
     pub fn from_pem(pem: &[u8]) -> crate::Result<Certificate> {
+        #[cfg(feature = "__rustls")]
+        {
+            // Validate that the input is actually PEM-encoded before storing it.
+            // Without this check, DER-encoded bytes would be silently accepted
+            // but fail later when the certificate is used.
+            let mut reader = std::io::BufReader::new(pem);
+            let certs = Self::read_pem_certs(&mut reader)?;
+            if certs.is_empty() {
+                return Err(crate::error::builder("no PEM certificate found in input"));
+            }
+        }
         Ok(Certificate {
             #[cfg(feature = "__native-tls")]
             native: native_tls_crate::Certificate::from_pem(pem).map_err(crate::error::builder)?,
@@ -818,6 +829,20 @@ mod tests {
     #[test]
     fn certificate_from_pem_invalid() {
         Certificate::from_pem(b"not pem").unwrap_err();
+    }
+
+    #[cfg(feature = "__rustls")]
+    #[test]
+    fn certificate_from_pem_invalid_rustls() {
+        Certificate::from_pem(b"not pem").unwrap_err();
+    }
+
+    #[cfg(feature = "__rustls")]
+    #[test]
+    fn certificate_from_pem_rejects_der() {
+        // DER-encoded bytes should not be accepted by from_pem
+        let der = b"\x30\x82\x01\x22"; // minimal DER prefix
+        Certificate::from_pem(der).unwrap_err();
     }
 
     #[cfg(feature = "__native-tls")]
