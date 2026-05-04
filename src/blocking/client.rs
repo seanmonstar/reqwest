@@ -1198,7 +1198,9 @@ impl From<async_impl::ClientBuilder> for ClientBuilder {
 
 impl From<async_impl::Client> for Client {
     fn from(builder: async_impl::Client) -> Self {
-        Self { inner: ClientHandle::with_async_client(client) }
+        Self {
+            inner: ClientHandle::with_async_client(client),
+        }
     }
 }
 
@@ -1368,7 +1370,7 @@ impl Drop for InnerClientHandle {
                 self.tx.take();
                 trace!("signaled close for runtime thread ({id:?})");
                 self.thread.take().map(|h| h.join());
-                trace!("closed runtime thread ({id:?})"); 
+                trace!("closed runtime thread ({id:?})");
             }
             TokioTask { handle, task } => {
                 let id = task.id();
@@ -1469,8 +1471,8 @@ impl ClientHandle {
                 let req_fut = client.execute(req);
                 tokio::spawn(forward(req_fut, req_tx));
             }
-         
-            trace!("({:?}) Receiver is shutdown", thread::current().id());
+    
+            trace!("({:?}) Receiver is shutdown", tokio::task::id());
         });
 
         let inner_handle = Arc::new(InnerClientHandle {
