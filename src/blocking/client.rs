@@ -1195,6 +1195,13 @@ impl From<async_impl::ClientBuilder> for ClientBuilder {
     }
 }
 
+
+impl From<async_impl::Client> for Client {
+    fn from(builder: async_impl::Client) -> Self {
+        Client { inner: ClientHandle::with_async_client(client) },
+    }
+}
+
 impl Default for Client {
     fn default() -> Self {
         Self::new()
@@ -1341,6 +1348,10 @@ struct InnerClientHandle {
 
 enum InnerClientJointHandle {
     Thread(Option<thread::JoinHandle<()>>),
+    TokioTask {
+        handle: tokio::runtime::Handle,
+        task: tokio::task::JoinHandle,
+    },
 }
 
 impl Drop for InnerClientHandle {
@@ -1358,6 +1369,15 @@ impl Drop for InnerClientHandle {
                 trace!("signaled close for runtime thread ({id:?})");
                 self.thread.take().map(|h| h.join());
                 trace!("closed runtime thread ({id:?})"); 
+            }
+            TokioTask { handle, task } => {
+                let id = task.id();
+
+                trace!("closing runtime task ({id})");
+                self.tx.take();
+                trace!("signaled close for runtime task ({id})");
+
+                handle.block_on(&mut task);
             }
         }
     }
@@ -1429,15 +1449,39 @@ impl ClientHandle {
 
         let inner_handle = Arc::new(InnerClientHandle {
             tx: Some(tx),
-            joint_handle: InnerClientJointHandle {
-                Thread(Some(handle)),
-            },
+            joint_handle: InnerClientJointHandle::Thread(Some(handle)),
         );
 
         Ok(ClientHandle {
             timeout,
             inner: inner_handle,
         })
+    }
+
+    fn with_async_client(client: async_impl::Client) -> ClientHandle {
+        let (tx, rx) = mpsc::unbounded_channel::<(async_impl::Request, OneshotResponse)>();
+
+        let handle = tokio::runtime::Handle::current();
+        let task = handle.spawn(async move {
+            let mut rx = rx;
+
+            while let Some((req, req_tx)) = rx.recv().await {
+                let req_fut = client.execute(req);
+                tokio::spawn(forward(req_fut, req_tx));
+            }
+         
+            trace!("({:?}) Receiver is shutdown", thread::current().id());
+        });
+
+        let inner_handle = Arc::new(InnerClientHandle {
+            tx: Some(tx),
+            joint_handle: InnerClientJointHandle::TokioTask { handle, task },
+        );
+
+        ClientHandle {
+            timeout: Default::default(),
+            inner: inner_handle,
+        }
     }
 
     fn execute_request(&self, req: Request) -> crate::Result<Response> {
