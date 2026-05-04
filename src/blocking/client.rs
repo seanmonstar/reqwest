@@ -1196,7 +1196,7 @@ impl From<async_impl::ClientBuilder> for ClientBuilder {
 }
 
 impl From<async_impl::Client> for Client {
-    fn from(builder: async_impl::Client) -> Self {
+    fn from(client: async_impl::Client) -> Self {
         Self {
             inner: ClientHandle::with_async_client(client),
         }
@@ -1369,7 +1369,7 @@ impl Drop for InnerClientHandle {
                 trace!("closing runtime thread ({id:?})");
                 self.tx.take();
                 trace!("signaled close for runtime thread ({id:?})");
-                self.thread.take().map(|h| h.join());
+                thread.take().map(|h| h.join());
                 trace!("closed runtime thread ({id:?})");
             }
             TokioTask { handle, task } => {
