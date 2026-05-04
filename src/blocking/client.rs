@@ -1195,6 +1195,14 @@ impl From<async_impl::ClientBuilder> for ClientBuilder {
     }
 }
 
+impl From<async_impl::Client> for Client {
+    fn from(client: async_impl::Client) -> Self {
+        Self {
+            inner: ClientHandle::with_async_client(client),
+        }
+    }
+}
+
 impl Default for Client {
     fn default() -> Self {
         Self::new()
@@ -1336,22 +1344,43 @@ type ThreadSender = mpsc::UnboundedSender<(async_impl::Request, OneshotResponse)
 
 struct InnerClientHandle {
     tx: Option<ThreadSender>,
-    thread: Option<thread::JoinHandle<()>>,
+    joint_handle: InnerClientJointHandle,
+}
+
+enum InnerClientJointHandle {
+    Thread(Option<thread::JoinHandle<()>>),
+    TokioTask {
+        handle: tokio::runtime::Handle,
+        task: tokio::task::JoinHandle<()>,
+    },
 }
 
 impl Drop for InnerClientHandle {
     fn drop(&mut self) {
-        let id = self
-            .thread
-            .as_ref()
-            .map(|h| h.thread().id())
-            .expect("thread not dropped yet");
+        use InnerClientJointHandle::*;
 
-        trace!("closing runtime thread ({id:?})");
-        self.tx.take();
-        trace!("signaled close for runtime thread ({id:?})");
-        self.thread.take().map(|h| h.join());
-        trace!("closed runtime thread ({id:?})");
+        match &mut self.joint_handle {
+            Thread(thread) => {
+                let thread = thread.take().expect("thread not dropped yet");
+                let id = thread.thread().id();
+
+                trace!("closing runtime thread ({id:?})");
+                self.tx.take();
+                trace!("signaled close for runtime thread ({id:?})");
+                let res = thread.join();
+                trace!("closed runtime thread ({id:?}): {res:?}");
+            }
+            TokioTask { handle, task } => {
+                let id = task.id();
+
+                trace!("closing runtime task ({id})");
+                self.tx.take();
+                trace!("signaled close for runtime task ({id})");
+
+                let res = handle.block_on(task);
+                trace!("closed runtime task ({id}): {res:?}");
+            }
+        }
     }
 }
 
@@ -1421,13 +1450,39 @@ impl ClientHandle {
 
         let inner_handle = Arc::new(InnerClientHandle {
             tx: Some(tx),
-            thread: Some(handle),
+            joint_handle: InnerClientJointHandle::Thread(Some(handle)),
         });
 
         Ok(ClientHandle {
             timeout,
             inner: inner_handle,
         })
+    }
+
+    fn with_async_client(client: async_impl::Client) -> ClientHandle {
+        let (tx, rx) = mpsc::unbounded_channel::<(async_impl::Request, OneshotResponse)>();
+
+        let handle = tokio::runtime::Handle::current();
+        let task = handle.spawn(async move {
+            let mut rx = rx;
+
+            while let Some((req, req_tx)) = rx.recv().await {
+                let req_fut = client.execute(req);
+                tokio::spawn(forward(req_fut, req_tx));
+            }
+
+            trace!("({:?}) Receiver is shutdown", tokio::task::id());
+        });
+
+        let inner_handle = Arc::new(InnerClientHandle {
+            tx: Some(tx),
+            joint_handle: InnerClientJointHandle::TokioTask { handle, task },
+        });
+
+        ClientHandle {
+            timeout: Default::default(),
+            inner: inner_handle,
+        }
     }
 
     fn execute_request(&self, req: Request) -> crate::Result<Response> {
