@@ -1361,7 +1361,7 @@ impl Drop for InnerClientHandle {
 
         match &mut self.joint_handle {
             Thread(thread) => {
-                let thread = thread.take().expect("thread not dropped yet"); 
+                let thread = thread.take().expect("thread not dropped yet");
                 let id = thread.thread().id();
 
                 trace!("closing runtime thread ({id:?})");
