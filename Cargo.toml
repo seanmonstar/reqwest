@@ -122,7 +122,7 @@ hyper-util = { version = "0.1.12", features = ["http1", "client", "client-legacy
 h2 = { version = "0.4", optional = true }
 log = "0.4.17"
 percent-encoding = "2.3"
-tokio = { version = "1.0", default-features = false, features = ["net", "time"] }
+tokio = { version = "1.41", default-features = false, features = ["net", "time"] }
 tower = { version = "0.5.2", default-features = false, features = ["retry", "timeout", "util"] }
 tower-service = "0.3"
 tower-http = { version = "0.6.8", default-features = false, features = ["follow-redirect"] }
