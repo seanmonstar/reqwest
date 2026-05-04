@@ -1248,7 +1248,7 @@ impl From<async_impl::ClientBuilder> for ClientBuilder {
 
 impl From<async_impl::Client> for Client {
     fn from(builder: async_impl::Client) -> Self {
-        Client { inner: ClientHandle::with_async_client(client) },
+        Self { inner: ClientHandle::with_async_client(client) }
     }
 }
 
