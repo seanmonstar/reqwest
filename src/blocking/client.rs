@@ -1367,8 +1367,8 @@ impl Drop for InnerClientHandle {
                 trace!("closing runtime thread ({id:?})");
                 self.tx.take();
                 trace!("signaled close for runtime thread ({id:?})");
-                thread.join();
-                trace!("closed runtime thread ({id:?})");
+                let res = thread.join();
+                trace!("closed runtime thread ({id:?}): {res:?}");
             }
             TokioTask { handle, task } => {
                 let id = task.id();
@@ -1378,6 +1378,7 @@ impl Drop for InnerClientHandle {
                 trace!("signaled close for runtime task ({id})");
 
                 handle.block_on(task);
+                trace!("closed runtime task ({id}): {res:?}");
             }
         }
     }
