@@ -1336,22 +1336,30 @@ type ThreadSender = mpsc::UnboundedSender<(async_impl::Request, OneshotResponse)
 
 struct InnerClientHandle {
     tx: Option<ThreadSender>,
-    thread: Option<thread::JoinHandle<()>>,
+    joint_handle: InnerClientJointHandle,
+}
+
+enum InnerClientJointHandle {
+    Thread(Option<thread::JoinHandle<()>>),
 }
 
 impl Drop for InnerClientHandle {
     fn drop(&mut self) {
-        let id = self
-            .thread
-            .as_ref()
-            .map(|h| h.thread().id())
-            .expect("thread not dropped yet");
+        match self.joint_handle {
+            Thread(thread) => {
+                let id = self
+                    .thread
+                    .as_ref()
+                    .map(|h| h.thread().id())
+                    .expect("thread not dropped yet");
 
-        trace!("closing runtime thread ({id:?})");
-        self.tx.take();
-        trace!("signaled close for runtime thread ({id:?})");
-        self.thread.take().map(|h| h.join());
-        trace!("closed runtime thread ({id:?})");
+                trace!("closing runtime thread ({id:?})");
+                self.tx.take();
+                trace!("signaled close for runtime thread ({id:?})");
+                self.thread.take().map(|h| h.join());
+                trace!("closed runtime thread ({id:?})"); 
+            }
+        }
     }
 }
 
@@ -1421,8 +1429,10 @@ impl ClientHandle {
 
         let inner_handle = Arc::new(InnerClientHandle {
             tx: Some(tx),
-            thread: Some(handle),
-        });
+            joint_handle: InnerClientJointHandle {
+                Thread(Some(handle)),
+            },
+        );
 
         Ok(ClientHandle {
             timeout,
