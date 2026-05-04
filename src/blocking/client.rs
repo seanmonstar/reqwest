@@ -1359,17 +1359,15 @@ impl Drop for InnerClientHandle {
     fn drop(&mut self) {
         use InnerClientJointHandle::*;
 
-        match self.joint_handle {
+        match &mut self.joint_handle {
             Thread(thread) => {
-                let id = thread
-                    .as_ref()
-                    .map(|h| h.thread().id())
-                    .expect("thread not dropped yet");
+                let thread = thread.take().expect("thread not dropped yet"); 
+                let id = thread.thread().id();
 
                 trace!("closing runtime thread ({id:?})");
                 self.tx.take();
                 trace!("signaled close for runtime thread ({id:?})");
-                thread.take().map(|h| h.join());
+                thread.join();
                 trace!("closed runtime thread ({id:?})");
             }
             TokioTask { handle, task } => {
