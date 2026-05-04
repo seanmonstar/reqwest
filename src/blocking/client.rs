@@ -1500,7 +1500,7 @@ impl ClientHandle {
         let inner_handle = Arc::new(InnerClientHandle {
             tx: Some(tx),
             joint_handle: InnerClientJointHandle::Thread(Some(handle)),
-        );
+        });
 
         Ok(ClientHandle {
             timeout,
