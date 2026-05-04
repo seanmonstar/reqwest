@@ -1559,7 +1559,7 @@ impl ClientHandle {
         let inner_handle = Arc::new(InnerClientHandle {
             tx: Some(tx),
             joint_handle: InnerClientJointHandle::TokioTask { handle, task },
-        );
+        });
 
         ClientHandle {
             timeout: Default::default(),
