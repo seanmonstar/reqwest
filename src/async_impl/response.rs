@@ -390,6 +390,17 @@ impl Response {
         }
     }
 
+    /// Turn a response into an error if the server returned a string error.
+    pub async fn text_error_for_status(self) -> crate::Result<Self> {
+        let status = self.status();
+        if status.is_client_error() || status.is_server_error() {
+            let err = self.text().await?;
+            Err(crate::error::body(err))
+        } else {
+            Ok(self)
+        }
+    }
+
     /// Turn a reference to a response into an error if the server returned an error.
     ///
     /// # Example
