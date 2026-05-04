@@ -1427,7 +1427,7 @@ impl Drop for InnerClientHandle {
                 self.tx.take();
                 trace!("signaled close for runtime task ({id})");
 
-                handle.block_on(task);
+                let res = handle.block_on(task);
                 trace!("closed runtime task ({id}): {res:?}");
             }
         }
