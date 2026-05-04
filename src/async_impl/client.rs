@@ -217,6 +217,10 @@ struct Config {
     #[cfg(feature = "http2")]
     http2_max_header_list_size: Option<u32>,
     #[cfg(feature = "http2")]
+    http2_header_table_size: Option<u32>,
+    #[cfg(feature = "http2")]
+    http2_max_concurrent_streams: Option<u32>,
+    #[cfg(feature = "http2")]
     http2_keep_alive_interval: Option<Duration>,
     #[cfg(feature = "http2")]
     http2_keep_alive_timeout: Option<Duration>,
@@ -341,6 +345,10 @@ impl ClientBuilder {
                 http2_max_frame_size: None,
                 #[cfg(feature = "http2")]
                 http2_max_header_list_size: None,
+                #[cfg(feature = "http2")]
+                http2_header_table_size: None,
+                #[cfg(feature = "http2")]
+                http2_max_concurrent_streams: None,
                 #[cfg(feature = "http2")]
                 http2_keep_alive_interval: None,
                 #[cfg(feature = "http2")]
@@ -952,6 +960,12 @@ impl ClientBuilder {
             }
             if let Some(http2_max_header_list_size) = config.http2_max_header_list_size {
                 builder.http2_max_header_list_size(http2_max_header_list_size);
+            }
+            if let Some(http2_header_table_size) = config.http2_header_table_size {
+                builder.http2_header_table_size(http2_header_table_size);
+            }
+            if let Some(http2_max_concurrent_streams) = config.http2_max_concurrent_streams {
+                builder.http2_max_concurrent_streams(http2_max_concurrent_streams);
             }
             if let Some(http2_keep_alive_interval) = config.http2_keep_alive_interval {
                 builder.http2_keep_alive_interval(http2_keep_alive_interval);
@@ -1615,6 +1629,30 @@ impl ClientBuilder {
     #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
     pub fn http2_max_header_list_size(mut self, max_header_size_bytes: u32) -> ClientBuilder {
         self.config.http2_max_header_list_size = Some(max_header_size_bytes);
+        self
+    }
+
+    /// Sets the header table size to use for HTTP2.
+    ///
+    /// Passing `None` will do nothing.
+    ///
+    /// If not set, hyper will use a default.
+    #[cfg(feature = "http2")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
+    pub fn http2_header_table_size(mut self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+        self.config.http2_header_table_size = sz.into();
+        self
+    }
+
+    /// Sets the `SETTINGS_MAX_CONCURRENT_STREAMS` option for HTTP2 connections.
+    ///
+    /// Passing `None` will do nothing.
+    ///
+    /// The default value is determined by the `h2` crate.
+    #[cfg(feature = "http2")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
+    pub fn http2_max_concurrent_streams(mut self, max: impl Into<Option<u32>>) -> ClientBuilder {
+        self.config.http2_max_concurrent_streams = max.into();
         self
     }
 
