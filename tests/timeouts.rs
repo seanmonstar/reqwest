@@ -1,7 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 #![cfg(not(feature = "rustls-no-provider"))]
 mod support;
-use support::server;
+use support::{delay_layer::DelayLayer, server};
 
 use std::time::Duration;
 
@@ -86,6 +86,49 @@ async fn connect_timeout() {
     let err = res.unwrap_err();
 
     assert!(err.is_connect() && err.is_timeout());
+}
+
+#[tokio::test]
+async fn request_connect_timeout() {
+    let _ = env_logger::try_init();
+
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+
+    let url = "http://192.0.2.1:81/slow";
+
+    let res = client
+        .get(url)
+        .connect_timeout(Duration::from_millis(100))
+        .timeout(Duration::from_millis(1000))
+        .send()
+        .await;
+
+    let err = res.unwrap_err();
+
+    assert!(err.is_connect() && err.is_timeout());
+}
+
+#[tokio::test]
+async fn request_connect_timeout_overrides_client_connect_timeout() {
+    let _ = env_logger::try_init();
+
+    let server = server::http(move |_req| async { http::Response::default() });
+    let url = format!("http://{}/", server.addr());
+
+    let client = reqwest::Client::builder()
+        .connector_layer(DelayLayer::new(Duration::from_millis(200)))
+        .connect_timeout(Duration::from_millis(50))
+        .no_proxy()
+        .build()
+        .unwrap();
+
+    let res = client
+        .get(url)
+        .connect_timeout(Duration::from_millis(500))
+        .send()
+        .await;
+
+    assert!(res.is_ok());
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -350,6 +393,28 @@ fn connect_timeout_blocking_request() {
     let url = "http://192.0.2.1:81/slow";
 
     let err = client.get(url).send().unwrap_err();
+
+    assert!(err.is_timeout());
+}
+
+#[cfg(feature = "blocking")]
+#[test]
+fn request_connect_timeout_blocking_request() {
+    let _ = env_logger::try_init();
+
+    let client = reqwest::blocking::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap();
+
+    // never returns
+    let url = "http://192.0.2.1:81/slow";
+
+    let err = client
+        .get(url)
+        .connect_timeout(Duration::from_millis(100))
+        .send()
+        .unwrap_err();
 
     assert!(err.is_timeout());
 }

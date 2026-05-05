@@ -11,9 +11,10 @@ use hyper_util::rt::TokioIo;
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
 use pin_project_lite::pin_project;
 use tower::util::{BoxCloneSyncServiceLayer, MapRequestLayer};
-use tower::{timeout::TimeoutLayer, util::BoxCloneSyncService, ServiceBuilder};
+use tower::{util::BoxCloneSyncService, ServiceBuilder};
 use tower_service::Service;
 
+use std::cell::Cell;
 use std::future::Future;
 use std::io::{self, IoSlice};
 use std::net::IpAddr;
@@ -33,13 +34,41 @@ use sealed::{Conn, Unnameable};
 
 pub(crate) type HttpConnector = hyper_util::client::legacy::connect::HttpConnector<DynResolver>;
 
+thread_local! {
+    static REQUEST_CONNECT_TIMEOUT: Cell<Option<Duration>> = Cell::new(None);
+}
+
+struct ResetConnectTimeout(Option<Duration>);
+
+impl Drop for ResetConnectTimeout {
+    fn drop(&mut self) {
+        REQUEST_CONNECT_TIMEOUT.with(|timeout| timeout.set(self.0));
+    }
+}
+
+pub(crate) fn with_request_connect_timeout<T>(
+    timeout: Option<Duration>,
+    f: impl FnOnce() -> T,
+) -> T {
+    let previous = REQUEST_CONNECT_TIMEOUT.with(|cell| {
+        let previous = cell.get();
+        cell.set(timeout);
+        previous
+    });
+    let _reset = ResetConnectTimeout(previous);
+    f()
+}
+
+fn connect_timeout(default: Option<Duration>) -> Option<Duration> {
+    REQUEST_CONNECT_TIMEOUT.with(|timeout| timeout.get().or(default))
+}
+
 #[derive(Clone)]
 pub(crate) enum Connector {
     // base service, with or without an embedded timeout
     Simple(ConnectorService),
-    // at least one custom layer along with maybe an outer timeout layer
-    // from `builder.connect_timeout()`
-    WithLayers(BoxCloneSyncService<Unnameable, Conn, BoxError>),
+    // at least one custom layer, with a default connect timeout.
+    WithLayers(BoxCloneSyncService<Unnameable, Conn, BoxError>, Option<Duration>),
 }
 
 impl Service<Uri> for Connector {
@@ -50,14 +79,17 @@ impl Service<Uri> for Connector {
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         match self {
             Connector::Simple(service) => service.poll_ready(cx),
-            Connector::WithLayers(service) => service.poll_ready(cx),
+            Connector::WithLayers(service, _) => service.poll_ready(cx),
         }
     }
 
     fn call(&mut self, dst: Uri) -> Self::Future {
         match self {
             Connector::Simple(service) => service.call(dst),
-            Connector::WithLayers(service) => service.call(Unnameable(dst)),
+            Connector::WithLayers(service, default_timeout) => {
+                let timeout = connect_timeout(*default_timeout);
+                Box::pin(with_timeout(service.call(Unnameable(dst)), timeout))
+            }
         }
     }
 }
@@ -138,33 +170,14 @@ where {
             service = ServiceBuilder::new().layer(layer).service(service);
         }
 
-        // now we handle the concrete stuff - any `connect_timeout`,
-        // plus a final map_err layer we can use to cast default tower layer
-        // errors to internal errors
-        match self.timeout {
-            Some(timeout) => {
-                let service = ServiceBuilder::new()
-                    .layer(TimeoutLayer::new(timeout))
-                    .service(service);
-                let service = ServiceBuilder::new()
-                    .map_err(|error: BoxError| cast_to_internal_error(error))
-                    .service(service);
-                let service = BoxCloneSyncService::new(service);
-
-                Connector::WithLayers(service)
-            }
-            None => {
-                // no timeout, but still map err
-                // no named timeout layer but we still map errors since
-                // we might have user-provided timeout layer
-                let service = ServiceBuilder::new().service(service);
-                let service = ServiceBuilder::new()
-                    .map_err(|error: BoxError| cast_to_internal_error(error))
-                    .service(service);
-                let service = BoxCloneSyncService::new(service);
-                Connector::WithLayers(service)
-            }
-        }
+        // Map errors so user-provided timeout layers are still reported as
+        // reqwest timeouts. The request/client connect timeout is applied by
+        // `Connector::call`, where a request-scoped override is available.
+        let service = ServiceBuilder::new()
+            .map_err(|error: BoxError| cast_to_internal_error(error))
+            .service(service);
+        let service = BoxCloneSyncService::new(service);
+        Connector::WithLayers(service, self.timeout)
     }
 
     #[cfg(not(feature = "__tls"))]
@@ -535,7 +548,12 @@ impl Inner {
 
 impl ConnectorService {
     #[cfg(feature = "socks")]
-    async fn connect_socks(mut self, dst: Uri, proxy: Intercepted) -> Result<Conn, BoxError> {
+    async fn connect_socks(
+        mut self,
+        dst: Uri,
+        proxy: Intercepted,
+        connect_timeout: Option<Duration>,
+    ) -> Result<Conn, BoxError> {
         let dns = match proxy.uri().scheme_str() {
             Some("socks4") | Some("socks5") => socks::DnsResolve::Local,
             Some("socks4a") | Some("socks5h") => socks::DnsResolve::Proxy,
@@ -547,6 +565,7 @@ impl ConnectorService {
         match &mut self.inner {
             #[cfg(feature = "__native-tls")]
             Inner::NativeTls(http, tls) => {
+                http.set_connect_timeout(connect_timeout);
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     let host = dst.host().ok_or("no host in url")?.to_string();
                     let conn = socks::connect(proxy, dst, dns, &self.resolver, http).await?;
@@ -564,6 +583,7 @@ impl ConnectorService {
             }
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, tls, .. } => {
+                http.set_connect_timeout(connect_timeout);
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     use std::convert::TryFrom;
                     use tokio_rustls::TlsConnector as RustlsConnector;
@@ -589,6 +609,7 @@ impl ConnectorService {
             }
             #[cfg(not(feature = "__tls"))]
             Inner::Http(http) => {
+                http.set_connect_timeout(connect_timeout);
                 let conn = socks::connect(proxy, dst, dns, &self.resolver, http).await?;
                 return Ok(Conn {
                     inner: self.verbose.wrap(TokioIo::new(conn)),
@@ -600,6 +621,7 @@ impl ConnectorService {
 
         let resolver = &self.resolver;
         let http = self.inner.get_http_connector();
+        http.set_connect_timeout(connect_timeout);
         socks::connect(proxy, dst, dns, resolver, http)
             .await
             .map(|tcp| Conn {
@@ -610,10 +632,16 @@ impl ConnectorService {
             .map_err(Into::into)
     }
 
-    async fn connect_with_maybe_proxy(self, dst: Uri, is_proxy: bool) -> Result<Conn, BoxError> {
+    async fn connect_with_maybe_proxy(
+        self,
+        dst: Uri,
+        is_proxy: bool,
+        connect_timeout: Option<Duration>,
+    ) -> Result<Conn, BoxError> {
         match self.inner {
             #[cfg(not(feature = "__tls"))]
             Inner::Http(mut http) => {
+                http.set_connect_timeout(connect_timeout);
                 let io = http.call(dst).await?;
                 Ok(Conn {
                     inner: self.verbose.wrap(io),
@@ -624,6 +652,7 @@ impl ConnectorService {
             #[cfg(feature = "__native-tls")]
             Inner::NativeTls(http, tls) => {
                 let mut http = http.clone();
+                http.set_connect_timeout(connect_timeout);
 
                 // Disable Nagle's algorithm for TLS handshake
                 //
@@ -663,6 +692,7 @@ impl ConnectorService {
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, tls, .. } => {
                 let mut http = http.clone();
+                http.set_connect_timeout(connect_timeout);
 
                 // Disable Nagle's algorithm for TLS handshake
                 //
@@ -780,13 +810,18 @@ impl ConnectorService {
         }
     }
 
-    async fn connect_via_proxy(self, dst: Uri, proxy: Intercepted) -> Result<Conn, BoxError> {
+    async fn connect_via_proxy(
+        self,
+        dst: Uri,
+        proxy: Intercepted,
+        connect_timeout: Option<Duration>,
+    ) -> Result<Conn, BoxError> {
         log::debug!("proxy({proxy:?}) intercepts '{:?}'", dst.host());
 
         #[cfg(feature = "socks")]
         match proxy.uri().scheme_str().ok_or("proxy scheme expected")? {
             "socks4" | "socks4a" | "socks5" | "socks5h" => {
-                return self.connect_socks(dst, proxy).await
+                return self.connect_socks(dst, proxy, connect_timeout).await
             }
             _ => (),
         }
@@ -804,8 +839,9 @@ impl ConnectorService {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     log::trace!("tunneling HTTPS over proxy");
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
-                    let inner =
-                        hyper_tls::HttpsConnector::from((http.clone(), tls_connector.clone()));
+                    let mut http = http.clone();
+                    http.set_connect_timeout(connect_timeout);
+                    let inner = hyper_tls::HttpsConnector::from((http, tls_connector.clone()));
                     // TODO: we could cache constructing this
                     let mut tunnel =
                         hyper_util::client::legacy::connect::proxy::Tunnel::new(proxy_dst, inner);
@@ -849,7 +885,8 @@ impl ConnectorService {
                     use tokio_rustls::TlsConnector as RustlsConnector;
 
                     log::trace!("tunneling HTTPS over proxy");
-                    let http = http.clone();
+                    let mut http = http.clone();
+                    http.set_connect_timeout(connect_timeout);
                     let inner = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
                     // TODO: we could cache constructing this
                     let mut tunnel =
@@ -888,7 +925,8 @@ impl ConnectorService {
             Inner::Http(_) => (),
         }
 
-        self.connect_with_maybe_proxy(proxy_dst, true).await
+        self.connect_with_maybe_proxy(proxy_dst, true, connect_timeout)
+            .await
     }
 
     #[cfg(any(unix, target_os = "windows"))]
@@ -927,7 +965,7 @@ impl Service<Uri> for ConnectorService {
 
     fn call(&mut self, dst: Uri) -> Self::Future {
         log::debug!("starting new connection '{:?}'", dst.host());
-        let timeout = self.simple_timeout;
+        let timeout = connect_timeout(self.simple_timeout);
 
         // Local transports (UDS, Windows Named Pipes) skip proxies
         #[cfg(any(unix, target_os = "windows"))]
@@ -941,14 +979,14 @@ impl Service<Uri> for ConnectorService {
         for prox in self.proxies.iter() {
             if let Some(intercepted) = prox.intercept(&dst) {
                 return Box::pin(with_timeout(
-                    self.clone().connect_via_proxy(dst, intercepted),
+                    self.clone().connect_via_proxy(dst, intercepted, timeout),
                     timeout,
                 ));
             }
         }
 
         Box::pin(with_timeout(
-            self.clone().connect_with_maybe_proxy(dst, false),
+            self.clone().connect_with_maybe_proxy(dst, false, timeout),
             timeout,
         ))
     }
