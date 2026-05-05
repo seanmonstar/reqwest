@@ -181,6 +181,44 @@ impl Http3 {
             + 'static,
         Fut: Future<Output = http::Response<reqwest::Body>> + Send + 'static,
     {
+        self.build_server(func, None)
+    }
+
+    pub fn build_with_stop_sending_before_response<F1, Fut>(
+        self,
+        func: F1,
+        code: h3::error::Code,
+    ) -> Server
+    where
+        F1: Fn(
+                http::Request<
+                    http_body_util::combinators::BoxBody<bytes::Bytes, h3::error::StreamError>,
+                >,
+            ) -> Fut
+            + Clone
+            + Send
+            + 'static,
+        Fut: Future<Output = http::Response<reqwest::Body>> + Send + 'static,
+    {
+        self.build_server(func, Some(code))
+    }
+
+    fn build_server<F1, Fut>(
+        self,
+        func: F1,
+        stop_sending_before_response: Option<h3::error::Code>,
+    ) -> Server
+    where
+        F1: Fn(
+                http::Request<
+                    http_body_util::combinators::BoxBody<bytes::Bytes, h3::error::StreamError>,
+                >,
+            ) -> Fut
+            + Clone
+            + Send
+            + 'static,
+        Fut: Future<Output = http::Response<reqwest::Body>> + Send + 'static,
+    {
         use bytes::Buf;
         use http_body_util::BodyExt;
         use quinn::crypto::rustls::QuicServerConfig;
@@ -242,7 +280,10 @@ impl Http3 {
                                             let func = func.clone();
                                             tokio::spawn(async move {
                                                 if let Ok((req, stream)) = resolver.resolve_request().await {
-                                                    let (mut tx, rx) = stream.split();
+                                                    let (mut tx, mut rx) = stream.split();
+                                                    if let Some(code) = stop_sending_before_response {
+                                                        rx.stop_sending(code);
+                                                    }
                                                     let body = futures_util::stream::unfold(rx, |mut rx| async move {
                                                         match rx.recv_data().await {
                                                             Ok(Some(mut buf)) => {

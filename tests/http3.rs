@@ -155,6 +155,295 @@ async fn http3_test_concurrent_request() {
 
 #[cfg(feature = "http3")]
 #[tokio::test]
+async fn http3_test_h3_stop_sending_before_response_no_error() {
+    // Order of payloads:
+    // 1. Server: Response headers
+    // 2. Server: STOP_SENDING
+    // 3. Server: Response body chunk, ensures following happens after STOP_SENDING
+    // 4. Client: Request close
+    // 5. Server: Response body chunk and close
+
+    let (response_tx, response_rx) = tokio::sync::mpsc::unbounded_channel::<bytes::Bytes>();
+    let response_rx = std::sync::Arc::new(std::sync::Mutex::new(Some(response_rx)));
+    let server_response_rx = response_rx.clone();
+
+    let server = server::Http3::new().build_with_stop_sending_before_response(
+        move |_| {
+            let server_response_rx = server_response_rx.clone();
+            async move {
+                let response_rx = server_response_rx.lock().unwrap().take().unwrap();
+                let response_stream =
+                    futures_util::stream::unfold(response_rx, |mut rx| async move {
+                        rx.recv().await.map(|chunk| {
+                            (
+                                Ok::<_, std::convert::Infallible>(hyper::body::Frame::data(chunk)),
+                                rx,
+                            )
+                        })
+                    });
+                let response_body =
+                    reqwest::Body::wrap(http_body_util::StreamBody::new(response_stream));
+                http::Response::new(response_body)
+            }
+        },
+        h3::error::Code::H3_NO_ERROR,
+    );
+
+    let (request_tx, request_rx) = tokio::sync::mpsc::unbounded_channel::<bytes::Bytes>();
+    let request_stream = futures_util::stream::unfold(request_rx, |mut rx| async move {
+        rx.recv().await.map(|chunk| {
+            (
+                Ok::<_, std::convert::Infallible>(hyper::body::Frame::data(chunk)),
+                rx,
+            )
+        })
+    });
+    let request_body = reqwest::Body::wrap(http_body_util::StreamBody::new(request_stream));
+
+    let url = format!("https://{}/", server.addr());
+    let client = reqwest::Client::builder()
+        .http3_prior_knowledge()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("client builder");
+
+    let mut res = client
+        .post(&url)
+        .version(http::Version::HTTP_3)
+        .body(request_body)
+        .send()
+        .await
+        .expect("response");
+
+    assert_eq!(res.version(), http::Version::HTTP_3);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+
+    response_tx
+        .send(bytes::Bytes::from_static(b"first"))
+        .unwrap();
+    let first = res
+        .chunk()
+        .await
+        .ok()
+        .flatten()
+        .expect("missing first response chunk");
+    assert_eq!(first, bytes::Bytes::from_static(b"first"));
+
+    drop(request_tx);
+
+    response_tx
+        .send(bytes::Bytes::from_static(b"second"))
+        .unwrap();
+    drop(response_tx);
+
+    let second = res
+        .chunk()
+        .await
+        .ok()
+        .flatten()
+        .expect("missing second response chunk");
+    assert_eq!(second, bytes::Bytes::from_static(b"second"));
+    assert!(res.chunk().await.expect("read response eof").is_none());
+}
+
+#[cfg(feature = "http3")]
+#[tokio::test]
+async fn http3_test_h3_stop_sending_before_response_no_error_request_body() {
+    // Order of payloads:
+    // 1. Server: Response headers
+    // 2. Server: STOP_SENDING
+    // 3. Server: Response body chunk, ensures following happens after STOP_SENDING
+    // 4. Client: Request body chunk and close
+    // 5. Server: Response body chunk and close
+
+    let (response_tx, response_rx) = tokio::sync::mpsc::unbounded_channel::<bytes::Bytes>();
+    let response_rx = std::sync::Arc::new(std::sync::Mutex::new(Some(response_rx)));
+    let server_response_rx = response_rx.clone();
+
+    let server = server::Http3::new().build_with_stop_sending_before_response(
+        move |_| {
+            let server_response_rx = server_response_rx.clone();
+            async move {
+                let response_rx = server_response_rx.lock().unwrap().take().unwrap();
+                let response_stream =
+                    futures_util::stream::unfold(response_rx, |mut rx| async move {
+                        rx.recv().await.map(|chunk| {
+                            (
+                                Ok::<_, std::convert::Infallible>(hyper::body::Frame::data(chunk)),
+                                rx,
+                            )
+                        })
+                    });
+                let response_body =
+                    reqwest::Body::wrap(http_body_util::StreamBody::new(response_stream));
+                http::Response::new(response_body)
+            }
+        },
+        h3::error::Code::H3_NO_ERROR,
+    );
+
+    let (request_tx, request_rx) = tokio::sync::mpsc::unbounded_channel::<bytes::Bytes>();
+    let request_stream = futures_util::stream::unfold(request_rx, |mut rx| async move {
+        rx.recv().await.map(|chunk| {
+            (
+                Ok::<_, std::convert::Infallible>(hyper::body::Frame::data(chunk)),
+                rx,
+            )
+        })
+    });
+    let request_body = reqwest::Body::wrap(http_body_util::StreamBody::new(request_stream));
+
+    let url = format!("https://{}/", server.addr());
+    let client = reqwest::Client::builder()
+        .http3_prior_knowledge()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("client builder");
+
+    let mut res = client
+        .post(&url)
+        .version(http::Version::HTTP_3)
+        .body(request_body)
+        .send()
+        .await
+        .expect("response");
+
+    assert_eq!(res.version(), http::Version::HTTP_3);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+
+    response_tx
+        .send(bytes::Bytes::from_static(b"first"))
+        .unwrap();
+    let first = res
+        .chunk()
+        .await
+        .ok()
+        .flatten()
+        .expect("missing first response chunk");
+    assert_eq!(first, bytes::Bytes::from_static(b"first"));
+
+    request_tx
+        .send(bytes::Bytes::from_static(b"late request chunk"))
+        .unwrap();
+    drop(request_tx);
+
+    response_tx
+        .send(bytes::Bytes::from_static(b"second"))
+        .unwrap();
+    drop(response_tx);
+
+    let second = res
+        .chunk()
+        .await
+        .ok()
+        .flatten()
+        .expect("missing second response chunk");
+    assert_eq!(second, bytes::Bytes::from_static(b"second"));
+    assert!(res.chunk().await.expect("read response eof").is_none());
+}
+
+#[cfg(feature = "http3")]
+#[tokio::test]
+async fn http3_test_h3_stop_sending_before_response_internal_error() {
+    // Order of payloads:
+    // 1. Server: Response headers
+    // 2. Server: STOP_SENDING with error
+    // 3. Server: Response body chunk, ensures following happens after STOP_SENDING
+    // 4. Client: Request close - returns error
+
+    let (response_tx, response_rx) = tokio::sync::mpsc::unbounded_channel::<bytes::Bytes>();
+    let response_rx = std::sync::Arc::new(std::sync::Mutex::new(Some(response_rx)));
+    let server_response_rx = response_rx.clone();
+
+    let server = server::Http3::new().build_with_stop_sending_before_response(
+        move |_| {
+            let server_response_rx = server_response_rx.clone();
+            async move {
+                let response_rx = server_response_rx.lock().unwrap().take().unwrap();
+                let response_stream =
+                    futures_util::stream::unfold(response_rx, |mut rx| async move {
+                        rx.recv().await.map(|chunk| {
+                            (
+                                Ok::<_, std::convert::Infallible>(hyper::body::Frame::data(chunk)),
+                                rx,
+                            )
+                        })
+                    });
+                let response_body =
+                    reqwest::Body::wrap(http_body_util::StreamBody::new(response_stream));
+                http::Response::new(response_body)
+            }
+        },
+        h3::error::Code::H3_INTERNAL_ERROR,
+    );
+
+    let (request_tx, request_rx) = tokio::sync::mpsc::unbounded_channel::<bytes::Bytes>();
+    let request_stream = futures_util::stream::unfold(request_rx, |mut rx| async move {
+        rx.recv().await.map(|chunk| {
+            (
+                Ok::<_, std::convert::Infallible>(hyper::body::Frame::data(chunk)),
+                rx,
+            )
+        })
+    });
+    let request_body = reqwest::Body::wrap(http_body_util::StreamBody::new(request_stream));
+
+    let url = format!("https://{}/", server.addr());
+    let client = reqwest::Client::builder()
+        .http3_prior_knowledge()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("client builder");
+
+    let mut res = client
+        .post(&url)
+        .version(http::Version::HTTP_3)
+        .body(request_body)
+        .send()
+        .await
+        .expect("response");
+
+    assert_eq!(res.version(), http::Version::HTTP_3);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+
+    response_tx
+        .send(bytes::Bytes::from_static(b"first"))
+        .expect("send first response chunk");
+    let first = res
+        .chunk()
+        .await
+        .ok()
+        .flatten()
+        .expect("missing first response chunk");
+    assert_eq!(first, bytes::Bytes::from_static(b"first"));
+
+    drop(request_tx);
+
+    response_tx
+        .send(bytes::Bytes::from_static(b"second"))
+        .unwrap();
+    drop(response_tx);
+
+    let err = res.chunk().await.unwrap_err();
+    assert!(err.is_decode());
+    let err = err
+        .source()
+        .unwrap()
+        .source()
+        .unwrap()
+        .downcast_ref::<h3::error::StreamError>()
+        .expect("h3 stream error");
+    assert!(matches!(
+        err,
+        h3::error::StreamError::RemoteTerminate {
+            code: h3::error::Code::H3_INTERNAL_ERROR,
+            ..
+        }
+    ));
+}
+
+#[cfg(feature = "http3")]
+#[tokio::test]
 async fn http3_test_reconnection() {
     use std::error::Error;
 

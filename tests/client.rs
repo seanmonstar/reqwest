@@ -371,6 +371,21 @@ fn use_preconfigured_rustls_default() {
         .expect("preconfigured rustls tls");
 }
 
+#[cfg(all(feature = "__tls", not(any(feature = "http2", feature = "http3")),))]
+#[tokio::test]
+async fn http1_only() {
+    let res = reqwest::Client::builder()
+        .build()
+        .expect("client builder")
+        .get("https://google.com")
+        .send()
+        .await
+        .expect("request");
+
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.version(), reqwest::Version::HTTP_11);
+}
+
 #[cfg(feature = "__rustls")]
 #[tokio::test]
 #[ignore = "Needs TLS support in the test server"]
