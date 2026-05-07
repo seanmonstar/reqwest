@@ -87,6 +87,9 @@ impl H3Connector {
         let mut endpoint = Endpoint::client(socket_addr)?;
         endpoint.set_default_client_config(config);
 
+        // Get the actual bound address from the endpoint
+        let bound_addr = endpoint.local_addr()?.ip();
+
         Ok(Self {
             resolver,
             endpoint,
