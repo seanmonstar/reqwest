@@ -572,9 +572,6 @@ impl ClientBuilder {
 
                     if let Some(min_tls_version) = config.min_tls_version {
                         let protocol = min_tls_version.to_native_tls().ok_or_else(|| {
-                            // TLS v1.3. This would be entirely reasonable,
-                            // native-tls just doesn't support it.
-                            // https://github.com/sfackler/rust-native-tls/issues/140
                             crate::error::builder("invalid minimum TLS version for backend")
                         })?;
                         tls.min_protocol_version(Some(protocol));
@@ -582,10 +579,6 @@ impl ClientBuilder {
 
                     if let Some(max_tls_version) = config.max_tls_version {
                         let protocol = max_tls_version.to_native_tls().ok_or_else(|| {
-                            // TLS v1.3.
-                            // We could arguably do max_protocol_version(None), given
-                            // that 1.4 does not exist yet, but that'd get messy in the
-                            // future.
                             crate::error::builder("invalid maximum TLS version for backend")
                         })?;
                         tls.max_protocol_version(Some(protocol));
