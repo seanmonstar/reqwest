@@ -55,6 +55,30 @@ async fn non_op_layer_with_timeout() {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::test]
+async fn request_connect_timeout_overrides_client_timeout_with_layers() {
+    let _ = env_logger::try_init();
+
+    let server = server::http(move |_req| async { http::Response::default() });
+
+    let client = reqwest::Client::builder()
+        .connector_layer(DelayLayer::new(Duration::from_millis(100)))
+        .connect_timeout(Duration::from_millis(50))
+        .no_proxy()
+        .build()
+        .unwrap();
+
+    let url = format!("http://{}", server.addr());
+    let res = client
+        .get(url)
+        .connect_timeout(Duration::from_millis(200))
+        .send()
+        .await;
+
+    assert!(res.is_ok());
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[tokio::test]
 async fn with_connect_timeout_layer_never_returning() {
     let _ = env_logger::try_init();
 
