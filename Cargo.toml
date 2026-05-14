@@ -42,8 +42,9 @@ default-tls = ["rustls"]
 
 http2 = ["dep:h2", "hyper/http2", "hyper-util/http2", "hyper-rustls?/http2"]
 
-rustls = ["__rustls-aws-lc-rs", "dep:rustls-platform-verifier", "__rustls"]
-rustls-no-provider = ["dep:rustls-platform-verifier", "__rustls"]
+rustls = ["__rustls-aws-lc-rs", "__rustls-platform-verifier", "__rustls"]
+rustls-no-provider = ["__rustls-platform-verifier", "__rustls"]
+rustls-no-provider-no-roots = ["__rustls"]
 
 native-tls = ["__native-tls", "__native-tls-alpn"]
 native-tls-no-alpn = ["__native-tls"]
@@ -89,6 +90,7 @@ __tls = ["dep:rustls-pki-types", "tokio/io-util"]
 # Enables common rustls code.
 __rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls"]
 __rustls-aws-lc-rs = ["hyper-rustls?/aws-lc-rs", "tokio-rustls?/aws-lc-rs", "rustls?/aws-lc-rs", "quinn?/rustls-aws-lc-rs"]
+__rustls-platform-verifier = ["dep:rustls-platform-verifier"]
 
 # Enables common native-tls code.
 __native-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
