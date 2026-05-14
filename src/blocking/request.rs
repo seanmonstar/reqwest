@@ -665,11 +665,15 @@ where
             method,
             uri,
             headers,
+            version,
+            extensions,
             ..
         } = parts;
         let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
         let mut inner = async_impl::Request::new(method, url);
         crate::util::replace_headers(inner.headers_mut(), headers);
+        *inner.version_mut() = version;
+        *inner.extensions_mut() = extensions;
         Ok(Request {
             body: Some(body.into()),
             inner,
@@ -709,6 +713,22 @@ mod tests {
 
         assert_eq!(r.method(), &Method::GET);
         assert_eq!(r.url().as_str(), some_url);
+    }
+
+    #[test]
+    fn convert_http_request_preserves_version() {
+        use std::convert::TryFrom;
+        use http::{Request as HttpRequest, Version};
+
+        let req = HttpRequest::builder()
+            .uri("http://example.com")
+            .version(Version::HTTP_2)
+            .body("hello")
+            .unwrap();
+
+        let converted = Request::try_from(req).unwrap();
+
+        assert_eq!(converted.version(), Version::HTTP_2);
     }
 
     #[test]
