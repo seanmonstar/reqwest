@@ -11,11 +11,14 @@ use quinn::{ClientConfig, Endpoint, TransportConfig};
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 
 type H3Connection = (
     h3::client::Connection<Connection, Bytes>,
     SendRequest<OpenStreams, Bytes>,
 );
+
+const HAPPY_EYEBALLS_DELAY: Duration = Duration::from_millis(250);
 
 /// H3 Client Config
 #[derive(Clone)]
@@ -59,7 +62,7 @@ pub(crate) struct H3Connector {
     resolver: DynResolver,
     endpoint: Endpoint,
     client_config: H3ClientConfig,
-    bound_addr: IpAddr,
+    local_addr: Option<IpAddr>,
 }
 
 impl H3Connector {
@@ -84,14 +87,11 @@ impl H3Connector {
         let mut endpoint = Endpoint::client(socket_addr)?;
         endpoint.set_default_client_config(config);
 
-        // Get the actual bound address from the endpoint
-        let bound_addr = endpoint.local_addr()?.ip();
-
         Ok(Self {
             resolver,
             endpoint,
             client_config,
-            bound_addr,
+            local_addr,
         })
     }
 
@@ -130,10 +130,12 @@ impl H3Connector {
         let (mut ipv6_addrs, mut ipv4_addrs): (Vec<SocketAddr>, Vec<SocketAddr>) =
             addrs.into_iter().partition(|addr| addr.is_ipv6());
 
-        if self.bound_addr.is_ipv6() {
-            ipv4_addrs.clear();
-        } else {
-            ipv6_addrs.clear();
+        if let Some(local_ip) = self.local_addr {
+            if local_ip.is_ipv6() {
+                ipv4_addrs.clear();
+            } else {
+                ipv6_addrs.clear();
+            }
         }
 
         if ipv6_addrs.is_empty() {
@@ -158,14 +160,31 @@ impl H3Connector {
         let endpoint = self.endpoint.clone();
         let client_config = self.client_config.clone();
 
-        match Self::try_addresses_static(&endpoint, &ipv6_addrs, server_name, &client_config).await
-        {
-            Ok(conn) => Ok(conn),
-            Err(_) => {
-                Self::try_addresses_static(&endpoint, &ipv4_addrs, server_name, &client_config)
-                    .await
-            }
+        if self.local_addr.is_some() {
+            return match Self::try_addresses_static(
+                &endpoint,
+                &ipv6_addrs,
+                server_name,
+                &client_config,
+            )
+            .await
+            {
+                Ok(conn) => Ok(conn),
+                Err(_) => {
+                    Self::try_addresses_static(&endpoint, &ipv4_addrs, server_name, &client_config)
+                        .await
+                }
+            };
         }
+
+        Self::try_addresses_happy_eyeballs(
+            &endpoint,
+            &ipv6_addrs,
+            &ipv4_addrs,
+            server_name,
+            &client_config,
+        )
+        .await
     }
 
     async fn try_addresses_static(
@@ -201,5 +220,57 @@ impl H3Connector {
         }
 
         Err(last_err.unwrap_or_else(|| "no addresses available".into()))
+    }
+
+    async fn try_addresses_happy_eyeballs(
+        endpoint: &Endpoint,
+        ipv6_addrs: &[SocketAddr],
+        ipv4_addrs: &[SocketAddr],
+        server_name: &str,
+        client_config: &H3ClientConfig,
+    ) -> Result<H3Connection, BoxError> {
+        let ipv6_connect =
+            Self::try_addresses_static(endpoint, ipv6_addrs, server_name, client_config);
+        tokio::pin!(ipv6_connect);
+
+        let delay = tokio::time::sleep(HAPPY_EYEBALLS_DELAY);
+        tokio::pin!(delay);
+
+        tokio::select! {
+            result = &mut ipv6_connect => {
+                return match result {
+                    Ok(conn) => Ok(conn),
+                    Err(_) => {
+                        Self::try_addresses_static(endpoint, ipv4_addrs, server_name, client_config).await
+                    }
+                };
+            }
+            _ = &mut delay => {}
+        }
+
+        let ipv4_connect =
+            Self::try_addresses_static(endpoint, ipv4_addrs, server_name, client_config);
+        tokio::pin!(ipv4_connect);
+
+        let wait_for_ipv6 = tokio::select! {
+            result = &mut ipv6_connect => {
+                match result {
+                    Ok(conn) => return Ok(conn),
+                    Err(_) => false,
+                }
+            }
+            result = &mut ipv4_connect => {
+                match result {
+                    Ok(conn) => return Ok(conn),
+                    Err(_) => true,
+                }
+            }
+        };
+
+        if wait_for_ipv6 {
+            ipv6_connect.await
+        } else {
+            ipv4_connect.await
+        }
     }
 }
