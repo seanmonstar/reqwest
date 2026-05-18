@@ -10,7 +10,7 @@ authors = ["Sean McArthur <sean@seanmonstar.com>"]
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 edition = "2021"
-rust-version = "1.64.0"
+rust-version = "1.80.0"
 autotests = true
 include = [
     "README.md",
@@ -134,7 +134,7 @@ mime = { version = "0.3.16", optional = true }
 
 # native-tls
 hyper-tls = { version = "0.6", optional = true }
-native-tls-crate = { version = "0.2.10", optional = true, package = "native-tls" }
+native-tls-crate = { version = "0.2.16", optional = true, package = "native-tls" }
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # default rustls
