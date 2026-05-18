@@ -239,7 +239,8 @@ pub(crate) enum ActionKind {
 pub(crate) fn remove_sensitive_headers(headers: &mut HeaderMap, next: &Url, previous: &[Url]) {
     if let Some(previous) = previous.last() {
         let cross_host = next.host_str() != previous.host_str()
-            || next.port_or_known_default() != previous.port_or_known_default();
+            || next.port_or_known_default() != previous.port_or_known_default()
+            || next.scheme() != previous.scheme();
         if cross_host {
             headers.remove(AUTHORIZATION);
             headers.remove(COOKIE);
@@ -425,6 +426,26 @@ fn test_remove_sensitive_headers() {
     assert_eq!(headers, filtered_headers);
 
     prev.push(Url::parse("http://new-domain.com/path").unwrap());
+    filtered_headers.remove(AUTHORIZATION);
+    filtered_headers.remove(COOKIE);
+
+    remove_sensitive_headers(&mut headers, &next, &prev);
+    assert_eq!(headers, filtered_headers);
+}
+
+#[test]
+fn test_remove_sensitive_headers_on_scheme_downgrade_same_host_port() {
+    use hyper::header::{HeaderValue, ACCEPT, AUTHORIZATION, COOKIE};
+
+    let mut headers = HeaderMap::new();
+    headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
+    headers.insert(AUTHORIZATION, HeaderValue::from_static("let me in"));
+    headers.insert(COOKIE, HeaderValue::from_static("foo=bar"));
+
+    let next = Url::parse("http://initial-domain.com:8443/path").unwrap();
+    let prev = vec![Url::parse("https://initial-domain.com:8443/new_path").unwrap()];
+
+    let mut filtered_headers = headers.clone();
     filtered_headers.remove(AUTHORIZATION);
     filtered_headers.remove(COOKIE);
 
