@@ -267,9 +267,9 @@ impl Response {
     #[cfg(feature = "json")]
     #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
     pub async fn json<T: DeserializeOwned>(self) -> crate::Result<T> {
-        let full = self.bytes().await?;
+        let (full, url) = self.do_bytes().await?;
 
-        serde_json::from_slice(&full).map_err(crate::error::decode)
+        serde_json::from_slice(&full).map_err(|err| crate::error::decode(err).with_url(*url))
     }
 
     /// Get the full response body as `Bytes`.
@@ -288,12 +288,7 @@ impl Response {
     /// # }
     /// ```
     pub async fn bytes(self) -> crate::Result<Bytes> {
-        use http_body_util::BodyExt;
-
-        BodyExt::collect(self.res.into_body())
-            .await
-            .map(|buf| buf.to_bytes())
-            .map_err(crate::error::decode)
+        self.do_bytes().await.map(|(bytes, _)| bytes)
     }
 
     /// Stream a chunk of the response body.
@@ -431,6 +426,14 @@ impl Response {
     #[cfg(feature = "blocking")]
     pub(crate) fn body_mut(&mut self) -> &mut ResponseBody {
         self.res.body_mut()
+    }
+    async fn do_bytes(self) -> crate::Result<(Bytes, Box<Url>)> {
+        use http_body_util::BodyExt;
+
+        match BodyExt::collect(self.res.into_body()).await {
+            Ok(buf) => Ok((buf.to_bytes(), self.url)),
+            Err(err) => Err(crate::error::decode(err).with_url(*self.url)),
+        }
     }
 }
 

@@ -42,6 +42,28 @@
 //! This backend uses the [rustls][] crate, a TLS library written in Rust.
 //!
 //! [rustls]: https://crates.io/crates/rustls
+//!
+//! ## rustls-no-provider
+//!
+//! Like `rustls`, but without a built-in crypto provider. This is useful when
+//! you want to supply your own [rustls CryptoProvider][], for example to use
+//! [ring][] instead of the default `aws-lc-rs`.
+//!
+//! **You must install a crypto provider before building a `Client`.** If none
+//! is installed the client will panic at construction time. Install one via
+//! [`CryptoProvider::install_default`][]:
+//!
+//! ```rust,ignore
+//! rustls::crypto::ring::default_provider()
+//!     .install_default()
+//!     .expect("Failed to install rustls crypto provider");
+//!
+//! let client = reqwest::Client::new();
+//! ```
+//!
+//! [rustls CryptoProvider]: https://docs.rs/rustls/latest/rustls/crypto/struct.CryptoProvider.html
+//! [ring]: https://crates.io/crates/ring
+//! [`CryptoProvider::install_default`]: https://docs.rs/rustls/latest/rustls/crypto/struct.CryptoProvider.html#method.install_default
 
 #[cfg(feature = "__rustls")]
 use rustls::{
@@ -453,7 +475,8 @@ impl CertificateRevocationList {
     pub fn from_pem(pem: &[u8]) -> crate::Result<CertificateRevocationList> {
         Ok(CertificateRevocationList {
             #[cfg(feature = "__rustls")]
-            inner: rustls_pki_types::CertificateRevocationListDer::from(pem.to_vec()),
+            inner: rustls_pki_types::CertificateRevocationListDer::from_pem_slice(pem)
+                .map_err(|_| crate::error::builder("invalid crl encoding"))?,
         })
     }
 
@@ -866,6 +889,12 @@ mod tests {
         let pem = b"-----BEGIN X509 CRL-----\n-----END X509 CRL-----\n";
 
         CertificateRevocationList::from_pem(pem).unwrap();
+    }
+
+    #[cfg(feature = "__rustls")]
+    #[test]
+    fn invalid_crl_from_pem() {
+        CertificateRevocationList::from_pem(b"Invalid").unwrap_err();
     }
 
     #[cfg(feature = "__rustls")]
