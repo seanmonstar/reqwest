@@ -309,6 +309,9 @@ jobs:
         run: |
           cargo clean
           cargo update -Z minimal-versions
+          # fix up deps of deps, which don't properly specify minimum versions
+          # hickory-proto -> prefix-trie
+          cargo update -p prefix-trie --precise 0.8.4
           cargo check
           cargo check --all-features
 
