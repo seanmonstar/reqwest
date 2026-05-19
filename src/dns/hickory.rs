@@ -2,7 +2,7 @@
 
 use hickory_resolver::{
     config::{LookupIpStrategy, ResolverConfig, GOOGLE},
-    net::{NetError, runtime::TokioRuntimeProvider},
+    net::{runtime::TokioRuntimeProvider, NetError},
     TokioResolver,
 };
 use once_cell::sync::OnceCell;
