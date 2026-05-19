@@ -2,7 +2,7 @@
 
 use hickory_resolver::{
     config::{LookupIpStrategy, ResolverConfig, GOOGLE},
-    net::runtime::TokioRuntimeProvider,
+    net::{runtime::TokioRuntimeProvider, NetError},
     TokioResolver,
 };
 use once_cell::sync::OnceCell;
@@ -29,7 +29,7 @@ impl Resolve for HickoryDnsResolver {
     fn resolve(&self, name: Name) -> Resolving {
         let resolver = self.clone();
         Box::pin(async move {
-            let resolver = resolver.state.get_or_init(new_resolver);
+            let resolver = resolver.state.get_or_try_init(new_resolver)?;
 
             let lookup = resolver.lookup_ip(name.as_str()).await?;
             let addrs: Addrs = Box::new(SocketAddrs {
@@ -53,7 +53,7 @@ impl Iterator for SocketAddrs {
 /// it fallbacks to hickory_resolver's default config.
 /// The options are overridden to look up for both IPv4 and IPv6 addresses
 /// to work with "happy eyeballs" algorithm.
-fn new_resolver() -> TokioResolver {
+fn new_resolver() -> Result<TokioResolver, NetError> {
     let mut builder = TokioResolver::builder_tokio().unwrap_or_else(|err| {
         log::debug!(
             "hickory-dns: failed to load system DNS configuration; falling back to Google DNS: {:?}",
@@ -65,6 +65,5 @@ fn new_resolver() -> TokioResolver {
         )
     });
     builder.options_mut().ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
-    // SAFETY: `build` only returns `Err` when DNS-over-TLS is enabled and default TLS config creation fails.
-    builder.build().unwrap()
+    builder.build()
 }
