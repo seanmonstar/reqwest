@@ -10,7 +10,7 @@ authors = ["Sean McArthur <sean@seanmonstar.com>"]
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 edition = "2021"
-rust-version = "1.80.0"
+rust-version = "1.85.0"
 autotests = true
 include = [
     "README.md",
@@ -151,7 +151,7 @@ cookie_store = { version = "0.22.0", optional = true }
 tokio-util = { version = "0.7.9", default-features = false, features = ["io"], optional = true }
 
 ## hickory-dns
-hickory-resolver = { version = "0.25", optional = true, features = ["tokio"] }
+hickory-resolver = { version = "0.26", optional = true, features = ["tokio"] }
 once_cell = { version = "1.18", optional = true }
 
 # HTTP/3 experimental support

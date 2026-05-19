@@ -1,14 +1,13 @@
 //! DNS resolution via the [hickory-resolver](https://github.com/hickory-dns/hickory-dns) crate
 
 use hickory_resolver::{
-    config::{LookupIpStrategy, ResolverConfig},
-    lookup_ip::LookupIpIntoIter,
-    name_server::TokioConnectionProvider,
+    config::{LookupIpStrategy, ResolverConfig, GOOGLE},
+    net::{runtime::TokioRuntimeProvider, NetError},
     TokioResolver,
 };
 use once_cell::sync::OnceCell;
 
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use super::{Addrs, Name, Resolve, Resolving};
@@ -23,18 +22,18 @@ pub(crate) struct HickoryDnsResolver {
 }
 
 struct SocketAddrs {
-    iter: LookupIpIntoIter,
+    iter: std::vec::IntoIter<IpAddr>,
 }
 
 impl Resolve for HickoryDnsResolver {
     fn resolve(&self, name: Name) -> Resolving {
         let resolver = self.clone();
         Box::pin(async move {
-            let resolver = resolver.state.get_or_init(new_resolver);
+            let resolver = resolver.state.get_or_try_init(new_resolver)?;
 
             let lookup = resolver.lookup_ip(name.as_str()).await?;
             let addrs: Addrs = Box::new(SocketAddrs {
-                iter: lookup.into_iter(),
+                iter: lookup.iter().collect::<Vec<_>>().into_iter(),
             });
             Ok(addrs)
         })
@@ -54,15 +53,15 @@ impl Iterator for SocketAddrs {
 /// it fallbacks to hickory_resolver's default config.
 /// The options are overridden to look up for both IPv4 and IPv6 addresses
 /// to work with "happy eyeballs" algorithm.
-fn new_resolver() -> TokioResolver {
+fn new_resolver() -> Result<TokioResolver, NetError> {
     let mut builder = TokioResolver::builder_tokio().unwrap_or_else(|err| {
         log::debug!(
-            "hickory-dns: failed to load system DNS configuration; falling back to hickory_resolver defaults: {:?}",
+            "hickory-dns: failed to load system DNS configuration; falling back to Google DNS: {:?}",
             err
         );
         TokioResolver::builder_with_config(
-            ResolverConfig::default(),
-            TokioConnectionProvider::default(),
+            ResolverConfig::udp_and_tcp(&GOOGLE),
+            TokioRuntimeProvider::default(),
         )
     });
     builder.options_mut().ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
