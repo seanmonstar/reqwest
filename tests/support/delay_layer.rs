@@ -59,10 +59,7 @@ where
 
     type Future = ResponseFuture<S::Future>;
 
-    fn poll_ready(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         match self.inner.poll_ready(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(r) => Poll::Ready(r.map_err(Into::into)),

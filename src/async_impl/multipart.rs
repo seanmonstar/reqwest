@@ -604,7 +604,9 @@ mod tests {
     use super::*;
     use futures_util::stream;
     use futures_util::TryStreamExt;
+    use mime_guess::mime;
     use std::future;
+    use std::io;
     use tokio::{self, runtime};
 
     #[test]
@@ -634,10 +636,7 @@ mod tests {
                 ))))),
             )
             .part("key1", Part::text("value1"))
-            .part(
-                "key2",
-                Part::text("value2").mime(mime_guess::mime::IMAGE_BMP),
-            )
+            .part("key2", Part::text("value2").mime(mime::IMAGE_BMP))
             .part(
                 "reader2",
                 Part::stream(Body::stream(stream::once(future::ready::<
@@ -683,7 +682,7 @@ mod tests {
 
     #[test]
     fn stream_to_end_with_header() {
-        let mut part = Part::text("value2").mime(mime_guess::mime::IMAGE_BMP);
+        let mut part = Part::text("value2").mime(mime::IMAGE_BMP);
         let mut headers = HeaderMap::new();
         headers.insert("Hdr3", "/a/b/c".parse().unwrap());
         part = part.headers(headers);
@@ -720,7 +719,7 @@ mod tests {
         let stream_len = stream_data.len();
         let stream_data = stream_data
             .chunks(3)
-            .map(|c| Ok::<_, std::io::Error>(Bytes::from(c)));
+            .map(|c| Ok::<_, io::Error>(Bytes::from(c)));
         let the_stream = futures_util::stream::iter(stream_data);
 
         let bytes_data = b"some bytes data".to_vec();

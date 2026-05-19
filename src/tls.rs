@@ -236,10 +236,7 @@ impl Certificate {
     }
 
     #[cfg(feature = "__rustls")]
-    pub(crate) fn add_to_rustls(
-        self,
-        root_cert_store: &mut rustls::RootCertStore,
-    ) -> crate::Result<()> {
+    pub(crate) fn add_to_rustls(self, root_cert_store: &mut RootCertStore) -> crate::Result<()> {
         use std::io::Cursor;
 
         match self.original {
@@ -376,7 +373,7 @@ impl Identity {
 
         let (key, certs) = {
             let mut pem = Cursor::new(buf);
-            let mut sk = Vec::<rustls_pki_types::PrivateKeyDer>::new();
+            let mut sk = Vec::<PrivateKeyDer>::new();
             let mut certs = Vec::<rustls_pki_types::CertificateDer>::new();
 
             while let Some((kind, data)) =
@@ -567,7 +564,7 @@ impl Version {
             InnerVersion::Tls1_0 => Some(native_tls_crate::Protocol::Tlsv10),
             InnerVersion::Tls1_1 => Some(native_tls_crate::Protocol::Tlsv11),
             InnerVersion::Tls1_2 => Some(native_tls_crate::Protocol::Tlsv12),
-            InnerVersion::Tls1_3 => None,
+            InnerVersion::Tls1_3 => Some(native_tls_crate::Protocol::Tlsv13),
         }
     }
 
@@ -637,7 +634,7 @@ impl Default for TlsBackend {
 
 #[cfg(feature = "__rustls")]
 pub(crate) fn rustls_store(certs: Vec<Certificate>) -> crate::Result<RootCertStore> {
-    let mut root_cert_store = rustls::RootCertStore::empty();
+    let mut root_cert_store = RootCertStore::empty();
     for cert in certs {
         cert.add_to_rustls(&mut root_cert_store)?;
     }
@@ -799,7 +796,7 @@ impl TlsInfo {
 }
 
 impl std::fmt::Debug for TlsInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("TlsInfo").finish()
     }
 }

@@ -141,19 +141,19 @@ struct HyperService {
     hyper: HyperClient,
 }
 
-impl Service<hyper::Request<crate::async_impl::body::Body>> for HyperService {
-    type Error = crate::Error;
+impl Service<hyper::Request<Body>> for HyperService {
     type Response = http::Response<hyper::body::Incoming>;
+    type Error = crate::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.hyper.poll_ready(cx).map_err(crate::error::request)
+        self.hyper.poll_ready(cx).map_err(error::request)
     }
 
-    fn call(&mut self, req: hyper::Request<crate::async_impl::body::Body>) -> Self::Future {
+    fn call(&mut self, req: hyper::Request<Body>) -> Self::Future {
         let clone = self.hyper.clone();
         let mut inner = std::mem::replace(&mut self.hyper, clone);
-        Box::pin(async move { inner.call(req).await.map_err(crate::error::request) })
+        Box::pin(async move { inner.call(req).await.map_err(error::request) })
     }
 }
 
@@ -572,9 +572,11 @@ impl ClientBuilder {
 
                     if let Some(min_tls_version) = config.min_tls_version {
                         let protocol = min_tls_version.to_native_tls().ok_or_else(|| {
-                            // TLS v1.3. This would be entirely reasonable,
-                            // native-tls just doesn't support it.
-                            // https://github.com/sfackler/rust-native-tls/issues/140
+                            // native-tls added support for TLS v1.3 in 0.2.16 🎉
+                            // `to_native_tls` could arguably return the value directly
+                            // instead of making us check for an impossible None here,
+                            // but given that 1.4 does not exist yet, that might get
+                            // messy in the future.
                             crate::error::builder("invalid minimum TLS version for backend")
                         })?;
                         tls.min_protocol_version(Some(protocol));
@@ -582,7 +584,6 @@ impl ClientBuilder {
 
                     if let Some(max_tls_version) = config.max_tls_version {
                         let protocol = max_tls_version.to_native_tls().ok_or_else(|| {
-                            // TLS v1.3.
                             // We could arguably do max_protocol_version(None), given
                             // that 1.4 does not exist yet, but that'd get messy in the
                             // future.
@@ -710,7 +711,7 @@ impl ClientBuilder {
                     }
 
                     if versions.is_empty() {
-                        return Err(crate::error::builder("empty supported tls versions"));
+                        return Err(error::builder("empty supported tls versions"));
                     }
 
                     // Allow user to have installed a runtime default.
@@ -724,7 +725,7 @@ impl ClientBuilder {
                     let config_builder =
                         rustls::ClientConfig::builder_with_provider(provider.clone())
                             .with_protocol_versions(&versions)
-                            .map_err(|_| crate::error::builder("invalid TLS versions"))?;
+                            .map_err(|_| error::builder("invalid TLS versions"))?;
 
                     let config_builder = if !config.certs_verification {
                         config_builder
@@ -733,7 +734,7 @@ impl ClientBuilder {
                     } else if !config.hostname_verification {
                         if !config.tls_certs_only {
                             // Should this just warn? Error for now...
-                            return Err(crate::error::builder(
+                            return Err(error::builder(
                                     "disabling rustls hostname verification only allowed with tls_certs_only()"
                             ));
                         }
@@ -741,20 +742,18 @@ impl ClientBuilder {
                         config_builder
                             .dangerous()
                             .with_custom_certificate_verifier(Arc::new(IgnoreHostname::new(
-                                crate::tls::rustls_store(config.root_certs)?,
+                                tls::rustls_store(config.root_certs)?,
                                 signature_algorithms,
                             )))
                     } else if !config.tls_certs_only {
                         // Check for some misconfigurations and report them.
                         if !config.crls.is_empty() {
-                            return Err(crate::error::builder(
-                                "CRLs only allowed with tls_certs_only()",
-                            ));
+                            return Err(error::builder("CRLs only allowed with tls_certs_only()"));
                         }
 
                         let verifier = if config.root_certs.is_empty() {
                             rustls_platform_verifier::Verifier::new(provider.clone())
-                                .map_err(crate::error::builder)?
+                                .map_err(error::builder)?
                         } else {
                             #[cfg(any(
                                 all(unix, not(target_os = "android")),
@@ -762,10 +761,10 @@ impl ClientBuilder {
                             ))]
                             {
                                 rustls_platform_verifier::Verifier::new_with_extra_roots(
-                                    crate::tls::rustls_der(config.root_certs)?,
+                                    tls::rustls_der(config.root_certs)?,
                                     provider.clone(),
                                 )
-                                .map_err(crate::error::builder)?
+                                .map_err(error::builder)?
                             }
 
                             #[cfg(not(any(
@@ -782,9 +781,8 @@ impl ClientBuilder {
                             .with_custom_certificate_verifier(Arc::new(verifier))
                     } else {
                         if config.crls.is_empty() {
-                            config_builder.with_root_certificates(crate::tls::rustls_store(
-                                config.root_certs,
-                            )?)
+                            config_builder
+                                .with_root_certificates(tls::rustls_store(config.root_certs)?)
                         } else {
                             let crls = config
                                 .crls
@@ -793,14 +791,12 @@ impl ClientBuilder {
                                 .collect::<Vec<_>>();
                             let verifier =
                                 rustls::client::WebPkiServerVerifier::builder_with_provider(
-                                    Arc::new(crate::tls::rustls_store(config.root_certs)?),
+                                    Arc::new(tls::rustls_store(config.root_certs)?),
                                     provider,
                                 )
                                 .with_crls(crls)
                                 .build()
-                                .map_err(|_| {
-                                    crate::error::builder("invalid TLS verification settings")
-                                })?;
+                                .map_err(|_| error::builder("invalid TLS verification settings"))?;
                             config_builder.with_webpki_verifier(verifier)
                         }
                     };
@@ -888,7 +884,7 @@ impl ClientBuilder {
                 }
                 #[cfg(any(feature = "__native-tls", feature = "__rustls",))]
                 TlsBackend::UnknownPreconfigured => {
-                    return Err(crate::error::builder(
+                    return Err(error::builder(
                         "Unknown TLS backend passed to `use_preconfigured_tls`",
                     ));
                 }
@@ -1134,7 +1130,7 @@ impl ClientBuilder {
                 self.config.headers.insert(USER_AGENT, value);
             }
             Err(e) => {
-                self.config.error = Some(crate::error::builder(e.into()));
+                self.config.error = Some(error::builder(e.into()));
             }
         };
         self
@@ -2061,12 +2057,9 @@ impl ClientBuilder {
     ///
     /// By default, the TLS backend's own default is used.
     ///
-    /// # Errors
-    ///
-    /// A value of `tls::Version::TLS_1_3` will cause an error with the
-    /// `native-tls` backend. This does not mean the version
-    /// isn't supported, just that it can't be set as a minimum due to
-    /// technical limitations.
+    /// On Apple platforms, a value of `tls::Version::TLS_1_3` may cause requests
+    /// to fail (with error -9830) with the `native-tls` backend due to lack of
+    /// TLS 1.3 support.
     ///
     /// # Optional
     ///
@@ -2092,12 +2085,11 @@ impl ClientBuilder {
     ///
     /// By default, there's no maximum.
     ///
-    /// # Errors
+    /// On Apple platforms, a value of `tls::Version::TLS_1_3` may cause requests
+    /// to fall back to TLS 1.2 if allowed by `tls_version_min`, or fail (with error
+    /// -9830) with the `native-tls` backend due to lack of TLS 1.3 support.
     ///
-    /// A value of `tls::Version::TLS_1_3` will cause an error with the
-    /// `native-tls` backend. This does not mean the version
-    /// isn't supported, just that it can't be set as a maximum due to
-    /// technical limitations.
+    /// # Errors
     ///
     /// Cannot set a maximum outside the protocol versions supported by
     /// `rustls` with the `rustls` backend.
@@ -2209,14 +2201,14 @@ impl ClientBuilder {
                 (&mut tls as &mut dyn Any).downcast_mut::<Option<rustls::ClientConfig>>()
             {
                 let tls = conn.take().expect("is definitely Some");
-                let tls = crate::tls::TlsBackend::BuiltRustls(tls);
+                let tls = TlsBackend::BuiltRustls(tls);
                 self.config.tls = tls;
                 return self;
             }
         }
 
         // Otherwise, we don't recognize the TLS backend!
-        self.config.tls = crate::tls::TlsBackend::UnknownPreconfigured;
+        self.config.tls = TlsBackend::UnknownPreconfigured;
         self
     }
 
@@ -2473,7 +2465,7 @@ impl ClientBuilder {
     }
 }
 
-type HyperClient = hyper_util::client::legacy::Client<Connector, super::Body>;
+type HyperClient = hyper_util::client::legacy::Client<Connector, Body>;
 
 impl Default for Client {
     fn default() -> Self {
@@ -2735,7 +2727,7 @@ impl fmt::Debug for Client {
     }
 }
 
-impl tower_service::Service<Request> for Client {
+impl Service<Request> for Client {
     type Response = Response;
     type Error = crate::Error;
     type Future = Pending;
@@ -2749,7 +2741,7 @@ impl tower_service::Service<Request> for Client {
     }
 }
 
-impl tower_service::Service<Request> for &'_ Client {
+impl Service<Request> for &'_ Client {
     type Response = Response;
     type Error = crate::Error;
     type Future = Pending;
@@ -3077,7 +3069,7 @@ impl Future for PendingRequest {
         if let Some(delay) = self.as_mut().total_timeout().as_mut().as_pin_mut() {
             if let Poll::Ready(()) = delay.poll(cx) {
                 return Poll::Ready(Err(
-                    crate::error::request(crate::error::TimedOut).with_url(self.url.clone())
+                    error::request(error::TimedOut).with_url(self.url.clone())
                 ));
             }
         }
@@ -3085,7 +3077,7 @@ impl Future for PendingRequest {
         if let Some(delay) = self.as_mut().read_timeout().as_mut().as_pin_mut() {
             if let Poll::Ready(()) = delay.poll(cx) {
                 return Poll::Ready(Err(
-                    crate::error::request(crate::error::TimedOut).with_url(self.url.clone())
+                    error::request(error::TimedOut).with_url(self.url.clone())
                 ));
             }
         }
@@ -3112,7 +3104,7 @@ impl Future for PendingRequest {
         {
             self.url = match Url::parse(&url.0.to_string()) {
                 Ok(url) => url,
-                Err(e) => return Poll::Ready(Err(crate::error::decode(e))),
+                Err(e) => return Poll::Ready(Err(error::decode(e))),
             }
         };
 
@@ -3170,7 +3162,7 @@ mod tests {
 
     #[test]
     fn test_future_size() {
-        let s = std::mem::size_of::<super::Pending>();
+        let s = size_of::<super::Pending>();
         assert!(s < 128, "size_of::<Pending>() == {s}, too big");
     }
 }

@@ -41,6 +41,7 @@ use std::time::Duration;
 
 use tower::retry::budget::{Budget as _, TpsBudget as Budget};
 
+use crate::retry::classify::ReqRep;
 #[cfg(docsrs)]
 pub use classify::ReqRep;
 
@@ -181,7 +182,7 @@ impl Builder {
     /// ```
     pub fn classify_fn<F>(self, func: F) -> Self
     where
-        F: Fn(classify::ReqRep<'_>) -> classify::Action + Send + Sync + 'static,
+        F: Fn(ReqRep<'_>) -> classify::Action + Send + Sync + 'static,
     {
         self.classify(classify::ClassifyFn(func))
     }
@@ -342,7 +343,7 @@ mod scope {
         F: Fn(&super::Req) -> bool + Send + Sync + 'static,
     {
         fn applies_to(&self, req: &super::Req) -> bool {
-            (self.0)(req)
+            self.0(req)
         }
     }
 
@@ -392,7 +393,7 @@ mod classify {
         F: Fn(ReqRep<'_>) -> Action + Send + Sync + 'static,
     {
         fn classify(&self, req_rep: ReqRep<'_>) -> Action {
-            (self.0)(req_rep)
+            self.0(req_rep)
         }
     }
 

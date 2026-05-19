@@ -47,7 +47,7 @@ async fn auto_headers() {
     });
 
     let url = format!("http://{}/1", server.addr());
-    let res = reqwest::Client::builder()
+    let res = Client::builder()
         .no_proxy()
         .build()
         .unwrap()
@@ -73,7 +73,7 @@ async fn donot_set_content_length_0_if_have_no_body() {
     });
 
     let url = format!("http://{}/content-length", server.addr());
-    let res = reqwest::Client::builder()
+    let res = Client::builder()
         .no_proxy()
         .build()
         .expect("client builder")
@@ -93,7 +93,7 @@ async fn user_agent() {
     });
 
     let url = format!("http://{}/ua", server.addr());
-    let res = reqwest::Client::builder()
+    let res = Client::builder()
         .user_agent("reqwest-test-agent")
         .build()
         .expect("client builder")
@@ -217,7 +217,7 @@ async fn overridden_dns_resolution_with_gai() {
         "http://{overridden_domain}:{}/domain_override",
         server.addr().port()
     );
-    let client = reqwest::Client::builder()
+    let client = Client::builder()
         .no_proxy()
         .resolve(overridden_domain, server.addr())
         .build()
@@ -242,7 +242,7 @@ async fn overridden_dns_resolution_with_gai_multiple() {
     );
     // the server runs on IPv4 localhost, so provide both IPv4 and IPv6 and let the happy eyeballs
     // algorithm decide which address to use.
-    let client = reqwest::Client::builder()
+    let client = Client::builder()
         .no_proxy()
         .resolve_to_addrs(
             overridden_domain,
@@ -330,7 +330,7 @@ async fn overridden_dns_resolution_with_hickory_dns_multiple() {
 fn use_preconfigured_tls_with_bogus_backend() {
     struct DefinitelyNotTls;
 
-    reqwest::Client::builder()
+    Client::builder()
         .use_preconfigured_tls(DefinitelyNotTls)
         .build()
         .expect_err("definitely is not TLS");
@@ -365,7 +365,7 @@ fn use_preconfigured_rustls_default() {
     .with_root_certificates(root_cert_store)
     .with_no_client_auth();
 
-    reqwest::Client::builder()
+    Client::builder()
         .use_preconfigured_tls(tls)
         .build()
         .expect("preconfigured rustls tls");
@@ -393,7 +393,7 @@ async fn http2_upgrade() {
     let server = server::http(move |_| async move { http::Response::default() });
 
     let url = format!("https://localhost:{}", server.addr().port());
-    let res = reqwest::Client::builder()
+    let res = Client::builder()
         .tls_danger_accept_invalid_certs(true)
         .tls_backend_rustls()
         .build()
@@ -411,7 +411,7 @@ async fn http2_upgrade() {
 #[cfg_attr(feature = "http3", ignore = "enabling http3 seems to break this, why?")]
 #[tokio::test]
 async fn test_allowed_methods() {
-    let resp = reqwest::Client::builder()
+    let resp = Client::builder()
         .https_only(true)
         .build()
         .expect("client builder")
@@ -421,7 +421,7 @@ async fn test_allowed_methods() {
 
     assert!(resp.is_ok());
 
-    let resp = reqwest::Client::builder()
+    let resp = Client::builder()
         .https_only(true)
         .build()
         .expect("client builder")
@@ -465,7 +465,7 @@ fn update_json_content_type_if_set_manually() {
 #[cfg(all(feature = "__tls", not(feature = "rustls-no-provider")))]
 #[tokio::test]
 async fn test_tls_info() {
-    let resp = reqwest::Client::builder()
+    let resp = Client::builder()
         .tls_info(true)
         .build()
         .expect("client builder")
@@ -481,7 +481,7 @@ async fn test_tls_info() {
     let der = peer_certificate.unwrap();
     assert_eq!(der[0], 0x30); // ASN.1 SEQUENCE
 
-    let resp = reqwest::Client::builder()
+    let resp = Client::builder()
         .build()
         .expect("client builder")
         .get("https://google.com")
@@ -496,7 +496,7 @@ async fn test_tls_info() {
 async fn close_connection_after_idle_timeout() {
     let mut server = server::http(move |_| async move { http::Response::default() });
 
-    let client = reqwest::Client::builder()
+    let client = Client::builder()
         .pool_idle_timeout(std::time::Duration::from_secs(1))
         .build()
         .unwrap();

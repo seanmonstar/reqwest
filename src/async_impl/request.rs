@@ -189,7 +189,7 @@ impl RequestBuilder {
     pub fn from_parts(client: Client, request: Request) -> RequestBuilder {
         RequestBuilder {
             client,
-            request: crate::Result::Ok(request),
+            request: Ok(request),
         }
     }
 
@@ -239,7 +239,7 @@ impl RequestBuilder {
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
-    pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
+    pub fn headers(mut self, headers: HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             crate::util::replace_headers(req.headers_mut(), headers);
         }
@@ -812,12 +812,12 @@ mod tests {
     #[test]
     #[cfg(feature = "stream")]
     fn try_clone_stream() {
-        let chunks: Vec<Result<_, ::std::io::Error>> = vec![Ok("hello"), Ok(" "), Ok("world")];
+        let chunks: Vec<Result<_, std::io::Error>> = vec![Ok("hello"), Ok(" "), Ok("world")];
         let stream = futures_util::stream::iter(chunks);
         let client = Client::new();
         let builder = client
             .get("http://httpbin.org/get")
-            .body(super::Body::wrap_stream(stream));
+            .body(Body::wrap_stream(stream));
         let clone = builder.try_clone();
         assert!(clone.is_none());
     }
@@ -876,7 +876,7 @@ mod tests {
         let client = Client::new();
         let some_url = "https://localhost/";
 
-        let mut header = http::HeaderValue::from_static("in plain sight");
+        let mut header = HeaderValue::from_static("in plain sight");
         header.set_sensitive(true);
 
         let req = client

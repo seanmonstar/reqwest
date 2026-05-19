@@ -322,7 +322,7 @@ pub use self::response::ResponseBuilderExt;
 /// - supplied `Url` cannot be parsed
 /// - there was an error while sending request
 /// - redirect limit was exhausted
-pub async fn get<T: IntoUrl>(url: T) -> crate::Result<Response> {
+pub async fn get<T: IntoUrl>(url: T) -> Result<Response> {
     Client::builder().build()?.get(url).send().await
 }
 

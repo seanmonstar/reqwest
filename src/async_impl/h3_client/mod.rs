@@ -46,10 +46,10 @@ impl H3Client {
             pool::Connecting::InProgress(waiter) => {
                 trace!("connecting to {key:?} is already in progress, subscribing...");
 
-                match waiter.receive().await {
-                    Some(client) => return Ok(client),
-                    None => return Err("failed to establish connection for HTTP/3 request".into()),
-                }
+                return match waiter.receive().await {
+                    Some(client) => Ok(client),
+                    None => Err("failed to establish connection for HTTP/3 request".into()),
+                };
             }
             pool::Connecting::Acquired(lock) => lock,
         };

@@ -1343,19 +1343,6 @@ pub(crate) mod sealed {
             Write::poll_write(this.inner, cx, buf)
         }
 
-        fn poll_write_vectored(
-            self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-            bufs: &[IoSlice<'_>],
-        ) -> Poll<Result<usize, io::Error>> {
-            let this = self.project();
-            Write::poll_write_vectored(this.inner, cx, bufs)
-        }
-
-        fn is_write_vectored(&self) -> bool {
-            self.inner.is_write_vectored()
-        }
-
         fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
             let this = self.project();
             Write::poll_flush(this.inner, cx)
@@ -1364,6 +1351,19 @@ pub(crate) mod sealed {
         fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
             let this = self.project();
             Write::poll_shutdown(this.inner, cx)
+        }
+
+        fn is_write_vectored(&self) -> bool {
+            self.inner.is_write_vectored()
+        }
+
+        fn poll_write_vectored(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            bufs: &[IoSlice<'_>],
+        ) -> Poll<Result<usize, io::Error>> {
+            let this = self.project();
+            Write::poll_write_vectored(this.inner, cx, bufs)
         }
     }
 }
@@ -1771,7 +1771,7 @@ mod rustls_tls_conn {
             self: Pin<&mut Self>,
             cx: &mut Context,
             buf: ReadBufCursor<'_>,
-        ) -> Poll<tokio::io::Result<()>> {
+        ) -> Poll<io::Result<()>> {
             let this = self.project();
             Read::poll_read(this.inner, cx, buf)
         }
@@ -1782,9 +1782,23 @@ mod rustls_tls_conn {
             self: Pin<&mut Self>,
             cx: &mut Context,
             buf: &[u8],
-        ) -> Poll<Result<usize, tokio::io::Error>> {
+        ) -> Poll<Result<usize, io::Error>> {
             let this = self.project();
             Write::poll_write(this.inner, cx, buf)
+        }
+
+        fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+            let this = self.project();
+            Write::poll_flush(this.inner, cx)
+        }
+
+        fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+            let this = self.project();
+            Write::poll_shutdown(this.inner, cx)
+        }
+
+        fn is_write_vectored(&self) -> bool {
+            self.inner.is_write_vectored()
         }
 
         fn poll_write_vectored(
@@ -1794,26 +1808,6 @@ mod rustls_tls_conn {
         ) -> Poll<Result<usize, io::Error>> {
             let this = self.project();
             Write::poll_write_vectored(this.inner, cx, bufs)
-        }
-
-        fn is_write_vectored(&self) -> bool {
-            self.inner.is_write_vectored()
-        }
-
-        fn poll_flush(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-        ) -> Poll<Result<(), tokio::io::Error>> {
-            let this = self.project();
-            Write::poll_flush(this.inner, cx)
-        }
-
-        fn poll_shutdown(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-        ) -> Poll<Result<(), tokio::io::Error>> {
-            let this = self.project();
-            Write::poll_shutdown(this.inner, cx)
         }
     }
     impl<T> TlsInfoFactory for RustlsTlsConn<T>
@@ -1986,7 +1980,7 @@ mod verbose {
             mut self: Pin<&mut Self>,
             cx: &mut Context,
             mut buf: ReadBufCursor<'_>,
-        ) -> Poll<std::io::Result<()>> {
+        ) -> Poll<io::Result<()>> {
             // TODO: This _does_ forget the `init` len, so it could result in
             // re-initializing twice. Needs upstream support, perhaps.
             // SAFETY: Passing to a ReadBuf will never de-initialize any bytes.
@@ -2013,7 +2007,7 @@ mod verbose {
             mut self: Pin<&mut Self>,
             cx: &mut Context,
             buf: &[u8],
-        ) -> Poll<Result<usize, std::io::Error>> {
+        ) -> Poll<Result<usize, io::Error>> {
             match Pin::new(&mut self.inner).poll_write(cx, buf) {
                 Poll::Ready(Ok(n)) => {
                     log::trace!("{:08x} write: {:?}", self.id, Escape::new(&buf[..n]));
@@ -2022,6 +2016,21 @@ mod verbose {
                 Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
                 Poll::Pending => Poll::Pending,
             }
+        }
+
+        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+            Pin::new(&mut self.inner).poll_flush(cx)
+        }
+
+        fn poll_shutdown(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context,
+        ) -> Poll<Result<(), io::Error>> {
+            Pin::new(&mut self.inner).poll_shutdown(cx)
+        }
+
+        fn is_write_vectored(&self) -> bool {
+            self.inner.is_write_vectored()
         }
 
         fn poll_write_vectored(
@@ -2041,24 +2050,6 @@ mod verbose {
                 Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
                 Poll::Pending => Poll::Pending,
             }
-        }
-
-        fn is_write_vectored(&self) -> bool {
-            self.inner.is_write_vectored()
-        }
-
-        fn poll_flush(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context,
-        ) -> Poll<Result<(), std::io::Error>> {
-            Pin::new(&mut self.inner).poll_flush(cx)
-        }
-
-        fn poll_shutdown(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context,
-        ) -> Poll<Result<(), std::io::Error>> {
-            Pin::new(&mut self.inner).poll_shutdown(cx)
         }
     }
 

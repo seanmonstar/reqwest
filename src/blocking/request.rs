@@ -174,7 +174,7 @@ impl RequestBuilder {
     pub fn from_parts(client: Client, request: Request) -> RequestBuilder {
         RequestBuilder {
             client,
-            request: crate::Result::Ok(request),
+            request: Ok(request),
         }
     }
 
@@ -258,7 +258,7 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
+    pub fn headers(mut self, headers: HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             crate::util::replace_headers(req.headers_mut(), headers);
         }

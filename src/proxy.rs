@@ -587,7 +587,7 @@ impl fmt::Debug for Matcher {
 }
 
 impl Intercepted {
-    pub(crate) fn uri(&self) -> &http::Uri {
+    pub(crate) fn uri(&self) -> &Uri {
         self.inner.uri()
     }
 
@@ -776,7 +776,7 @@ struct Custom {
 }
 
 impl Custom {
-    fn call(&self, uri: &http::Uri) -> Option<matcher::Intercept> {
+    fn call(&self, uri: &Uri) -> Option<matcher::Intercept> {
         let url = format!(
             "{}://{}{}{}",
             uri.scheme()?,
@@ -814,7 +814,7 @@ pub(crate) fn encode_basic_auth(username: &str, password: &str) -> HeaderValue {
 mod tests {
     use super::*;
 
-    fn url(s: &str) -> http::Uri {
+    fn url(s: &str) -> Uri {
         s.parse().unwrap()
     }
 
@@ -890,7 +890,7 @@ mod tests {
         let target = "http://example.domain/";
         let p = Proxy::all(target)
             .unwrap()
-            .custom_http_auth(http::HeaderValue::from_static("testme"))
+            .custom_http_auth(HeaderValue::from_static("testme"))
             .into_matcher();
 
         let got = p.intercept(&url("http://anywhere.local")).unwrap();
@@ -902,7 +902,7 @@ mod tests {
     fn test_custom_with_custom_auth_header() {
         let target = "http://example.domain/";
         let p = Proxy::custom(move |_| target.parse::<Url>().ok())
-            .custom_http_auth(http::HeaderValue::from_static("testme"))
+            .custom_http_auth(HeaderValue::from_static("testme"))
             .into_matcher();
 
         let got = p.intercept(&url("http://anywhere.local")).unwrap();

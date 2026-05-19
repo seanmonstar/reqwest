@@ -46,7 +46,7 @@ impl Drop for Server {
             let _ = tx.send(());
         }
 
-        if !::std::thread::panicking() {
+        if !thread::panicking() {
             self.panic_rx
                 .recv_timeout(Duration::from_secs(3))
                 .expect("test server should not panic");
@@ -83,7 +83,7 @@ where
             .build()
             .expect("new rt");
         let listener = rt.block_on(async move {
-            tokio::net::TcpListener::bind(&std::net::SocketAddr::from(([127, 0, 0, 1], 0)))
+            tokio::net::TcpListener::bind(&net::SocketAddr::from(([127, 0, 0, 1], 0)))
                 .await
                 .unwrap()
         });
@@ -364,7 +364,7 @@ where
             .build()
             .expect("new rt");
         let listener = rt.block_on(async move {
-            tokio::net::TcpListener::bind(&std::net::SocketAddr::from(([127, 0, 0, 1], 0)))
+            tokio::net::TcpListener::bind(&net::SocketAddr::from(([127, 0, 0, 1], 0)))
                 .await
                 .unwrap()
         });
@@ -428,7 +428,7 @@ where
 
 async fn low_level_read_http_request(
     client_socket: &mut TcpStream,
-) -> core::result::Result<Vec<u8>, std::io::Error> {
+) -> Result<Vec<u8>, std::io::Error> {
     let mut buf = Vec::new();
 
     // Read until the delimiter "\r\n\r\n" is found

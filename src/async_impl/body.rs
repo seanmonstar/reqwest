@@ -260,17 +260,17 @@ impl HttpBody for Body {
         }
     }
 
-    fn size_hint(&self) -> http_body::SizeHint {
-        match self.inner {
-            Inner::Reusable(ref bytes) => http_body::SizeHint::with_exact(bytes.len() as u64),
-            Inner::Streaming(ref body) => body.size_hint(),
-        }
-    }
-
     fn is_end_stream(&self) -> bool {
         match self.inner {
             Inner::Reusable(ref bytes) => bytes.is_empty(),
             Inner::Streaming(ref body) => body.is_end_stream(),
+        }
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        match self.inner {
+            Inner::Reusable(ref bytes) => http_body::SizeHint::with_exact(bytes.len() as u64),
+            Inner::Streaming(ref body) => body.size_hint(),
         }
     }
 }
@@ -315,13 +315,13 @@ where
     }
 
     #[inline]
-    fn size_hint(&self) -> http_body::SizeHint {
-        self.inner.size_hint()
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
     }
 
     #[inline]
-    fn is_end_stream(&self) -> bool {
-        self.inner.is_end_stream()
+    fn size_hint(&self) -> http_body::SizeHint {
+        self.inner.size_hint()
     }
 }
 
@@ -360,18 +360,17 @@ where
     }
 
     #[inline]
-    fn size_hint(&self) -> http_body::SizeHint {
-        self.inner.size_hint()
-    }
-
-    #[inline]
     fn is_end_stream(&self) -> bool {
         self.inner.is_end_stream()
     }
+
+    #[inline]
+    fn size_hint(&self) -> http_body::SizeHint {
+        self.inner.size_hint()
+    }
 }
 
-pub(crate) type ResponseBody =
-    http_body_util::combinators::BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>;
+pub(crate) type ResponseBody = BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>;
 
 pub(crate) fn boxed<B>(body: B) -> ResponseBody
 where
@@ -443,13 +442,13 @@ where
     }
 
     #[inline]
-    fn size_hint(&self) -> http_body::SizeHint {
-        self.inner.size_hint()
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
     }
 
     #[inline]
-    fn is_end_stream(&self) -> bool {
-        self.inner.is_end_stream()
+    fn size_hint(&self) -> http_body::SizeHint {
+        self.inner.size_hint()
     }
 }
 
