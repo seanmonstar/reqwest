@@ -22,8 +22,7 @@ jobs:
       - features
       - unstable
       - nightly
-      - msrv_default
-      - msrv_oldest
+      - msrv
       - android
       - wasm
       - docs
@@ -318,38 +317,8 @@ jobs:
           cargo check
           cargo check --all-features
 
-  msrv_default:
-    name: MSRV Default
-    needs: [style]
-
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Resolve MSRV aware dependencies
-        run: cargo update
-        env:
-          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
-
-      # required by rustls-platform-verifier
-      - name: Install rust (1.71.0)
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.71.0
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Downgrade rustls-platform-verifier
-        run: cargo update -p rustls-platform-verifier --precise 0.6.2
-
-      - name: Check
-        run: cargo check
-
-  msrv_oldest:
-    name: MSRV Oldest
+  msrv:
+    name: MSRV
     needs: [style]
 
     runs-on: ubuntu-latest
@@ -376,7 +345,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Check
-        run: cargo check --no-default-features --features="http2,charset,native-tls"
+        run: cargo check
 
   android:
     name: Android
