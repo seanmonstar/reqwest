@@ -538,7 +538,7 @@ impl ClientBuilder {
         mut self,
         interval: impl Into<Option<Duration>>,
     ) -> ClientBuilder {
-        self.config.http2_keep_alive_interval = interval.into();
+        self.with_inner(|inner| inner.http2_keep_alive_interval(interval));
         self
     }
 
@@ -550,7 +550,7 @@ impl ClientBuilder {
     #[cfg(feature = "http2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
     pub fn http2_keep_alive_timeout(mut self, timeout: Duration) -> ClientBuilder {
-        self.config.http2_keep_alive_timeout = Some(timeout);
+        self.with_inner(|inner| inner.http2_keep_alive_timeout(timeout));
         self
     }
 
@@ -563,7 +563,7 @@ impl ClientBuilder {
     #[cfg(feature = "http2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
     pub fn http2_keep_alive_while_idle(mut self, enabled: bool) -> ClientBuilder {
-        self.config.http2_keep_alive_while_idle = enabled;
+        self.with_inner(|inner| inner.http2_keep_alive_while_idle(enabled));
         self
     }
 
