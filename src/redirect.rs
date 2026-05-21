@@ -452,3 +452,92 @@ fn test_remove_sensitive_headers_on_scheme_downgrade_same_host_port() {
     remove_sensitive_headers(&mut headers, &next, &prev);
     assert_eq!(headers, filtered_headers);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn none_always_returns_stop() {
+        let policy = Policy::none();
+        let next = Url::parse("http://x.y/z").unwrap();
+
+        let action = policy.redirect(Attempt {
+            status: StatusCode::FOUND,
+            next: &next,
+            previous: &[],
+        });
+        match action.inner {
+            ActionKind::Stop => (),
+            other => panic!("unexpected {other:?}"),
+        }
+
+        let previous = vec![Url::parse("http://a.b/1").unwrap()];
+        let action = policy.redirect(Attempt {
+            status: StatusCode::FOUND,
+            next: &next,
+            previous: &previous,
+        });
+        match action.inner {
+            ActionKind::Stop => (),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn limited_zero_stops_on_first_redirect() {
+        let policy = Policy::limited(0);
+        let next = Url::parse("http://x.y/z").unwrap();
+        let previous = vec![Url::parse("http://a.b/c").unwrap()];
+
+        let action = policy.redirect(Attempt {
+            status: StatusCode::FOUND,
+            next: &next,
+            previous: &previous,
+        });
+
+        match action.inner {
+            ActionKind::Error(err) if err.is::<TooManyRedirects>() => (),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn custom_receives_expected_previous_chain() {
+        let policy = Policy::custom(|attempt| {
+            match attempt.previous() {
+                [first] if first.as_str() == "http://a.b/1" => attempt.follow(),
+                [first, second]
+                    if first.as_str() == "http://a.b/1" && second.as_str() == "http://a.b/2" =>
+                {
+                    attempt.stop()
+                }
+                _ => attempt.error("unexpected previous chain"),
+            }
+        });
+
+        let url1 = Url::parse("http://a.b/1").unwrap();
+        let url2 = Url::parse("http://a.b/2").unwrap();
+        let url3 = Url::parse("http://a.b/3").unwrap();
+
+        let action1 = policy.redirect(Attempt {
+            status: StatusCode::FOUND,
+            next: &url2,
+            previous: &[url1.clone()],
+        });
+        match action1.inner {
+            ActionKind::Follow => (),
+            other => panic!("unexpected {other:?}"),
+        }
+
+        let action2 = policy.redirect(Attempt {
+            status: StatusCode::FOUND,
+            next: &url3,
+            previous: &[url1, url2],
+        });
+        match action2.inner {
+            ActionKind::Stop => (),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+}
