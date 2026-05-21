@@ -535,11 +535,10 @@ impl ClientBuilder {
     #[cfg(feature = "http2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
     pub fn http2_keep_alive_interval(
-        mut self,
+        self,
         interval: impl Into<Option<Duration>>,
     ) -> ClientBuilder {
-        self.with_inner(|inner| inner.http2_keep_alive_interval(interval));
-        self
+        self.with_inner(|inner| inner.http2_keep_alive_interval(interval))
     }
 
     /// Sets a timeout for receiving an acknowledgement of the keep-alive ping.
@@ -549,9 +548,8 @@ impl ClientBuilder {
     /// Default is currently disabled.
     #[cfg(feature = "http2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
-    pub fn http2_keep_alive_timeout(mut self, timeout: Duration) -> ClientBuilder {
-        self.with_inner(|inner| inner.http2_keep_alive_timeout(timeout));
-        self
+    pub fn http2_keep_alive_timeout(self, timeout: Duration) -> ClientBuilder {
+        self.with_inner(|inner| inner.http2_keep_alive_timeout(timeout))
     }
 
     /// Sets whether HTTP2 keep-alive should apply while the connection is idle.
@@ -562,9 +560,8 @@ impl ClientBuilder {
     /// Default is `false`.
     #[cfg(feature = "http2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
-    pub fn http2_keep_alive_while_idle(mut self, enabled: bool) -> ClientBuilder {
-        self.with_inner(|inner| inner.http2_keep_alive_while_idle(enabled));
-        self
+    pub fn http2_keep_alive_while_idle(self, enabled: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.http2_keep_alive_while_idle(enabled))
     }
 
     /// This requires the optional `http3` feature to be
