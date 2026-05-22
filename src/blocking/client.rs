@@ -534,10 +534,7 @@ impl ClientBuilder {
     /// Default is currently disabled.
     #[cfg(feature = "http2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
-    pub fn http2_keep_alive_interval(
-        self,
-        interval: impl Into<Option<Duration>>,
-    ) -> ClientBuilder {
+    pub fn http2_keep_alive_interval(self, interval: impl Into<Option<Duration>>) -> ClientBuilder {
         self.with_inner(|inner| inner.http2_keep_alive_interval(interval))
     }
 
