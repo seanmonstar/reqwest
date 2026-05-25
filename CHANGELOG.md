@@ -1,3 +1,12 @@
+## v0.13.4
+
+- Add `ClientBuilder::tls_sslkeylogfile(bool)` option to allow using the related environment variable.
+- Add `ClientBuilder::http2_keep_alive_*` options for the `blocking` client.
+- Add TLS 1.3 support when using `native-tls` backend.
+- Fix redirect handling to strip sensitive headers when the scheme changes.
+- Fix HTTP/3 happy-eyeball connection creation.
+- Upgrade hickory-resolver to 0.26.
+
 ## v0.13.3
 
 - Fix CertificateRevocationList parsing of PEM values.
