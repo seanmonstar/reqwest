@@ -1,3 +1,7 @@
+## Unreleased
+
+- Add `TlsInfo::tls_exporter()` exposing the RFC 9266 `tls-exporter` channel binding (rustls backend).
+
 ## v0.13.4
 
 - Add `ClientBuilder::tls_sslkeylogfile(bool)` option to allow using the related environment variable.

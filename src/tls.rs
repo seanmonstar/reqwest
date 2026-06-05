@@ -789,12 +789,18 @@ impl ServerCertVerifier for IgnoreHostname {
 #[derive(Clone)]
 pub struct TlsInfo {
     pub(crate) peer_certificate: Option<Vec<u8>>,
+    pub(crate) tls_exporter: Option<Vec<u8>>,
 }
 
 impl TlsInfo {
     /// Get the DER encoded leaf certificate of the peer.
     pub fn peer_certificate(&self) -> Option<&[u8]> {
         self.peer_certificate.as_ref().map(|der| &der[..])
+    }
+
+    /// Get the [RFC 9266] `tls-exporter` channel binding for this connection.
+    pub fn tls_exporter(&self) -> Option<&[u8]> {
+        self.tls_exporter.as_ref().map(|v| &v[..])
     }
 }
 
