@@ -1,6 +1,6 @@
 ## Unreleased
 
-- Add `TlsInfo::tls_exporter()` exposing the RFC 9266 `tls-exporter` channel binding (rustls backend).
+- Add `TlsInfo::tls_exporter_channel_binding()` exposing the RFC 9266 `tls-exporter` channel binding (rustls backend, TLS 1.3).
 
 ## v0.13.4
 

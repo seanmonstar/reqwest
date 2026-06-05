@@ -960,7 +960,9 @@ trait TlsInfoFactory {
 }
 
 #[cfg(feature = "__rustls")]
-fn rustls_tls_exporter(conn: &tokio_rustls::rustls::ClientConnection) -> Option<Vec<u8>> {
+fn rustls_tls_exporter_channel_binding(
+    conn: &tokio_rustls::rustls::ClientConnection,
+) -> Option<Vec<u8>> {
     use tokio_rustls::rustls::ProtocolVersion;
     if conn.protocol_version() != Some(ProtocolVersion::TLSv1_3) {
         return None;
@@ -998,7 +1000,7 @@ impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<TokioIo<tokio::net::
         // native-tls does not expose TLS keying material, so no channel binding.
         Some(crate::tls::TlsInfo {
             peer_certificate,
-            tls_exporter: None,
+            tls_exporter_channel_binding: None,
         })
     }
 }
@@ -1019,7 +1021,7 @@ impl TlsInfoFactory
         // native-tls does not expose TLS keying material, so no channel binding.
         Some(crate::tls::TlsInfo {
             peer_certificate,
-            tls_exporter: None,
+            tls_exporter_channel_binding: None,
         })
     }
 }
@@ -1042,10 +1044,10 @@ impl TlsInfoFactory for tokio_rustls::client::TlsStream<TokioIo<TokioIo<tokio::n
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.to_vec());
-        let tls_exporter = rustls_tls_exporter(conn);
+        let tls_exporter_channel_binding = rustls_tls_exporter_channel_binding(conn);
         Some(crate::tls::TlsInfo {
             peer_certificate,
-            tls_exporter,
+            tls_exporter_channel_binding,
         })
     }
 }
@@ -1062,10 +1064,10 @@ impl TlsInfoFactory
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.to_vec());
-        let tls_exporter = rustls_tls_exporter(conn);
+        let tls_exporter_channel_binding = rustls_tls_exporter_channel_binding(conn);
         Some(crate::tls::TlsInfo {
             peer_certificate,
-            tls_exporter,
+            tls_exporter_channel_binding,
         })
     }
 }
@@ -1103,7 +1105,7 @@ impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<TokioIo<tokio::net::
         // native-tls does not expose TLS keying material, so no channel binding.
         Some(crate::tls::TlsInfo {
             peer_certificate,
-            tls_exporter: None,
+            tls_exporter_channel_binding: None,
         })
     }
 }
@@ -1125,7 +1127,7 @@ impl TlsInfoFactory
         // native-tls does not expose TLS keying material, so no channel binding.
         Some(crate::tls::TlsInfo {
             peer_certificate,
-            tls_exporter: None,
+            tls_exporter_channel_binding: None,
         })
     }
 }
@@ -1150,10 +1152,10 @@ impl TlsInfoFactory for tokio_rustls::client::TlsStream<TokioIo<TokioIo<tokio::n
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.to_vec());
-        let tls_exporter = rustls_tls_exporter(conn);
+        let tls_exporter_channel_binding = rustls_tls_exporter_channel_binding(conn);
         Some(crate::tls::TlsInfo {
             peer_certificate,
-            tls_exporter,
+            tls_exporter_channel_binding,
         })
     }
 }
@@ -1171,10 +1173,10 @@ impl TlsInfoFactory
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.to_vec());
-        let tls_exporter = rustls_tls_exporter(conn);
+        let tls_exporter_channel_binding = rustls_tls_exporter_channel_binding(conn);
         Some(crate::tls::TlsInfo {
             peer_certificate,
-            tls_exporter,
+            tls_exporter_channel_binding,
         })
     }
 }
@@ -1217,7 +1219,7 @@ impl TlsInfoFactory
         // native-tls does not expose TLS keying material, so no channel binding.
         Some(crate::tls::TlsInfo {
             peer_certificate,
-            tls_exporter: None,
+            tls_exporter_channel_binding: None,
         })
     }
 }
@@ -1241,7 +1243,7 @@ impl TlsInfoFactory
         // native-tls does not expose TLS keying material, so no channel binding.
         Some(crate::tls::TlsInfo {
             peer_certificate,
-            tls_exporter: None,
+            tls_exporter_channel_binding: None,
         })
     }
 }
@@ -1272,10 +1274,10 @@ impl TlsInfoFactory
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.to_vec());
-        let tls_exporter = rustls_tls_exporter(conn);
+        let tls_exporter_channel_binding = rustls_tls_exporter_channel_binding(conn);
         Some(crate::tls::TlsInfo {
             peer_certificate,
-            tls_exporter,
+            tls_exporter_channel_binding,
         })
     }
 }
@@ -1297,10 +1299,10 @@ impl TlsInfoFactory
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.to_vec());
-        let tls_exporter = rustls_tls_exporter(conn);
+        let tls_exporter_channel_binding = rustls_tls_exporter_channel_binding(conn);
         Some(crate::tls::TlsInfo {
             peer_certificate,
-            tls_exporter,
+            tls_exporter_channel_binding,
         })
     }
 }
