@@ -198,6 +198,14 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     let mut init = web_sys::RequestInit::new();
     init.method(req.method().as_str());
 
+    if let Some(referrer) = &req.referrer {
+        init.set_referrer(referrer);
+    }
+
+    if let Some(policy) = req.referrer_policy {
+        init.set_referrer_policy(policy);
+    }
+
     // convert HeaderMap to Headers
     let js_headers = web_sys::Headers::new()
         .map_err(crate::error::wasm)
