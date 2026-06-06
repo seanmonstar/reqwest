@@ -202,7 +202,20 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         init.set_referrer(referrer);
     }
 
-    if let Some(policy) = req.referrer_policy {
+    if let Some(policy) = &req.referrer_policy {
+        let policy = match policy.as_str() {
+            "no-referrer" => web_sys::ReferrerPolicy::NoReferrer,
+            "no-referrer-when-downgrade" => web_sys::ReferrerPolicy::NoReferrerWhenDowngrade,
+            "origin" => web_sys::ReferrerPolicy::Origin,
+            "origin-when-cross-origin" => web_sys::ReferrerPolicy::OriginWhenCrossOrigin,
+            "same-origin" => web_sys::ReferrerPolicy::SameOrigin,
+            "strict-origin" => web_sys::ReferrerPolicy::StrictOrigin,
+            "strict-origin-when-cross-origin" => {
+                web_sys::ReferrerPolicy::StrictOriginWhenCrossOrigin
+            }
+            "unsafe-url" => web_sys::ReferrerPolicy::UnsafeUrl,
+            _ => web_sys::ReferrerPolicy::None,
+        };
         init.set_referrer_policy(policy);
     }
 

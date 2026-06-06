@@ -9,7 +9,7 @@ use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
 use url::Url;
-use web_sys::{RequestCache, RequestCredentials, ReferrerPolicy};
+use web_sys::{RequestCache, RequestCredentials};
 
 use super::{Body, Client, Response};
 #[cfg(any(feature = "form", feature = "json"))]
@@ -27,7 +27,7 @@ pub struct Request {
     pub(super) credentials: Option<RequestCredentials>,
     pub(super) cache: Option<RequestCache>,
     pub(super) referrer: Option<String>,
-    pub(super) referrer_policy: Option<ReferrerPolicy>,
+    pub(super) referrer_policy: Option<String>,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -513,13 +513,13 @@ impl RequestBuilder {
     /// # WASM
     ///
     /// This maps to the browser `RequestInit.referrerPolicy` field.
-    pub fn fetch_referrer_policy(mut self, policy: web_sys::ReferrerPolicy) -> RequestBuilder {
+    pub fn fetch_referrer_policy(mut self, policy: &str) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            req.referrer_policy = Some(policy);
+            req.referrer_policy = Some(policy.to_string());
         }
         self
     }
-    
+
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
     pub fn build(self) -> crate::Result<Request> {
