@@ -665,11 +665,15 @@ where
             method,
             uri,
             headers,
+            version,
+            extensions,
             ..
         } = parts;
         let url = Url::parse(&uri.to_string()).map_err(crate::error::builder)?;
         let mut inner = async_impl::Request::new(method, url);
         crate::util::replace_headers(inner.headers_mut(), headers);
+        *inner.version_mut() = version;
+        *inner.extensions_mut() = extensions;
         Ok(Request {
             body: Some(body.into()),
             inner,
