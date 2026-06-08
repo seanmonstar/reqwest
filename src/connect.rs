@@ -662,7 +662,7 @@ impl ConnectorService {
             }
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, tls, .. } => {
-                let mut http = http.clone();
+                let mut http = http;
 
                 // Disable Nagle's algorithm for TLS handshake
                 //
@@ -671,7 +671,7 @@ impl ConnectorService {
                     http.set_nodelay(true);
                 }
 
-                let mut http = hyper_rustls::HttpsConnector::from((http, tls.clone()));
+                let mut http = hyper_rustls::HttpsConnector::from((http, tls));
                 let io = http.call(dst).await?;
 
                 if let hyper_rustls::MaybeHttpsStream::Https(stream) = io {
@@ -760,7 +760,7 @@ impl ConnectorService {
             }
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { tls, .. } => {
-                let mut http = hyper_rustls::HttpsConnector::from((svc, tls.clone()));
+                let mut http = hyper_rustls::HttpsConnector::from((svc, tls));
                 let io = http.call(dst).await?;
 
                 if let hyper_rustls::MaybeHttpsStream::Https(stream) = io {
@@ -796,7 +796,7 @@ impl ConnectorService {
         let auth = proxy.basic_auth().cloned();
 
         #[cfg(feature = "__tls")]
-        let misc = proxy.custom_headers().clone();
+        let misc = proxy.custom_headers();
 
         match &self.inner {
             #[cfg(feature = "__native-tls")]
