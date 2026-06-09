@@ -198,6 +198,7 @@ features = [
     "RequestCredentials",
     "File",
     "ReadableStream",
+    "ReferrerPolicy",
     "RequestCache"
 ]
 

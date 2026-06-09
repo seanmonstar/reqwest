@@ -198,6 +198,27 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     let mut init = web_sys::RequestInit::new();
     init.method(req.method().as_str());
 
+    if let Some(referrer) = &req.referrer {
+        init.set_referrer(referrer);
+    }
+
+    if let Some(policy) = &req.referrer_policy {
+        let policy = match policy.as_str() {
+            "no-referrer" => web_sys::ReferrerPolicy::NoReferrer,
+            "no-referrer-when-downgrade" => web_sys::ReferrerPolicy::NoReferrerWhenDowngrade,
+            "origin" => web_sys::ReferrerPolicy::Origin,
+            "origin-when-cross-origin" => web_sys::ReferrerPolicy::OriginWhenCrossOrigin,
+            "same-origin" => web_sys::ReferrerPolicy::SameOrigin,
+            "strict-origin" => web_sys::ReferrerPolicy::StrictOrigin,
+            "strict-origin-when-cross-origin" => {
+                web_sys::ReferrerPolicy::StrictOriginWhenCrossOrigin
+            }
+            "unsafe-url" => web_sys::ReferrerPolicy::UnsafeUrl,
+            _ => web_sys::ReferrerPolicy::None,
+        };
+        init.set_referrer_policy(policy);
+    }
+
     // convert HeaderMap to Headers
     let js_headers = web_sys::Headers::new()
         .map_err(crate::error::wasm)

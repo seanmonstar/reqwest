@@ -26,6 +26,8 @@ pub struct Request {
     pub(super) cors: bool,
     pub(super) credentials: Option<RequestCredentials>,
     pub(super) cache: Option<RequestCache>,
+    pub(super) referrer: Option<String>,
+    pub(super) referrer_policy: Option<String>,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -47,6 +49,8 @@ impl Request {
             cors: true,
             credentials: None,
             cache: None,
+            referrer: None,
+            referrer_policy: None,
         }
     }
 
@@ -128,6 +132,8 @@ impl Request {
             cors: self.cors,
             credentials: self.credentials,
             cache: self.cache,
+            referrer: self.referrer.clone(),
+            referrer_policy: self.referrer_policy.clone(),
         })
     }
 }
@@ -490,6 +496,30 @@ impl RequestBuilder {
         self
     }
 
+    /// Set fetch referrer
+    ///
+    /// # WASM
+    ///
+    /// This maps to the browser `RequestInit.referrer` field.
+    pub fn fetch_referrer(mut self, referrer: &str) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.referrer = Some(referrer.to_string());
+        }
+        self
+    }
+
+    /// Set fetch referrer policy
+    ///
+    /// # WASM
+    ///
+    /// This maps to the browser `RequestInit.referrerPolicy` field.
+    pub fn fetch_referrer_policy(mut self, policy: &str) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.referrer_policy = Some(policy.to_string());
+        }
+        self
+    }
+
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
     pub fn build(self) -> crate::Result<Request> {
@@ -609,6 +639,8 @@ where
             cors: true,
             credentials: None,
             cache: None,
+            referrer: None,
+            referrer_policy: None,
         })
     }
 }
