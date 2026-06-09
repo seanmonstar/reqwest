@@ -966,6 +966,21 @@ impl<T: TlsInfoFactory> TlsInfoFactory for TokioIo<T> {
     }
 }
 
+#[cfg(feature = "__rustls")]
+fn rustls_peer_certificate(conn: &rustls::ClientConnection) -> Option<Vec<u8>> {
+    match conn.peer_identity()? {
+        rustls::crypto::Identity::X509(certificates) => Some(certificates.end_entity.to_vec()),
+        rustls::crypto::Identity::RawPublicKey(_) => None,
+        _ => None,
+    }
+}
+
+#[cfg(feature = "__rustls")]
+fn rustls_is_h2(conn: &rustls::ClientConnection) -> bool {
+    conn.alpn_protocol()
+        .is_some_and(|protocol| protocol.as_ref() == b"h2")
+}
+
 // ===== TcpStream =====
 
 #[cfg(feature = "__tls")]
@@ -1018,12 +1033,7 @@ impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::TcpStrea
 #[cfg(feature = "__rustls")]
 impl TlsInfoFactory for tokio_rustls::client::TlsStream<TokioIo<TokioIo<tokio::net::TcpStream>>> {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .1
-            .peer_certificates()
-            .and_then(|certs| certs.first())
-            .map(|c| c.to_vec());
+        let peer_certificate = rustls_peer_certificate(self.get_ref().1);
         Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
@@ -1035,12 +1045,7 @@ impl TlsInfoFactory
     >
 {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .1
-            .peer_certificates()
-            .and_then(|certs| certs.first())
-            .map(|c| c.to_vec());
+        let peer_certificate = rustls_peer_certificate(self.get_ref().1);
         Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
@@ -1112,12 +1117,7 @@ impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::UnixStre
 #[cfg(unix)]
 impl TlsInfoFactory for tokio_rustls::client::TlsStream<TokioIo<TokioIo<tokio::net::UnixStream>>> {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .1
-            .peer_certificates()
-            .and_then(|certs| certs.first())
-            .map(|c| c.to_vec());
+        let peer_certificate = rustls_peer_certificate(self.get_ref().1);
         Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
@@ -1130,12 +1130,7 @@ impl TlsInfoFactory
     >
 {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .1
-            .peer_certificates()
-            .and_then(|certs| certs.first())
-            .map(|c| c.to_vec());
+        let peer_certificate = rustls_peer_certificate(self.get_ref().1);
         Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
@@ -1220,12 +1215,7 @@ impl TlsInfoFactory
     >
 {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .1
-            .peer_certificates()
-            .and_then(|certs| certs.first())
-            .map(|c| c.to_vec());
+        let peer_certificate = rustls_peer_certificate(self.get_ref().1);
         Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
@@ -1242,12 +1232,7 @@ impl TlsInfoFactory
     >
 {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .1
-            .peer_certificates()
-            .and_then(|certs| certs.first())
-            .map(|c| c.to_vec());
+        let peer_certificate = rustls_peer_certificate(self.get_ref().1);
         Some(crate::tls::TlsInfo { peer_certificate })
     }
 }
@@ -1640,7 +1625,7 @@ mod native_tls_conn {
 
 #[cfg(feature = "__rustls")]
 mod rustls_tls_conn {
-    use super::TlsInfoFactory;
+    use super::{rustls_is_h2, TlsInfoFactory};
     use hyper::rt::{Read, ReadBufCursor, Write};
     use hyper_rustls::MaybeHttpsStream;
     use hyper_util::client::legacy::connect::{Connected, Connection};
@@ -1663,7 +1648,7 @@ mod rustls_tls_conn {
 
     impl Connection for RustlsTlsConn<TokioIo<TokioIo<TcpStream>>> {
         fn connected(&self) -> Connected {
-            if self.inner.inner().get_ref().1.alpn_protocol() == Some(b"h2") {
+            if rustls_is_h2(self.inner.inner().get_ref().1) {
                 self.inner
                     .inner()
                     .get_ref()
@@ -1678,7 +1663,7 @@ mod rustls_tls_conn {
     }
     impl Connection for RustlsTlsConn<TokioIo<MaybeHttpsStream<TokioIo<TcpStream>>>> {
         fn connected(&self) -> Connected {
-            if self.inner.inner().get_ref().1.alpn_protocol() == Some(b"h2") {
+            if rustls_is_h2(self.inner.inner().get_ref().1) {
                 self.inner
                     .inner()
                     .get_ref()
@@ -1695,7 +1680,7 @@ mod rustls_tls_conn {
     #[cfg(unix)]
     impl Connection for RustlsTlsConn<TokioIo<TokioIo<tokio::net::UnixStream>>> {
         fn connected(&self) -> Connected {
-            if self.inner.inner().get_ref().1.alpn_protocol() == Some(b"h2") {
+            if rustls_is_h2(self.inner.inner().get_ref().1) {
                 self.inner
                     .inner()
                     .get_ref()
@@ -1712,7 +1697,7 @@ mod rustls_tls_conn {
     #[cfg(unix)]
     impl Connection for RustlsTlsConn<TokioIo<MaybeHttpsStream<TokioIo<tokio::net::UnixStream>>>> {
         fn connected(&self) -> Connected {
-            if self.inner.inner().get_ref().1.alpn_protocol() == Some(b"h2") {
+            if rustls_is_h2(self.inner.inner().get_ref().1) {
                 self.inner
                     .inner()
                     .get_ref()
@@ -1731,7 +1716,7 @@ mod rustls_tls_conn {
         for RustlsTlsConn<TokioIo<TokioIo<tokio::net::windows::named_pipe::NamedPipeClient>>>
     {
         fn connected(&self) -> Connected {
-            if self.inner.inner().get_ref().1.alpn_protocol() == Some(b"h2") {
+            if rustls_is_h2(self.inner.inner().get_ref().1) {
                 self.inner
                     .inner()
                     .get_ref()
@@ -1752,7 +1737,7 @@ mod rustls_tls_conn {
         >
     {
         fn connected(&self) -> Connected {
-            if self.inner.inner().get_ref().1.alpn_protocol() == Some(b"h2") {
+            if rustls_is_h2(self.inner.inner().get_ref().1) {
                 self.inner
                     .inner()
                     .get_ref()

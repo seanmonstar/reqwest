@@ -342,7 +342,7 @@ fn install_default_crypto_provider() -> bool {
         .expect("failed to install the default Ring TLS provider");
 
     #[cfg(feature = "__rustls-aws-lc-rs")]
-    rustls::crypto::aws_lc_rs::default_provider()
+    rustls_aws_lc_rs::DEFAULT_PROVIDER
         .install_default()
         .expect("failed to install the default TLS provider");
 

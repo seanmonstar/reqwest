@@ -87,8 +87,8 @@ http3 = ["rustls", "dep:h3", "dep:h3-quinn", "dep:quinn", "tokio/macros"]
 __tls = ["dep:rustls-pki-types", "tokio/io-util"]
 
 # Enables common rustls code.
-__rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "__tls"]
-__rustls-aws-lc-rs = ["hyper-rustls?/aws-lc-rs", "tokio-rustls?/aws-lc-rs", "rustls?/aws-lc-rs", "quinn?/rustls-aws-lc-rs"]
+__rustls = ["dep:hyper-rustls", "dep:tokio-rustls", "dep:rustls", "dep:rustls-util", "__tls"]
+__rustls-aws-lc-rs = ["hyper-rustls?/aws-lc-rs", "tokio-rustls?/aws-lc-rs", "dep:rustls-aws-lc-rs", "quinn?/rustls-aws-lc-rs"]
 
 # Enables common native-tls code.
 __native-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-native-tls"]
@@ -138,10 +138,12 @@ native-tls-crate = { version = "0.2.16", optional = true, package = "native-tls"
 tokio-native-tls = { version = "0.3.0", optional = true }
 
 # default rustls
-hyper-rustls = { version = "0.27.0", default-features = false, optional = true, features = ["http1", "tls12"] }
-rustls = { version = "0.23.4", optional = true, default-features = false, features = ["std", "tls12"] }
-tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["tls12"] }
-rustls-platform-verifier = { version = ">=0.6.0, <0.8.0", optional = true }
+hyper-rustls = { git = "https://github.com/rustls/hyper-rustls.git", rev = "836e95c4d3b111973ce0e718b8e0035a97658d01", version = "0.27.10", default-features = false, optional = true, features = ["http1", "tls12"] }
+rustls = { git = "https://github.com/rustls/rustls.git", branch = "main", version = "0.24.0-dev.0", optional = true, default-features = false, features = ["log", "webpki"] }
+tokio-rustls = { git = "https://github.com/rustls/tokio-rustls.git", rev = "be34e90bfe59f124363d725ceb739a435bfafa1e", version = "0.26.4", optional = true, default-features = false, features = ["tls12"] }
+rustls-platform-verifier = { git = "https://github.com/rustls/rustls-platform-verifier.git", rev = "733494d8ade721f249dc1b4e93196adf409ae8c0", version = "0.7", optional = true }
+rustls-aws-lc-rs = { git = "https://github.com/rustls/rustls.git", branch = "main", version = "0.1.0-dev.0", default-features = false, features = ["aws-lc-sys", "std"], optional = true }
+rustls-util = { git = "https://github.com/rustls/rustls.git", branch = "main", version = "0.1.0", optional = true }
 
 ## cookies
 cookie_crate = { version = "0.18.0", package = "cookie", optional = true }

@@ -692,7 +692,7 @@ impl ClientBuilder {
 
                     if let Some(min_tls_version) = config.min_tls_version {
                         versions.retain(|&supported_version| {
-                            match tls::Version::from_rustls(supported_version.version) {
+                            match tls::Version::from_rustls(supported_version.version()) {
                                 Some(version) => version >= min_tls_version,
                                 // Assume it's so new we don't know about it, allow it
                                 // (as of writing this is unreachable)
@@ -703,7 +703,7 @@ impl ClientBuilder {
 
                     if let Some(max_tls_version) = config.max_tls_version {
                         versions.retain(|&supported_version| {
-                            match tls::Version::from_rustls(supported_version.version) {
+                            match tls::Version::from_rustls(supported_version.version()) {
                                 Some(version) => version <= max_tls_version,
                                 None => false,
                             }
@@ -716,16 +716,26 @@ impl ClientBuilder {
 
                     // Allow user to have installed a runtime default.
                     // If not, we ship with _our_ recommended default.
-                    let provider = rustls::crypto::CryptoProvider::get_default()
-                        .map(|arc| arc.clone())
-                        .unwrap_or_else(default_rustls_crypto_provider);
+                    let mut provider = rustls::crypto::CryptoProvider::get_default()
+                        .map(|arc| arc.as_ref().clone())
+                        .unwrap_or_else(|| default_rustls_crypto_provider().as_ref().clone());
+                    if !versions
+                        .iter()
+                        .any(|version| version.version() == rustls::enums::ProtocolVersion::TLSv1_2)
+                    {
+                        provider.tls12_cipher_suites = std::borrow::Cow::Borrowed(&[]);
+                    }
+                    if !versions
+                        .iter()
+                        .any(|version| version.version() == rustls::enums::ProtocolVersion::TLSv1_3)
+                    {
+                        provider.tls13_cipher_suites = std::borrow::Cow::Borrowed(&[]);
+                    }
+                    let provider = Arc::new(provider);
 
                     // Build TLS config
                     let signature_algorithms = provider.signature_verification_algorithms;
-                    let config_builder =
-                        rustls::ClientConfig::builder_with_provider(provider.clone())
-                            .with_protocol_versions(&versions)
-                            .map_err(|_| crate::error::builder("invalid TLS versions"))?;
+                    let config_builder = rustls::ClientConfig::builder(provider.clone());
 
                     let config_builder = if !config.certs_verification {
                         config_builder
@@ -739,11 +749,22 @@ impl ClientBuilder {
                             ));
                         }
 
+                        let roots = crate::tls::rustls_store(config.root_certs)?;
+                        let signature_verifier =
+                            rustls::client::WebPkiServerVerifier::builder(
+                                Arc::new(roots.clone()),
+                                provider.as_ref(),
+                            )
+                            .build()
+                            .map_err(|_| {
+                                crate::error::builder("invalid TLS verification settings")
+                            })?;
                         config_builder
                             .dangerous()
                             .with_custom_certificate_verifier(Arc::new(IgnoreHostname::new(
-                                crate::tls::rustls_store(config.root_certs)?,
+                                roots,
                                 signature_algorithms,
+                                Arc::new(signature_verifier),
                             )))
                     } else if !config.tls_certs_only {
                         // Check for some misconfigurations and report them.
@@ -793,16 +814,16 @@ impl ClientBuilder {
                                 .map(|e| e.as_rustls_crl())
                                 .collect::<Vec<_>>();
                             let verifier =
-                                rustls::client::WebPkiServerVerifier::builder_with_provider(
+                                rustls::client::WebPkiServerVerifier::builder(
                                     Arc::new(crate::tls::rustls_store(config.root_certs)?),
-                                    provider,
+                                    provider.as_ref(),
                                 )
                                 .with_crls(crls)
                                 .build()
                                 .map_err(|_| {
                                     crate::error::builder("invalid TLS verification settings")
                                 })?;
-                            config_builder.with_webpki_verifier(verifier)
+                            config_builder.with_webpki_verifier(verifier.into())
                         }
                     };
 
@@ -810,23 +831,25 @@ impl ClientBuilder {
                     let mut tls = if let Some(id) = config.identity {
                         id.add_to_rustls(config_builder)?
                     } else {
-                        config_builder.with_no_client_auth()
+                        config_builder
+                            .with_no_client_auth()
+                            .map_err(crate::error::builder)?
                     };
 
                     tls.enable_sni = config.tls_sni;
 
                     if config.tls_sslkeylogfile {
-                        tls.key_log = Arc::new(rustls::KeyLogFile::new());
+                        tls.key_log = Arc::new(rustls_util::KeyLogFile::new());
                     }
 
                     // ALPN protocol
                     match config.http_version_pref {
                         HttpVersionPref::Http1 => {
-                            tls.alpn_protocols = vec!["http/1.1".into()];
+                            tls.alpn_protocols = vec![b"http/1.1".into()];
                         }
                         #[cfg(feature = "http2")]
                         HttpVersionPref::Http2 => {
-                            tls.alpn_protocols = vec!["h2".into()];
+                            tls.alpn_protocols = vec![b"h2".into()];
                         }
                         #[cfg(feature = "http3")]
                         HttpVersionPref::Http3 => {
@@ -835,8 +858,8 @@ impl ClientBuilder {
                         HttpVersionPref::All => {
                             tls.alpn_protocols = vec![
                                 #[cfg(feature = "http2")]
-                                "h2".into(),
-                                "http/1.1".into(),
+                                b"h2".into(),
+                                b"http/1.1".into(),
                             ];
                         }
                     }
@@ -2485,12 +2508,12 @@ fn default_rustls_crypto_provider() -> Arc<rustls::crypto::CryptoProvider> {
         "No rustls crypto provider is configured. \
         When using the `rustls-no-provider` feature you must install a \
         crypto provider before building a Client. For example: \
-        `rustls::crypto::aws_lc_rs::default_provider().install_default().unwrap();` \
+        `rustls_aws_lc_rs::DEFAULT_PROVIDER.install_default().unwrap();` \
         See https://docs.rs/rustls/latest/rustls/#cryptography-providers for details."
     );
 
     #[cfg(feature = "__rustls-aws-lc-rs")]
-    Arc::new(rustls::crypto::aws_lc_rs::default_provider())
+    Arc::new(rustls_aws_lc_rs::DEFAULT_PROVIDER)
 }
 
 impl Client {

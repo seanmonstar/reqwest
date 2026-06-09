@@ -54,7 +54,7 @@
 //! [`CryptoProvider::install_default`][]:
 //!
 //! ```rust,ignore
-//! rustls::crypto::ring::default_provider()
+//! rustls_ring::DEFAULT_PROVIDER
 //!     .install_default()
 //!     .expect("Failed to install rustls crypto provider");
 //!
@@ -67,16 +67,20 @@
 
 #[cfg(feature = "__rustls")]
 use rustls::{
-    client::danger::HandshakeSignatureValid, client::danger::ServerCertVerified,
-    client::danger::ServerCertVerifier, crypto::WebPkiSupportedAlgorithms,
-    server::ParsedCertificate, DigitallySignedStruct, Error as TLSError, RootCertStore,
-    SignatureScheme,
+    client::danger::{
+        HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
+        SignatureVerificationInput,
+    },
+    crypto::{Identity as RustlsIdentity, SignatureScheme, WebPkiSupportedAlgorithms},
+    enums::ProtocolVersion,
+    error::ApiMisuse,
+    server::ParsedCertificate,
+    Error as TLSError, RootCertStore,
 };
 use rustls_pki_types::pem::PemObject;
-#[cfg(feature = "__rustls")]
-use rustls_pki_types::{ServerName, UnixTime};
 use std::{
     fmt,
+    hash::Hasher,
     io::{BufRead, BufReader},
 };
 
@@ -438,9 +442,14 @@ impl Identity {
         >,
     ) -> crate::Result<rustls::ClientConfig> {
         match self.inner {
-            ClientCert::Pem { key, certs } => config_builder
-                .with_client_auth_cert(certs, key)
-                .map_err(crate::error::builder),
+            ClientCert::Pem { key, certs } => {
+                let identity = RustlsIdentity::from_cert_chain(certs)
+                    .map(std::sync::Arc::new)
+                    .map_err(crate::error::builder)?;
+                config_builder
+                    .with_client_auth_cert(identity, key)
+                    .map_err(crate::error::builder)
+            }
             #[cfg(feature = "__native-tls")]
             ClientCert::Pkcs12(..) | ClientCert::Pkcs8(..) => {
                 Err(crate::error::builder("incompatible TLS identity type"))
@@ -572,14 +581,14 @@ impl Version {
     }
 
     #[cfg(feature = "__rustls")]
-    pub(crate) fn from_rustls(version: rustls::ProtocolVersion) -> Option<Self> {
+    pub(crate) fn from_rustls(version: ProtocolVersion) -> Option<Self> {
         match version {
-            rustls::ProtocolVersion::SSLv2 => None,
-            rustls::ProtocolVersion::SSLv3 => None,
-            rustls::ProtocolVersion::TLSv1_0 => Some(Self(InnerVersion::Tls1_0)),
-            rustls::ProtocolVersion::TLSv1_1 => Some(Self(InnerVersion::Tls1_1)),
-            rustls::ProtocolVersion::TLSv1_2 => Some(Self(InnerVersion::Tls1_2)),
-            rustls::ProtocolVersion::TLSv1_3 => Some(Self(InnerVersion::Tls1_3)),
+            ProtocolVersion::SSLv2 => None,
+            ProtocolVersion::SSLv3 => None,
+            ProtocolVersion::TLSv1_0 => Some(Self(InnerVersion::Tls1_0)),
+            ProtocolVersion::TLSv1_1 => Some(Self(InnerVersion::Tls1_1)),
+            ProtocolVersion::TLSv1_2 => Some(Self(InnerVersion::Tls1_2)),
+            ProtocolVersion::TLSv1_3 => Some(Self(InnerVersion::Tls1_3)),
             _ => None,
         }
     }
@@ -670,32 +679,24 @@ pub(crate) fn rustls_der(
 pub(crate) struct NoVerifier;
 
 #[cfg(feature = "__rustls")]
-impl ServerCertVerifier for NoVerifier {
-    fn verify_server_cert(
+impl ServerVerifier for NoVerifier {
+    fn verify_identity(
         &self,
-        _end_entity: &rustls_pki_types::CertificateDer,
-        _intermediates: &[rustls_pki_types::CertificateDer],
-        _server_name: &ServerName,
-        _ocsp_response: &[u8],
-        _now: UnixTime,
-    ) -> Result<ServerCertVerified, TLSError> {
-        Ok(ServerCertVerified::assertion())
+        _identity: &ServerIdentity<'_>,
+    ) -> Result<PeerVerified, TLSError> {
+        Ok(PeerVerified::assertion())
     }
 
     fn verify_tls12_signature(
         &self,
-        _message: &[u8],
-        _cert: &rustls_pki_types::CertificateDer,
-        _dss: &DigitallySignedStruct,
+        _input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, TLSError> {
         Ok(HandshakeSignatureValid::assertion())
     }
 
     fn verify_tls13_signature(
         &self,
-        _message: &[u8],
-        _cert: &rustls_pki_types::CertificateDer,
-        _dss: &DigitallySignedStruct,
+        _input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, TLSError> {
         Ok(HandshakeSignatureValid::assertion())
     }
@@ -717,6 +718,14 @@ impl ServerCertVerifier for NoVerifier {
             SignatureScheme::ED448,
         ]
     }
+
+    fn request_ocsp_response(&self) -> bool {
+        false
+    }
+
+    fn hash_config(&self, h: &mut dyn Hasher) {
+        h.write(b"reqwest-no-verifier");
+    }
 }
 
 #[cfg(feature = "__rustls")]
@@ -724,6 +733,7 @@ impl ServerCertVerifier for NoVerifier {
 pub(crate) struct IgnoreHostname {
     roots: RootCertStore,
     signature_algorithms: WebPkiSupportedAlgorithms,
+    signature_verifier: std::sync::Arc<rustls::client::WebPkiServerVerifier>,
 }
 
 #[cfg(feature = "__rustls")]
@@ -731,56 +741,75 @@ impl IgnoreHostname {
     pub(crate) fn new(
         roots: RootCertStore,
         signature_algorithms: WebPkiSupportedAlgorithms,
+        signature_verifier: std::sync::Arc<rustls::client::WebPkiServerVerifier>,
     ) -> Self {
         Self {
             roots,
             signature_algorithms,
+            signature_verifier,
         }
     }
 }
 
 #[cfg(feature = "__rustls")]
-impl ServerCertVerifier for IgnoreHostname {
-    fn verify_server_cert(
+impl ServerVerifier for IgnoreHostname {
+    fn verify_identity(
         &self,
-        end_entity: &rustls_pki_types::CertificateDer<'_>,
-        intermediates: &[rustls_pki_types::CertificateDer<'_>],
-        _server_name: &ServerName<'_>,
-        _ocsp_response: &[u8],
-        now: UnixTime,
-    ) -> Result<ServerCertVerified, TLSError> {
-        let cert = ParsedCertificate::try_from(end_entity)?;
+        identity: &ServerIdentity<'_>,
+    ) -> Result<PeerVerified, TLSError> {
+        let RustlsIdentity::X509(certificates) = identity.identity else {
+            return Err(ApiMisuse::UnverifiableCertificateType.into());
+        };
 
-        rustls::client::verify_server_cert_signed_by_trust_anchor(
+        let cert = ParsedCertificate::try_from(&certificates.end_entity)?;
+        let supported_algs: Vec<_> = self
+            .signature_algorithms
+            .mapping()
+            .iter()
+            .flat_map(|(_, algs)| algs.iter().copied())
+            .collect();
+
+        rustls::client::verify_identity_signed_by_trust_anchor(
             &cert,
             &self.roots,
-            intermediates,
-            now,
-            self.signature_algorithms.all,
+            &certificates.intermediates,
+            identity.now,
+            &supported_algs,
         )?;
-        Ok(ServerCertVerified::assertion())
+        Ok(PeerVerified::assertion())
     }
 
     fn verify_tls12_signature(
         &self,
-        message: &[u8],
-        cert: &rustls_pki_types::CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, TLSError> {
-        rustls::crypto::verify_tls12_signature(message, cert, dss, &self.signature_algorithms)
+        self.signature_verifier.verify_tls12_signature(input)
     }
 
     fn verify_tls13_signature(
         &self,
-        message: &[u8],
-        cert: &rustls_pki_types::CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, TLSError> {
-        rustls::crypto::verify_tls13_signature(message, cert, dss, &self.signature_algorithms)
+        self.signature_verifier.verify_tls13_signature(input)
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.signature_algorithms.supported_schemes()
+    }
+
+    fn request_ocsp_response(&self) -> bool {
+        false
+    }
+
+    fn hash_config(&self, h: &mut dyn Hasher) {
+        h.write(b"reqwest-ignore-hostname");
+        for root in &self.roots.roots {
+            h.write(root.subject.as_ref());
+            h.write(root.subject_public_key_info.as_ref());
+            if let Some(name_constraints) = &root.name_constraints {
+                h.write(name_constraints.as_ref());
+            }
+        }
     }
 }
 
