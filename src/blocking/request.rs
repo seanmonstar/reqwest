@@ -115,6 +115,18 @@ impl Request {
         self.inner.timeout_mut()
     }
 
+    /// Get the connect timeout.
+    #[inline]
+    pub fn connect_timeout(&self) -> Option<&Duration> {
+        self.inner.connect_timeout()
+    }
+
+    /// Get a mutable reference to the connect timeout.
+    #[inline]
+    pub fn connect_timeout_mut(&mut self) -> &mut Option<Duration> {
+        self.inner.connect_timeout_mut()
+    }
+
     /// Attempts to clone the `Request`.
     ///
     /// None is returned if a body is which can not be cloned. This can be because the body is a
@@ -131,6 +143,7 @@ impl Request {
         };
         let mut req = Request::new(self.method().clone(), self.url().clone());
         *req.timeout_mut() = self.timeout().copied();
+        *req.connect_timeout_mut() = self.connect_timeout().copied();
         *req.headers_mut() = self.headers().clone();
         *req.version_mut() = self.version().clone();
         req.body = body;
@@ -362,6 +375,17 @@ impl RequestBuilder {
     pub fn timeout(mut self, timeout: Duration) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             *req.timeout_mut() = Some(timeout);
+        }
+        self
+    }
+
+    /// Set a timeout for only the connect phase of this request.
+    ///
+    /// This affects only this request and overrides the timeout configured
+    /// using `ClientBuilder::connect_timeout()`.
+    pub fn connect_timeout(mut self, timeout: Duration) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *req.connect_timeout_mut() = Some(timeout);
         }
         self
     }

@@ -16,7 +16,7 @@ use super::Body;
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::H3Client;
-use crate::config::{RequestConfig, TotalTimeout};
+use crate::config::{ConnectTimeout, RequestConfig, TotalTimeout};
 #[cfg(unix)]
 use crate::connect::uds::UnixSocketProvider;
 #[cfg(target_os = "windows")]
@@ -447,9 +447,7 @@ impl ClientBuilder {
                 headers.get(USER_AGENT).cloned()
             }
 
-            let mut http = HttpConnector::new_with_resolver(resolver.clone());
-            http.set_connect_timeout(config.connect_timeout);
-
+            let http = HttpConnector::new_with_resolver(resolver.clone());
             #[cfg(all(feature = "http3", feature = "__rustls"))]
             let build_h3_connector =
                 |resolver,
@@ -1093,6 +1091,7 @@ impl ClientBuilder {
                 referer: config.referer,
                 read_timeout: config.read_timeout,
                 total_timeout: RequestConfig::new(config.timeout),
+                connect_timeout: RequestConfig::new(config.connect_timeout),
                 hyper,
                 proxies,
                 proxies_maybe_http_auth,
@@ -2634,21 +2633,29 @@ impl Client {
             .uri(uri)
             .version(version);
 
-        let in_flight = match version {
-            #[cfg(feature = "http3")]
-            http::Version::HTTP_3 if self.inner.h3_client.is_some() => {
-                let mut req = builder.body(body).expect("valid request parts");
-                *req.headers_mut() = headers.clone();
-                let mut h3 = self.inner.h3_client.as_ref().unwrap().clone();
-                ResponseFuture::H3(h3.call(req))
+        let connect_timeout = self
+            .inner
+            .connect_timeout
+            .fetch(&extensions)
+            .copied();
+
+        let in_flight = crate::connect::with_request_connect_timeout(connect_timeout, || {
+            match version {
+                #[cfg(feature = "http3")]
+                http::Version::HTTP_3 if self.inner.h3_client.is_some() => {
+                    let mut req = builder.body(body).expect("valid request parts");
+                    *req.headers_mut() = headers.clone();
+                    let mut h3 = self.inner.h3_client.as_ref().unwrap().clone();
+                    ResponseFuture::H3(h3.call(req))
+                }
+                _ => {
+                    let mut req = builder.body(body).expect("valid request parts");
+                    *req.headers_mut() = headers.clone();
+                    let mut hyper = self.inner.hyper.clone();
+                    ResponseFuture::Default(hyper.call(req))
+                }
             }
-            _ => {
-                let mut req = builder.body(body).expect("valid request parts");
-                *req.headers_mut() = headers.clone();
-                let mut hyper = self.inner.hyper.clone();
-                ResponseFuture::Default(hyper.call(req))
-            }
-        };
+        });
 
         let total_timeout = self
             .inner
@@ -2673,6 +2680,7 @@ impl Client {
                 client: self.inner.clone(),
 
                 in_flight,
+                connect_timeout,
                 total_timeout,
                 read_timeout_fut,
                 read_timeout: self.inner.read_timeout,
@@ -2947,6 +2955,7 @@ struct ClientRef {
     h3_client: Option<LayeredService<H3Client>>,
     referer: bool,
     total_timeout: RequestConfig<TotalTimeout>,
+    connect_timeout: RequestConfig<ConnectTimeout>,
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<ProxyMatcher>>,
     proxies_maybe_http_auth: bool,
@@ -2984,6 +2993,7 @@ impl ClientRef {
         f.field("default_headers", &self.headers);
 
         self.total_timeout.fmt_as_field(f);
+        self.connect_timeout.fmt_as_field(f);
 
         if let Some(ref d) = self.read_timeout {
             f.field("read_timeout", d);
@@ -3013,6 +3023,7 @@ pin_project! {
 
         #[pin]
         in_flight: ResponseFuture,
+        connect_timeout: Option<Duration>,
         #[pin]
         total_timeout: Option<Pin<Box<Sleep>>>,
         #[pin]
@@ -3087,15 +3098,24 @@ impl Future for PendingRequest {
             }
         }
 
+        let connect_timeout = self.connect_timeout;
         let res = match self.as_mut().in_flight().get_mut() {
-            ResponseFuture::Default(r) => match ready!(Pin::new(r).poll(cx)) {
+            ResponseFuture::Default(r) => match ready!(
+                crate::connect::with_request_connect_timeout(connect_timeout, || {
+                    Pin::new(r).poll(cx)
+                })
+            ) {
                 Err(e) => {
                     return Poll::Ready(Err(e.if_no_url(|| self.url.clone())));
                 }
                 Ok(res) => res.map(super::body::boxed),
             },
             #[cfg(feature = "http3")]
-            ResponseFuture::H3(r) => match ready!(Pin::new(r).poll(cx)) {
+            ResponseFuture::H3(r) => match ready!(
+                crate::connect::with_request_connect_timeout(connect_timeout, || {
+                    Pin::new(r).poll(cx)
+                })
+            ) {
                 Err(e) => {
                     return Poll::Ready(Err(crate::error::request(e).with_url(self.url.clone())));
                 }
