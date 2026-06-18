@@ -1,3 +1,7 @@
+## Unreleased
+
+- Add `Error::is_dns()` to identify errors caused by DNS resolution failures.
+
 ## v0.13.4
 
 - Add `ClientBuilder::tls_sslkeylogfile(bool)` option to allow using the related environment variable.
