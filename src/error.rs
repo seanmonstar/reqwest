@@ -442,7 +442,7 @@ pub(crate) struct DnsError {
 
 impl fmt::Display for DnsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.inner, f)
+        f.write_str("error resolving DNS")
     }
 }
 
