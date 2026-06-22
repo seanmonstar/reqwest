@@ -492,6 +492,33 @@ async fn test_tls_info() {
     assert!(tls_info.is_none());
 }
 
+#[cfg(all(feature = "__rustls", not(feature = "rustls-no-provider")))]
+#[tokio::test]
+async fn test_tls_info_exporter() {
+    let resp = reqwest::Client::builder()
+        .tls_info(true)
+        // Pin rustls: the channel binding is rustls-only, and native-tls would
+        // otherwise take over as the active backend when both are enabled.
+        .tls_backend_rustls()
+        .build()
+        .expect("client builder")
+        .get("https://google.com")
+        .send()
+        .await
+        .expect("response");
+    let tls_info = resp
+        .extensions()
+        .get::<reqwest::tls::TlsInfo>()
+        .expect("tls info");
+    // The rustls backend exposes the RFC 9266 tls-exporter channel binding.
+    let exporter = tls_info.tls_exporter_channel_binding();
+    assert!(
+        exporter.is_some(),
+        "rustls should expose the tls-exporter channel binding"
+    );
+    assert_eq!(exporter.unwrap().len(), 32);
+}
+
 #[tokio::test]
 async fn close_connection_after_idle_timeout() {
     let mut server = server::http(move |_| async move { http::Response::default() });
