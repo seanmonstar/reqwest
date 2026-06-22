@@ -512,6 +512,7 @@ mod tests {
         assert!(nested.is_timeout());
     }
 
+    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
     #[test]
     fn is_dns() {
         let err = super::request(DnsError { inner: "".into() });
