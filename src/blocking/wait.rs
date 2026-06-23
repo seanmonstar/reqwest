@@ -12,9 +12,17 @@ where
 {
     enter();
 
-    let deadline = timeout.map(|d| {
+    let deadline = timeout.and_then(|d| {
         log::trace!("wait at most {d:?}");
-        Instant::now() + d
+
+        let deadline = Instant::now().checked_add(d);
+
+        if deadline.is_none() {
+            log::warn!("timeout {d:?} overflows system clock, disabling timeout");
+        }
+
+        // Overflow means the deadline is effectively infinite, so None (no timeout) is correct.
+        deadline
     });
 
     let thread = ThreadWaker(thread::current());
