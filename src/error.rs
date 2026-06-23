@@ -166,6 +166,22 @@ impl Error {
         false
     }
 
+    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+    /// Returns true if the error is related to DNS resolution.
+    pub fn is_dns(&self) -> bool {
+        let mut source = self.source();
+
+        while let Some(err) = source {
+            if err.is::<DnsError>() {
+                return true;
+            }
+
+            source = err.source();
+        }
+
+        false
+    }
+
     /// Returns true if the error is related to the request or response body
     pub fn is_body(&self) -> bool {
         matches!(self.inner.kind, Kind::Body)
@@ -336,6 +352,10 @@ pub(crate) fn request<E: Into<BoxError>>(e: E) -> Error {
     Error::new(Kind::Request, Some(e))
 }
 
+pub(crate) fn dns<E: Into<BoxError>>(e: E) -> BoxError {
+    Box::new(DnsError { inner: e.into() })
+}
+
 pub(crate) fn redirect<E: Into<BoxError>>(e: E, url: Url) -> Error {
     Error::new(Kind::Redirect, Some(e)).with_url(url)
 }
@@ -415,6 +435,23 @@ impl fmt::Display for BadScheme {
 
 impl StdError for BadScheme {}
 
+#[derive(Debug)]
+pub(crate) struct DnsError {
+    pub(crate) inner: BoxError,
+}
+
+impl fmt::Display for DnsError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("error resolving DNS")
+    }
+}
+
+impl StdError for DnsError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        Some(&*self.inner as _)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -473,5 +510,12 @@ mod tests {
         let io = io::Error::from(io::ErrorKind::TimedOut);
         let nested = super::request(io);
         assert!(nested.is_timeout());
+    }
+
+    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+    #[test]
+    fn is_dns() {
+        let err = super::request(DnsError { inner: "".into() });
+        assert!(err.is_dns());
     }
 }

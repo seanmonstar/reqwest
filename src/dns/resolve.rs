@@ -97,7 +97,11 @@ impl DynResolver {
 
         let explicit_port = target.port().is_some();
 
-        let addrs = self.resolver.resolve(host.parse()?).await?;
+        let addrs = self
+            .resolver
+            .resolve(host.parse()?)
+            .await
+            .map_err(crate::error::dns)?;
 
         Ok(addrs.map(move |mut addr| {
             if explicit_port || addr.port() == 0 {
@@ -118,7 +122,9 @@ impl Service<HyperName> for DynResolver {
     }
 
     fn call(&mut self, name: HyperName) -> Self::Future {
-        self.resolver.resolve(Name(name))
+        let resolving = self.resolver.resolve(Name(name));
+        // Tag resolution failures so `Error::is_dns` can recognize them once
+        Box::pin(async move { resolving.await.map_err(crate::error::dns) })
     }
 }
 

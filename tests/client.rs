@@ -207,6 +207,35 @@ async fn body_pipe_response() {
     assert_eq!(res2.status(), reqwest::StatusCode::OK);
 }
 
+struct FailingResolver;
+
+impl reqwest::dns::Resolve for FailingResolver {
+    fn resolve(&self, _name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        Box::pin(async { Err("simulated resolver failure".into()) })
+    }
+}
+
+#[tokio::test]
+async fn dns_resolution_failure_is_dns_error() {
+    let _ = env_logger::builder().is_test(true).try_init();
+
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .dns_resolver(std::sync::Arc::new(FailingResolver))
+        .build()
+        .expect("client builder");
+
+    let err = client
+        .get("http://does.not.resolve.invalid/")
+        .send()
+        .await
+        .expect_err("request should fail during resolution");
+
+    assert!(err.is_dns(), "expected a DNS error, got: {err:?}");
+    // DNS errors are a refinement of connect errors.
+    assert!(err.is_connect(), "expected is_connect() to also be true");
+}
+
 #[tokio::test]
 async fn overridden_dns_resolution_with_gai() {
     let _ = env_logger::builder().is_test(true).try_init();
