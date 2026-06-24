@@ -193,3 +193,66 @@ impl fmt::Debug for Response {
             .finish()
     }
 }
+
+impl<T: Into<crate::wasm::Body>> From<http::Response<T>> for Response {
+    fn from(r: http::Response<T>) -> Response {
+        use crate::response::ResponseUrl;
+
+        let (mut parts, body) = r.into_parts();
+        let body = body.into();
+        let body = body
+            .as_bytes()
+            .expect("wasm response conversion requires a byte-backed body");
+        let mut body = body.to_vec();
+
+        let web_response = if body.is_empty() {
+            web_sys::Response::new().expect("failed to construct a wasm Response")
+        } else {
+            web_sys::Response::new_with_opt_u8_array(Some(&mut body))
+                .expect("failed to construct a wasm Response")
+        };
+
+        let url = parts
+            .extensions
+            .remove::<ResponseUrl>()
+            .unwrap_or_else(|| ResponseUrl(Url::parse("http://no.url.provided.local").unwrap()))
+            .0;
+        let http = http::Response::from_parts(parts, web_response);
+        let abort = AbortGuard::new().expect("failed to construct an abort controller");
+
+        Response {
+            http,
+            _abort: abort,
+            url: Box::new(url),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Response;
+    use crate::ResponseBuilderExt;
+    use http::header::CONTENT_TYPE;
+    use url::Url;
+    use wasm_bindgen_test::*;
+
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
+    async fn from_http_response_preserves_response_parts() {
+        let url = Url::parse("https://example.com/cached").unwrap();
+        let response = http::Response::builder()
+            .status(201)
+            .header(CONTENT_TYPE, "text/plain")
+            .url(url.clone())
+            .body("cached response")
+            .unwrap();
+
+        let response = Response::from(response);
+
+        assert_eq!(response.status(), 201);
+        assert_eq!("text/plain", response.headers().get(CONTENT_TYPE).unwrap());
+        assert_eq!(response.url(), &url);
+        assert_eq!(response.text().await.unwrap(), "cached response");
+    }
+}
