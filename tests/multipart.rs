@@ -234,3 +234,49 @@ async fn async_impl_file_part() {
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
+
+/// Customize form part boundary
+#[tokio::test]
+async fn set_boundary() {
+    let _ = env_logger::try_init();
+    let mut form = reqwest::multipart::Form::new().text("foo", "bar");
+    form.set_boundary("BOUNDARY");
+
+    let expected_body = "\
+        --BOUNDARY\r\n\
+        Content-Disposition: form-data; name=\"foo\"\r\n\r\n\
+        bar\r\n\
+        --BOUNDARY--\r\n\
+    ";
+    let ct = "multipart/form-data; boundary=BOUNDARY";
+
+    let server = server::http(move |mut req| async move {
+        assert_eq!(req.method(), "POST");
+        assert_eq!(req.headers()["content-type"], ct);
+        assert_eq!(
+            req.headers()["content-length"],
+            expected_body.len().to_string()
+        );
+
+        let mut full: Vec<u8> = Vec::new();
+        while let Some(item) = req.body_mut().frame().await {
+            full.extend(&*item.unwrap().into_data().unwrap());
+        }
+
+        assert_eq!(full, expected_body.as_bytes());
+
+        http::Response::default()
+    });
+
+    let url = format!("http://{}/multipart/1", server.addr());
+
+    let res = reqwest::Client::new()
+        .post(&url)
+        .multipart(form)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.url().as_str(), &url);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
