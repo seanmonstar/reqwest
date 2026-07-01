@@ -64,6 +64,6 @@ fn new_resolver() -> Result<TokioResolver, NetError> {
             TokioRuntimeProvider::default(),
         )
     });
-    builder.options_mut().ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+    builder.options_mut().ip_strategy = LookupIpStrategy::Ipv6AndIpv4;
     builder.build()
 }
