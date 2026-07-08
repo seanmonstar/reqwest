@@ -465,6 +465,16 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.http1_allow_spaces_after_header_name_in_responses(value))
     }
 
+    /// Set the maximum number of headers accepted in an HTTP/1 response.
+    ///
+    /// When a response contains more headers than this value, it is rejected
+    /// with a parse error and the request fails.
+    ///
+    /// Default is 100.
+    pub fn http1_max_headers(self, max: usize) -> ClientBuilder {
+        self.with_inner(|inner| inner.http1_max_headers(max))
+    }
+
     /// Only use HTTP/1.
     pub fn http1_only(self) -> ClientBuilder {
         self.with_inner(|inner| inner.http1_only())

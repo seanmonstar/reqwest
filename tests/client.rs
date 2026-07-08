@@ -576,3 +576,38 @@ async fn error_has_url() {
     let err = reqwest::get(u).await.unwrap_err();
     assert_eq!(err.url().map(AsRef::as_ref), Some(u), "{err:?}");
 }
+
+#[tokio::test]
+async fn http1_max_headers() {
+    // The server responds with 150 headers, well over hyper's default limit of 100.
+    let server = server::http(move |_req| async move {
+        let mut builder = http::Response::builder();
+        for i in 0..150 {
+            builder = builder.header(format!("x-custom-{i}"), "value");
+        }
+        builder.body("Hello".into()).unwrap()
+    });
+
+    let url = format!("http://{}/", server.addr());
+
+    // The default client uses hyper's 100-header limit and rejects the response.
+    reqwest::Client::new()
+        .get(&url)
+        .send()
+        .await
+        .expect_err("the default 100-header limit should reject a 150-header response");
+
+    // Raising the limit lets the same response through.
+    let res = reqwest::Client::builder()
+        .http1_max_headers(300)
+        .build()
+        .unwrap()
+        .get(&url)
+        .send()
+        .await
+        .expect("a raised http1_max_headers should accept the response");
+
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    assert_eq!(res.headers()["x-custom-0"], "value");
+    assert_eq!(res.headers()["x-custom-149"], "value");
+}

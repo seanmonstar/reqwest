@@ -1,6 +1,7 @@
 ## Unreleased
 
 - Add `Error::is_dns()` to identify errors caused by DNS resolution failures.
+- Add `ClientBuilder::http1_max_headers(usize)` to configure the maximum number of headers accepted in an HTTP/1 response (default 100).
 
 ## v0.13.4
 

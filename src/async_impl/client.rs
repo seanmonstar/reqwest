@@ -208,6 +208,7 @@ struct Config {
     http1_allow_obsolete_multiline_headers_in_responses: bool,
     http1_ignore_invalid_headers_in_responses: bool,
     http1_allow_spaces_after_header_name_in_responses: bool,
+    http1_max_headers: Option<usize>,
     #[cfg(feature = "http2")]
     http2_initial_stream_window_size: Option<u32>,
     #[cfg(feature = "http2")]
@@ -335,6 +336,7 @@ impl ClientBuilder {
                 http1_allow_obsolete_multiline_headers_in_responses: false,
                 http1_ignore_invalid_headers_in_responses: false,
                 http1_allow_spaces_after_header_name_in_responses: false,
+                http1_max_headers: None,
                 #[cfg(feature = "http2")]
                 http2_initial_stream_window_size: None,
                 #[cfg(feature = "http2")]
@@ -998,6 +1000,10 @@ impl ClientBuilder {
             builder.http1_allow_spaces_after_header_name_in_responses(true);
         }
 
+        if let Some(http1_max_headers) = config.http1_max_headers {
+            builder.http1_max_headers(http1_max_headers);
+        }
+
         let proxies_maybe_http_auth = proxies.iter().any(|p| p.maybe_has_http_auth());
         let proxies_maybe_http_custom_headers =
             proxies.iter().any(|p| p.maybe_has_http_custom_headers());
@@ -1542,6 +1548,17 @@ impl ClientBuilder {
     ) -> ClientBuilder {
         self.config
             .http1_allow_spaces_after_header_name_in_responses = value;
+        self
+    }
+
+    /// Set the maximum number of headers accepted in an HTTP/1 response.
+    ///
+    /// When a response contains more headers than this value, it is rejected
+    /// with a parse error and the request fails.
+    ///
+    /// Default is 100.
+    pub fn http1_max_headers(mut self, max: usize) -> ClientBuilder {
+        self.config.http1_max_headers = Some(max);
         self
     }
 
