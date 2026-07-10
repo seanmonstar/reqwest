@@ -789,6 +789,7 @@ impl ServerCertVerifier for IgnoreHostname {
 #[derive(Clone)]
 pub struct TlsInfo {
     pub(crate) peer_certificate: Option<Vec<u8>>,
+    pub(crate) version: Option<Version>,
 }
 
 impl TlsInfo {
@@ -796,11 +797,21 @@ impl TlsInfo {
     pub fn peer_certificate(&self) -> Option<&[u8]> {
         self.peer_certificate.as_ref().map(|der| &der[..])
     }
+
+    /// Get the TLS protocol version negotiated with the peer.
+    ///
+    /// Returns `None` if the TLS backend cannot report it. The `native-tls`
+    /// backend never reports a version.
+    pub fn version(&self) -> Option<Version> {
+        self.version
+    }
 }
 
 impl std::fmt::Debug for TlsInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct("TlsInfo").finish()
+        f.debug_struct("TlsInfo")
+            .field("version", &self.version)
+            .finish()
     }
 }
 

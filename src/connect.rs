@@ -984,7 +984,10 @@ impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<TokioIo<tokio::net::
             .ok()
             .flatten()
             .and_then(|c| c.to_der().ok());
-        Some(crate::tls::TlsInfo { peer_certificate })
+        Some(crate::tls::TlsInfo {
+            peer_certificate,
+            version: None,
+        })
     }
 }
 
@@ -1001,7 +1004,10 @@ impl TlsInfoFactory
             .ok()
             .flatten()
             .and_then(|c| c.to_der().ok());
-        Some(crate::tls::TlsInfo { peer_certificate })
+        Some(crate::tls::TlsInfo {
+            peer_certificate,
+            version: None,
+        })
     }
 }
 
@@ -1018,13 +1024,18 @@ impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::TcpStrea
 #[cfg(feature = "__rustls")]
 impl TlsInfoFactory for tokio_rustls::client::TlsStream<TokioIo<TokioIo<tokio::net::TcpStream>>> {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .1
+        let conn = &self.get_ref().1;
+        let peer_certificate = conn
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.to_vec());
-        Some(crate::tls::TlsInfo { peer_certificate })
+        let version = conn
+            .protocol_version()
+            .and_then(crate::tls::Version::from_rustls);
+        Some(crate::tls::TlsInfo {
+            peer_certificate,
+            version,
+        })
     }
 }
 
@@ -1035,13 +1046,18 @@ impl TlsInfoFactory
     >
 {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .1
+        let conn = &self.get_ref().1;
+        let peer_certificate = conn
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.to_vec());
-        Some(crate::tls::TlsInfo { peer_certificate })
+        let version = conn
+            .protocol_version()
+            .and_then(crate::tls::Version::from_rustls);
+        Some(crate::tls::TlsInfo {
+            peer_certificate,
+            version,
+        })
     }
 }
 
@@ -1075,7 +1091,10 @@ impl TlsInfoFactory for tokio_native_tls::TlsStream<TokioIo<TokioIo<tokio::net::
             .ok()
             .flatten()
             .and_then(|c| c.to_der().ok());
-        Some(crate::tls::TlsInfo { peer_certificate })
+        Some(crate::tls::TlsInfo {
+            peer_certificate,
+            version: None,
+        })
     }
 }
 
@@ -1093,7 +1112,10 @@ impl TlsInfoFactory
             .ok()
             .flatten()
             .and_then(|c| c.to_der().ok());
-        Some(crate::tls::TlsInfo { peer_certificate })
+        Some(crate::tls::TlsInfo {
+            peer_certificate,
+            version: None,
+        })
     }
 }
 
@@ -1112,13 +1134,18 @@ impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::UnixStre
 #[cfg(unix)]
 impl TlsInfoFactory for tokio_rustls::client::TlsStream<TokioIo<TokioIo<tokio::net::UnixStream>>> {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .1
+        let conn = &self.get_ref().1;
+        let peer_certificate = conn
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.to_vec());
-        Some(crate::tls::TlsInfo { peer_certificate })
+        let version = conn
+            .protocol_version()
+            .and_then(crate::tls::Version::from_rustls);
+        Some(crate::tls::TlsInfo {
+            peer_certificate,
+            version,
+        })
     }
 }
 
@@ -1130,13 +1157,18 @@ impl TlsInfoFactory
     >
 {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .1
+        let conn = &self.get_ref().1;
+        let peer_certificate = conn
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.to_vec());
-        Some(crate::tls::TlsInfo { peer_certificate })
+        let version = conn
+            .protocol_version()
+            .and_then(crate::tls::Version::from_rustls);
+        Some(crate::tls::TlsInfo {
+            peer_certificate,
+            version,
+        })
     }
 }
 
@@ -1175,7 +1207,10 @@ impl TlsInfoFactory
             .ok()
             .flatten()
             .and_then(|c| c.to_der().ok());
-        Some(crate::tls::TlsInfo { peer_certificate })
+        Some(crate::tls::TlsInfo {
+            peer_certificate,
+            version: None,
+        })
     }
 }
 
@@ -1195,7 +1230,10 @@ impl TlsInfoFactory
             .ok()
             .flatten()
             .and_then(|c| c.to_der().ok());
-        Some(crate::tls::TlsInfo { peer_certificate })
+        Some(crate::tls::TlsInfo {
+            peer_certificate,
+            version: None,
+        })
     }
 }
 
@@ -1220,13 +1258,18 @@ impl TlsInfoFactory
     >
 {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .1
+        let conn = &self.get_ref().1;
+        let peer_certificate = conn
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.to_vec());
-        Some(crate::tls::TlsInfo { peer_certificate })
+        let version = conn
+            .protocol_version()
+            .and_then(crate::tls::Version::from_rustls);
+        Some(crate::tls::TlsInfo {
+            peer_certificate,
+            version,
+        })
     }
 }
 
@@ -1242,13 +1285,18 @@ impl TlsInfoFactory
     >
 {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
-        let peer_certificate = self
-            .get_ref()
-            .1
+        let conn = &self.get_ref().1;
+        let peer_certificate = conn
             .peer_certificates()
             .and_then(|certs| certs.first())
             .map(|c| c.to_vec());
-        Some(crate::tls::TlsInfo { peer_certificate })
+        let version = conn
+            .protocol_version()
+            .and_then(crate::tls::Version::from_rustls);
+        Some(crate::tls::TlsInfo {
+            peer_certificate,
+            version,
+        })
     }
 }
 

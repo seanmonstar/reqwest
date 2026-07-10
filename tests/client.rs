@@ -521,6 +521,51 @@ async fn test_tls_info() {
     assert!(tls_info.is_none());
 }
 
+#[cfg(all(feature = "__rustls", not(feature = "rustls-no-provider")))]
+#[tokio::test]
+async fn test_tls_info_version_rustls() {
+    let resp = reqwest::Client::builder()
+        .tls_backend_rustls()
+        .tls_info(true)
+        .build()
+        .expect("client builder")
+        .get("https://google.com")
+        .send()
+        .await
+        .expect("response");
+    let tls_info = resp
+        .extensions()
+        .get::<reqwest::tls::TlsInfo>()
+        .expect("tls info");
+    let version = tls_info.version().expect("negotiated version");
+    assert!(
+        version >= reqwest::tls::Version::TLS_1_2,
+        "negotiated {version:?}"
+    );
+}
+
+// native-tls cannot report the negotiated version, so it stays `None` even
+// though the rest of the `TlsInfo` is populated.
+#[cfg(feature = "__native-tls")]
+#[tokio::test]
+async fn test_tls_info_version_native_tls() {
+    let resp = reqwest::Client::builder()
+        .tls_backend_native()
+        .tls_info(true)
+        .build()
+        .expect("client builder")
+        .get("https://google.com")
+        .send()
+        .await
+        .expect("response");
+    let tls_info = resp
+        .extensions()
+        .get::<reqwest::tls::TlsInfo>()
+        .expect("tls info");
+    assert!(tls_info.peer_certificate().is_some());
+    assert!(tls_info.version().is_none());
+}
+
 #[tokio::test]
 async fn close_connection_after_idle_timeout() {
     let mut server = server::http(move |_| async move { http::Response::default() });
