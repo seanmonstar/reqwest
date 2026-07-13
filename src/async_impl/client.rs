@@ -2497,7 +2497,17 @@ impl Default for Client {
 
 #[cfg(feature = "__rustls")]
 fn default_rustls_crypto_provider() -> Arc<rustls::crypto::CryptoProvider> {
-    #[cfg(not(feature = "__rustls-aws-lc-rs"))]
+    #[cfg(feature = "__rustls-ring")]
+    {
+        return Arc::new(rustls::crypto::ring::default_provider());
+    }
+
+    #[cfg(all(not(feature = "__rustls-ring"), feature = "__rustls-aws-lc-rs"))]
+    {
+        Arc::new(rustls::crypto::aws_lc_rs::default_provider())
+    }
+
+    #[cfg(not(any(feature = "__rustls-ring", feature = "__rustls-aws-lc-rs")))]
     panic!(
         "No rustls crypto provider is configured. \
         When using the `rustls-no-provider` feature you must install a \
@@ -2505,9 +2515,6 @@ fn default_rustls_crypto_provider() -> Arc<rustls::crypto::CryptoProvider> {
         `rustls::crypto::aws_lc_rs::default_provider().install_default().unwrap();` \
         See https://docs.rs/rustls/latest/rustls/#cryptography-providers for details."
     );
-
-    #[cfg(feature = "__rustls-aws-lc-rs")]
-    Arc::new(rustls::crypto::aws_lc_rs::default_provider())
 }
 
 impl Client {
@@ -3156,6 +3163,14 @@ impl fmt::Debug for Pending {
 #[cfg(test)]
 mod tests {
     #![cfg(not(feature = "rustls-no-provider"))]
+
+    #[cfg(all(feature = "__rustls-ring", not(feature = "__rustls-aws-lc-rs")))]
+    #[test]
+    fn ring_feature_builds_client_without_installing_a_process_default() {
+        assert!(rustls::crypto::CryptoProvider::get_default().is_none());
+        super::Client::builder().build().unwrap();
+        assert!(rustls::crypto::CryptoProvider::get_default().is_none());
+    }
 
     #[tokio::test]
     async fn execute_request_rejects_invalid_urls() {
