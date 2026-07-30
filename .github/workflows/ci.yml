@@ -217,7 +217,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@v2.85.2
         with:
           tool: cargo-nextest
 
