@@ -1,0 +1,28 @@
+# Plumber overlay: inherits every control from the CLI's built-in
+# baseline, only the differences for this repo are written here.
+# Run 'plumber config resolve' to see the full effective config.
+extends: plumber:default
+version: "2.0"
+
+github:
+  controls:
+    githubActionMustComeFromAuthorizedSources:
+      # Keep the curated default list and trust the actions this repo
+      # already uses on top of it.
+      includePlumberDefaults: true
+      trustedGithubActions:
+        - dtolnay/rust-toolchain
+        - Swatinem/rust-cache
+        - taiki-e/install-action
+
+    # Off for now: this flags the rustup installer that dtolnay's action
+    # fetches over the network, which is how every Rust CI works today.
+    # Nothing repo-side to fix until upstream ships checksummed installs.
+    actionsMustNotExecuteMutableRemoteCode:
+      enabled: false
+
+    # Off for now: the wasm job installs wasm-pack through its upstream
+    # installer script (curl | sh). Freezing that fetch to a commit is a
+    # good follow-up, but it is its own change.
+    pipelineMustNotExecuteUnverifiedScripts:
+      enabled: false

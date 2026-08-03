@@ -4,6 +4,7 @@
 [![Documentation](https://docs.rs/reqwest/badge.svg)](https://docs.rs/reqwest)
 [![MIT/Apache-2 licensed](https://img.shields.io/crates/l/reqwest.svg)](./LICENSE-APACHE)
 [![CI](https://github.com/seanmonstar/reqwest/actions/workflows/ci.yml/badge.svg)](https://github.com/seanmonstar/reqwest/actions/workflows/ci.yml)
+[![Plumber Score](https://score.getplumber.io/github.com/seanmonstar/reqwest.svg)](https://score.getplumber.io/github.com/seanmonstar/reqwest)
 
 An ergonomic, batteries-included HTTP Client for Rust.
 
