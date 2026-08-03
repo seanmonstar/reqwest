@@ -12,6 +12,9 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
+permissions:
+  contents: read
+
 jobs:
   ci-pass:
     name: CI is green
