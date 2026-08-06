@@ -449,6 +449,10 @@ impl RequestBuilder {
 
     /// Send a JSON body.
     ///
+    /// Serializes the value to JSON and sets resulting bytes as the body.
+    ///
+    /// Sets Content-Type header to application/json unless the header is already set.
+    ///
     /// # Optional
     ///
     /// This requires the optional `json` feature enabled.
