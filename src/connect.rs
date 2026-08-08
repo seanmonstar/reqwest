@@ -723,7 +723,12 @@ impl ConnectorService {
                 .clone();
             tower::service_fn(move |_| {
                 let pipe = pipe.clone();
-                async move { ClientOptions::new().open(pipe).map(TokioIo::new) }
+                async move {
+                    tokio::task::spawn_blocking(move || ClientOptions::new().open(pipe))
+                        .await
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
+                        .map(TokioIo::new)
+                }
             })
         };
         let is_proxy = false;
