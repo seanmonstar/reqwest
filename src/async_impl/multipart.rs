@@ -591,12 +591,13 @@ impl PercentEncoding {
 fn gen_boundary() -> String {
     use crate::util::fast_random as random;
 
+    // RFC 2046 §5.1.1 recommends multipart boundaries be at most 70 bytes.
+    // Three 16-hex chunks joined by '-' yield 50 bytes (was 71 with four chunks).
     let a = random();
     let b = random();
     let c = random();
-    let d = random();
 
-    format!("{a:016x}-{b:016x}-{c:016x}-{d:016x}")
+    format!("{a:016x}-{b:016x}-{c:016x}")
 }
 
 #[cfg(test)]
@@ -606,6 +607,23 @@ mod tests {
     use futures_util::TryStreamExt;
     use std::future;
     use tokio::{self, runtime};
+
+    #[test]
+    fn boundary_respects_rfc2046_length() {
+        // RFC 2046 §5.1.1 recommends boundaries of at most 70 bytes.
+        for _ in 0..32 {
+            let boundary = gen_boundary();
+            assert!(
+                boundary.len() <= 70,
+                "boundary length {} exceeds RFC recommendation: {boundary}",
+                boundary.len()
+            );
+            assert!(
+                !boundary.is_empty(),
+                "boundary must not be empty"
+            );
+        }
+    }
 
     #[test]
     fn form_empty() {
