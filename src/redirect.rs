@@ -11,6 +11,7 @@ use crate::header::{AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, REFERER, WWW_AUT
 use http::{HeaderMap, HeaderValue};
 use hyper::StatusCode;
 
+use crate::config::{HttpsOnly, RequestConfig};
 use crate::{async_impl, Url};
 use tower_http::follow_redirect::policy::{
     Action as TowerAction, Attempt as TowerAttempt, Policy as TowerPolicy,
@@ -335,6 +336,10 @@ impl TowerPolicy<async_impl::body::Body, crate::Error> for TowerRedirectPolicy {
     }
 
     fn on_request(&mut self, req: &mut http::Request<async_impl::body::Body>) {
+        if let Some(&https_only) = RequestConfig::<HttpsOnly>::get(req.extensions()) {
+            self.https_only = https_only;
+        }
+
         if let Ok(next_url) = Url::parse(&req.uri().to_string()) {
             remove_sensitive_headers(req.headers_mut(), &next_url, &self.urls);
             if self.referer {
@@ -384,6 +389,33 @@ fn test_redirect_policy_limit_to_0() {
         ActionKind::Error(err) if err.is::<TooManyRedirects>() => (),
         other => panic!("unexpected {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn test_request_https_only_rejects_http_redirect() {
+    let policy = TowerRedirectPolicy::new(Policy::default());
+    let service = tower::service_fn(|req: http::Request<async_impl::body::Body>| async move {
+        assert_eq!(req.uri(), "https://example.com");
+        Ok::<_, crate::Error>(
+            http::Response::builder()
+                .status(StatusCode::FOUND)
+                .header("location", "http://insecure")
+                .body(async_impl::body::Body::default())
+                .unwrap(),
+        )
+    });
+    let mut request = http::Request::builder()
+        .uri("https://example.com")
+        .body(async_impl::body::Body::default())
+        .unwrap();
+    *RequestConfig::<HttpsOnly>::get_mut(request.extensions_mut()) = Some(true);
+
+    let service = tower_http::follow_redirect::FollowRedirect::with_policy(service, policy);
+    let err = tower::ServiceExt::oneshot(service, request)
+        .await
+        .unwrap_err();
+
+    assert!(err.is_redirect());
 }
 
 #[test]

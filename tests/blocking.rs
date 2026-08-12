@@ -342,6 +342,31 @@ fn test_allowed_methods_blocking() {
     assert_eq!(resp.is_err(), true);
 }
 
+#[cfg(feature = "default-tls")]
+#[test]
+fn test_request_https_only_blocking() {
+    let client = reqwest::blocking::Client::builder()
+        .no_proxy()
+        .https_only(true)
+        .build()
+        .expect("client builder");
+
+    let https_err = client.get("https://127.0.0.1:1").https_only(true).send();
+    assert!(!https_err.unwrap_err().is_builder());
+
+    let server = server::http(move |_req| async { http::Response::default() });
+    let http_url = format!("http://{}", server.addr());
+    let http_res = client
+        .get(&http_url)
+        .https_only(false)
+        .send()
+        .expect("request allowed by per-request override");
+    assert_eq!(http_res.status(), reqwest::StatusCode::OK);
+
+    let http_err = client.get("http://127.0.0.1:1").https_only(true).send();
+    assert!(http_err.unwrap_err().is_builder());
+}
+
 /// Test that a [`reqwest::blocking::Body`] can be created from [`bytes::Bytes`].
 #[test]
 fn test_body_from_bytes() {

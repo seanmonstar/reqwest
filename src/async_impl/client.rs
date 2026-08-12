@@ -16,7 +16,7 @@ use super::Body;
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::H3Client;
-use crate::config::{RequestConfig, TotalTimeout};
+use crate::config::{HttpsOnly, RequestConfig, TotalTimeout};
 #[cfg(unix)]
 use crate::connect::uds::UnixSocketProvider;
 #[cfg(target_os = "windows")]
@@ -2624,7 +2624,10 @@ impl Client {
         }
 
         // check if we're in https_only mode and check the scheme of the current URL
-        if self.inner.https_only && url.scheme() != "https" {
+        let https_only = RequestConfig::<HttpsOnly>::get(&extensions)
+            .copied()
+            .unwrap_or(self.inner.https_only);
+        if https_only && url.scheme() != "https" {
             return Pending::new_err(error::url_bad_scheme(url));
         }
 
@@ -2656,12 +2659,14 @@ impl Client {
             http::Version::HTTP_3 if self.inner.h3_client.is_some() => {
                 let mut req = builder.body(body).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
+                *req.extensions_mut() = extensions.clone();
                 let mut h3 = self.inner.h3_client.as_ref().unwrap().clone();
                 ResponseFuture::H3(h3.call(req))
             }
             _ => {
                 let mut req = builder.body(body).expect("valid request parts");
                 *req.headers_mut() = headers.clone();
+                *req.extensions_mut() = extensions.clone();
                 let mut hyper = self.inner.hyper.clone();
                 ResponseFuture::Default(hyper.call(req))
             }

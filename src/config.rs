@@ -108,3 +108,10 @@ pub(crate) struct TotalTimeout;
 impl RequestConfigValue for TotalTimeout {
     type Value = Duration;
 }
+
+#[derive(Clone, Copy)]
+pub(crate) struct HttpsOnly;
+
+impl RequestConfigValue for HttpsOnly {
+    type Value = bool;
+}

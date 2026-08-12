@@ -12,6 +12,7 @@ use super::body::{self, Body};
 #[cfg(feature = "multipart")]
 use super::multipart;
 use super::Client;
+use crate::config::{HttpsOnly, RequestConfig};
 #[cfg(any(feature = "multipart", feature = "form", feature = "json"))]
 use crate::header::CONTENT_TYPE;
 use crate::header::{HeaderMap, HeaderName, HeaderValue};
@@ -199,6 +200,16 @@ impl RequestBuilder {
         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
         self.header_sensitive(key, value, false)
+    }
+
+    /// Restrict this request to HTTPS.
+    ///
+    /// This overrides the setting configured on `ClientBuilder`.
+    pub fn https_only(mut self, enabled: bool) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *RequestConfig::<HttpsOnly>::get_mut(req.inner.extensions_mut()) = Some(enabled);
+        }
+        self
     }
 
     /// Add a `Header` to this Request with ability to define if header_value is sensitive.

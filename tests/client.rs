@@ -461,6 +461,42 @@ async fn test_allowed_methods() {
     assert!(resp.is_err());
 }
 
+#[cfg(feature = "default-tls")]
+#[tokio::test]
+async fn test_request_https_only() {
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .https_only(true)
+        .build()
+        .expect("client builder");
+
+    let https_err = client
+        .get("https://127.0.0.1:1")
+        .https_only(true)
+        .send()
+        .await
+        .unwrap_err();
+    assert!(!https_err.is_builder());
+
+    let server = server::http(move |_req| async { http::Response::default() });
+    let http_url = format!("http://{}", server.addr());
+    let http_res = client
+        .get(&http_url)
+        .https_only(false)
+        .send()
+        .await
+        .expect("request allowed by per-request override");
+    assert_eq!(http_res.status(), reqwest::StatusCode::OK);
+
+    let http_err = client
+        .get("http://127.0.0.1:1")
+        .https_only(true)
+        .send()
+        .await
+        .unwrap_err();
+    assert!(http_err.is_builder());
+}
+
 #[test]
 #[cfg(feature = "json")]
 fn add_json_default_content_type_if_not_set_manually() {
