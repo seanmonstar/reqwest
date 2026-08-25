@@ -1419,7 +1419,8 @@ impl ClientBuilder {
     ///
     /// # Note
     ///
-    /// Adding a proxy will disable the automatic usage of the "system" proxy.
+    /// Adding a proxy will disable the automatic usage of the "system" proxy,
+    /// which is based on [`hyper_utils` proxy][`hyper_util::client::proxy::matcher::Matcher::from_system`].
     pub fn proxy(mut self, proxy: Proxy) -> ClientBuilder {
         self.config.proxies.push(proxy.into_matcher());
         self.config.auto_sys_proxy = false;
@@ -1432,7 +1433,8 @@ impl ClientBuilder {
     /// To add a proxy exclusion list, use [crate::proxy::Proxy::no_proxy()]
     /// on all desired proxies instead.
     ///
-    /// This also disables the automatic usage of the "system" proxy.
+    /// This also disables the automatic usage of the "system" proxy,
+    /// which is based on [`hyper_utils` proxy][`hyper_util::client::proxy::matcher::Matcher::from_system`].
     pub fn no_proxy(mut self) -> ClientBuilder {
         self.config.proxies.clear();
         self.config.auto_sys_proxy = false;
