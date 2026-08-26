@@ -870,8 +870,9 @@ impl ConnectorService {
                     // and we know this is definitely HTTPS.
                     let tunneled = tunnel.call(dst.clone()).await?;
                     let host = dst.host().ok_or("no host in url")?.to_string();
-                    let server_name = ServerName::try_from(unbracket_ipv6(host.as_str()).to_owned())
-                        .map_err(|_| "Invalid Server Name")?;
+                    let server_name =
+                        ServerName::try_from(unbracket_ipv6(host.as_str()).to_owned())
+                            .map_err(|_| "Invalid Server Name")?;
                     let io = RustlsConnector::from(tls.clone())
                         .connect(server_name, TokioIo::new(tunneled))
                         .await?;
