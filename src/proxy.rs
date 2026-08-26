@@ -1042,7 +1042,11 @@ fn parse_setting_from_dynamic_store(
 
 #[cfg(all(target_os = "macos", feature = "macos-system-configuration"))]
 fn get_from_platform_impl() -> Result<Option<String>, Box<dyn Error>> {
-    let store = SCDynamicStoreBuilder::new("reqwest").build();
+    let store = if let Some(store) = SCDynamicStoreBuilder::new("reqwest").build() {
+        store
+    } else {
+        return Ok(None);
+    };
 
     let proxies_map = if let Some(proxies_map) = store.get_proxies() {
         proxies_map
