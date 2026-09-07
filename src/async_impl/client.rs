@@ -2714,8 +2714,11 @@ impl Client {
         }
 
         for proxy in self.inner.proxies.iter() {
-            if let Some(header) = proxy.http_non_tunnel_basic_auth(dst) {
-                headers.insert(PROXY_AUTHORIZATION, header);
+            if let Some(proxy) = proxy.intercept(dst) {
+                if let Some(header) = proxy.http_non_tunnel_basic_auth() {
+                    headers.insert(PROXY_AUTHORIZATION, header);
+                }
+                // Use only the first matching proxy, as the connector does.
                 break;
             }
         }
@@ -2731,10 +2734,13 @@ impl Client {
         }
 
         for proxy in self.inner.proxies.iter() {
-            if let Some(iter) = proxy.http_non_tunnel_custom_headers(dst) {
-                iter.iter().for_each(|(key, value)| {
-                    headers.insert(key, value.clone());
-                });
+            if let Some(proxy) = proxy.intercept(dst) {
+                if let Some(iter) = proxy.http_non_tunnel_custom_headers() {
+                    iter.iter().for_each(|(key, value)| {
+                        headers.insert(key, value.clone());
+                    });
+                }
+                // Use only the first matching proxy, as the connector does.
                 break;
             }
         }

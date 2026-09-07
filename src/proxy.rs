@@ -550,30 +550,8 @@ impl Matcher {
         self.maybe_has_http_auth
     }
 
-    pub(crate) fn http_non_tunnel_basic_auth(&self, dst: &Uri) -> Option<HeaderValue> {
-        if let Some(proxy) = self.intercept(dst) {
-            let scheme = proxy.uri().scheme();
-            if scheme == Some(&Scheme::HTTP) || scheme == Some(&Scheme::HTTPS) {
-                return proxy.basic_auth().cloned();
-            }
-        }
-
-        None
-    }
-
     pub(crate) fn maybe_has_http_custom_headers(&self) -> bool {
         self.maybe_has_http_custom_headers
-    }
-
-    pub(crate) fn http_non_tunnel_custom_headers(&self, dst: &Uri) -> Option<HeaderMap> {
-        if let Some(proxy) = self.intercept(dst) {
-            let scheme = proxy.uri().scheme();
-            if scheme == Some(&Scheme::HTTP) || scheme == Some(&Scheme::HTTPS) {
-                return proxy.custom_headers().cloned();
-            }
-        }
-
-        None
     }
 }
 
@@ -587,6 +565,24 @@ impl fmt::Debug for Matcher {
 }
 
 impl Intercepted {
+    pub(crate) fn http_non_tunnel_basic_auth(&self) -> Option<HeaderValue> {
+        let scheme = self.uri().scheme();
+        if scheme == Some(&Scheme::HTTP) || scheme == Some(&Scheme::HTTPS) {
+            return self.basic_auth().cloned();
+        }
+
+        None
+    }
+
+    pub(crate) fn http_non_tunnel_custom_headers(&self) -> Option<HeaderMap> {
+        let scheme = self.uri().scheme();
+        if scheme == Some(&Scheme::HTTP) || scheme == Some(&Scheme::HTTPS) {
+            return self.custom_headers().cloned();
+        }
+
+        None
+    }
+
     pub(crate) fn uri(&self) -> &http::Uri {
         self.inner.uri()
     }
