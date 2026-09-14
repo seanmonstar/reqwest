@@ -95,7 +95,7 @@ __native-tls = ["dep:hyper-tls", "dep:native-tls-crate", "__tls", "dep:tokio-nat
 __native-tls-alpn = ["native-tls-crate?/alpn", "hyper-tls?/alpn"]
 
 [dependencies]
-base64 = "0.23"
+base64 = { version = "0.23", default-features = false, features = ["std"] }
 http = "1.1"
 url = "2.4"
 bytes = "1.2"
