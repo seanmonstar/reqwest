@@ -41,6 +41,17 @@ pub struct RequestBuilder {
     request: crate::Result<Request>,
 }
 
+#[cfg(feature = "into_future")]
+impl std::future::IntoFuture for RequestBuilder {
+    type Output = Result<Response, crate::Error>;
+
+    type IntoFuture = futures_core::future::BoxFuture<'static, Self::Output>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(self.send())
+    }
+}
+
 impl Request {
     /// Constructs a new request.
     #[inline]
