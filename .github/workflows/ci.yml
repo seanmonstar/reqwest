@@ -327,7 +327,9 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
       - name: Resolve MSRV aware dependencies
-        run: cargo update
+        run: |
+          cargo update
+          cargo update yoke-derive --precise 0.8.2
         env:
           CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
 
