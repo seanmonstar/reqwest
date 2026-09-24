@@ -7,6 +7,7 @@ use url::Url;
 pub trait IntoUrl: IntoUrlSealed {}
 
 impl IntoUrl for Url {}
+impl<'a> IntoUrl for &'a Url {}
 impl IntoUrl for String {}
 impl<'a> IntoUrl for &'a str {}
 impl<'a> IntoUrl for &'a String {}
@@ -36,6 +37,16 @@ impl IntoUrlSealed for Url {
         } else {
             Err(crate::error::url_bad_scheme(self))
         }
+    }
+
+    fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+impl<'a> IntoUrlSealed for &'a Url {
+    fn into_url(self) -> crate::Result<Url> {
+        self.clone().into_url()
     }
 
     fn as_str(&self) -> &str {
