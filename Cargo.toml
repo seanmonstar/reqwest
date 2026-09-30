@@ -67,7 +67,7 @@ json = ["dep:serde", "dep:serde_json"]
 
 multipart = ["dep:mime_guess", "dep:futures-util"]
 
-hickory-dns = ["dep:hickory-resolver", "dep:once_cell"]
+hickory-dns = ["dep:hickory-resolver"]
 
 stream = ["tokio/fs", "dep:futures-util", "dep:tokio-util", "dep:wasm-streams"]
 
@@ -152,7 +152,6 @@ tokio-util = { version = "0.7.9", default-features = false, features = ["io"], o
 
 ## hickory-dns
 hickory-resolver = { version = "0.26", optional = true, features = ["tokio"] }
-once_cell = { version = "1.18", optional = true }
 
 # HTTP/3 experimental support
 h3 = { version = "0.0.8", optional = true }
