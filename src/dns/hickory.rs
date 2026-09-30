@@ -5,10 +5,8 @@ use hickory_resolver::{
     net::{runtime::TokioRuntimeProvider, NetError},
     TokioResolver,
 };
-use once_cell::sync::OnceCell;
-
 use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use super::{Addrs, Name, Resolve, Resolving};
 
@@ -18,7 +16,7 @@ pub(crate) struct HickoryDnsResolver {
     /// Since we might not have been called in the context of a
     /// Tokio Runtime in initialization, so we must delay the actual
     /// construction of the resolver.
-    state: Arc<OnceCell<TokioResolver>>,
+    state: Arc<OnceLock<TokioResolver>>,
 }
 
 struct SocketAddrs {
@@ -29,7 +27,10 @@ impl Resolve for HickoryDnsResolver {
     fn resolve(&self, name: Name) -> Resolving {
         let resolver = self.clone();
         Box::pin(async move {
-            let resolver = resolver.state.get_or_try_init(new_resolver)?;
+            let state = &resolver.state;
+            let resolver = state
+                .get()
+                .map_or_else(|| new_resolver().map(|new| state.get_or_init(|| new)), Ok)?;
 
             let lookup = resolver.lookup_ip(name.as_str()).await?;
             let addrs: Addrs = Box::new(SocketAddrs {
