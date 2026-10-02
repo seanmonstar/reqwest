@@ -39,7 +39,12 @@
 //!
 //! ## rustls
 //!
-//! This backend uses the [rustls][] crate, a TLS library written in Rust.
+//! This backend uses the [rustls][] crate with the `aws-lc-rs` crypto provider.
+//!
+//! ## rustls-ring
+//!
+//! Like `rustls`, but uses the [ring][] crypto provider without requiring
+//! process-global provider installation.
 //!
 //! [rustls]: https://crates.io/crates/rustls
 //!
