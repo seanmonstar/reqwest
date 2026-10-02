@@ -538,6 +538,28 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.http2_max_header_list_size(max_header_size_bytes))
     }
 
+    /// Sets the header table size to use for HTTP2.
+    ///
+    /// Passing `None` will do nothing.
+    ///
+    /// If not set, hyper will use a default.
+    #[cfg(feature = "http2")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
+    pub fn http2_header_table_size(self, sz: impl Into<Option<u32>>) -> ClientBuilder {
+        self.with_inner(|inner| inner.http2_header_table_size(sz))
+    }
+
+    /// Sets the `SETTINGS_MAX_CONCURRENT_STREAMS` option for HTTP2 connections.
+    ///
+    /// Passing `None` will do nothing.
+    ///
+    /// The default value is determined by the `h2` crate.
+    #[cfg(feature = "http2")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "http2")))]
+    pub fn http2_max_concurrent_streams(self, max: impl Into<Option<u32>>) -> ClientBuilder {
+        self.with_inner(|inner| inner.http2_max_concurrent_streams(max))
+    }
+
     /// Sets an interval for HTTP2 Ping frames should be sent to keep a connection alive.
     ///
     /// Pass `None` to disable HTTP2 keep-alive.

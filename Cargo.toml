@@ -118,7 +118,7 @@ encoding_rs = { version = "0.8", optional = true }
 http-body = "1"
 http-body-util = "0.1.2"
 hyper = { version = "1.1", features = ["http1", "client"] }
-hyper-util = { version = "0.1.12", features = ["http1", "client", "client-legacy", "client-proxy", "tokio"] }
+hyper-util = { version = "0.1.21", features = ["http1", "client", "client-legacy", "client-proxy", "tokio"] }
 h2 = { version = "0.4", optional = true }
 log = "0.4.17"
 percent-encoding = "2.3"
