@@ -1,5 +1,8 @@
 #![cfg(not(target_arch = "wasm32"))]
-#![cfg(not(feature = "rustls-no-provider"))]
+#![cfg(not(any(
+    feature = "rustls-no-provider",
+    feature = "rustls-no-provider-no-roots"
+)))]
 mod support;
 use http_body_util::BodyExt;
 use reqwest::Body;
