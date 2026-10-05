@@ -96,6 +96,40 @@ async fn cookie_store_simple() {
 }
 
 #[tokio::test]
+async fn cookie_store_clear() {
+    let server = server::http(move |req| async move {
+        if req.uri() == "/" {
+            http::Response::builder()
+                .header("Set-Cookie", "key=val")
+                .body(Default::default())
+                .unwrap()
+        } else if req.uri() == "/2" {
+            assert_eq!(req.headers()["cookie"], "key=val");
+            http::Response::default()
+        } else {
+            assert!(!req.headers().contains_key("cookie"));
+            http::Response::default()
+        }
+    });
+
+    let client = reqwest::Client::builder()
+        .cookie_store(true)
+        .build()
+        .unwrap();
+
+    let url = format!("http://{}/", server.addr());
+    client.get(&url).send().await.unwrap();
+
+    let url = format!("http://{}/2", server.addr());
+    client.get(&url).send().await.unwrap();
+
+    client.clear_cookies();
+
+    let url = format!("http://{}/3", server.addr());
+    client.get(&url).send().await.unwrap();
+}
+
+#[tokio::test]
 async fn cookie_store_overwrite_existing() {
     let server = server::http(move |req| async move {
         if req.uri() == "/" {
