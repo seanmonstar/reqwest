@@ -178,6 +178,7 @@ struct Config {
     tcp_keepalive_retries: Option<u32>,
     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
     tcp_user_timeout: Option<Duration>,
+    happy_eyeballs_timeout: Option<Duration>,
     #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
     identity: Option<Identity>,
     proxies: Vec<ProxyMatcher>,
@@ -310,6 +311,7 @@ impl ClientBuilder {
                 tcp_keepalive_retries: Some(3),
                 #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
                 tcp_user_timeout: Some(Duration::from_secs(30)),
+                happy_eyeballs_timeout: Some(Duration::from_millis(300)),
                 proxies: Vec::new(),
                 auto_sys_proxy: true,
                 redirect_policy: redirect::Policy::default(),
@@ -934,6 +936,7 @@ impl ClientBuilder {
         connector_builder.set_keepalive_retries(config.tcp_keepalive_retries);
         #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
         connector_builder.set_tcp_user_timeout(config.tcp_user_timeout);
+        connector_builder.set_happy_eyeballs_timeout(config.happy_eyeballs_timeout);
 
         #[cfg(feature = "socks")]
         connector_builder.set_socks_resolver(resolver);
@@ -1847,6 +1850,27 @@ impl ClientBuilder {
         D: Into<Option<Duration>>,
     {
         self.config.tcp_user_timeout = val.into();
+        self
+    }
+
+    /// Set the timeout for the [RFC 6555 (Happy Eyeballs)][RFC 6555] algorithm.
+    ///
+    /// If a hostname resolves to both IPv4 and IPv6 addresses and a connection
+    /// cannot be established using the preferred address family before the
+    /// timeout elapses, a connection attempt will be made in parallel using the
+    /// other address family.
+    ///
+    /// If `None`, parallel connection attempts are disabled, and the addresses
+    /// are tried sequentially.
+    ///
+    /// Default is 300 milliseconds.
+    ///
+    /// [RFC 6555]: https://datatracker.ietf.org/doc/html/rfc6555
+    pub fn happy_eyeballs_timeout<D>(mut self, val: D) -> ClientBuilder
+    where
+        D: Into<Option<Duration>>,
+    {
+        self.config.happy_eyeballs_timeout = val.into();
         self
     }
 
