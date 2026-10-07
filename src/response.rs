@@ -1,5 +1,7 @@
 use url::Url;
 
+use crate::Body;
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ResponseUrl(pub Url);
 
@@ -12,9 +14,23 @@ pub trait ResponseBuilderExt {
     fn url(self, url: Url) -> Self;
 }
 
+/// Extension trait for http::Response objects
+///
+/// Provides methods to extract URL information from HTTP responses
+pub trait ResponseExt {
+    /// Returns a reference to the `Url` associated with this response, if available.
+    fn url(&self) -> Option<&Url>;
+}
+
 impl ResponseBuilderExt for http::response::Builder {
     fn url(self, url: Url) -> Self {
         self.extension(ResponseUrl(url))
+    }
+}
+
+impl ResponseExt for http::Response<Body> {
+    fn url(&self) -> Option<&Url> {
+        self.extensions().get::<ResponseUrl>().map(|r| &r.0)
     }
 }
 
@@ -37,5 +53,19 @@ mod tests {
             response.extensions().get::<ResponseUrl>(),
             Some(&ResponseUrl(url))
         );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn test_response_ext() {
+        use super::ResponseExt;
+        let url = Url::parse("http://example.com").unwrap();
+        let response = http::Response::builder()
+            .status(200)
+            .extension(ResponseUrl(url.clone()))
+            .body(crate::Body::empty())
+            .unwrap();
+
+        assert_eq!(response.url(), Some(&url));
     }
 }
