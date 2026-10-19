@@ -2693,13 +2693,13 @@ impl Client {
             #[cfg(feature = "http3")]
             http::Version::HTTP_3 if self.inner.h3_client.is_some() => {
                 let mut req = builder.body(body).expect("valid request parts");
-                *req.headers_mut() = headers.clone();
+                *req.headers_mut() = headers;
                 let mut h3 = self.inner.h3_client.as_ref().unwrap().clone();
                 ResponseFuture::H3(h3.call(req))
             }
             _ => {
                 let mut req = builder.body(body).expect("valid request parts");
-                *req.headers_mut() = headers.clone();
+                *req.headers_mut() = headers;
                 let mut hyper = self.inner.hyper.clone();
                 ResponseFuture::Default(hyper.call(req))
             }
@@ -2723,7 +2723,6 @@ impl Client {
             inner: PendingInner::Request(Box::pin(PendingRequest {
                 method,
                 url,
-                headers,
 
                 client: self.inner.clone(),
 
@@ -3068,7 +3067,6 @@ pin_project! {
     struct PendingRequest {
         method: Method,
         url: Url,
-        headers: HeaderMap,
 
         client: Arc<ClientRef>,
 
