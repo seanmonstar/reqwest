@@ -237,6 +237,68 @@ async fn dns_resolution_failure_is_dns_error() {
 }
 
 #[tokio::test]
+async fn global_ips_only_rejects_non_global_literal() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
+
+    // The test server binds to loopback, so its address is a non-global literal.
+    let url = format!("http://{}/", server.addr());
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .global_ips_only(true)
+        .build()
+        .expect("client builder");
+
+    let err = client
+        .get(&url)
+        .send()
+        .await
+        .expect_err("connecting to a non-global IP should fail");
+
+    assert!(err.is_connect(), "expected a connect error, got: {err:?}");
+}
+
+#[tokio::test]
+async fn global_ips_only_rejects_non_global_resolved() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
+
+    // The domain resolves (via the override) to the loopback test server, which
+    // is not globally reachable and should therefore be rejected.
+    let url = format!("http://example.invalid:{}/", server.addr().port());
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .resolve("example.invalid", server.addr())
+        .global_ips_only(true)
+        .build()
+        .expect("client builder");
+
+    let err = client
+        .get(&url)
+        .send()
+        .await
+        .expect_err("resolving to a non-global IP should fail");
+
+    assert!(err.is_connect(), "expected a connect error, got: {err:?}");
+}
+
+#[tokio::test]
+async fn global_ips_only_allows_loopback_when_disabled() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
+
+    let url = format!("http://{}/", server.addr());
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .global_ips_only(false)
+        .build()
+        .expect("client builder");
+
+    let res = client.get(&url).send().await.expect("request");
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
+#[tokio::test]
 async fn overridden_dns_resolution_with_gai() {
     let _ = env_logger::builder().is_test(true).try_init();
     let server = server::http(move |_req| async { http::Response::new("Hello".into()) });

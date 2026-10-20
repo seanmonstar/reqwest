@@ -1203,6 +1203,17 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.https_only(enabled))
     }
 
+    /// Restrict the Client to only connect to globally reachable IP addresses, as determined by [`IpAddr::is_global`].
+    ///
+    /// This can be useful for mitigating SSRF attacks, where an attacker tries to make the Client connect to an internal server.
+    ///
+    /// Defaults to false.
+    ///
+    /// [`IpAddr::is_global`]: https://doc.rust-lang.org/std/net/enum.IpAddr.html#method.is_global
+    pub fn global_ips_only(self, enabled: bool) -> ClientBuilder {
+        self.with_inner(|inner| inner.global_ips_only(enabled))
+    }
+
     /// Override DNS resolution for specific domains to a particular IP address.
     ///
     /// Set the port to `0` to use the conventional port for the given scheme (e.g. 80 for http).
