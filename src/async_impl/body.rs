@@ -42,6 +42,7 @@ pin_project! {
         inner: B,
         #[pin]
         sleep: Option<Sleep>,
+        armed: bool,
         timeout: Duration,
     }
 }
@@ -288,6 +289,7 @@ pub(crate) fn with_read_timeout<B>(body: B, timeout: Duration) -> ReadTimeoutBod
     ReadTimeoutBody {
         inner: body,
         sleep: None,
+        armed: false,
         timeout,
     }
 }
@@ -339,11 +341,15 @@ where
     ) -> Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
         let mut this = self.project();
 
-        let deadline = tokio::time::Instant::now() + *this.timeout;
-        let sleep_pinned = if let Some(some) = this.sleep.as_mut().as_pin_mut() {
+        let sleep_pinned = if let Some(mut some) = this.sleep.as_mut().as_pin_mut() {
+            if !*this.armed {
+                some.as_mut().reset(tokio::time::Instant::now() + *this.timeout);
+                *this.armed = true;
+            }
             some
         } else {
-            this.sleep.set(Some(tokio::time::sleep_until(deadline)));
+            this.sleep.set(Some(tokio::time::sleep(*this.timeout)));
+            *this.armed = true;
             this.sleep.as_mut().as_pin_mut().unwrap()
         };
 
@@ -355,9 +361,7 @@ where
         let item = ready!(this.inner.poll_frame(cx))
             .map(|opt_chunk| opt_chunk.map_err(crate::error::body));
         // a ready frame means timeout is reset for the next chunk
-        if let Some(some) = this.sleep.as_mut().as_pin_mut() {
-            some.reset(tokio::time::Instant::now() + *this.timeout);
-        }
+        *this.armed = false;
         Poll::Ready(item)
     }
 
