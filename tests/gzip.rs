@@ -355,3 +355,133 @@ async fn test_chunked_fragmented_response_with_extra_bytes() {
     assert!(err.is_decode());
     assert!(start.elapsed() >= DELAY_BETWEEN_RESPONSE_PARTS - DELAY_MARGIN);
 }
+
+#[tokio::test]
+async fn request_decompression_overrides_client() {
+    let compressed = gzip_compress(RESPONSE_CONTENT.as_bytes());
+    let response_body = compressed.clone();
+    let server = server::http(move |req| {
+        let compressed = response_body.clone();
+        async move {
+            let accepts = req
+                .headers()
+                .get("accept-encoding")
+                .map(|value| {
+                    value
+                        .to_str()
+                        .unwrap()
+                        .split(',')
+                        .any(|v| v.trim() == "gzip")
+                })
+                .unwrap_or(false);
+            assert_eq!(accepts, req.uri().path() == "/decoded");
+            http::Response::builder()
+                .header("content-encoding", "gzip")
+                .header("content-length", compressed.len())
+                .body(compressed.into())
+                .unwrap()
+        }
+    });
+
+    for default in [false, true] {
+        let client = reqwest::Client::builder().gzip(default).build().unwrap();
+        for setting in [Some(!default), None, Some(default)] {
+            let decode = setting.unwrap_or(default);
+            let path = if decode { "decoded" } else { "raw" };
+            let mut builder = client.get(format!("http://{}/{path}", server.addr()));
+            if let Some(enable) = setting {
+                builder = builder.gzip(!enable).gzip(enable);
+            }
+            let request = builder.build().unwrap();
+            // Cloning a built request must retain its overrides.
+            let res = client.execute(request.try_clone().unwrap()).await.unwrap();
+            if decode {
+                assert!(!res.headers().contains_key("content-encoding"));
+                assert!(!res.headers().contains_key("content-length"));
+                assert_eq!(
+                    res.bytes().await.unwrap().as_ref(),
+                    RESPONSE_CONTENT.as_bytes()
+                );
+            } else {
+                assert_eq!(res.headers()["content-encoding"], "gzip");
+                assert_eq!(res.content_length(), Some(compressed.len() as u64));
+                assert_eq!(res.bytes().await.unwrap().as_ref(), compressed.as_slice());
+            }
+        }
+    }
+}
+
+#[cfg(feature = "blocking")]
+#[test]
+fn blocking_request_decompression_overrides_client() {
+    let compressed = gzip_compress(RESPONSE_CONTENT.as_bytes());
+    let response_body = compressed.clone();
+    let server = server::http(move |_| {
+        let compressed = response_body.clone();
+        async move {
+            http::Response::builder()
+                .header("content-encoding", "gzip")
+                .header("content-length", compressed.len())
+                .body(compressed.into())
+                .unwrap()
+        }
+    });
+    let client = reqwest::blocking::Client::new();
+    let request = client
+        .get(format!("http://{}/", server.addr()))
+        .gzip(false)
+        .build()
+        .unwrap();
+    let res = client.execute(request.try_clone().unwrap()).unwrap();
+    assert_eq!(res.headers()["content-encoding"], "gzip");
+    assert_eq!(res.bytes().unwrap().as_ref(), compressed.as_slice());
+    let res = client
+        .get(format!("http://{}/", server.addr()))
+        .send()
+        .unwrap();
+    assert_eq!(res.text().unwrap(), RESPONSE_CONTENT);
+}
+
+#[tokio::test]
+async fn request_raw_gzip_with_range_and_redirect() {
+    let compressed = gzip_compress(RESPONSE_CONTENT.as_bytes());
+    let response_body = compressed.clone();
+    let server = server::http(move |req| {
+        let compressed = response_body.clone();
+        async move {
+            assert_eq!(req.headers()["accept-encoding"], "gzip");
+            assert_eq!(req.headers()["range"], "bytes=0-");
+            if req.uri().path() == "/redirect" {
+                return http::Response::builder()
+                    .status(302)
+                    .header("location", "/object")
+                    .body(Default::default())
+                    .unwrap();
+            }
+            http::Response::builder()
+                .status(206)
+                .header("content-encoding", "gzip")
+                .header("content-length", compressed.len())
+                .header(
+                    "content-range",
+                    format!("bytes 0-{}/{}", compressed.len() - 1, compressed.len()),
+                )
+                .body(compressed.into())
+                .unwrap()
+        }
+    });
+    let client = reqwest::Client::new();
+    let request = client
+        .get(format!("http://{}/redirect", server.addr()))
+        .header("accept-encoding", "gzip")
+        .header("range", "bytes=0-");
+    let raw = request.try_clone().unwrap().gzip(false).send();
+    let decoded = request.gzip(true).send();
+    let (raw, decoded) = tokio::join!(raw, decoded);
+    let raw = raw.unwrap();
+    assert_eq!(raw.status(), 206);
+    assert_eq!(raw.headers()["content-encoding"], "gzip");
+    assert_eq!(raw.content_length(), Some(compressed.len() as u64));
+    assert_eq!(raw.bytes().await.unwrap().as_ref(), compressed.as_slice());
+    assert_eq!(decoded.unwrap().text().await.unwrap(), RESPONSE_CONTENT);
+}
