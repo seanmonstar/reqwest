@@ -297,6 +297,18 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.deflate(enable))
     }
 
+    /// Disable all automatic response body decompression.
+    ///
+    /// This includes any decompression algorithms added in the future, regardless
+    /// of which optional features are enabled.
+    ///
+    /// An explicitly set `Accept-Encoding` request header is preserved and does
+    /// not enable decompression. Individual algorithms can be enabled again by
+    /// calling their respective methods after this method.
+    pub fn no_decompression(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.no_decompression())
+    }
+
     /// Disable auto response body gzip decompression.
     ///
     /// This method exists even if the optional `gzip` feature is not enabled.
