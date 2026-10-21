@@ -54,6 +54,32 @@ it will use the operating system TLS framework if available, meaning Windows and
 On Linux, it will use the available OpenSSL (see https://docs.rs/openssl for supported versions and more details)
 or fail to build if not found. Alternatively you can enable the `native-tls-vendored` feature to compile a copy of OpenSSL.
 
+### Using `rustls-no-provider`
+
+The `rustls` feature (the default) ships with the `aws-lc-rs` crypto provider. To use a different
+provider—for example [`ring`](https://crates.io/crates/ring)—enable `rustls-no-provider` instead
+and install the provider yourself before creating any clients:
+
+```toml
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", features = ["ring"] }
+```
+
+```rust,no_run
+#[tokio::main]
+async fn main() {
+    // Required when using `rustls-no-provider`; omitting this panics at Client construction.
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
+    let client = reqwest::Client::new();
+    // ...
+}
+```
+
+See the [`tls` module docs](https://docs.rs/reqwest/latest/reqwest/tls/index.html) for more detail on TLS backends.
+
 ## License
 
 Licensed under either of
