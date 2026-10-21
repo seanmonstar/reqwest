@@ -305,8 +305,10 @@ fn make_referer(next: &Url, previous: &Url) -> Option<HeaderValue> {
 
 impl TowerPolicy<async_impl::body::Body, crate::Error> for TowerRedirectPolicy {
     fn redirect(&mut self, attempt: &TowerAttempt<'_>) -> Result<TowerAction, crate::Error> {
-        let previous_url =
-            Url::parse(&attempt.previous().to_string()).expect("Previous URL must be valid");
+        let previous_url = match Url::parse(&attempt.previous().to_string()) {
+            Ok(url) => url,
+            Err(e) => return Err(crate::error::builder(e)),
+        };
 
         let next_url = match Url::parse(&attempt.location().to_string()) {
             Ok(url) => url,
