@@ -797,6 +797,26 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.tcp_user_timeout(val))
     }
 
+    /// Set the timeout for the [RFC 6555 (Happy Eyeballs)][RFC 6555] algorithm.
+    ///
+    /// If a hostname resolves to both IPv4 and IPv6 addresses and a connection
+    /// cannot be established using the preferred address family before the
+    /// timeout elapses, a connection attempt will be made in parallel using the
+    /// other address family.
+    ///
+    /// If `None`, parallel connection attempts are disabled, and the addresses
+    /// are tried sequentially.
+    ///
+    /// Default is 300 milliseconds.
+    ///
+    /// [RFC 6555]: https://datatracker.ietf.org/doc/html/rfc6555
+    pub fn happy_eyeballs_timeout<D>(self, val: D) -> ClientBuilder
+    where
+        D: Into<Option<Duration>>,
+    {
+        self.with_inner(move |inner| inner.happy_eyeballs_timeout(val))
+    }
+
     // Alt Transports
 
     /// Set that all connections will use this Unix socket.
