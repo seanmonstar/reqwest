@@ -33,6 +33,28 @@ use sealed::{Conn, Unnameable};
 
 pub(crate) type HttpConnector = hyper_util::client::legacy::connect::HttpConnector<DynResolver>;
 
+#[cfg(feature = "__rustls")]
+pub(crate) type ProxyTlsConfigFactory =
+    Arc<dyn Fn(&Uri) -> Result<Arc<rustls::ClientConfig>, BoxError> + Send + Sync>;
+
+#[cfg(feature = "__rustls")]
+fn proxy_tls_config(
+    factory: Option<&ProxyTlsConfigFactory>,
+    uri: &Uri,
+) -> Result<Option<Arc<rustls::ClientConfig>>, BoxError> {
+    if uri.scheme() != Some(&Scheme::HTTPS) {
+        return Ok(None);
+    }
+    factory
+        .map(|factory| {
+            let mut config = (*factory(uri)?).clone();
+            // HTTPS proxy connections use HTTP/1, including CONNECT requests.
+            config.alpn_protocols.clear();
+            Ok(Arc::new(config))
+        })
+        .transpose()
+}
+
 #[derive(Clone)]
 pub(crate) enum Connector {
     // base service, with or without an embedded timeout
@@ -394,6 +416,7 @@ where {
                 http,
                 tls,
                 tls_proxy,
+                proxy_tls_config_factory: None,
             },
             proxies,
             verbose: verbose::OFF,
@@ -412,6 +435,26 @@ where {
 
     pub(crate) fn set_timeout(&mut self, timeout: Option<Duration>) {
         self.timeout = timeout;
+    }
+
+    #[cfg(feature = "__rustls")]
+    pub(crate) fn set_proxy_tls_config_factory(
+        &mut self,
+        factory: ProxyTlsConfigFactory,
+    ) -> crate::Result<()> {
+        match &mut self.inner {
+            Inner::RustlsTls {
+                proxy_tls_config_factory,
+                ..
+            } => {
+                *proxy_tls_config_factory = Some(factory);
+                Ok(())
+            }
+            #[cfg(feature = "__native-tls")]
+            _ => Err(crate::error::builder(
+                "https_proxy_tls_config requires the rustls TLS backend",
+            )),
+        }
     }
 
     pub(crate) fn set_verbose(&mut self, enabled: bool) {
@@ -516,6 +559,7 @@ enum Inner {
         http: HttpConnector,
         tls: Arc<rustls::ClientConfig>,
         tls_proxy: Arc<rustls::ClientConfig>,
+        proxy_tls_config_factory: Option<ProxyTlsConfigFactory>,
     },
 }
 
@@ -661,8 +705,19 @@ impl ConnectorService {
                 }
             }
             #[cfg(feature = "__rustls")]
-            Inner::RustlsTls { http, tls, .. } => {
+            Inner::RustlsTls {
+                http,
+                tls,
+                proxy_tls_config_factory,
+                ..
+            } => {
                 let mut http = http;
+
+                let tls = if is_proxy {
+                    proxy_tls_config(proxy_tls_config_factory.as_ref(), &dst)?.unwrap_or(tls)
+                } else {
+                    tls
+                };
 
                 // Disable Nagle's algorithm for TLS handshake
                 //
@@ -842,6 +897,7 @@ impl ConnectorService {
                 http,
                 tls,
                 tls_proxy,
+                proxy_tls_config_factory,
             } => {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     use rustls_pki_types::ServerName;
@@ -850,7 +906,9 @@ impl ConnectorService {
 
                     log::trace!("tunneling HTTPS over proxy");
                     let http = http.clone();
-                    let inner = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
+                    let tls_proxy = proxy_tls_config(proxy_tls_config_factory.as_ref(), &proxy_dst)?
+                        .unwrap_or_else(|| tls_proxy.clone());
+                    let inner = hyper_rustls::HttpsConnector::from((http, tls_proxy));
                     // TODO: we could cache constructing this
                     let mut tunnel =
                         hyper_util::client::legacy::connect::proxy::Tunnel::new(proxy_dst, inner);
