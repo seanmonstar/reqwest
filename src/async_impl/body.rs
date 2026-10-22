@@ -343,7 +343,8 @@ where
 
         let sleep_pinned = if let Some(mut some) = this.sleep.as_mut().as_pin_mut() {
             if !*this.armed {
-                some.as_mut().reset(tokio::time::Instant::now() + *this.timeout);
+                some.as_mut()
+                    .reset(tokio::time::Instant::now() + *this.timeout);
                 *this.armed = true;
             }
             some
