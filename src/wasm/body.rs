@@ -2,8 +2,10 @@
 use super::multipart::Form;
 /// dox
 use bytes::Bytes;
+#[cfg(not(target_os = "wasi"))]
 use js_sys::Uint8Array;
 use std::{borrow::Cow, fmt};
+#[cfg(not(target_os = "wasi"))]
 use wasm_bindgen::JsValue;
 
 /// The body of a `Request`.
@@ -38,6 +40,7 @@ impl Single {
         }
     }
 
+    #[cfg(not(target_os = "wasi"))]
     pub(crate) fn to_js_value(&self) -> JsValue {
         match self {
             Single::Bytes(bytes) => {
@@ -71,6 +74,7 @@ impl Body {
         }
     }
 
+    #[cfg(not(target_os = "wasi"))]
     pub(crate) fn to_js_value(&self) -> crate::Result<JsValue> {
         match &self.inner {
             Inner::Single(single) => Ok(single.to_js_value()),
@@ -83,7 +87,19 @@ impl Body {
         }
     }
 
-    #[cfg(feature = "multipart")]
+    /// The bytes to send, and the `Content-Type` they need, if any: a
+    /// multipart form is encoded, with its boundary.
+    #[cfg(target_os = "wasi")]
+    pub(crate) fn to_bytes(&self) -> (Option<Bytes>, Option<http::HeaderValue>) {
+        match &self.inner {
+            Inner::Single(Single::Bytes(bytes)) => (Some(bytes.clone()), None),
+            Inner::Single(Single::Text(text)) => (Some(Bytes::from(text.to_string())), None),
+            #[cfg(feature = "multipart")]
+            Inner::MultipartForm(form) => (Some(form.to_bytes()), Some(form.content_type())),
+        }
+    }
+
+    #[cfg(all(feature = "multipart", not(target_os = "wasi")))]
     pub(crate) fn as_single(&self) -> Option<&Single> {
         match &self.inner {
             Inner::Single(single) => Some(single),
@@ -194,7 +210,7 @@ impl Default for Body {
 // > `init.method(m)` to `init.set_method(m)`
 // For now, ignore their deprecation.
 #[allow(deprecated)]
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
     use crate::Body;
     use js_sys::Uint8Array;

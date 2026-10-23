@@ -1,9 +1,15 @@
+#[cfg(not(target_os = "wasi"))]
 use std::convert::TryInto;
+#[cfg(not(target_os = "wasi"))]
 use std::time::Duration;
 
+#[cfg(not(target_os = "wasi"))]
 use js_sys::Function;
+#[cfg(not(target_os = "wasi"))]
 use wasm_bindgen::prelude::{wasm_bindgen, Closure};
+#[cfg(not(target_os = "wasi"))]
 use wasm_bindgen::{JsCast, JsValue};
+#[cfg(not(target_os = "wasi"))]
 use web_sys::{AbortController, AbortSignal};
 
 mod body;
@@ -13,12 +19,15 @@ mod client;
 pub mod multipart;
 mod request;
 mod response;
+#[cfg(target_os = "wasi")]
+mod wasi;
 
 pub use self::body::Body;
 pub use self::client::{Client, ClientBuilder};
 pub use self::request::{Request, RequestBuilder};
 pub use self::response::Response;
 
+#[cfg(not(target_os = "wasi"))]
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_name = "setTimeout")]
@@ -28,6 +37,7 @@ extern "C" {
     fn clear_timeout(handle: JsValue) -> JsValue;
 }
 
+#[cfg(not(target_os = "wasi"))]
 async fn promise<T>(promise: js_sys::Promise) -> Result<T, crate::error::BoxError>
 where
     T: JsCast,
@@ -42,11 +52,13 @@ where
 }
 
 /// A guard that cancels a fetch request when dropped.
+#[cfg(not(target_os = "wasi"))]
 struct AbortGuard {
     ctrl: AbortController,
     timeout: Option<(JsValue, Closure<dyn FnMut()>)>,
 }
 
+#[cfg(not(target_os = "wasi"))]
 impl AbortGuard {
     fn new() -> crate::Result<Self> {
         Ok(AbortGuard {
@@ -75,6 +87,7 @@ impl AbortGuard {
     }
 }
 
+#[cfg(not(target_os = "wasi"))]
 impl Drop for AbortGuard {
     fn drop(&mut self) {
         self.ctrl.abort();
