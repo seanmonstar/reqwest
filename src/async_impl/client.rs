@@ -1874,6 +1874,9 @@ impl ClientBuilder {
     /// If a request URI uses the `https` scheme, TLS will still be used over
     /// the Windows named pipe.
     ///
+    /// If every instance of the pipe is busy, opening the pipe is retried until we can connect to a
+    /// free instance.
+    ///
     /// # Note
     ///
     /// This option is not compatible with any of the TCP or Proxy options.
