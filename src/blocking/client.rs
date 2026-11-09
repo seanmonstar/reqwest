@@ -1168,17 +1168,18 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.tls_backend_preconfigured(tls))
     }
 
-    /// Sets a Rustls configuration factory for HTTPS proxy connections.
+    /// Sets a TLS configuration factory for HTTPS proxy connections.
     ///
     /// See [`reqwest::ClientBuilder::https_proxy_tls_config`](crate::ClientBuilder::https_proxy_tls_config).
-    #[cfg(feature = "__rustls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
-    pub fn https_proxy_tls_config<F>(self, factory: F) -> ClientBuilder
+    #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls"))))]
+    pub fn https_proxy_tls_config<F, T>(self, factory: F) -> ClientBuilder
     where
-        F: Fn(&http::Uri) -> Result<Arc<rustls::ClientConfig>, Box<dyn std::error::Error + Send + Sync>>
+        F: Fn(&http::Uri) -> Result<T, Box<dyn std::error::Error + Send + Sync>>
             + Send
             + Sync
             + 'static,
+        T: Any,
     {
         self.with_inner(move |inner| inner.https_proxy_tls_config(factory))
     }
