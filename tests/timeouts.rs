@@ -279,6 +279,26 @@ async fn read_timeout_allows_slow_response_body() {
     assert_eq!(body, "012");
 }
 
+#[tokio::test]
+async fn read_timeout_ignores_time_between_reads() {
+    let _ = env_logger::try_init();
+
+    let server = server::http(move |_req| async { http::Response::new("Hello".into()) });
+
+    let client = reqwest::Client::builder()
+        .read_timeout(Duration::from_millis(100))
+        .no_proxy()
+        .build()
+        .unwrap();
+
+    let url = format!("http://{}/pause", server.addr());
+    let mut res = client.get(&url).send().await.expect("Failed to get");
+    assert_eq!(res.chunk().await.unwrap().unwrap(), "Hello");
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(res.chunk().await.expect("read after pause").is_none());
+}
+
 /// Tests that a big [`Duration`] does not overflow the system clock
 /// and instead behaves as if no timeout was set (the request completes normally).
 #[cfg(feature = "blocking")]
