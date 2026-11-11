@@ -1472,6 +1472,8 @@ impl ClientBuilder {
     /// successful read. This is more appropriate for detecting stalled
     /// connections when the size isn't known beforehand.
     ///
+    /// Note: this timeout always applies, regardless of writing any request body.
+    ///
     /// Default is no timeout.
     pub fn read_timeout(mut self, timeout: Duration) -> ClientBuilder {
         self.config.read_timeout = Some(timeout);
