@@ -45,9 +45,9 @@ fn js_fetch(req: &web_sys::Request) -> Promise {
 
 /// An HTTP Client for WebAssembly.
 ///
-/// Uses the browser's Fetch API to make requests. The `Client` holds
-/// configuration that applies to all requests. To configure a `Client`,
-/// use `Client::builder()`.
+/// Uses the browser's Fetch API to make requests, or `wasi:http` on WASI
+/// targets. The `Client` holds configuration that applies to all requests.
+/// To configure a `Client`, use `Client::builder()`.
 #[derive(Clone)]
 pub struct Client {
     config: Arc<Config>,

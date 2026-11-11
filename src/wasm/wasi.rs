@@ -1,3 +1,10 @@
+//! The WASI client. A request goes through `wasi:http/client`, and the response body is read from
+//! the host as it arrives. One deadline, from the request's timeout, covers the send and the body.
+//!
+//! A failed send is a request error, a request that cannot be built is a builder error, and a
+//! failed body read is a body error. The `wasi:http` error code is the source, so `is_timeout()` is
+//! true for the deadline and for the host's timeout codes.
+
 use std::future::{poll_fn, Future};
 use std::pin::{pin, Pin};
 use std::task::{Context, Poll};
