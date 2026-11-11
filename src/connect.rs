@@ -31,7 +31,90 @@ use crate::error::{cast_to_internal_error, BoxError};
 use crate::proxy::{Intercepted, Matcher as ProxyMatcher};
 use sealed::{Conn, Unnameable};
 
-pub(crate) type HttpConnector = hyper_util::client::legacy::connect::HttpConnector<DynResolver>;
+type HyperHttpConnector = hyper_util::client::legacy::connect::HttpConnector<DynResolver>;
+
+#[derive(Clone)]
+pub(crate) struct HttpConnector {
+    inner: HyperHttpConnector,
+    linger: Option<Duration>,
+}
+
+impl std::fmt::Debug for HttpConnector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HttpConnector")
+            .field("linger", &self.linger)
+            .finish_non_exhaustive()
+    }
+}
+
+impl HttpConnector {
+    pub(crate) fn new_with_resolver(resolver: DynResolver) -> Self {
+        Self {
+            inner: HyperHttpConnector::new_with_resolver(resolver),
+            linger: None,
+        }
+    }
+}
+
+impl std::ops::Deref for HttpConnector {
+    type Target = HyperHttpConnector;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl std::ops::DerefMut for HttpConnector {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl Service<Uri> for HttpConnector {
+    type Response = <HyperHttpConnector as Service<Uri>>::Response;
+    type Error = BoxError;
+    type Future = HttpConnecting;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx).map_err(Into::into)
+    }
+
+    fn call(&mut self, dst: Uri) -> Self::Future {
+        HttpConnecting {
+            inner: self.inner.call(dst),
+            linger: self.linger,
+        }
+    }
+}
+
+pin_project! {
+    pub(crate) struct HttpConnecting {
+        #[pin]
+        inner: <HyperHttpConnector as Service<Uri>>::Future,
+        linger: Option<Duration>,
+    }
+}
+
+impl std::fmt::Debug for HttpConnecting {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HttpConnecting")
+            .field("linger", &self.linger)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Future for HttpConnecting {
+    type Output = Result<<HttpConnector as Service<Uri>>::Response, BoxError>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        let stream = std::task::ready!(this.inner.poll(cx))?;
+        if let Some(linger) = *this.linger {
+            socket2::SockRef::from(stream.inner()).set_linger(Some(linger))?;
+        }
+        Poll::Ready(Ok(stream))
+    }
+}
 
 #[derive(Clone)]
 pub(crate) enum Connector {
@@ -418,6 +501,10 @@ where {
         self.verbose.0 = enabled;
     }
 
+    pub(crate) fn set_linger(&mut self, dur: Option<Duration>) {
+        self.inner.get_http_connector().linger = dur;
+    }
+
     pub(crate) fn set_keepalive(&mut self, dur: Option<Duration>) {
         match &mut self.inner {
             #[cfg(feature = "__native-tls")]
@@ -520,7 +607,6 @@ enum Inner {
 }
 
 impl Inner {
-    #[cfg(feature = "socks")]
     fn get_http_connector(&mut self) -> &mut crate::connect::HttpConnector {
         match self {
             #[cfg(feature = "__native-tls")]
@@ -2134,6 +2220,31 @@ mod verbose {
                 left -= n;
             }
             Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tcp_linger_tests {
+    use super::{DynResolver, HttpConnector, Service};
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn tcp_linger_socket_option() {
+        for linger in [None, Some(Duration::ZERO), Some(Duration::from_secs(2))] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let uri = format!("http://{}", listener.local_addr().unwrap())
+                .parse()
+                .unwrap();
+            let mut connector = HttpConnector::new_with_resolver(DynResolver::new(
+                std::sync::Arc::new(crate::dns::gai::GaiResolver::new()),
+            ));
+            connector.linger = linger;
+            let stream = connector.call(uri).await.unwrap();
+            assert_eq!(
+                socket2::SockRef::from(stream.inner()).linger().unwrap(),
+                linger
+            );
         }
     }
 }

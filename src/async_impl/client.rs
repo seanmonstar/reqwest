@@ -23,7 +23,7 @@ use crate::connect::uds::UnixSocketProvider;
 use crate::connect::windows_named_pipe::WindowsNamedPipeProvider;
 use crate::connect::{
     sealed::{Conn, Unnameable},
-    BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder,
+    BoxedConnectorLayer, BoxedConnectorService, Connector, ConnectorBuilder, HttpConnector,
 };
 #[cfg(feature = "cookies")]
 use crate::cookie;
@@ -49,7 +49,6 @@ use crate::{IntoUrl, Method, Proxy, Url};
 use http::header::{Entry, HeaderMap, HeaderValue, ACCEPT, PROXY_AUTHORIZATION, USER_AGENT};
 use http::uri::Scheme;
 use http::Uri;
-use hyper_util::client::legacy::connect::HttpConnector;
 #[cfg(feature = "__native-tls")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
@@ -173,6 +172,7 @@ struct Config {
     connection_verbose: bool,
     pool_idle_timeout: Option<Duration>,
     pool_max_idle_per_host: usize,
+    tcp_linger: Option<Duration>,
     tcp_keepalive: Option<Duration>,
     tcp_keepalive_interval: Option<Duration>,
     tcp_keepalive_retries: Option<u32>,
@@ -305,6 +305,7 @@ impl ClientBuilder {
                 connection_verbose: false,
                 pool_idle_timeout: Some(Duration::from_secs(90)),
                 pool_max_idle_per_host: usize::MAX,
+                tcp_linger: None,
                 tcp_keepalive: Some(Duration::from_secs(15)),
                 tcp_keepalive_interval: Some(Duration::from_secs(15)),
                 tcp_keepalive_retries: Some(3),
@@ -929,6 +930,7 @@ impl ClientBuilder {
 
         connector_builder.set_timeout(config.connect_timeout);
         connector_builder.set_verbose(config.connection_verbose);
+        connector_builder.set_linger(config.tcp_linger);
         connector_builder.set_keepalive(config.tcp_keepalive);
         connector_builder.set_keepalive_interval(config.tcp_keepalive_interval);
         connector_builder.set_keepalive_retries(config.tcp_keepalive_retries);
@@ -1728,6 +1730,26 @@ impl ClientBuilder {
     /// Default is `true`.
     pub fn tcp_nodelay(mut self, enabled: bool) -> ClientBuilder {
         self.config.nodelay = enabled;
+        self
+    }
+
+    /// Set the linger duration for TCP sockets with `SO_LINGER`.
+    ///
+    /// By default, no linger option is set. Passing `None` preserves that behavior.
+    ///
+    /// A zero duration enables abortive close: when a socket is closed, pending
+    /// unsent data is discarded and the peer receives a TCP reset instead of a
+    /// graceful shutdown. This can avoid accumulating local `TIME_WAIT` state.
+    /// It does not close active requests or disable connection pooling.
+    ///
+    /// A nonzero duration can cause socket closure to block while pending data
+    /// is sent, depending on the platform. This option does not apply to Unix
+    /// sockets, Windows named pipes, or HTTP/3 connections.
+    pub fn tcp_linger<D>(mut self, val: D) -> ClientBuilder
+    where
+        D: Into<Option<Duration>>,
+    {
+        self.config.tcp_linger = val.into();
         self
     }
 

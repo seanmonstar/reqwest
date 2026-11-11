@@ -709,6 +709,20 @@ impl ClientBuilder {
         self.with_inner(move |inner| inner.tcp_nodelay(enabled))
     }
 
+    /// Set the linger duration for TCP sockets with `SO_LINGER`.
+    ///
+    /// Defaults to `None`, leaving the socket's linger option unchanged. A zero
+    /// duration resets the connection on close and discards unsent data. A
+    /// nonzero duration can block socket closure while pending data is sent.
+    /// This option does not close active requests or disable connection pooling.
+    /// It does not apply to Unix sockets, Windows named pipes, or HTTP/3.
+    pub fn tcp_linger<D>(self, val: D) -> ClientBuilder
+    where
+        D: Into<Option<Duration>>,
+    {
+        self.with_inner(move |inner| inner.tcp_linger(val))
+    }
+
     /// Bind to a local IP Address.
     ///
     /// # Example
