@@ -293,3 +293,8 @@ required-features = ["deflate", "stream"]
 name = "multipart"
 path = "tests/multipart.rs"
 required-features = ["multipart"]
+
+[[test]]
+name = "wasi"
+path = "tests/wasi.rs"
+required-features = ["json", "stream"]

@@ -25,6 +25,7 @@ jobs:
       - msrv
       - android
       - wasm
+      - wasi
       - docs
     steps:
       - run: exit 0
@@ -397,3 +398,41 @@ jobs:
 
       - name: Wasm-pack test chrome
         run: wasm-pack test --headless --chrome
+
+  wasi:
+    name: WASI
+    needs: [style]
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+
+      - name: Check
+        run: cargo check --target wasm32-wasip2
+
+      - name: Check features
+        run: cargo check --target wasm32-wasip2 --features json,form,query,multipart,stream
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasmtime@50.0.1
+
+      - name: Test library
+        run: cargo test --lib --target wasm32-wasip2
+        env:
+          CARGO_TARGET_WASM32_WASIP2_RUNNER: wasmtime run
+
+      - name: Build component
+        run: cargo build --release --target wasm32-wasip2 --manifest-path tests/wasi_guest/Cargo.toml
+
+      - name: Test component
+        run: cargo test --test wasi --features json,stream -- --ignored
+        env:
+          REQWEST_WASI_COMPONENT: tests/wasi_guest/target/wasm32-wasip2/release/wasi_guest.wasm
