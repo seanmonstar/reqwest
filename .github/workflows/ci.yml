@@ -76,6 +76,7 @@ jobs:
           - windows / stable-i686-gnu
           - "feat.: default-tls disabled"
           - "feat.: rustls"
+          - "feat.: rustls-ring"
           - "feat.: rustls-no-provider"
           - "feat.: native-tls"
           - "feat.: default-tls and native-tls"
@@ -142,6 +143,8 @@ jobs:
             features: "--no-default-features"
           - name: "feat.: rustls"
             features: "--no-default-features --features rustls"
+          - name: "feat.: rustls-ring"
+            features: "--no-default-features --features rustls-ring"
           - name: "feat.: rustls-no-provider"
             features: "--no-default-features --features rustls-no-provider"
           - name: "feat.: native-tls"
@@ -245,7 +248,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: check --feature-powerset
-        run: cargo hack --no-dev-deps check --feature-powerset --depth 2 --skip http3,__tls,__rustls,__rustls-aws-lc-rs,native-tls-vendored,trust-dns
+        run: cargo hack --no-dev-deps check --feature-powerset --depth 2 --skip http3,__tls,__rustls,__rustls-aws-lc-rs,__rustls-ring,native-tls-vendored,trust-dns
         env:
           RUSTFLAGS: "-D dead_code -D unused_imports"
 
