@@ -586,3 +586,53 @@ async fn http3_request_stream_error() {
         .unwrap();
     assert!(err.is_body());
 }
+
+#[cfg(feature = "gzip")]
+#[tokio::test]
+async fn http3_request_decompression_overrides_client() {
+    use std::io::Write;
+
+    let content = b"compressed HTTP/3 response";
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder.write_all(content).unwrap();
+    let compressed = encoder.finish().unwrap();
+    let response_body = compressed.clone();
+    let server = server::Http3::new().build(move |req| {
+        let compressed = response_body.clone();
+        async move {
+            assert_eq!(req.headers()["accept-encoding"], "gzip");
+            http::Response::builder()
+                .header("content-encoding", "gzip")
+                .header("content-length", compressed.len())
+                .body(compressed.into())
+                .unwrap()
+        }
+    });
+    let url = format!("https://{}/", server.addr());
+    for default in [false, true] {
+        let client = reqwest::Client::builder()
+            .http3_prior_knowledge()
+            .danger_accept_invalid_certs(true)
+            .gzip(default)
+            .build()
+            .unwrap();
+        let res = client
+            .get(&url)
+            .version(http::Version::HTTP_3)
+            .header("accept-encoding", "gzip")
+            .gzip(!default)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.version(), http::Version::HTTP_3);
+        if default {
+            assert_eq!(res.headers()["content-encoding"], "gzip");
+            assert_eq!(res.content_length(), Some(compressed.len() as u64));
+            assert_eq!(res.bytes().await.unwrap().as_ref(), compressed.as_slice());
+        } else {
+            assert!(!res.headers().contains_key("content-encoding"));
+            assert!(!res.headers().contains_key("content-length"));
+            assert_eq!(res.bytes().await.unwrap().as_ref(), content);
+        }
+    }
+}

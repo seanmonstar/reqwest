@@ -355,3 +355,83 @@ async fn test_chunked_fragmented_response_with_extra_bytes() {
     assert!(err.is_decode());
     assert!(start.elapsed() >= DELAY_BETWEEN_RESPONSE_PARTS - DELAY_MARGIN);
 }
+
+#[tokio::test]
+async fn request_decompression_overrides_client() {
+    let compressed = brotli_compress(RESPONSE_CONTENT.as_bytes());
+    let response_body = compressed.clone();
+    let server = server::http(move |req| {
+        let compressed = response_body.clone();
+        async move {
+            let accepts = req
+                .headers()
+                .get("accept-encoding")
+                .map(|value| value.to_str().unwrap().split(',').any(|v| v.trim() == "br"))
+                .unwrap_or(false);
+            assert_eq!(accepts, req.uri().path() == "/decoded");
+            http::Response::builder()
+                .header("content-encoding", "br")
+                .header("content-length", compressed.len())
+                .body(compressed.into())
+                .unwrap()
+        }
+    });
+
+    for default in [false, true] {
+        let client = reqwest::Client::builder().brotli(default).build().unwrap();
+        for setting in [Some(!default), None, Some(default)] {
+            let decode = setting.unwrap_or(default);
+            let path = if decode { "decoded" } else { "raw" };
+            let mut builder = client.get(format!("http://{}/{path}", server.addr()));
+            if let Some(enable) = setting {
+                builder = builder.brotli(!enable).brotli(enable);
+            }
+            let request = builder.build().unwrap();
+            // Cloning a built request must retain its overrides.
+            let res = client.execute(request.try_clone().unwrap()).await.unwrap();
+            if decode {
+                assert!(!res.headers().contains_key("content-encoding"));
+                assert!(!res.headers().contains_key("content-length"));
+                assert_eq!(
+                    res.bytes().await.unwrap().as_ref(),
+                    RESPONSE_CONTENT.as_bytes()
+                );
+            } else {
+                assert_eq!(res.headers()["content-encoding"], "br");
+                assert_eq!(res.content_length(), Some(compressed.len() as u64));
+                assert_eq!(res.bytes().await.unwrap().as_ref(), compressed.as_slice());
+            }
+        }
+    }
+}
+
+#[cfg(feature = "blocking")]
+#[test]
+fn blocking_request_decompression_overrides_client() {
+    let compressed = brotli_compress(RESPONSE_CONTENT.as_bytes());
+    let response_body = compressed.clone();
+    let server = server::http(move |_| {
+        let compressed = response_body.clone();
+        async move {
+            http::Response::builder()
+                .header("content-encoding", "br")
+                .header("content-length", compressed.len())
+                .body(compressed.into())
+                .unwrap()
+        }
+    });
+    let client = reqwest::blocking::Client::new();
+    let request = client
+        .get(format!("http://{}/", server.addr()))
+        .brotli(false)
+        .build()
+        .unwrap();
+    let res = client.execute(request.try_clone().unwrap()).unwrap();
+    assert_eq!(res.headers()["content-encoding"], "br");
+    assert_eq!(res.bytes().unwrap().as_ref(), compressed.as_slice());
+    let res = client
+        .get(format!("http://{}/", server.addr()))
+        .send()
+        .unwrap();
+    assert_eq!(res.text().unwrap(), RESPONSE_CONTENT);
+}

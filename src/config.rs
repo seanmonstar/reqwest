@@ -108,3 +108,39 @@ pub(crate) struct TotalTimeout;
 impl RequestConfigValue for TotalTimeout {
     type Value = Duration;
 }
+
+#[cfg(feature = "gzip")]
+#[derive(Clone, Copy)]
+pub(crate) struct Gzip;
+
+#[cfg(feature = "gzip")]
+impl RequestConfigValue for Gzip {
+    type Value = bool;
+}
+
+#[cfg(feature = "brotli")]
+#[derive(Clone, Copy)]
+pub(crate) struct Brotli;
+
+#[cfg(feature = "brotli")]
+impl RequestConfigValue for Brotli {
+    type Value = bool;
+}
+
+#[cfg(feature = "zstd")]
+#[derive(Clone, Copy)]
+pub(crate) struct Zstd;
+
+#[cfg(feature = "zstd")]
+impl RequestConfigValue for Zstd {
+    type Value = bool;
+}
+
+#[cfg(feature = "deflate")]
+#[derive(Clone, Copy)]
+pub(crate) struct Deflate;
+
+#[cfg(feature = "deflate")]
+impl RequestConfigValue for Deflate {
+    type Value = bool;
+}
