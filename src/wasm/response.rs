@@ -2,15 +2,19 @@ use std::fmt;
 
 use bytes::Bytes;
 use http::{HeaderMap, StatusCode};
+#[cfg(not(target_os = "wasi"))]
 use js_sys::Uint8Array;
 use url::Url;
 
+#[cfg(target_os = "wasi")]
+use crate::wasm::wasi::Incoming;
+#[cfg(not(target_os = "wasi"))]
 use crate::wasm::AbortGuard;
 
-#[cfg(feature = "stream")]
+#[cfg(all(feature = "stream", not(target_os = "wasi")))]
 use wasm_bindgen::JsCast;
 
-#[cfg(feature = "stream")]
+#[cfg(all(feature = "stream", not(target_os = "wasi")))]
 use futures_util::stream::{self, StreamExt};
 
 #[cfg(feature = "json")]
@@ -18,14 +22,27 @@ use serde::de::DeserializeOwned;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
+    #[cfg(not(target_os = "wasi"))]
     http: http::Response<web_sys::Response>,
+    #[cfg(not(target_os = "wasi"))]
     _abort: AbortGuard,
+    #[cfg(target_os = "wasi")]
+    http: http::Response<Incoming>,
     // Boxed to save space (11 words to 1 word), and it's not accessed
     // frequently internally.
     url: Box<Url>,
 }
 
 impl Response {
+    #[cfg(target_os = "wasi")]
+    pub(super) fn new(res: http::Response<Incoming>, url: Url) -> Response {
+        Response {
+            http: res,
+            url: Box::new(url),
+        }
+    }
+
+    #[cfg(not(target_os = "wasi"))]
     pub(super) fn new(
         res: http::Response<web_sys::Response>,
         url: Url,
@@ -96,6 +113,46 @@ impl Response {
     }
 
     /// Get the response text.
+    #[cfg(target_os = "wasi")]
+    pub async fn text(self) -> crate::Result<String> {
+        let bytes = self.bytes().await?;
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
+    }
+
+    /// Get the response as bytes
+    #[cfg(target_os = "wasi")]
+    pub async fn bytes(self) -> crate::Result<Bytes> {
+        use http_body_util::BodyExt;
+
+        let collected = self.http.into_body().collect().await?;
+        Ok(collected.to_bytes())
+    }
+
+    /// Stream a chunk of the response body.
+    ///
+    /// When the response body has been exhausted, this will return `None`.
+    #[cfg(target_os = "wasi")]
+    pub async fn chunk(&mut self) -> crate::Result<Option<Bytes>> {
+        use http_body_util::BodyExt;
+
+        while let Some(frame) = self.http.body_mut().frame().await {
+            if let Ok(data) = frame?.into_data() {
+                return Ok(Some(data));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Convert the response into a `Stream` of `Bytes` from the body.
+    #[cfg(all(feature = "stream", target_os = "wasi"))]
+    pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> + Send {
+        use http_body_util::BodyExt;
+
+        self.http.into_body().into_data_stream()
+    }
+
+    /// Get the response text.
+    #[cfg(not(target_os = "wasi"))]
     pub async fn text(self) -> crate::Result<String> {
         let p = self
             .http
@@ -114,6 +171,7 @@ impl Response {
     }
 
     /// Get the response as bytes
+    #[cfg(not(target_os = "wasi"))]
     pub async fn bytes(self) -> crate::Result<Bytes> {
         let p = self
             .http
@@ -133,7 +191,7 @@ impl Response {
     }
 
     /// Convert the response into a `Stream` of `Bytes` from the body.
-    #[cfg(feature = "stream")]
+    #[cfg(all(feature = "stream", not(target_os = "wasi")))]
     pub fn bytes_stream(self) -> impl futures_core::Stream<Item = crate::Result<Bytes>> {
         use futures_core::Stream;
         use std::pin::Pin;

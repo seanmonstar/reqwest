@@ -2,8 +2,13 @@
 use std::borrow::Cow;
 use std::fmt;
 
+#[cfg(target_os = "wasi")]
+use bytes::Bytes;
 use http::HeaderMap;
+#[cfg(target_os = "wasi")]
+use http::HeaderValue;
 use mime_guess::Mime;
+#[cfg(not(target_os = "wasi"))]
 use web_sys::FormData;
 
 use super::Body;
@@ -89,6 +94,7 @@ impl Form {
         }
     }
 
+    #[cfg(not(target_os = "wasi"))]
     pub(crate) fn to_form_data(&self) -> crate::Result<FormData> {
         let form = FormData::new()
             .map_err(crate::error::wasm)
@@ -181,6 +187,7 @@ impl Part {
         }
     }
 
+    #[cfg(not(target_os = "wasi"))]
     fn append_to_form(
         &self,
         name: &str,
@@ -215,6 +222,7 @@ impl Part {
         }
     }
 
+    #[cfg(not(target_os = "wasi"))]
     fn blob(&self, mime_type: Option<&Mime>) -> crate::Result<web_sys::Blob> {
         use web_sys::Blob;
         use web_sys::BlobPropertyBag;
@@ -323,7 +331,86 @@ impl PartMetadata {
     }
 }
 
-#[cfg(test)]
+#[cfg(target_os = "wasi")]
+impl Form {
+    pub(crate) fn to_bytes(&self) -> (Bytes, HeaderValue) {
+        let boundary = boundary();
+        let mut buf = Vec::new();
+        for (name, part) in &self.inner.fields {
+            buf.extend_from_slice(b"--");
+            buf.extend_from_slice(boundary.as_bytes());
+            buf.extend_from_slice(b"\r\n");
+            part.write_headers(name, &mut buf);
+            buf.extend_from_slice(b"\r\n\r\n");
+            let single = part
+                .value
+                .as_single()
+                .expect("A part's body can't be multipart itself");
+            buf.extend_from_slice(&single.to_bytes());
+            buf.extend_from_slice(b"\r\n");
+        }
+        buf.extend_from_slice(b"--");
+        buf.extend_from_slice(boundary.as_bytes());
+        buf.extend_from_slice(b"--\r\n");
+        let content_type =
+            HeaderValue::try_from(format!("multipart/form-data; boundary={boundary}"))
+                .expect("a boundary is a valid header value");
+        (buf.into(), content_type)
+    }
+}
+
+#[cfg(target_os = "wasi")]
+impl Part {
+    fn write_headers(&self, name: &str, buf: &mut Vec<u8>) {
+        let meta = self.metadata();
+        buf.extend_from_slice(b"Content-Disposition: form-data; name=\"");
+        buf.extend_from_slice(escape_quoted(name).as_bytes());
+        buf.push(b'"');
+        if let Some(file_name) = &meta.file_name {
+            buf.extend_from_slice(b"; filename=\"");
+            buf.extend_from_slice(escape_quoted(file_name).as_bytes());
+            buf.push(b'"');
+        }
+        if let Some(mime) = &meta.mime {
+            buf.extend_from_slice(b"\r\nContent-Type: ");
+            buf.extend_from_slice(mime.as_ref().as_bytes());
+        }
+        for (name, value) in &meta.headers {
+            buf.extend_from_slice(b"\r\n");
+            buf.extend_from_slice(name.as_str().as_bytes());
+            buf.extend_from_slice(b": ");
+            buf.extend_from_slice(value.as_bytes());
+        }
+    }
+}
+
+#[cfg(target_os = "wasi")]
+fn escape_quoted(value: &str) -> Cow<'_, str> {
+    if value.contains(['"', '\r', '\n']) {
+        Cow::Owned(
+            value
+                .replace('"', "%22")
+                .replace('\r', "%0D")
+                .replace('\n', "%0A"),
+        )
+    } else {
+        Cow::Borrowed(value)
+    }
+}
+
+#[cfg(target_os = "wasi")]
+fn boundary() -> String {
+    use crate::util::fast_random as random;
+
+    let a = random();
+    let b = random();
+    let c = random();
+    let d = random();
+
+    format!("{a:016x}-{b:016x}-{c:016x}-{d:016x}")
+}
+
+#[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
 
     use wasm_bindgen_test::*;

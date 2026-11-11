@@ -2,8 +2,10 @@
 use super::multipart::Form;
 /// dox
 use bytes::Bytes;
+#[cfg(not(target_os = "wasi"))]
 use js_sys::Uint8Array;
 use std::{borrow::Cow, fmt};
+#[cfg(not(target_os = "wasi"))]
 use wasm_bindgen::JsValue;
 
 /// The body of a `Request`.
@@ -38,6 +40,16 @@ impl Single {
         }
     }
 
+    #[cfg(target_os = "wasi")]
+    pub(crate) fn to_bytes(&self) -> Bytes {
+        match self {
+            Single::Bytes(bytes) => bytes.clone(),
+            Single::Text(Cow::Borrowed(text)) => Bytes::from_static(text.as_bytes()),
+            Single::Text(Cow::Owned(text)) => Bytes::copy_from_slice(text.as_bytes()),
+        }
+    }
+
+    #[cfg(not(target_os = "wasi"))]
     pub(crate) fn to_js_value(&self) -> JsValue {
         match self {
             Single::Bytes(bytes) => {
@@ -71,6 +83,19 @@ impl Body {
         }
     }
 
+    #[cfg(target_os = "wasi")]
+    pub(crate) fn to_bytes(&self) -> (Bytes, Option<http::HeaderValue>) {
+        match &self.inner {
+            Inner::Single(single) => (single.to_bytes(), None),
+            #[cfg(feature = "multipart")]
+            Inner::MultipartForm(form) => {
+                let (bytes, content_type) = form.to_bytes();
+                (bytes, Some(content_type))
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "wasi"))]
     pub(crate) fn to_js_value(&self) -> crate::Result<JsValue> {
         match &self.inner {
             Inner::Single(single) => Ok(single.to_js_value()),
@@ -194,7 +219,7 @@ impl Default for Body {
 // > `init.method(m)` to `init.set_method(m)`
 // For now, ignore their deprecation.
 #[allow(deprecated)]
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
     use crate::Body;
     use js_sys::Uint8Array;
