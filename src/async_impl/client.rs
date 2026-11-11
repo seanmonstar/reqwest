@@ -181,6 +181,8 @@ struct Config {
     #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
     identity: Option<Identity>,
     proxies: Vec<ProxyMatcher>,
+    #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
+    proxy_tls_config_factory: Option<crate::connect::ProxyTlsConfigFactory>,
     auto_sys_proxy: bool,
     redirect_policy: redirect::Policy,
     retry_policy: crate::retry::Builder,
@@ -325,6 +327,8 @@ impl ClientBuilder {
                 identity: None,
                 #[cfg(feature = "__rustls")]
                 crls: vec![],
+                #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
+                proxy_tls_config_factory: None,
                 #[cfg(feature = "__tls")]
                 min_tls_version: None,
                 #[cfg(feature = "__tls")]
@@ -929,6 +933,10 @@ impl ClientBuilder {
 
         connector_builder.set_timeout(config.connect_timeout);
         connector_builder.set_verbose(config.connection_verbose);
+        #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
+        if let Some(factory) = config.proxy_tls_config_factory {
+            connector_builder.set_proxy_tls_config_factory(factory)?;
+        }
         connector_builder.set_keepalive(config.tcp_keepalive);
         connector_builder.set_keepalive_interval(config.tcp_keepalive_interval);
         connector_builder.set_keepalive_retries(config.tcp_keepalive_retries);
@@ -2269,6 +2277,40 @@ impl ClientBuilder {
 
         // Otherwise, we don't recognize the TLS backend!
         self.config.tls = crate::tls::TlsBackend::UnknownPreconfigured;
+        self
+    }
+
+    /// Sets a TLS configuration factory for HTTPS proxy connections.
+    ///
+    /// The factory receives the proxy URI for each new connection. It can supply
+    /// separate trust roots and client certificates, including updated certificates
+    /// after rotation. Existing pooled connections are not affected.
+    ///
+    /// The factory may return a `rustls::ClientConfig`, `Arc<rustls::ClientConfig>`,
+    /// `native_tls::TlsConnector`, or `Arc<native_tls::TlsConnector>` matching an
+    /// enabled TLS feature and the crate version used by reqwest. Returning any
+    /// other type causes [`build()`][Self::build] to return an error.
+    ///
+    /// This does not change TLS settings for destination servers, HTTP proxies,
+    /// or SOCKS proxies. Proxy connections use HTTP/1, so a Rustls configuration's
+    /// ALPN protocols are ignored. A factory error fails the connection.
+    ///
+    /// # Optional
+    ///
+    /// This requires one of the optional features `native-tls` or
+    /// `rustls(-...)` to be enabled.
+    #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "native-tls", feature = "rustls"))))]
+    pub fn https_proxy_tls_config<F, T>(mut self, factory: F) -> ClientBuilder
+    where
+        F: Fn(&http::Uri) -> Result<T, Box<dyn std::error::Error + Send + Sync>>
+            + Send
+            + Sync
+            + 'static,
+        T: Any,
+    {
+        self.config.proxy_tls_config_factory =
+            Some(crate::connect::ProxyTlsConfigFactory::new(factory));
         self
     }
 

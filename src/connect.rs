@@ -14,6 +14,8 @@ use tower::util::{BoxCloneSyncServiceLayer, MapRequestLayer};
 use tower::{timeout::TimeoutLayer, util::BoxCloneSyncService, ServiceBuilder};
 use tower_service::Service;
 
+#[cfg(any(feature = "__native-tls", feature = "__rustls"))]
+use std::any::{Any, TypeId};
 use std::future::Future;
 use std::io::{self, IoSlice};
 use std::net::IpAddr;
@@ -32,6 +34,113 @@ use crate::proxy::{Intercepted, Matcher as ProxyMatcher};
 use sealed::{Conn, Unnameable};
 
 pub(crate) type HttpConnector = hyper_util::client::legacy::connect::HttpConnector<DynResolver>;
+
+#[cfg(any(feature = "__native-tls", feature = "__rustls"))]
+#[derive(Clone)]
+pub(crate) enum ProxyTlsConfigFactory {
+    #[cfg(feature = "__native-tls")]
+    NativeTls(Arc<dyn Fn(&Uri) -> Result<TlsConnector, BoxError> + Send + Sync>),
+    #[cfg(feature = "__rustls")]
+    Rustls(Arc<dyn Fn(&Uri) -> Result<Arc<rustls::ClientConfig>, BoxError> + Send + Sync>),
+    Unknown,
+}
+
+#[cfg(any(feature = "__native-tls", feature = "__rustls"))]
+enum ProxyTlsConfig {
+    #[cfg(feature = "__native-tls")]
+    NativeTls(TlsConnector),
+    #[cfg(feature = "__rustls")]
+    Rustls(Arc<rustls::ClientConfig>),
+}
+
+#[cfg(any(feature = "__native-tls", feature = "__rustls"))]
+impl ProxyTlsConfigFactory {
+    pub(crate) fn new<F, T>(factory: F) -> Self
+    where
+        F: Fn(&Uri) -> Result<T, BoxError> + Send + Sync + 'static,
+        T: Any,
+    {
+        #[cfg(feature = "__native-tls")]
+        {
+            if TypeId::of::<T>() == TypeId::of::<TlsConnector>() {
+                return Self::NativeTls(Arc::new(move |uri| {
+                    let mut tls = Some(factory(uri)?);
+                    let tls = (&mut tls as &mut dyn Any)
+                        .downcast_mut::<Option<TlsConnector>>()
+                        .expect("is definitely TlsConnector")
+                        .take()
+                        .expect("is definitely Some");
+                    Ok(tls)
+                }));
+            }
+            if TypeId::of::<T>() == TypeId::of::<Arc<TlsConnector>>() {
+                return Self::NativeTls(Arc::new(move |uri| {
+                    let mut tls = Some(factory(uri)?);
+                    let tls = (&mut tls as &mut dyn Any)
+                        .downcast_mut::<Option<Arc<TlsConnector>>>()
+                        .expect("is definitely Arc<TlsConnector>")
+                        .take()
+                        .expect("is definitely Some");
+                    Ok((*tls).clone())
+                }));
+            }
+        }
+        #[cfg(feature = "__rustls")]
+        {
+            if TypeId::of::<T>() == TypeId::of::<Arc<rustls::ClientConfig>>() {
+                return Self::Rustls(Arc::new(move |uri| {
+                    let mut tls = Some(factory(uri)?);
+                    let mut config = (&mut tls as &mut dyn Any)
+                        .downcast_mut::<Option<Arc<rustls::ClientConfig>>>()
+                        .expect("is definitely Arc<rustls::ClientConfig>")
+                        .take()
+                        .expect("is definitely Some");
+                    // HTTPS proxy connections use HTTP/1, including CONNECT requests.
+                    if !config.alpn_protocols.is_empty() {
+                        Arc::make_mut(&mut config).alpn_protocols.clear();
+                    }
+                    Ok(config)
+                }));
+            }
+            if TypeId::of::<T>() == TypeId::of::<rustls::ClientConfig>() {
+                return Self::Rustls(Arc::new(move |uri| {
+                    let mut tls = Some(factory(uri)?);
+                    let mut config = (&mut tls as &mut dyn Any)
+                        .downcast_mut::<Option<rustls::ClientConfig>>()
+                        .expect("is definitely rustls::ClientConfig")
+                        .take()
+                        .expect("is definitely Some");
+                    // HTTPS proxy connections use HTTP/1, including CONNECT requests.
+                    config.alpn_protocols.clear();
+                    Ok(Arc::new(config))
+                }));
+            }
+        }
+        let _ = factory;
+        Self::Unknown
+    }
+}
+
+#[cfg(any(feature = "__native-tls", feature = "__rustls"))]
+fn proxy_tls_config(
+    factory: Option<&ProxyTlsConfigFactory>,
+    uri: &Uri,
+) -> Result<Option<ProxyTlsConfig>, BoxError> {
+    if uri.scheme() != Some(&Scheme::HTTPS) {
+        return Ok(None);
+    }
+    match factory {
+        #[cfg(feature = "__native-tls")]
+        Some(ProxyTlsConfigFactory::NativeTls(factory)) => {
+            Ok(Some(ProxyTlsConfig::NativeTls(factory(uri)?)))
+        }
+        #[cfg(feature = "__rustls")]
+        Some(ProxyTlsConfigFactory::Rustls(factory)) => {
+            Ok(Some(ProxyTlsConfig::Rustls(factory(uri)?)))
+        }
+        Some(ProxyTlsConfigFactory::Unknown) | None => Ok(None),
+    }
+}
 
 #[derive(Clone)]
 pub(crate) enum Connector {
@@ -78,6 +187,8 @@ pub(crate) struct ConnectorBuilder {
     tls_info: bool,
     #[cfg(feature = "__tls")]
     user_agent: Option<HeaderValue>,
+    #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
+    proxy_tls_config_factory: Option<ProxyTlsConfigFactory>,
     #[cfg(feature = "socks")]
     resolver: Option<DynResolver>,
     #[cfg(unix)]
@@ -100,6 +211,8 @@ where {
             tls_info: self.tls_info,
             #[cfg(feature = "__tls")]
             user_agent: self.user_agent,
+            #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
+            proxy_tls_config_factory: self.proxy_tls_config_factory,
             simple_timeout: None,
             #[cfg(feature = "socks")]
             resolver: self.resolver.unwrap_or_else(DynResolver::gai),
@@ -325,6 +438,7 @@ where {
             nodelay,
             tls_info,
             user_agent,
+            proxy_tls_config_factory: None,
             timeout: None,
             #[cfg(feature = "socks")]
             resolver: None,
@@ -400,6 +514,7 @@ where {
             nodelay,
             tls_info,
             user_agent,
+            proxy_tls_config_factory: None,
             timeout: None,
             #[cfg(feature = "socks")]
             resolver: None,
@@ -412,6 +527,20 @@ where {
 
     pub(crate) fn set_timeout(&mut self, timeout: Option<Duration>) {
         self.timeout = timeout;
+    }
+
+    #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
+    pub(crate) fn set_proxy_tls_config_factory(
+        &mut self,
+        factory: ProxyTlsConfigFactory,
+    ) -> crate::Result<()> {
+        if matches!(factory, ProxyTlsConfigFactory::Unknown) {
+            return Err(crate::error::builder(
+                "Unknown TLS backend passed to `https_proxy_tls_config`",
+            ));
+        }
+        self.proxy_tls_config_factory = Some(factory);
+        Ok(())
     }
 
     pub(crate) fn set_verbose(&mut self, enabled: bool) {
@@ -496,6 +625,8 @@ pub(crate) struct ConnectorService {
     tls_info: bool,
     #[cfg(feature = "__tls")]
     user_agent: Option<HeaderValue>,
+    #[cfg(any(feature = "__native-tls", feature = "__rustls"))]
+    proxy_tls_config_factory: Option<ProxyTlsConfigFactory>,
     #[cfg(feature = "socks")]
     resolver: DynResolver,
     /// If set, this always takes priority over TCP.
@@ -610,8 +741,89 @@ impl ConnectorService {
             .map_err(Into::into)
     }
 
+    #[cfg(feature = "__native-tls")]
+    async fn connect_native_tls(
+        &self,
+        mut http: HttpConnector,
+        tls: TlsConnector,
+        dst: Uri,
+        is_proxy: bool,
+    ) -> Result<Conn, BoxError> {
+        // Disable Nagle's algorithm for TLS handshake
+        //
+        // https://www.openssl.org/docs/man1.1.1/man3/SSL_connect.html#NOTES
+        if !self.nodelay && (dst.scheme() == Some(&Scheme::HTTPS)) {
+            http.set_nodelay(true);
+        }
+
+        let tls_connector = tokio_native_tls::TlsConnector::from(tls);
+        let mut http = hyper_tls::HttpsConnector::from((http, tls_connector));
+        let io = http.call(dst).await?;
+
+        if let hyper_tls::MaybeHttpsStream::Https(stream) = io {
+            if !self.nodelay {
+                stream
+                    .inner()
+                    .get_ref()
+                    .get_ref()
+                    .get_ref()
+                    .inner()
+                    .inner()
+                    .set_nodelay(false)?;
+            }
+            Ok(Conn {
+                inner: self.verbose.wrap(NativeTlsConn { inner: stream }),
+                is_proxy,
+                tls_info: self.tls_info,
+            })
+        } else {
+            Ok(Conn {
+                inner: self.verbose.wrap(io),
+                is_proxy,
+                tls_info: false,
+            })
+        }
+    }
+
+    #[cfg(feature = "__rustls")]
+    async fn connect_rustls_tls(
+        &self,
+        mut http: HttpConnector,
+        tls: Arc<rustls::ClientConfig>,
+        dst: Uri,
+        is_proxy: bool,
+    ) -> Result<Conn, BoxError> {
+        // Disable Nagle's algorithm for TLS handshake
+        //
+        // https://www.openssl.org/docs/man1.1.1/man3/SSL_connect.html#NOTES
+        if !self.nodelay && (dst.scheme() == Some(&Scheme::HTTPS)) {
+            http.set_nodelay(true);
+        }
+
+        let mut http = hyper_rustls::HttpsConnector::from((http, tls));
+        let io = http.call(dst).await?;
+
+        if let hyper_rustls::MaybeHttpsStream::Https(stream) = io {
+            if !self.nodelay {
+                let (io, _) = stream.inner().get_ref();
+                io.inner().inner().set_nodelay(false)?;
+            }
+            Ok(Conn {
+                inner: self.verbose.wrap(RustlsTlsConn { inner: stream }),
+                is_proxy,
+                tls_info: self.tls_info,
+            })
+        } else {
+            Ok(Conn {
+                inner: self.verbose.wrap(io),
+                is_proxy,
+                tls_info: false,
+            })
+        }
+    }
+
     async fn connect_with_maybe_proxy(self, dst: Uri, is_proxy: bool) -> Result<Conn, BoxError> {
-        match self.inner {
+        match self.inner.clone() {
             #[cfg(not(feature = "__tls"))]
             Inner::Http(mut http) => {
                 let io = http.call(dst).await?;
@@ -623,74 +835,35 @@ impl ConnectorService {
             }
             #[cfg(feature = "__native-tls")]
             Inner::NativeTls(http, tls) => {
-                let mut http = http.clone();
-
-                // Disable Nagle's algorithm for TLS handshake
-                //
-                // https://www.openssl.org/docs/man1.1.1/man3/SSL_connect.html#NOTES
-                if !self.nodelay && (dst.scheme() == Some(&Scheme::HTTPS)) {
-                    http.set_nodelay(true);
-                }
-
-                let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
-                let mut http = hyper_tls::HttpsConnector::from((http, tls_connector));
-                let io = http.call(dst).await?;
-
-                if let hyper_tls::MaybeHttpsStream::Https(stream) = io {
-                    if !self.nodelay {
-                        stream
-                            .inner()
-                            .get_ref()
-                            .get_ref()
-                            .get_ref()
-                            .inner()
-                            .inner()
-                            .set_nodelay(false)?;
+                if is_proxy {
+                    match proxy_tls_config(self.proxy_tls_config_factory.as_ref(), &dst)? {
+                        Some(ProxyTlsConfig::NativeTls(tls)) => {
+                            return self.connect_native_tls(http, tls, dst, is_proxy).await;
+                        }
+                        #[cfg(feature = "__rustls")]
+                        Some(ProxyTlsConfig::Rustls(tls)) => {
+                            return self.connect_rustls_tls(http, tls, dst, is_proxy).await;
+                        }
+                        None => (),
                     }
-                    Ok(Conn {
-                        inner: self.verbose.wrap(NativeTlsConn { inner: stream }),
-                        is_proxy,
-                        tls_info: self.tls_info,
-                    })
-                } else {
-                    Ok(Conn {
-                        inner: self.verbose.wrap(io),
-                        is_proxy,
-                        tls_info: false,
-                    })
                 }
+                self.connect_native_tls(http, tls, dst, is_proxy).await
             }
             #[cfg(feature = "__rustls")]
             Inner::RustlsTls { http, tls, .. } => {
-                let mut http = http;
-
-                // Disable Nagle's algorithm for TLS handshake
-                //
-                // https://www.openssl.org/docs/man1.1.1/man3/SSL_connect.html#NOTES
-                if !self.nodelay && (dst.scheme() == Some(&Scheme::HTTPS)) {
-                    http.set_nodelay(true);
-                }
-
-                let mut http = hyper_rustls::HttpsConnector::from((http, tls));
-                let io = http.call(dst).await?;
-
-                if let hyper_rustls::MaybeHttpsStream::Https(stream) = io {
-                    if !self.nodelay {
-                        let (io, _) = stream.inner().get_ref();
-                        io.inner().inner().set_nodelay(false)?;
+                if is_proxy {
+                    match proxy_tls_config(self.proxy_tls_config_factory.as_ref(), &dst)? {
+                        #[cfg(feature = "__native-tls")]
+                        Some(ProxyTlsConfig::NativeTls(tls)) => {
+                            return self.connect_native_tls(http, tls, dst, is_proxy).await;
+                        }
+                        Some(ProxyTlsConfig::Rustls(tls)) => {
+                            return self.connect_rustls_tls(http, tls, dst, is_proxy).await;
+                        }
+                        None => (),
                     }
-                    Ok(Conn {
-                        inner: self.verbose.wrap(RustlsTlsConn { inner: stream }),
-                        is_proxy,
-                        tls_info: self.tls_info,
-                    })
-                } else {
-                    Ok(Conn {
-                        inner: self.verbose.wrap(io),
-                        is_proxy,
-                        tls_info: false,
-                    })
                 }
+                self.connect_rustls_tls(http, tls, dst, is_proxy).await
             }
         }
     }
@@ -804,37 +977,82 @@ impl ConnectorService {
                 if dst.scheme() == Some(&Scheme::HTTPS) {
                     log::trace!("tunneling HTTPS over proxy");
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
-                    let inner =
-                        hyper_tls::HttpsConnector::from((http.clone(), tls_connector.clone()));
-                    // TODO: we could cache constructing this
-                    let mut tunnel =
-                        hyper_util::client::legacy::connect::proxy::Tunnel::new(proxy_dst, inner);
-                    if let Some(auth) = auth {
-                        tunnel = tunnel.with_auth(auth);
+                    let host = dst.host().ok_or("no host in url")?.to_string();
+                    match proxy_tls_config(self.proxy_tls_config_factory.as_ref(), &proxy_dst)? {
+                        #[cfg(feature = "__rustls")]
+                        Some(ProxyTlsConfig::Rustls(tls_proxy)) => {
+                            let inner =
+                                hyper_rustls::HttpsConnector::from((http.clone(), tls_proxy));
+                            let mut tunnel =
+                                hyper_util::client::legacy::connect::proxy::Tunnel::new(
+                                    proxy_dst, inner,
+                                );
+                            if let Some(auth) = auth {
+                                tunnel = tunnel.with_auth(auth);
+                            }
+                            if let Some(ua) = self.user_agent {
+                                let mut headers = http::HeaderMap::new();
+                                headers.insert(http::header::USER_AGENT, ua);
+                                tunnel = tunnel.with_headers(headers);
+                            }
+                            // Note that custom headers may override the user agent header.
+                            if let Some(custom_headers) = misc {
+                                tunnel = tunnel.with_headers(custom_headers.clone());
+                            }
+                            let tunneled = tunnel.call(dst).await?;
+                            let io = tls_connector
+                                .connect(&host, TokioIo::new(tunneled))
+                                .await?;
+                            return Ok(Conn {
+                                inner: self.verbose.wrap(NativeTlsConn {
+                                    inner: TokioIo::new(io),
+                                }),
+                                is_proxy: false,
+                                tls_info: false,
+                            });
+                        }
+                        proxy_tls => {
+                            let tls_proxy = match proxy_tls {
+                                Some(ProxyTlsConfig::NativeTls(tls_proxy)) => {
+                                    tokio_native_tls::TlsConnector::from(tls_proxy)
+                                }
+                                #[cfg(feature = "__rustls")]
+                                Some(ProxyTlsConfig::Rustls(_)) => unreachable!(),
+                                None => tls_connector.clone(),
+                            };
+                            let inner = hyper_tls::HttpsConnector::from((http.clone(), tls_proxy));
+                            // TODO: we could cache constructing this
+                            let mut tunnel =
+                                hyper_util::client::legacy::connect::proxy::Tunnel::new(
+                                    proxy_dst, inner,
+                                );
+                            if let Some(auth) = auth {
+                                tunnel = tunnel.with_auth(auth);
+                            }
+                            if let Some(ua) = self.user_agent {
+                                let mut headers = http::HeaderMap::new();
+                                headers.insert(http::header::USER_AGENT, ua);
+                                tunnel = tunnel.with_headers(headers);
+                            }
+                            // Note that custom headers may override the user agent header.
+                            if let Some(custom_headers) = misc {
+                                tunnel = tunnel.with_headers(custom_headers.clone());
+                            }
+                            // We don't wrap this again in an HttpsConnector since that uses Maybe,
+                            // and we know this is definitely HTTPS.
+                            let tunneled = tunnel.call(dst).await?;
+                            let io = tls_connector
+                                .connect(&host, TokioIo::new(tunneled))
+                                .await?;
+                            return Ok(Conn {
+                                inner: self.verbose.wrap(NativeTlsConn {
+                                    inner: TokioIo::new(io),
+                                }),
+                                is_proxy: false,
+                                tls_info: false,
+                            });
+                        }
                     }
-                    if let Some(ua) = self.user_agent {
-                        let mut headers = http::HeaderMap::new();
-                        headers.insert(http::header::USER_AGENT, ua);
-                        tunnel = tunnel.with_headers(headers);
-                    }
-                    // Note that custom headers may override the user agent header.
-                    if let Some(custom_headers) = misc {
-                        tunnel = tunnel.with_headers(custom_headers.clone());
-                    }
-                    // We don't wrap this again in an HttpsConnector since that uses Maybe,
-                    // and we know this is definitely HTTPS.
-                    let tunneled = tunnel.call(dst.clone()).await?;
-                    let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
-                    let io = tls_connector
-                        .connect(dst.host().ok_or("no host in url")?, TokioIo::new(tunneled))
-                        .await?;
-                    return Ok(Conn {
-                        inner: self.verbose.wrap(NativeTlsConn {
-                            inner: TokioIo::new(io),
-                        }),
-                        is_proxy: false,
-                        tls_info: false,
-                    });
                 }
             }
             #[cfg(feature = "__rustls")]
@@ -850,38 +1068,82 @@ impl ConnectorService {
 
                     log::trace!("tunneling HTTPS over proxy");
                     let http = http.clone();
-                    let inner = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
-                    // TODO: we could cache constructing this
-                    let mut tunnel =
-                        hyper_util::client::legacy::connect::proxy::Tunnel::new(proxy_dst, inner);
-                    if let Some(auth) = auth {
-                        tunnel = tunnel.with_auth(auth);
-                    }
-                    if let Some(custom_headers) = misc {
-                        tunnel = tunnel.with_headers(custom_headers.clone());
-                    }
-                    if let Some(ua) = self.user_agent {
-                        let mut headers = http::HeaderMap::new();
-                        headers.insert(http::header::USER_AGENT, ua);
-                        tunnel = tunnel.with_headers(headers);
-                    }
-                    // We don't wrap this again in an HttpsConnector since that uses Maybe,
-                    // and we know this is definitely HTTPS.
-                    let tunneled = tunnel.call(dst.clone()).await?;
                     let host = dst.host().ok_or("no host in url")?.to_string();
                     let server_name = ServerName::try_from(host.as_str().to_owned())
                         .map_err(|_| "Invalid Server Name")?;
-                    let io = RustlsConnector::from(tls.clone())
-                        .connect(server_name, TokioIo::new(tunneled))
-                        .await?;
+                    match proxy_tls_config(self.proxy_tls_config_factory.as_ref(), &proxy_dst)? {
+                        #[cfg(feature = "__native-tls")]
+                        Some(ProxyTlsConfig::NativeTls(tls_proxy)) => {
+                            let tls_proxy = tokio_native_tls::TlsConnector::from(tls_proxy);
+                            let inner = hyper_tls::HttpsConnector::from((http, tls_proxy));
+                            let mut tunnel =
+                                hyper_util::client::legacy::connect::proxy::Tunnel::new(
+                                    proxy_dst, inner,
+                                );
+                            if let Some(auth) = auth {
+                                tunnel = tunnel.with_auth(auth);
+                            }
+                            if let Some(custom_headers) = misc {
+                                tunnel = tunnel.with_headers(custom_headers.clone());
+                            }
+                            if let Some(ua) = self.user_agent {
+                                let mut headers = http::HeaderMap::new();
+                                headers.insert(http::header::USER_AGENT, ua);
+                                tunnel = tunnel.with_headers(headers);
+                            }
+                            let tunneled = tunnel.call(dst).await?;
+                            let io = RustlsConnector::from(tls.clone())
+                                .connect(server_name, TokioIo::new(tunneled))
+                                .await?;
 
-                    return Ok(Conn {
-                        inner: self.verbose.wrap(RustlsTlsConn {
-                            inner: TokioIo::new(io),
-                        }),
-                        is_proxy: false,
-                        tls_info: false,
-                    });
+                            return Ok(Conn {
+                                inner: self.verbose.wrap(RustlsTlsConn {
+                                    inner: TokioIo::new(io),
+                                }),
+                                is_proxy: false,
+                                tls_info: false,
+                            });
+                        }
+                        proxy_tls => {
+                            let tls_proxy = match proxy_tls {
+                                Some(ProxyTlsConfig::Rustls(tls_proxy)) => tls_proxy,
+                                #[cfg(feature = "__native-tls")]
+                                Some(ProxyTlsConfig::NativeTls(_)) => unreachable!(),
+                                None => tls_proxy.clone(),
+                            };
+                            let inner = hyper_rustls::HttpsConnector::from((http, tls_proxy));
+                            // TODO: we could cache constructing this
+                            let mut tunnel =
+                                hyper_util::client::legacy::connect::proxy::Tunnel::new(
+                                    proxy_dst, inner,
+                                );
+                            if let Some(auth) = auth {
+                                tunnel = tunnel.with_auth(auth);
+                            }
+                            if let Some(custom_headers) = misc {
+                                tunnel = tunnel.with_headers(custom_headers.clone());
+                            }
+                            if let Some(ua) = self.user_agent {
+                                let mut headers = http::HeaderMap::new();
+                                headers.insert(http::header::USER_AGENT, ua);
+                                tunnel = tunnel.with_headers(headers);
+                            }
+                            // We don't wrap this again in an HttpsConnector since that uses Maybe,
+                            // and we know this is definitely HTTPS.
+                            let tunneled = tunnel.call(dst).await?;
+                            let io = RustlsConnector::from(tls.clone())
+                                .connect(server_name, TokioIo::new(tunneled))
+                                .await?;
+
+                            return Ok(Conn {
+                                inner: self.verbose.wrap(RustlsTlsConn {
+                                    inner: TokioIo::new(io),
+                                }),
+                                is_proxy: false,
+                                tls_info: false,
+                            });
+                        }
+                    }
                 }
             }
             #[cfg(not(feature = "__tls"))]
@@ -1011,6 +1273,26 @@ impl TlsInfoFactory
     }
 }
 
+#[cfg(all(feature = "__native-tls", feature = "__rustls"))]
+impl TlsInfoFactory
+    for tokio_native_tls::TlsStream<
+        TokioIo<hyper_rustls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>>>,
+    >
+{
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let peer_certificate = self
+            .get_ref()
+            .peer_certificate()
+            .ok()
+            .flatten()
+            .and_then(|c| c.to_der().ok());
+        Some(crate::tls::TlsInfo {
+            peer_certificate,
+            version: None,
+        })
+    }
+}
+
 #[cfg(feature = "__native-tls")]
 impl TlsInfoFactory for hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>> {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
@@ -1043,6 +1325,28 @@ impl TlsInfoFactory for tokio_rustls::client::TlsStream<TokioIo<TokioIo<tokio::n
 impl TlsInfoFactory
     for tokio_rustls::client::TlsStream<
         TokioIo<hyper_rustls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>>>,
+    >
+{
+    fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
+        let conn = &self.get_ref().1;
+        let peer_certificate = conn
+            .peer_certificates()
+            .and_then(|certs| certs.first())
+            .map(|c| c.to_vec());
+        let version = conn
+            .protocol_version()
+            .and_then(crate::tls::Version::from_rustls);
+        Some(crate::tls::TlsInfo {
+            peer_certificate,
+            version,
+        })
+    }
+}
+
+#[cfg(all(feature = "__native-tls", feature = "__rustls"))]
+impl TlsInfoFactory
+    for tokio_rustls::client::TlsStream<
+        TokioIo<hyper_tls::MaybeHttpsStream<TokioIo<tokio::net::TcpStream>>>,
     >
 {
     fn tls_info(&self) -> Option<crate::tls::TlsInfo> {
@@ -1563,6 +1867,29 @@ mod native_tls_conn {
         }
     }
 
+    #[cfg(feature = "__rustls")]
+    impl Connection
+        for NativeTlsConn<TokioIo<hyper_rustls::MaybeHttpsStream<TokioIo<TcpStream>>>>
+    {
+        fn connected(&self) -> Connected {
+            let connected = self
+                .inner
+                .inner()
+                .get_ref()
+                .get_ref()
+                .get_ref()
+                .inner()
+                .connected();
+            #[cfg(feature = "__native-tls-alpn")]
+            match self.inner.inner().get_ref().negotiated_alpn().ok() {
+                Some(Some(alpn_protocol)) if alpn_protocol == b"h2" => connected.negotiated_h2(),
+                _ => connected,
+            }
+            #[cfg(not(feature = "__native-tls-alpn"))]
+            connected
+        }
+    }
+
     #[cfg(unix)]
     impl Connection for NativeTlsConn<TokioIo<TokioIo<tokio::net::UnixStream>>> {
         fn connected(&self) -> Connected {
@@ -1725,6 +2052,23 @@ mod rustls_tls_conn {
         }
     }
     impl Connection for RustlsTlsConn<TokioIo<MaybeHttpsStream<TokioIo<TcpStream>>>> {
+        fn connected(&self) -> Connected {
+            if self.inner.inner().get_ref().1.alpn_protocol() == Some(b"h2") {
+                self.inner
+                    .inner()
+                    .get_ref()
+                    .0
+                    .inner()
+                    .connected()
+                    .negotiated_h2()
+            } else {
+                self.inner.inner().get_ref().0.inner().connected()
+            }
+        }
+    }
+
+    #[cfg(feature = "__native-tls")]
+    impl Connection for RustlsTlsConn<TokioIo<hyper_tls::MaybeHttpsStream<TokioIo<TcpStream>>>> {
         fn connected(&self) -> Connected {
             if self.inner.inner().get_ref().1.alpn_protocol() == Some(b"h2") {
                 self.inner
