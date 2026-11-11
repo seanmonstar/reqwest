@@ -1,3 +1,7 @@
+## Unreleased
+
+- Add `ClientBuilder::global_ips_only` to restrict connections to globally reachable IP addresses, which makes it easy to protect against SSRF.
+
 ## v0.13.5
 
 - Add `Error::is_dns()` to identify errors caused by DNS resolution failures.
@@ -925,7 +929,7 @@
   - Timeouts now affect DNS and socket connection.
   - Pool much better at evicting sockets when they die.
   - An `unstable` Cargo feature to enable `reqwest::unstable::async`.
-- A huge docs improvement! 
+- A huge docs improvement!
 
 ### Fixes
 
@@ -999,7 +1003,7 @@
 
 ### Breaking Changes
 
-The only breaking change is a behavioral one, all programs should still compile without modification. The automatic GZIP decoding could interfere in cases where a user was expecting the GZIP bytes, either to save to a file or decode themselves. To restore this functionality, set `client.gzip(false)`. 
+The only breaking change is a behavioral one, all programs should still compile without modification. The automatic GZIP decoding could interfere in cases where a user was expecting the GZIP bytes, either to save to a file or decode themselves. To restore this functionality, set `client.gzip(false)`.
 
 # v0.4.0
 
