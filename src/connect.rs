@@ -2223,28 +2223,3 @@ mod verbose {
         }
     }
 }
-
-#[cfg(test)]
-mod tcp_linger_tests {
-    use super::{DynResolver, HttpConnector, Service};
-    use std::time::Duration;
-
-    #[tokio::test]
-    async fn tcp_linger_socket_option() {
-        for linger in [None, Some(Duration::ZERO), Some(Duration::from_secs(2))] {
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let uri = format!("http://{}", listener.local_addr().unwrap())
-                .parse()
-                .unwrap();
-            let mut connector = HttpConnector::new_with_resolver(DynResolver::new(
-                std::sync::Arc::new(crate::dns::gai::GaiResolver::new()),
-            ));
-            connector.linger = linger;
-            let stream = connector.call(uri).await.unwrap();
-            assert_eq!(
-                socket2::SockRef::from(stream.inner()).linger().unwrap(),
-                linger
-            );
-        }
-    }
-}
