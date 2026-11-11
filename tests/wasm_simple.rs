@@ -1,4 +1,4 @@
-#![cfg(target_arch = "wasm32")]
+#![cfg(target_family = "wasm")]
 use std::time::Duration;
 
 use wasm_bindgen::prelude::*;

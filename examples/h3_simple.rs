@@ -4,7 +4,7 @@
 //
 // `tokio = { version = "1", features = ["full"] }`
 #[cfg(feature = "http3")]
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
     let client = reqwest::Client::builder().http3_prior_knowledge().build()?;
@@ -36,9 +36,9 @@ async fn main() -> Result<(), reqwest::Error> {
     Ok(())
 }
 
-// The [cfg(not(target_arch = "wasm32"))] above prevent building the tokio::main function
+// The [cfg(not(target_family = "wasm"))] above prevent building the tokio::main function
 // for wasm32 target, because tokio isn't compatible with wasm32.
 // If you aren't building for wasm32, you don't need that line.
 // The two lines below avoid the "'main' function not found" error when building for wasm32 target.
-#[cfg(any(target_arch = "wasm32", not(feature = "http3")))]
+#[cfg(any(target_family = "wasm", not(feature = "http3")))]
 fn main() {}

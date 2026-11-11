@@ -25,6 +25,7 @@ jobs:
       - msrv
       - android
       - wasm
+      - wasm64
       - docs
     steps:
       - run: exit 0
@@ -396,3 +397,33 @@ jobs:
 
       - name: Wasm-pack test chrome
         run: wasm-pack test --headless --chrome
+
+  wasm64:
+    name: WASM64
+    needs: [style]
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install rust
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Check
+        run: cargo check -Zbuild-std=std,panic_abort --target wasm64-unknown-unknown
+
+      - name: Check cookies
+        run: cargo check -Zbuild-std=std,panic_abort --target wasm64-unknown-unknown --features cookies
+
+      - name: Install wasm-pack
+        run: curl https://wasm-bindgen.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Wasm-pack test firefox
+        run: wasm-pack test --headless --firefox -- --target wasm64-unknown-unknown -Zbuild-std=std,panic_abort
+
+      - name: Wasm-pack test chrome
+        run: wasm-pack test --headless --chrome -- --target wasm64-unknown-unknown -Zbuild-std=std,panic_abort
