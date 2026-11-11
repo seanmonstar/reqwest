@@ -269,9 +269,19 @@ macro_rules! if_wasm {
     )*}
 }
 
+macro_rules! if_wasi {
+    ($($item:item)*) => {$(
+        #[cfg(all(target_os = "wasi", not(target_env = "p1")))]
+        $item
+    )*}
+}
+
 macro_rules! if_hyper {
     ($($item:item)*) => {$(
-        #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+        #[cfg(not(any(
+            all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+            all(target_os = "wasi", not(target_env = "p1"))
+        )))]
         $item
     )*}
 }
@@ -343,6 +353,11 @@ fn _assert_impls() {
         assert_send::<Response>();
     }
 
+    #[cfg(all(target_os = "wasi", not(target_env = "p1")))]
+    {
+        assert_send::<Response>();
+    }
+
     assert_send::<Error>();
     assert_sync::<Error>();
 
@@ -388,6 +403,15 @@ if_hyper! {
 }
 
 if_wasm! {
+    mod wasm;
+    mod util;
+
+    pub use self::wasm::{Body, Client, ClientBuilder, Request, RequestBuilder, Response};
+    #[cfg(feature = "multipart")]
+    pub use self::wasm::multipart;
+}
+
+if_wasi! {
     mod wasm;
     mod util;
 
