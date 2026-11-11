@@ -412,3 +412,120 @@ fn test_response_no_tls_info_for_http() {
     let body = res.text().unwrap();
     assert_eq!(b"Hello", body.as_bytes());
 }
+
+// Yields its bytes in two reads, once the server has seen the client close.
+// Even if the first chunk slips into the body channel while hyper is
+// tearing down the connection, the second send can't complete - see
+// the `send_to_early_response_server` helper below.
+struct GatedReader {
+    closed_rx: Option<std::sync::mpsc::Receiver<()>>,
+    remaining: usize,
+}
+
+impl std::io::Read for GatedReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if let Some(closed_rx) = self.closed_rx.take() {
+            closed_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .expect("client did not close the connection");
+        }
+        let n = self.remaining.min(16).min(buf.len());
+        buf[..n].fill(b'x');
+        self.remaining -= n;
+        Ok(n)
+    }
+}
+
+// Helper for testing cases where the server responds early (before the body
+// is fully sent) such that we can verify that the blocking client handles
+// early server responses correctly with a variety of request body types.
+fn send_to_early_response_server(
+    make_body: impl FnOnce(GatedReader) -> reqwest::blocking::Body,
+) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    // This server responds without reading the request body, then waits for
+    // the client to close the connection before letting the body produce
+    // any bytes. This reproduces the case where the response is received
+    // before the body is fully sent, e.g. an HTTP 412 for a failed
+    // `If-None-Match: *` precondition.
+    let (closed_tx, closed_rx) = std::sync::mpsc::channel();
+    let (head_tx, head_rx) = std::sync::mpsc::channel();
+    let server = server::low_level_with_response(move |raw_request, client_socket| {
+        let closed_tx = closed_tx.clone();
+        let _ = head_tx.send(String::from_utf8_lossy(raw_request).to_ascii_lowercase());
+        Box::new(async move {
+            client_socket
+                .write_all(
+                    b"HTTP/1.1 412 Precondition Failed\r\n\
+                      Content-Length: 0\r\n\
+                      Connection: close\r\n\
+                      \r\n",
+                )
+                .await
+                .expect("response write_all failed");
+            client_socket.shutdown().await.expect("shutdown failed");
+            let _ = client_socket.read_to_end(&mut Vec::new()).await;
+            let _ = closed_tx.send(());
+        })
+    });
+
+    let url = format!("http://{}/object", server.addr());
+    let reader = GatedReader {
+        closed_rx: Some(closed_rx),
+        remaining: 32,
+    };
+    let res = reqwest::blocking::Client::new()
+        .put(&url)
+        .body(make_body(reader))
+        .send()
+        .unwrap();
+
+    assert_eq!(res.status(), reqwest::StatusCode::PRECONDITION_FAILED);
+    head_rx.recv().expect("server did not see a request")
+}
+
+// Test that the blocking client correctly handles an early server response
+// with a sized request body.
+#[test]
+fn test_response_before_streamed_body_is_sent() {
+    let head = send_to_early_response_server(|reader| reqwest::blocking::Body::sized(reader, 32));
+    assert!(head.contains("\r\ncontent-length: 32\r\n"));
+}
+
+// Test that the blocking client correctly handles an early server response
+// with a chunked request body - covered as a separate scenario since the
+// code paths for sized and chunked bodies differ, though they do converge
+// at the same point, so this is defensive.
+#[test]
+fn test_response_before_chunked_body_is_sent() {
+    let head = send_to_early_response_server(reqwest::blocking::Body::new);
+    assert!(head.contains("\r\ntransfer-encoding: chunked\r\n"));
+}
+
+#[test]
+fn test_streamed_body_read_error() {
+    struct FailingReader;
+
+    impl std::io::Read for FailingReader {
+        fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("read failed"))
+        }
+    }
+
+    let server = server::http(move |_req| async { http::Response::default() });
+
+    let url = format!("http://{}/object", server.addr());
+    let body = reqwest::blocking::Body::sized(FailingReader, 16);
+    let err = reqwest::blocking::Client::new()
+        .put(&url)
+        .body(body)
+        .send()
+        .unwrap_err();
+
+    assert!(err.is_body());
+    assert_eq!(
+        std::error::Error::source(&err).unwrap().to_string(),
+        "read failed"
+    );
+}
