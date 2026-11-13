@@ -293,8 +293,8 @@ fn is_retryable_error(err: &crate::Error) -> bool {
     if let Some(cause) = err.source() {
         if let Some(err) = cause.downcast_ref::<h3::error::ConnectionError>() {
             log::trace!("determining if HTTP/3 error {err} can be retried");
-            // TODO: Does h3 provide an API for checking the error?
-            return err.to_string().as_str() == "timeout";
+            // h3 0.0.8 non-exhaustive error workaround: check if error message contains timeout
+            return err.to_string().to_ascii_lowercase().contains("timeout");
         }
     }
 
