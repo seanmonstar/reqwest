@@ -237,15 +237,23 @@ pub(crate) mod service {
         fn call(&mut self, mut req: Request<ReqBody>) -> Self::Future {
             let clone = self.inner.clone();
             let mut inner = std::mem::replace(&mut self.inner, clone);
-            let url = Url::parse(req.uri().to_string().as_str()).expect("invalid URL");
+            let url_opt = Url::parse(req.uri().to_string().as_str()).ok();
             if let Some(cookie_store) = self.cookie_store.as_ref() {
-                if req.headers().get(crate::header::COOKIE).is_none() {
-                    let headers = req.headers_mut();
-                    crate::util::add_cookie_header(headers, &**cookie_store, &url);
+                if let Some(ref url) = url_opt {
+                    if req.headers().get(crate::header::COOKIE).is_none() {
+                        let headers = req.headers_mut();
+                        crate::util::add_cookie_header(headers, &**cookie_store, url);
+                    }
                 }
             }
 
-            let cookie_store = self.cookie_store.clone();
+            let cookie_store = if url_opt.is_some() {
+                self.cookie_store.clone()
+            } else {
+                None
+            };
+            let url = url_opt.unwrap_or_else(|| Url::parse("http://localhost").expect("valid default URL"));
+
             ResponseFuture {
                 future: inner.call(req),
                 cookie_store,
