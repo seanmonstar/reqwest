@@ -45,6 +45,9 @@ use crate::Url;
 /// `Proxy` added first with eager intercept rules, such as `Proxy::all`,
 /// would prevent a `Proxy` later in the list from ever working, so take care.
 ///
+/// The default system proxy is not constructible,
+/// but can be used by not adding any proxy to the `Client`.
+///
 /// By enabling the `"socks"` feature it is possible to use a socks proxy:
 /// ```rust
 /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -473,6 +476,10 @@ impl fmt::Debug for Proxy {
 impl NoProxy {
     /// Returns a new no-proxy configuration based on environment variables (or `None` if no variables are set)
     /// see [self::NoProxy::from_string()] for the string format
+    ///
+    /// The rules are as follows:
+    /// * The environment variable `NO_PROXY` is checked, if it is not set, `no_proxy` is checked
+    /// * If neither environment variable is set, `None` is returned
     pub fn from_env() -> Option<NoProxy> {
         let raw = std::env::var("NO_PROXY")
             .or_else(|_| std::env::var("no_proxy"))
@@ -484,11 +491,9 @@ impl NoProxy {
         Some(Self::from_string(&raw).unwrap_or_default())
     }
 
-    /// Returns a new no-proxy configuration based on a `no_proxy` string (or `None` if no variables
-    /// are set)
+    /// Returns a new no-proxy configuration based on a `no_proxy` string
+    ///
     /// The rules are as follows:
-    /// * The environment variable `NO_PROXY` is checked, if it is not set, `no_proxy` is checked
-    /// * If neither environment variable is set, `None` is returned
     /// * Entries are expected to be comma-separated (whitespace between entries is ignored)
     /// * IP addresses (both IPv4 and IPv6) are allowed, as are optional subnet masks (by adding /size,
     ///   for example "`192.168.1.0/24`").

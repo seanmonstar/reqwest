@@ -150,6 +150,11 @@
 //! `ALL_PROXY` or `all_proxy` provide proxies for both HTTP and HTTPS connections.
 //! If both the all proxy and HTTP or HTTPS proxy variables are set the more specific
 //! HTTP or HTTPS proxies take precedence.
+//! `NO_PROXY` or `no_proxy` provide a comma separated exception list for any of those configurations.
+//!
+//! If the `system-proxy` feature is enabled (which it is by default),
+//! the native Windows and macOS system proxy settings are checked,
+//! but the environment variables take precedence.
 //!
 //! These can be overwritten by adding a [`Proxy`] to `ClientBuilder`
 //! i.e. `let proxy = reqwest::Proxy::http("https://secure.example")?;`
