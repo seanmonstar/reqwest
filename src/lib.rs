@@ -193,7 +193,7 @@
 //! - **default-tls** *(enabled by default)*: Provides TLS support to connect
 //!   over HTTPS.
 //! - **rustls**: Enables TLS functionality provided by `rustls`.
-//! - **rustls-no-provider**: Enables TLS provided by `rustls` without specifying a crypto provider.
+//! - **rustls-no-provider**: Enables TLS provided by `rustls` without a built-in crypto provider. You must install a provider (e.g. via `CryptoProvider::install_default`) before creating a `Client`; see the [`tls`] module.
 //! - **native-tls**: Enables TLS functionality provided by `native-tls`.
 //! - **native-tls-vendored**: Enables the `vendored` feature of `native-tls`.
 //! - **native-tls-no-alpn**: Enables `native-tls` without its `alpn` feature.
