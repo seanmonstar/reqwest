@@ -468,6 +468,17 @@ where {
         }
     }
 
+    pub(crate) fn set_happy_eyeballs_timeout(&mut self, dur: Option<Duration>) {
+        match &mut self.inner {
+            #[cfg(feature = "__native-tls")]
+            Inner::NativeTls(http, _tls) => http.set_happy_eyeballs_timeout(dur),
+            #[cfg(feature = "__rustls")]
+            Inner::RustlsTls { http, .. } => http.set_happy_eyeballs_timeout(dur),
+            #[cfg(not(feature = "__tls"))]
+            Inner::Http(http) => http.set_happy_eyeballs_timeout(dur),
+        }
+    }
+
     #[cfg(unix)]
     pub(crate) fn set_unix_socket(&mut self, path: Option<Arc<std::path::Path>>) {
         self.unix_socket = path;
