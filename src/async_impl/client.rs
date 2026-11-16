@@ -31,7 +31,9 @@ use crate::cookie;
 use crate::cookie::service::CookieService;
 #[cfg(feature = "hickory-dns")]
 use crate::dns::hickory::HickoryDnsResolver;
-use crate::dns::{gai::GaiResolver, DnsResolverWithOverrides, DynResolver, Resolve};
+use crate::dns::{
+    gai::GaiResolver, DnsResolverWithOverrides, DynResolver, GlobalIpsOnlyResolver, Resolve,
+};
 use crate::error::{self, BoxError};
 use crate::into_url::try_uri;
 use crate::proxy::Matcher as ProxyMatcher;
@@ -249,6 +251,7 @@ struct Config {
     hickory_dns: bool,
     error: Option<crate::Error>,
     https_only: bool,
+    global_ips_only: bool,
     #[cfg(feature = "http3")]
     tls_enable_early_data: bool,
     #[cfg(feature = "http3")]
@@ -380,6 +383,7 @@ impl ClientBuilder {
                 #[cfg(feature = "cookies")]
                 cookie_store: None,
                 https_only: false,
+                global_ips_only: false,
                 dns_overrides: HashMap::new(),
                 #[cfg(feature = "http3")]
                 tls_enable_early_data: false,
@@ -447,6 +451,9 @@ impl ClientBuilder {
                     resolver,
                     config.dns_overrides,
                 ));
+            }
+            if config.global_ips_only {
+                resolver = Arc::new(GlobalIpsOnlyResolver::new(resolver));
             }
             DynResolver::new(resolver)
         };
@@ -934,6 +941,8 @@ impl ClientBuilder {
         connector_builder.set_keepalive_retries(config.tcp_keepalive_retries);
         #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
         connector_builder.set_tcp_user_timeout(config.tcp_user_timeout);
+
+        connector_builder.set_global_ips_only(config.global_ips_only);
 
         #[cfg(feature = "socks")]
         connector_builder.set_socks_resolver(resolver);
@@ -2299,6 +2308,18 @@ impl ClientBuilder {
     /// Defaults to false.
     pub fn https_only(mut self, enabled: bool) -> ClientBuilder {
         self.config.https_only = enabled;
+        self
+    }
+
+    /// Restrict the Client to only connect to globally reachable IP addresses, as determined by [`IpAddr::is_global`].
+    ///
+    /// This can be useful for mitigating SSRF attacks, where an attacker tries to make the Client connect to an internal server.
+    ///
+    /// Defaults to false.
+    ///
+    /// [`IpAddr::is_global`]: https://doc.rust-lang.org/std/net/enum.IpAddr.html#method.is_global
+    pub fn global_ips_only(mut self, enabled: bool) -> ClientBuilder {
+        self.config.global_ips_only = enabled;
         self
     }
 
