@@ -2694,13 +2694,55 @@ impl Client {
             http::Version::HTTP_3 if self.inner.h3_client.is_some() => {
                 let mut req = builder.body(body).expect("valid request parts");
                 *req.headers_mut() = headers;
-                let mut h3 = self.inner.h3_client.as_ref().unwrap().clone();
+                let h3 = self.inner.h3_client.as_ref().unwrap().clone();
+                #[cfg(feature = "gzip")]
+                let h3 = match RequestConfig::<crate::config::Gzip>::get(&extensions) {
+                    Some(&enable) => h3.gzip(enable),
+                    None => h3,
+                };
+                #[cfg(feature = "brotli")]
+                let h3 = match RequestConfig::<crate::config::Brotli>::get(&extensions) {
+                    Some(&enable) => h3.br(enable),
+                    None => h3,
+                };
+                #[cfg(feature = "zstd")]
+                let h3 = match RequestConfig::<crate::config::Zstd>::get(&extensions) {
+                    Some(&enable) => h3.zstd(enable),
+                    None => h3,
+                };
+                #[cfg(feature = "deflate")]
+                let h3 = match RequestConfig::<crate::config::Deflate>::get(&extensions) {
+                    Some(&enable) => h3.deflate(enable),
+                    None => h3,
+                };
+                let mut h3 = h3;
                 ResponseFuture::H3(h3.call(req))
             }
             _ => {
                 let mut req = builder.body(body).expect("valid request parts");
                 *req.headers_mut() = headers;
-                let mut hyper = self.inner.hyper.clone();
+                let hyper = self.inner.hyper.clone();
+                #[cfg(feature = "gzip")]
+                let hyper = match RequestConfig::<crate::config::Gzip>::get(&extensions) {
+                    Some(&enable) => hyper.gzip(enable),
+                    None => hyper,
+                };
+                #[cfg(feature = "brotli")]
+                let hyper = match RequestConfig::<crate::config::Brotli>::get(&extensions) {
+                    Some(&enable) => hyper.br(enable),
+                    None => hyper,
+                };
+                #[cfg(feature = "zstd")]
+                let hyper = match RequestConfig::<crate::config::Zstd>::get(&extensions) {
+                    Some(&enable) => hyper.zstd(enable),
+                    None => hyper,
+                };
+                #[cfg(feature = "deflate")]
+                let hyper = match RequestConfig::<crate::config::Deflate>::get(&extensions) {
+                    Some(&enable) => hyper.deflate(enable),
+                    None => hyper,
+                };
+                let mut hyper = hyper;
                 ResponseFuture::Default(hyper.call(req))
             }
         };
