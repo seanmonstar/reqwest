@@ -215,6 +215,48 @@ async fn test_redirect_removes_sensitive_headers() {
 }
 
 #[tokio::test]
+async fn test_redirect_does_not_restore_sensitive_headers_after_cross_origin_hop() {
+    let server = server::http(move |req| async move {
+        let host = req.headers()["host"].to_str().unwrap().to_owned();
+        match req.uri().path() {
+            "/a" => {
+                assert_eq!(req.headers()["authorization"], "Bearer secret");
+                let port = host.rsplit(':').next().unwrap();
+                http::Response::builder()
+                    .status(302)
+                    .header("location", format!("http://localhost:{port}/b"))
+                    .body(Body::default())
+                    .unwrap()
+            }
+            "/b" => {
+                assert_eq!(req.headers().get("authorization"), None);
+                http::Response::builder()
+                    .status(302)
+                    .header("location", "/c")
+                    .body(Body::default())
+                    .unwrap()
+            }
+            _ => {
+                assert_eq!(req.headers().get("authorization"), None);
+                http::Response::default()
+            }
+        }
+    });
+
+    let res = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap()
+        .get(format!("http://127.0.0.1:{}/a", server.addr().port()))
+        .header(reqwest::header::AUTHORIZATION, "Bearer secret")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    assert_eq!(res.url().path(), "/c");
+}
+
+#[tokio::test]
 async fn test_redirect_policy_can_return_errors() {
     let server = server::http(move |req| async move {
         assert_eq!(req.uri(), "/loop");
