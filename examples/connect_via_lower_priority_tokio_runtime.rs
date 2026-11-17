@@ -16,7 +16,7 @@
 // `pin-project-lite = "0.2"`
 // `tower = { version = "0.5", default-features = false}`
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
     background_threadpool::init_background_runtime();
@@ -48,8 +48,8 @@ async fn main() -> Result<(), reqwest::Error> {
     Ok(())
 }
 
-// separating out for convenience to avoid a million #[cfg(not(target_arch = "wasm32"))]
-#[cfg(not(target_arch = "wasm32"))]
+// separating out for convenience to avoid a million #[cfg(not(target_family = "wasm"))]
+#[cfg(not(target_family = "wasm"))]
 mod background_threadpool {
     use std::{
         future::Future,
@@ -102,7 +102,7 @@ mod background_threadpool {
             .unwrap_or_else(|e| panic!("cpu heavy thread failed_to_initialize: {}", e));
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     async fn process_cpu_work() {
         // we only use this channel for routing work, it should move pretty quick, it can be small
         let (tx, mut rx) = tokio::sync::mpsc::channel(10);
@@ -256,9 +256,9 @@ mod background_threadpool {
     }
 }
 
-// The [cfg(not(target_arch = "wasm32"))] above prevent building the tokio::main function
+// The [cfg(not(target_family = "wasm"))] above prevent building the tokio::main function
 // for wasm32 target, because tokio isn't compatible with wasm32.
 // If you aren't building for wasm32, you don't need that line.
 // The two lines below avoid the "'main' function not found" error when building for wasm32 target.
-#[cfg(any(target_arch = "wasm32"))]
+#[cfg(any(target_family = "wasm"))]
 fn main() {}
