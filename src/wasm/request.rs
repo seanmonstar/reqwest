@@ -9,6 +9,7 @@ use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
 use url::Url;
+#[cfg(not(target_os = "wasi"))]
 use web_sys::{RequestCache, RequestCredentials};
 
 use super::{Body, Client, Response};
@@ -24,7 +25,9 @@ pub struct Request {
     body: Option<Body>,
     timeout: Option<Duration>,
     pub(super) cors: bool,
+    #[cfg(not(target_os = "wasi"))]
     pub(super) credentials: Option<RequestCredentials>,
+    #[cfg(not(target_os = "wasi"))]
     pub(super) cache: Option<RequestCache>,
     pub(super) referrer: Option<String>,
     pub(super) referrer_policy: Option<String>,
@@ -47,7 +50,9 @@ impl Request {
             body: None,
             timeout: None,
             cors: true,
+            #[cfg(not(target_os = "wasi"))]
             credentials: None,
+            #[cfg(not(target_os = "wasi"))]
             cache: None,
             referrer: None,
             referrer_policy: None,
@@ -130,7 +135,9 @@ impl Request {
             body,
             timeout: self.timeout,
             cors: self.cors,
+            #[cfg(not(target_os = "wasi"))]
             credentials: self.credentials,
+            #[cfg(not(target_os = "wasi"))]
             cache: self.cache,
             referrer: self.referrer.clone(),
             referrer_policy: self.referrer_policy.clone(),
@@ -345,6 +352,7 @@ impl RequestBuilder {
     /// The [request mode][mdn] will be set to 'no-cors'.
     ///
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/mode
+    #[cfg(not(target_os = "wasi"))]
     pub fn fetch_mode_no_cors(mut self) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.cors = false;
@@ -361,6 +369,7 @@ impl RequestBuilder {
     /// The [request credentials][mdn] will be set to 'same-origin'.
     ///
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials
+    #[cfg(not(target_os = "wasi"))]
     pub fn fetch_credentials_same_origin(mut self) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.credentials = Some(RequestCredentials::SameOrigin);
@@ -377,6 +386,7 @@ impl RequestBuilder {
     /// The [request credentials][mdn] will be set to 'include'.
     ///
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials
+    #[cfg(not(target_os = "wasi"))]
     pub fn fetch_credentials_include(mut self) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.credentials = Some(RequestCredentials::Include);
@@ -393,6 +403,7 @@ impl RequestBuilder {
     /// The [request credentials][mdn] will be set to 'omit'.
     ///
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials
+    #[cfg(not(target_os = "wasi"))]
     pub fn fetch_credentials_omit(mut self) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.credentials = Some(RequestCredentials::Omit);
@@ -409,6 +420,7 @@ impl RequestBuilder {
     /// The [request cache][mdn] will be set to 'default'.
     ///
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
+    #[cfg(not(target_os = "wasi"))]
     pub fn fetch_cache_default(mut self) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.cache = Some(RequestCache::Default);
@@ -425,6 +437,7 @@ impl RequestBuilder {
     /// The [request cache][mdn] will be set to 'no-store'.
     ///
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
+    #[cfg(not(target_os = "wasi"))]
     pub fn fetch_cache_no_store(mut self) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.cache = Some(RequestCache::NoStore);
@@ -441,6 +454,7 @@ impl RequestBuilder {
     /// The [request cache][mdn] will be set to 'reload'.
     ///
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
+    #[cfg(not(target_os = "wasi"))]
     pub fn fetch_cache_reload(mut self) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.cache = Some(RequestCache::Reload);
@@ -457,6 +471,7 @@ impl RequestBuilder {
     /// The [request cache][mdn] will be set to 'no-cache'.
     ///
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
+    #[cfg(not(target_os = "wasi"))]
     pub fn fetch_cache_no_cache(mut self) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.cache = Some(RequestCache::NoCache);
@@ -473,6 +488,7 @@ impl RequestBuilder {
     /// The [request cache][mdn] will be set to 'force-cache'.
     ///
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
+    #[cfg(not(target_os = "wasi"))]
     pub fn fetch_cache_force_cache(mut self) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.cache = Some(RequestCache::ForceCache);
@@ -489,6 +505,7 @@ impl RequestBuilder {
     /// The [request cache][mdn] will be set to 'only-if-cached'.
     ///
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
+    #[cfg(not(target_os = "wasi"))]
     pub fn fetch_cache_only_if_cached(mut self) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.cache = Some(RequestCache::OnlyIfCached);
@@ -501,6 +518,7 @@ impl RequestBuilder {
     /// # WASM
     ///
     /// This maps to the browser `RequestInit.referrer` field.
+    #[cfg(not(target_os = "wasi"))]
     pub fn fetch_referrer(mut self, referrer: &str) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.referrer = Some(referrer.to_string());
@@ -513,6 +531,7 @@ impl RequestBuilder {
     /// # WASM
     ///
     /// This maps to the browser `RequestInit.referrerPolicy` field.
+    #[cfg(not(target_os = "wasi"))]
     pub fn fetch_referrer_policy(mut self, policy: &str) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.referrer_policy = Some(policy.to_string());
@@ -637,7 +656,9 @@ where
             body: Some(body.into()),
             timeout: None,
             cors: true,
+            #[cfg(not(target_os = "wasi"))]
             credentials: None,
+            #[cfg(not(target_os = "wasi"))]
             cache: None,
             referrer: None,
             referrer_policy: None,
