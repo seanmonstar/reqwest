@@ -24,7 +24,10 @@ where
     header
 }
 
-#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+#[cfg(not(any(
+    all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+    all(target_os = "wasi", not(target_env = "p1"), not(feature = "multipart"))
+)))]
 pub(crate) fn fast_random() -> u64 {
     use std::cell::Cell;
     use std::collections::hash_map::RandomState;
@@ -77,7 +80,7 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
 }
 
 #[cfg(feature = "cookies")]
-#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+#[cfg(not(any(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")), all(target_os = "wasi", not(target_env = "p1")))))]
 pub(crate) fn add_cookie_header(
     headers: &mut HeaderMap,
     cookie_store: &dyn crate::cookie::CookieStore,
@@ -90,7 +93,7 @@ pub(crate) fn add_cookie_header(
 
 pub(crate) struct Escape<'a>(&'a [u8]);
 
-#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+#[cfg(not(any(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")), all(target_os = "wasi", not(target_env = "p1")))))]
 impl<'a> Escape<'a> {
     pub(crate) fn new(bytes: &'a [u8]) -> Self {
         Escape(bytes)

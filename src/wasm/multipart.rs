@@ -4,6 +4,7 @@ use std::fmt;
 
 use http::HeaderMap;
 use mime_guess::Mime;
+#[cfg(not(target_os = "wasi"))]
 use web_sys::FormData;
 
 use super::Body;
@@ -11,6 +12,8 @@ use super::Body;
 /// An async multipart/form-data request.
 pub struct Form {
     inner: FormParts<Part>,
+    #[cfg(target_os = "wasi")]
+    boundary: String,
 }
 
 impl Form {
@@ -52,6 +55,8 @@ impl Form {
     pub fn new() -> Form {
         Form {
             inner: FormParts::new(),
+            #[cfg(target_os = "wasi")]
+            boundary: gen_boundary(),
         }
     }
 
@@ -86,9 +91,12 @@ impl Form {
     {
         Form {
             inner: func(self.inner),
+            #[cfg(target_os = "wasi")]
+            boundary: self.boundary,
         }
     }
 
+    #[cfg(not(target_os = "wasi"))]
     pub(crate) fn to_form_data(&self) -> crate::Result<FormData> {
         let form = FormData::new()
             .map_err(crate::error::wasm)
@@ -181,6 +189,7 @@ impl Part {
         }
     }
 
+    #[cfg(not(target_os = "wasi"))]
     fn append_to_form(
         &self,
         name: &str,
@@ -215,6 +224,7 @@ impl Part {
         }
     }
 
+    #[cfg(not(target_os = "wasi"))]
     fn blob(&self, mime_type: Option<&Mime>) -> crate::Result<web_sys::Blob> {
         use web_sys::Blob;
         use web_sys::BlobPropertyBag;
@@ -323,7 +333,78 @@ impl PartMetadata {
     }
 }
 
-#[cfg(test)]
+// ===== encoding, on WASI =====
+
+#[cfg(target_os = "wasi")]
+impl Form {
+    /// Get the boundary that this form will use.
+    pub fn boundary(&self) -> &str {
+        &self.boundary
+    }
+
+    /// The `Content-Type` of the encoded form.
+    pub(crate) fn content_type(&self) -> http::HeaderValue {
+        let value = format!("multipart/form-data; boundary={}", self.boundary);
+        http::HeaderValue::from_str(&value).expect("the boundary is a valid header value")
+    }
+
+    /// The form encoded as `multipart/form-data` (RFC 7578).
+    pub(crate) fn to_bytes(&self) -> bytes::Bytes {
+        let mut out = Vec::new();
+        for (name, part) in &self.inner.fields {
+            let meta = part.metadata();
+            out.extend_from_slice(format!("--{}\r\n", self.boundary).as_bytes());
+            let mut disposition = format!("Content-Disposition: form-data; name=\"{}\"", quote(name));
+            if let Some(file_name) = &meta.file_name {
+                disposition.push_str(&format!("; filename=\"{}\"", quote(file_name)));
+            }
+            out.extend_from_slice(disposition.as_bytes());
+            out.extend_from_slice(b"\r\n");
+            if let Some(mime) = &meta.mime {
+                out.extend_from_slice(format!("Content-Type: {mime}\r\n").as_bytes());
+            }
+            for (key, value) in meta.headers.iter() {
+                out.extend_from_slice(key.as_str().as_bytes());
+                out.extend_from_slice(b": ");
+                out.extend_from_slice(value.as_bytes());
+                out.extend_from_slice(b"\r\n");
+            }
+            out.extend_from_slice(b"\r\n");
+            let value = part
+                .value
+                .as_bytes()
+                .expect("A part's body can't be multipart itself");
+            out.extend_from_slice(value);
+            out.extend_from_slice(b"\r\n");
+        }
+        out.extend_from_slice(format!("--{}--\r\n", self.boundary).as_bytes());
+        out.into()
+    }
+}
+
+/// A name or file name as a quoted string: `"`, CR and LF percent-encoded,
+/// as browsers do.
+#[cfg(target_os = "wasi")]
+fn quote(value: &str) -> String {
+    value
+        .replace('"', "%22")
+        .replace('\r', "%0D")
+        .replace('\n', "%0A")
+}
+
+#[cfg(target_os = "wasi")]
+fn gen_boundary() -> String {
+    use crate::util::fast_random as random;
+
+    let a = random();
+    let b = random();
+    let c = random();
+    let d = random();
+
+    format!("{a:016x}-{b:016x}-{c:016x}-{d:016x}")
+}
+
+#[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
 
     use wasm_bindgen_test::*;

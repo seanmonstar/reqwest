@@ -1,5 +1,8 @@
 #![cfg_attr(
-    all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+    any(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        all(target_os = "wasi", not(target_env = "p1"))
+    ),
     allow(unused)
 )]
 use std::error::Error as StdError;
@@ -105,11 +108,17 @@ impl Error {
 
     /// Returns true if the error is from `Response::error_for_status`.
     pub fn is_status(&self) -> bool {
-        #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+        #[cfg(not(any(
+            all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+            all(target_os = "wasi", not(target_env = "p1"))
+        )))]
         {
             matches!(self.inner.kind, Kind::Status(_, _))
         }
-        #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+        #[cfg(any(
+            all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+            all(target_os = "wasi", not(target_env = "p1"))
+        ))]
         {
             matches!(self.inner.kind, Kind::Status(_))
         }
@@ -128,9 +137,9 @@ impl Error {
                     return true;
                 }
             }
-            #[cfg(not(all(
-                target_arch = "wasm32",
-                any(target_os = "unknown", target_os = "none")
+            #[cfg(not(any(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                all(target_os = "wasi", not(target_env = "p1"))
             )))]
             if let Some(hyper_err) = err.downcast_ref::<hyper::Error>() {
                 if hyper_err.is_timeout() {
@@ -153,7 +162,10 @@ impl Error {
         matches!(self.inner.kind, Kind::Request)
     }
 
-    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+    #[cfg(not(any(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        all(target_os = "wasi", not(target_env = "p1"))
+    )))]
     /// Returns true if the error is related to connect
     pub fn is_connect(&self) -> bool {
         let mut source = self.source();
@@ -171,7 +183,10 @@ impl Error {
         false
     }
 
-    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+    #[cfg(not(any(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        all(target_os = "wasi", not(target_env = "p1"))
+    )))]
     /// Returns true if the error is related to DNS resolution.
     pub fn is_dns(&self) -> bool {
         let mut source = self.source();
@@ -200,11 +215,14 @@ impl Error {
     /// Returns the status code, if the error was generated from a response.
     pub fn status(&self) -> Option<StatusCode> {
         match self.inner.kind {
-            #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+            #[cfg(any(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                all(target_os = "wasi", not(target_env = "p1"))
+            ))]
             Kind::Status(code) => Some(code),
-            #[cfg(not(all(
-                target_arch = "wasm32",
-                any(target_os = "unknown", target_os = "none")
+            #[cfg(not(any(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                all(target_os = "wasi", not(target_env = "p1"))
             )))]
             Kind::Status(code, _) => Some(code),
             _ => None,
@@ -228,7 +246,10 @@ impl Error {
 /// internal equivalents.
 ///
 /// Currently only is used for `tower::timeout::error::Elapsed`.
-#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+#[cfg(not(any(
+    all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+    all(target_os = "wasi", not(target_env = "p1"))
+)))]
 pub(crate) fn cast_to_internal_error(error: BoxError) -> BoxError {
     if error.is::<tower::timeout::error::Elapsed>() {
         Box::new(crate::error::TimedOut) as BoxError
@@ -263,7 +284,10 @@ impl fmt::Display for Error {
             Kind::Decode => f.write_str("error decoding response body")?,
             Kind::Redirect => f.write_str("error following redirect")?,
             Kind::Upgrade => f.write_str("error upgrading connection")?,
-            #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+            #[cfg(any(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                all(target_os = "wasi", not(target_env = "p1"))
+            ))]
             Kind::Status(ref code) => {
                 let prefix = if code.is_client_error() {
                     "HTTP status client error"
@@ -273,9 +297,9 @@ impl fmt::Display for Error {
                 };
                 write!(f, "{prefix} ({code})")?;
             }
-            #[cfg(not(all(
-                target_arch = "wasm32",
-                any(target_os = "unknown", target_os = "none")
+            #[cfg(not(any(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                all(target_os = "wasi", not(target_env = "p1"))
             )))]
             Kind::Status(ref code, ref reason) => {
                 let prefix = if code.is_client_error() {
@@ -330,9 +354,15 @@ pub(crate) enum Kind {
     Builder,
     Request,
     Redirect,
-    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+    #[cfg(not(any(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        all(target_os = "wasi", not(target_env = "p1"))
+    )))]
     Status(StatusCode, Option<hyper::ext::ReasonPhrase>),
-    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    #[cfg(any(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        all(target_os = "wasi", not(target_env = "p1"))
+    ))]
     Status(StatusCode),
     Body,
     Decode,
@@ -368,14 +398,18 @@ pub(crate) fn redirect<E: Into<BoxError>>(e: E, url: Url) -> Error {
 pub(crate) fn status_code(
     url: Url,
     status: StatusCode,
-    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))] reason: Option<hyper::ext::ReasonPhrase>,
+    #[cfg(not(any(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        all(target_os = "wasi", not(target_env = "p1"))
+    )))]
+    reason: Option<hyper::ext::ReasonPhrase>,
 ) -> Error {
     Error::new(
         Kind::Status(
             status,
-            #[cfg(not(all(
-                target_arch = "wasm32",
-                any(target_os = "unknown", target_os = "none")
+            #[cfg(not(any(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                all(target_os = "wasi", not(target_env = "p1"))
             )))]
             reason,
         ),
@@ -392,10 +426,9 @@ pub(crate) fn url_invalid_uri(url: Url) -> Error {
     Error::new(Kind::Builder, Some("Parsed Url is not a valid Uri")).with_url(url)
 }
 
-if_wasm! {
-    pub(crate) fn wasm(js_val: wasm_bindgen::JsValue) -> BoxError {
-        format!("{js_val:?}").into()
-    }
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+pub(crate) fn wasm(js_val: wasm_bindgen::JsValue) -> BoxError {
+    format!("{js_val:?}").into()
 }
 
 pub(crate) fn upgrade<E: Into<BoxError>>(e: E) -> Error {
@@ -534,7 +567,10 @@ mod tests {
         assert!(nested.is_timeout());
     }
 
-    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+    #[cfg(not(any(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        all(target_os = "wasi", not(target_env = "p1"))
+    )))]
     #[test]
     fn is_dns() {
         let err = super::request(DnsError { inner: "".into() });
