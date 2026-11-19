@@ -121,6 +121,21 @@ struct Accepts {
     deflate: bool,
 }
 
+impl Accepts {
+    fn none() -> Accepts {
+        Accepts {
+            #[cfg(feature = "gzip")]
+            gzip: false,
+            #[cfg(feature = "brotli")]
+            brotli: false,
+            #[cfg(feature = "zstd")]
+            zstd: false,
+            #[cfg(feature = "deflate")]
+            deflate: false,
+        }
+    }
+}
+
 impl Default for Accepts {
     fn default() -> Accepts {
         Accepts {
@@ -1327,6 +1342,19 @@ impl ClientBuilder {
     #[cfg_attr(docsrs, doc(cfg(feature = "deflate")))]
     pub fn deflate(mut self, enable: bool) -> ClientBuilder {
         self.config.accepts.deflate = enable;
+        self
+    }
+
+    /// Disable all automatic response body decompression.
+    ///
+    /// This includes any decompression algorithms added in the future, regardless
+    /// of which optional features are enabled.
+    ///
+    /// An explicitly set `Accept-Encoding` request header is preserved and does
+    /// not enable decompression. Individual algorithms can be enabled again by
+    /// calling their respective methods after this method.
+    pub fn no_decompression(mut self) -> ClientBuilder {
+        self.config.accepts = Accepts::none();
         self
     }
 
