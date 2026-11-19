@@ -716,14 +716,30 @@ impl ConnectorService {
         #[cfg(target_os = "windows")]
         let svc = {
             use tokio::net::windows::named_pipe::ClientOptions;
+
+            // https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-#:~:text=ERROR_PIPE_BUSY,busy.
+            const ERROR_PIPE_BUSY: i32 = 231;
+
             let pipe = self
                 .windows_named_pipe
                 .as_ref()
                 .expect("connect local must have pipe path")
                 .clone();
+
             tower::service_fn(move |_| {
                 let pipe = pipe.clone();
-                async move { ClientOptions::new().open(pipe).map(TokioIo::new) }
+
+                async move {
+                    loop {
+                        match ClientOptions::new().open(&pipe) {
+                            Ok(client) => return Ok(TokioIo::new(client)),
+                            Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY) => {}
+                            Err(e) => return Err(e),
+                        }
+
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                }
             })
         };
         let is_proxy = false;
