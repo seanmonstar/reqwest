@@ -23,6 +23,17 @@ async fn simple_example() {
     let body = res.text().await.expect("response to utf-8 text");
     log(&format!("Body:\n\n{body}"));
 }
+#[wasm_bindgen_test]
+async fn response_extensions_and_version() {
+    let mut res = reqwest::get("https://hyper.rs")
+        .await
+        .expect("http get example");
+    assert_eq!(res.version(), http::Version::HTTP_11);
+    assert!(res.extensions().is_empty());
+    res.extensions_mut().insert(42u32);
+    assert_eq!(res.extensions().get::<u32>(), Some(&42));
+}
+
 
 #[wasm_bindgen_test]
 async fn request_with_timeout() {
