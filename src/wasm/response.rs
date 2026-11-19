@@ -1,7 +1,7 @@
 use std::fmt;
 
 use bytes::Bytes;
-use http::{HeaderMap, StatusCode};
+use http::{HeaderMap, StatusCode, Version};
 use js_sys::Uint8Array;
 use url::Url;
 
@@ -56,6 +56,18 @@ impl Response {
         self.http.headers_mut()
     }
 
+    /// Returns a reference to the associated extensions.
+    #[inline]
+    pub fn extensions(&self) -> &http::Extensions {
+        self.http.extensions()
+    }
+
+    /// Returns a mutable reference to the associated extensions.
+    #[inline]
+    pub fn extensions_mut(&mut self) -> &mut http::Extensions {
+        self.http.extensions_mut()
+    }
+
     /// Get the content-length of this response, if known.
     ///
     /// Reasons it may not be known:
@@ -78,13 +90,11 @@ impl Response {
         &self.url
     }
 
-    /* It might not be possible to detect this in JS?
     /// Get the HTTP `Version` of this `Response`.
     #[inline]
     pub fn version(&self) -> Version {
         self.http.version()
     }
-    */
 
     /// Try to deserialize the response body as JSON.
     #[cfg(feature = "json")]
