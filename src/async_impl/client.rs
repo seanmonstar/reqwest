@@ -288,6 +288,8 @@ impl ClientBuilder {
         let mut headers: HeaderMap<HeaderValue> = HeaderMap::with_capacity(2);
         headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
 
+        const TCP_KEEPALIVE_INTERVAL: u64 = 15;
+        const TCP_KEEPALIVE_RETRIES: u32 = 3;
         ClientBuilder {
             config: Config {
                 error: None,
@@ -305,11 +307,13 @@ impl ClientBuilder {
                 connection_verbose: false,
                 pool_idle_timeout: Some(Duration::from_secs(90)),
                 pool_max_idle_per_host: usize::MAX,
-                tcp_keepalive: Some(Duration::from_secs(15)),
-                tcp_keepalive_interval: Some(Duration::from_secs(15)),
-                tcp_keepalive_retries: Some(3),
+                tcp_keepalive: Some(Duration::from_secs(TCP_KEEPALIVE_INTERVAL)),
+                tcp_keepalive_interval: Some(Duration::from_secs(TCP_KEEPALIVE_INTERVAL)),
+                tcp_keepalive_retries: Some(TCP_KEEPALIVE_RETRIES),
                 #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
-                tcp_user_timeout: Some(Duration::from_secs(30)),
+                tcp_user_timeout: Some(Duration::from_secs(
+                    TCP_KEEPALIVE_INTERVAL * (TCP_KEEPALIVE_RETRIES + 1) as u64,
+                )),
                 proxies: Vec::new(),
                 auto_sys_proxy: true,
                 redirect_policy: redirect::Policy::default(),
