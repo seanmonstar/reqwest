@@ -338,6 +338,10 @@ async fn tunnel_detects_auth_required() {
         .await
         .unwrap_err();
 
+    assert!(
+        err.proxy_url().is_none(),
+        "the proxy accepted the connection"
+    );
     let err = support::error::inspect(err).pop().unwrap();
     assert!(
         err.contains("auth"),

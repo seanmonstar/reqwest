@@ -234,6 +234,37 @@ async fn dns_resolution_failure_is_dns_error() {
     assert!(err.is_dns(), "expected a DNS error, got: {err:?}");
     // DNS errors are a refinement of connect errors.
     assert!(err.is_connect(), "expected is_connect() to also be true");
+    assert!(err.proxy_url().is_none());
+}
+
+#[cfg(feature = "__tls")]
+#[tokio::test]
+async fn proxy_dns_error_includes_proxy_endpoint() {
+    let client = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::https("http://user:secret@proxy.invalid:8080").unwrap())
+        .dns_resolver(std::sync::Arc::new(FailingResolver))
+        .build()
+        .unwrap();
+
+    let destination = "https://example.org/";
+    let err = client.get(destination).send().await.unwrap_err();
+    assert!(err.is_dns());
+    assert!(err.is_connect());
+    assert_eq!(err.url().unwrap().as_str(), destination);
+    assert_eq!(
+        err.proxy_url().unwrap().as_str(),
+        "http://proxy.invalid:8080/"
+    );
+
+    let causes = support::error::inspect(err);
+    let expected = [
+        "failed to connect to proxy (http://proxy.invalid:8080/)",
+        "dns error",
+    ];
+    assert!(
+        causes.windows(expected.len()).any(|pair| pair == expected),
+        "{causes:?}"
+    );
 }
 
 #[tokio::test]

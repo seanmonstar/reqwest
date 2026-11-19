@@ -11,6 +11,8 @@ use hyper_util::rt::TokioIo;
 use native_tls_crate::{TlsConnector, TlsConnectorBuilder};
 use pin_project_lite::pin_project;
 use tower::util::{BoxCloneSyncServiceLayer, MapRequestLayer};
+#[cfg(feature = "__tls")]
+use tower::ServiceExt;
 use tower::{timeout::TimeoutLayer, util::BoxCloneSyncService, ServiceBuilder};
 use tower_service::Service;
 
@@ -805,10 +807,13 @@ impl ConnectorService {
                     log::trace!("tunneling HTTPS over proxy");
                     let tls_connector = tokio_native_tls::TlsConnector::from(tls.clone());
                     let inner =
-                        hyper_tls::HttpsConnector::from((http.clone(), tls_connector.clone()));
+                        hyper_tls::HttpsConnector::from((http.clone(), tls_connector.clone()))
+                            .map_err(move |original_err| proxy_connect(&proxy_dst, original_err));
                     // TODO: we could cache constructing this
-                    let mut tunnel =
-                        hyper_util::client::legacy::connect::proxy::Tunnel::new(proxy_dst, inner);
+                    let mut tunnel = hyper_util::client::legacy::connect::proxy::Tunnel::new(
+                        proxy.uri().clone(),
+                        inner,
+                    );
                     if let Some(auth) = auth {
                         tunnel = tunnel.with_auth(auth);
                     }
@@ -850,10 +855,13 @@ impl ConnectorService {
 
                     log::trace!("tunneling HTTPS over proxy");
                     let http = http.clone();
-                    let inner = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()));
+                    let inner = hyper_rustls::HttpsConnector::from((http, tls_proxy.clone()))
+                        .map_err(move |original_err| proxy_connect(&proxy_dst, original_err));
                     // TODO: we could cache constructing this
-                    let mut tunnel =
-                        hyper_util::client::legacy::connect::proxy::Tunnel::new(proxy_dst, inner);
+                    let mut tunnel = hyper_util::client::legacy::connect::proxy::Tunnel::new(
+                        proxy.uri().clone(),
+                        inner,
+                    );
                     if let Some(auth) = auth {
                         tunnel = tunnel.with_auth(auth);
                     }
@@ -888,7 +896,9 @@ impl ConnectorService {
             Inner::Http(_) => (),
         }
 
-        self.connect_with_maybe_proxy(proxy_dst, true).await
+        self.connect_with_maybe_proxy(proxy_dst, true)
+            .await
+            .map_err(|original_err| proxy_connect(proxy.uri(), original_err))
     }
 
     #[cfg(any(unix, target_os = "windows"))]
@@ -899,6 +909,56 @@ impl ConnectorService {
         #[cfg(target_os = "windows")]
         return self.windows_named_pipe.is_some();
     }
+}
+
+#[derive(Debug)]
+pub(crate) struct ProxyError {
+    pub(crate) url: crate::Url,
+    source: BoxError,
+}
+
+impl std::fmt::Display for ProxyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "failed to connect to proxy ({})", self.url)
+    }
+}
+
+impl std::error::Error for ProxyError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&*self.source)
+    }
+}
+
+/// Redact credentials before adding the proxy address to the connection error.
+/// For example, report `http://user:secret@proxy:8080` as `http://proxy:8080`.
+/// If the redacted address doesn't parse as a URL, omit the address entirely.
+fn proxy_connect(uri: &http::Uri, source: BoxError) -> BoxError {
+    let url = uri
+        .scheme()
+        .zip(uri.authority())
+        .and_then(|(scheme, authority)| {
+            let host_port = authority.as_str().rsplit('@').next()?;
+            crate::Url::parse(&format!("{scheme}://{host_port}")).ok()
+        });
+    match url {
+        Some(url) => Box::new(ProxyError { url, source }),
+        None => source,
+    }
+}
+
+#[test]
+fn proxy_error_omits_password_suffix_after_unescaped_at() {
+    let matcher = hyper_util::client::proxy::matcher::Matcher::builder()
+        .https("http://user:password@secret-suffix@proxy.example:8080")
+        .build();
+    let proxy = matcher
+        .intercept(&"https://example.org/".parse().unwrap())
+        .unwrap();
+    let err = proxy_connect(proxy.uri(), "connection refused".into());
+    assert_eq!(
+        err.to_string(),
+        "failed to connect to proxy (http://proxy.example:8080/)"
+    );
 }
 
 async fn with_timeout<T, F>(f: F, timeout: Option<Duration>) -> Result<T, BoxError>
