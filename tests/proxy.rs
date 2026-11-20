@@ -144,6 +144,44 @@ async fn http_proxy_basic_auth_parsed() {
 }
 
 #[tokio::test]
+async fn http_proxy_basic_auth_on_cross_host_redirect() {
+    let url = "http://hyper.rs.local/redirect";
+    let redirected = "http://other.rs.local/dst";
+    let server = server::http(move |req| {
+        let mut res = http::Response::default();
+        if req.headers().get("proxy-authorization")
+            != Some(&http::HeaderValue::from_static(
+                "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+            ))
+        {
+            *res.status_mut() = http::StatusCode::PROXY_AUTHENTICATION_REQUIRED;
+        } else if req.uri() == url {
+            *res.status_mut() = http::StatusCode::FOUND;
+            res.headers_mut()
+                .insert("location", http::HeaderValue::from_static(redirected));
+        } else {
+            assert_eq!(req.uri(), redirected);
+        }
+
+        async { res }
+    });
+
+    let proxy = format!("http://Aladdin:open sesame@{}", server.addr());
+
+    let res = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::http(&proxy).unwrap())
+        .build()
+        .unwrap()
+        .get(url)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.url().as_str(), redirected);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
+#[tokio::test]
 async fn system_http_proxy_basic_auth_parsed() {
     let url = "http://hyper.rs.local/prox";
     let server = server::http(move |req| {
