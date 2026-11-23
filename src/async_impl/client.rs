@@ -139,6 +139,60 @@ impl Default for Accepts {
 #[derive(Clone)]
 struct HyperService {
     hyper: HyperClient,
+    proxies: Arc<Vec<ProxyMatcher>>,
+    proxies_maybe_http_auth: bool,
+    proxies_maybe_http_custom_headers: bool,
+}
+
+impl HyperService {
+    fn proxy_auth(&self, dst: &Uri, headers: &mut HeaderMap) {
+        if !self.proxies_maybe_http_auth {
+            return;
+        }
+
+        // Only set the header here if the destination scheme is 'http',
+        // since otherwise, the header will be included in the CONNECT tunnel
+        // request instead.
+        if dst.scheme() != Some(&Scheme::HTTP) {
+            return;
+        }
+
+        if headers.contains_key(PROXY_AUTHORIZATION) {
+            return;
+        }
+
+        for proxy in self.proxies.iter() {
+            if let Some(proxy) = proxy.intercept(dst) {
+                if let Some(header) = proxy.http_non_tunnel_basic_auth() {
+                    headers.insert(PROXY_AUTHORIZATION, header);
+                }
+                // Use only the first matching proxy, as the connector does.
+                break;
+            }
+        }
+    }
+
+    fn proxy_custom_headers(&self, dst: &Uri, headers: &mut HeaderMap) {
+        if !self.proxies_maybe_http_custom_headers {
+            return;
+        }
+
+        if dst.scheme() != Some(&Scheme::HTTP) {
+            return;
+        }
+
+        for proxy in self.proxies.iter() {
+            if let Some(proxy) = proxy.intercept(dst) {
+                if let Some(iter) = proxy.http_non_tunnel_custom_headers() {
+                    iter.iter().for_each(|(key, value)| {
+                        headers.insert(key, value.clone());
+                    });
+                }
+                // Use only the first matching proxy, as the connector does.
+                break;
+            }
+        }
+    }
 }
 
 impl Service<hyper::Request<crate::async_impl::body::Body>> for HyperService {
@@ -151,6 +205,13 @@ impl Service<hyper::Request<crate::async_impl::body::Body>> for HyperService {
     }
 
     fn call(&mut self, req: hyper::Request<crate::async_impl::body::Body>) -> Self::Future {
+        // Applied below the redirect layer, so that each hop carries the
+        // headers of the proxy that intercepts its own URI.
+        let (mut parts, body) = req.into_parts();
+        self.proxy_auth(&parts.uri, &mut parts.headers);
+        self.proxy_custom_headers(&parts.uri, &mut parts.headers);
+        let req = hyper::Request::from_parts(parts, body);
+
         let clone = self.hyper.clone();
         let mut inner = std::mem::replace(&mut self.hyper, clone);
         Box::pin(async move { inner.call(req).await.map_err(crate::error::request) })
@@ -1031,6 +1092,9 @@ impl ClientBuilder {
         let hyper_client = builder.build(connector_builder.build(config.connector_layers));
         let hyper_service = HyperService {
             hyper: hyper_client,
+            proxies: proxies.clone(),
+            proxies_maybe_http_auth,
+            proxies_maybe_http_custom_headers,
         };
 
         let redirect_policy = {
@@ -1115,8 +1179,6 @@ impl ClientBuilder {
                 total_timeout: RequestConfig::new(config.timeout),
                 hyper,
                 proxies,
-                proxies_maybe_http_auth,
-                proxies_maybe_http_custom_headers,
                 https_only: config.https_only,
                 redirect_policy_desc,
             }),
@@ -2681,9 +2743,6 @@ impl Client {
 
         let body = body.unwrap_or_else(Body::empty);
 
-        self.proxy_auth(&uri, &mut headers);
-        self.proxy_custom_headers(&uri, &mut headers);
-
         let builder = hyper::Request::builder()
             .method(method.clone())
             .uri(uri)
@@ -2731,55 +2790,6 @@ impl Client {
                 read_timeout_fut,
                 read_timeout: self.inner.read_timeout,
             })),
-        }
-    }
-
-    fn proxy_auth(&self, dst: &Uri, headers: &mut HeaderMap) {
-        if !self.inner.proxies_maybe_http_auth {
-            return;
-        }
-
-        // Only set the header here if the destination scheme is 'http',
-        // since otherwise, the header will be included in the CONNECT tunnel
-        // request instead.
-        if dst.scheme() != Some(&Scheme::HTTP) {
-            return;
-        }
-
-        if headers.contains_key(PROXY_AUTHORIZATION) {
-            return;
-        }
-
-        for proxy in self.inner.proxies.iter() {
-            if let Some(proxy) = proxy.intercept(dst) {
-                if let Some(header) = proxy.http_non_tunnel_basic_auth() {
-                    headers.insert(PROXY_AUTHORIZATION, header);
-                }
-                // Use only the first matching proxy, as the connector does.
-                break;
-            }
-        }
-    }
-
-    fn proxy_custom_headers(&self, dst: &Uri, headers: &mut HeaderMap) {
-        if !self.inner.proxies_maybe_http_custom_headers {
-            return;
-        }
-
-        if dst.scheme() != Some(&Scheme::HTTP) {
-            return;
-        }
-
-        for proxy in self.inner.proxies.iter() {
-            if let Some(proxy) = proxy.intercept(dst) {
-                if let Some(iter) = proxy.http_non_tunnel_custom_headers() {
-                    iter.iter().for_each(|(key, value)| {
-                        headers.insert(key, value.clone());
-                    });
-                }
-                // Use only the first matching proxy, as the connector does.
-                break;
-            }
         }
     }
 }
@@ -3009,8 +3019,6 @@ struct ClientRef {
     total_timeout: RequestConfig<TotalTimeout>,
     read_timeout: Option<Duration>,
     proxies: Arc<Vec<ProxyMatcher>>,
-    proxies_maybe_http_auth: bool,
-    proxies_maybe_http_custom_headers: bool,
     https_only: bool,
     redirect_policy_desc: Option<String>,
 }
