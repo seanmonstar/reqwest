@@ -172,6 +172,17 @@ impl Error {
     }
 
     #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+    /// Returns the proxy endpoint if establishing the connection to an HTTP proxy failed.
+    ///
+    /// Unlike [`Error::url`], this identifies the proxy rather than the request destination.
+    /// Proxy credentials are redacted.
+    pub fn proxy_url(&self) -> Option<&Url> {
+        std::iter::successors(self.source(), |&err| err.source())
+            .find_map(|err| err.downcast_ref::<crate::connect::ProxyError>())
+            .map(|err| &err.url)
+    }
+
+    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
     /// Returns true if the error is related to DNS resolution.
     pub fn is_dns(&self) -> bool {
         let mut source = self.source();
