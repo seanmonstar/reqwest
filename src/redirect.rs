@@ -237,7 +237,8 @@ pub(crate) enum ActionKind {
 }
 
 pub(crate) fn remove_sensitive_headers(headers: &mut HeaderMap, next: &Url, previous: &[Url]) {
-    if let Some(previous) = previous.last() {
+    // Headers are rebuilt from the initial request on every hop, so compare against its URL.
+    if let Some(previous) = previous.first() {
         let cross_host = next.host_str() != previous.host_str()
             || next.port_or_known_default() != previous.port_or_known_default()
             || next.scheme() != previous.scheme();
@@ -420,12 +421,33 @@ fn test_remove_sensitive_headers() {
 
     let next = Url::parse("http://initial-domain.com/path").unwrap();
     let mut prev = vec![Url::parse("http://initial-domain.com/new_path").unwrap()];
-    let mut filtered_headers = headers.clone();
+    let expected_headers = headers.clone();
 
     remove_sensitive_headers(&mut headers, &next, &prev);
-    assert_eq!(headers, filtered_headers);
+    assert_eq!(headers, expected_headers);
 
     prev.push(Url::parse("http://new-domain.com/path").unwrap());
+
+    remove_sensitive_headers(&mut headers, &next, &prev);
+    assert_eq!(headers, expected_headers);
+}
+
+#[test]
+fn test_remove_sensitive_headers_after_earlier_cross_origin_hop() {
+    use hyper::header::{HeaderValue, ACCEPT, AUTHORIZATION, COOKIE};
+
+    let mut headers = HeaderMap::new();
+    headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
+    headers.insert(AUTHORIZATION, HeaderValue::from_static("let me in"));
+    headers.insert(COOKIE, HeaderValue::from_static("foo=bar"));
+
+    let next = Url::parse("http://new-domain.com/c").unwrap();
+    let prev = vec![
+        Url::parse("http://initial-domain.com/a").unwrap(),
+        Url::parse("http://new-domain.com/b").unwrap(),
+    ];
+
+    let mut filtered_headers = headers.clone();
     filtered_headers.remove(AUTHORIZATION);
     filtered_headers.remove(COOKIE);
 
