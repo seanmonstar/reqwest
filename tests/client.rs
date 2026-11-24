@@ -234,6 +234,37 @@ async fn dns_resolution_failure_is_dns_error() {
     assert!(err.is_dns(), "expected a DNS error, got: {err:?}");
     // DNS errors are a refinement of connect errors.
     assert!(err.is_connect(), "expected is_connect() to also be true");
+    assert!(err.proxy_url().is_none());
+}
+
+#[cfg(feature = "__tls")]
+#[tokio::test]
+async fn proxy_dns_error_includes_proxy_endpoint() {
+    let client = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::https("http://user:secret@proxy.invalid:8080").unwrap())
+        .dns_resolver(std::sync::Arc::new(FailingResolver))
+        .build()
+        .unwrap();
+
+    let destination = "https://example.org/";
+    let err = client.get(destination).send().await.unwrap_err();
+    assert!(err.is_dns());
+    assert!(err.is_connect());
+    assert_eq!(err.url().unwrap().as_str(), destination);
+    assert_eq!(
+        err.proxy_url().unwrap().as_str(),
+        "http://proxy.invalid:8080/"
+    );
+
+    let causes = support::error::inspect(err);
+    let expected = [
+        "failed to connect to proxy (http://proxy.invalid:8080/)",
+        "dns error",
+    ];
+    assert!(
+        causes.windows(expected.len()).any(|pair| pair == expected),
+        "{causes:?}"
+    );
 }
 
 #[tokio::test]
@@ -671,4 +702,48 @@ async fn http1_max_headers() {
     assert_eq!(res.status(), reqwest::StatusCode::OK);
     assert_eq!(res.headers()["x-custom-0"], "value");
     assert_eq!(res.headers()["x-custom-149"], "value");
+}
+
+#[cfg(feature = "stream")]
+#[tokio::test]
+async fn response_before_streamed_body_is_sent() {
+    use tokio::io::AsyncReadExt;
+
+    // This server responds without reading the request body, then waits for
+    // the client to close the connection before letting the body produce
+    // any bytes. This covers the case where the response is received
+    // before the body is fully sent, e.g. an HTTP 412 for a failed
+    // `If-None-Match: *` precondition.
+    let (closed_tx, mut closed_rx) = tokio::sync::mpsc::unbounded_channel();
+    let server = server::low_level_with_response(move |_raw_request, client_socket| {
+        let closed_tx = closed_tx.clone();
+        Box::new(async move {
+            client_socket
+                .write_all(
+                    b"HTTP/1.1 412 Precondition Failed\r\n\
+                      Content-Length: 0\r\n\
+                      Connection: close\r\n\
+                      \r\n",
+                )
+                .await
+                .expect("response write_all failed");
+            client_socket.shutdown().await.expect("shutdown failed");
+            let _ = client_socket.read_to_end(&mut Vec::new()).await;
+            let _ = closed_tx.send(());
+        })
+    });
+
+    let body = reqwest::Body::wrap_stream(futures_util::stream::once(async move {
+        closed_rx.recv().await;
+        Ok::<_, std::convert::Infallible>(vec![b'x'; 16])
+    }));
+    let res = Client::new()
+        .put(format!("http://{}/object", server.addr()))
+        .header(CONTENT_LENGTH, 16)
+        .body(body)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), reqwest::StatusCode::PRECONDITION_FAILED);
 }
