@@ -130,7 +130,7 @@ impl Request {
             None
         };
         let mut req = Request::new(self.method().clone(), self.url().clone());
-        *req.timeout_mut() = self.timeout().copied();
+        *req.inner.extensions_mut() = self.inner.extensions().clone();
         *req.headers_mut() = self.headers().clone();
         *req.version_mut() = self.version().clone();
         req.body = body;
@@ -350,6 +350,90 @@ impl RequestBuilder {
     pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             *req.body_mut() = Some(body.into());
+        }
+        self
+    }
+
+    /// Enables or disables automatic gzip response decompression for this request.
+    ///
+    /// Overrides [`ClientBuilder::gzip()`](crate::blocking::ClientBuilder::gzip)
+    /// without changing the client's configuration.
+    /// When enabled, `gzip` is included in an automatically generated
+    /// `Accept-Encoding` header. An existing `Accept-Encoding` header is preserved.
+    /// Responses with `Content-Encoding: gzip` are decompressed, and their
+    /// `Content-Encoding` and `Content-Length` headers are removed.
+    /// When disabled, the response body and these headers are left unchanged.
+    /// The request body is not compressed.
+    #[cfg(feature = "gzip")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "gzip")))]
+    pub fn gzip(mut self, enable: bool) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *crate::config::RequestConfig::<crate::config::Gzip>::get_mut(
+                req.inner.extensions_mut(),
+            ) = Some(enable);
+        }
+        self
+    }
+
+    /// Enables or disables automatic brotli response decompression for this request.
+    ///
+    /// Overrides [`ClientBuilder::brotli()`](crate::blocking::ClientBuilder::brotli)
+    /// without changing the client's configuration.
+    /// When enabled, `br` is included in an automatically generated
+    /// `Accept-Encoding` header. An existing `Accept-Encoding` header is preserved.
+    /// Responses with `Content-Encoding: br` are decompressed, and their
+    /// `Content-Encoding` and `Content-Length` headers are removed.
+    /// When disabled, the response body and these headers are left unchanged.
+    /// The request body is not compressed.
+    #[cfg(feature = "brotli")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "brotli")))]
+    pub fn brotli(mut self, enable: bool) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *crate::config::RequestConfig::<crate::config::Brotli>::get_mut(
+                req.inner.extensions_mut(),
+            ) = Some(enable);
+        }
+        self
+    }
+
+    /// Enables or disables automatic zstd response decompression for this request.
+    ///
+    /// Overrides [`ClientBuilder::zstd()`](crate::blocking::ClientBuilder::zstd)
+    /// without changing the client's configuration.
+    /// When enabled, `zstd` is included in an automatically generated
+    /// `Accept-Encoding` header. An existing `Accept-Encoding` header is preserved.
+    /// Responses with `Content-Encoding: zstd` are decompressed, and their
+    /// `Content-Encoding` and `Content-Length` headers are removed.
+    /// When disabled, the response body and these headers are left unchanged.
+    /// The request body is not compressed.
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "zstd")))]
+    pub fn zstd(mut self, enable: bool) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *crate::config::RequestConfig::<crate::config::Zstd>::get_mut(
+                req.inner.extensions_mut(),
+            ) = Some(enable);
+        }
+        self
+    }
+
+    /// Enables or disables automatic deflate response decompression for this request.
+    ///
+    /// Overrides [`ClientBuilder::deflate()`](crate::blocking::ClientBuilder::deflate)
+    /// without changing the client's configuration.
+    /// When enabled, `deflate` is included in an automatically generated
+    /// `Accept-Encoding` header. An existing `Accept-Encoding` header is preserved.
+    /// Responses with `Content-Encoding: deflate` are decompressed, and their
+    /// `Content-Encoding` and `Content-Length` headers are removed.
+    /// When disabled, the response body and these headers are left unchanged.
+    /// The request body is not compressed.
+    #[cfg(feature = "deflate")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "deflate")))]
+    pub fn deflate(mut self, enable: bool) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            *crate::config::RequestConfig::<crate::config::Deflate>::get_mut(
+                req.inner.extensions_mut(),
+            ) = Some(enable);
         }
         self
     }
