@@ -64,6 +64,39 @@
 //! [rustls CryptoProvider]: https://docs.rs/rustls/latest/rustls/crypto/struct.CryptoProvider.html
 //! [ring]: https://crates.io/crates/ring
 //! [`CryptoProvider::install_default`]: https://docs.rs/rustls/latest/rustls/crypto/struct.CryptoProvider.html#method.install_default
+//!
+//! ### Certificate verification source
+//!
+//! Installing a crypto provider only avoids the panic above; it does not
+//! change where certificates come from. This applies to both `rustls` and
+//! `rustls-no-provider`: certificate verification goes through
+//! [rustls-platform-verifier][] by default, which on Linux falls back to the
+//! system's CA bundle (e.g. the `ca-certificates` package), since there is no
+//! unified "platform verifier" API there. Minimal or `musl`-based container
+//! images (Alpine, `scratch`, distroless, etc.) frequently don't ship that
+//! package, so HTTPS requests can still fail at certificate verification even
+//! after a crypto provider has been installed correctly.
+//!
+//! If you don't want to depend on the system's CA bundle, build a
+//! [`rustls::ClientConfig`][] yourself from [webpki-roots][]'s bundled Mozilla
+//! root list and pass it to [`ClientBuilder::use_preconfigured_tls`][]:
+//!
+//! ```rust,ignore
+//! let mut root_store = rustls::RootCertStore::empty();
+//! root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+//! let tls_config = rustls::ClientConfig::builder()
+//!     .with_root_certificates(root_store)
+//!     .with_no_client_auth();
+//!
+//! let client = reqwest::Client::builder()
+//!     .use_preconfigured_tls(tls_config)
+//!     .build()?;
+//! ```
+//!
+//! [rustls-platform-verifier]: https://crates.io/crates/rustls-platform-verifier
+//! [`rustls::ClientConfig`]: https://docs.rs/rustls/latest/rustls/struct.ClientConfig.html
+//! [webpki-roots]: https://crates.io/crates/webpki-roots
+//! [`ClientBuilder::use_preconfigured_tls`]: crate::ClientBuilder::use_preconfigured_tls
 
 #[cfg(feature = "__rustls")]
 use rustls::{
