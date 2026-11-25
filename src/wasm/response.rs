@@ -56,6 +56,18 @@ impl Response {
         self.http.headers_mut()
     }
 
+    /// Returns a reference to the associated extensions.
+    #[inline]
+    pub fn extensions(&self) -> &http::Extensions {
+        self.http.extensions()
+    }
+
+    /// Returns a mutable reference to the associated extensions.
+    #[inline]
+    pub fn extensions_mut(&mut self) -> &mut http::Extensions {
+        self.http.extensions_mut()
+    }
+
     /// Get the content-length of this response, if known.
     ///
     /// Reasons it may not be known:
