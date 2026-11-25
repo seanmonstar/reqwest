@@ -177,12 +177,24 @@
 //!
 //! ## WASM
 //!
-//! The Client implementation automatically switches to the WASM one when the target_arch is wasm32,
-//! the usage is basically the same as the async api. Some of the features are disabled in wasm
-//! : [`tls`], [`cookie`], [`blocking`], as well as various `ClientBuilder` methods such as `timeout()` and `connector_layer()`.
+//! reqwest has two WASM clients, and the target picks which one you get. No feature is needed.
+//! The usage is basically the same as the async api. Some of the features are disabled in both:
+//! [`tls`], [`cookie`], [`blocking`], as well as various `ClientBuilder` methods such as
+//! `connector_layer()`.
 //!
-//! TLS and cookies are provided through the browser environment, so reqwest can issue TLS requests with cookies,
-//! but has limited configuration.
+//! On `wasm32-unknown-unknown`, the client uses the browser's `fetch`. TLS and cookies are provided
+//! through the browser environment, so reqwest can issue TLS requests with cookies, but has limited
+//! configuration. `ClientBuilder::timeout()` is also disabled.
+//!
+//! On `wasm32-wasip2` and `wasm32-wasip3`, the client sends requests with `wasi:http`. The host
+//! makes the connection and does TLS. This client has [`ClientBuilder::timeout`] and
+//! [`Response::chunk`], which the browser client does not have. It does not follow redirects, so a
+//! 3xx response is returned as it is. It has no cookie store, proxy, TLS options or decompression,
+//! and no `connect_timeout()` or `read_timeout()`. A request body is sent whole, not streamed.
+//!
+//! The WASI client needs Rust 1.87, the minimum version of the `wasip3` crate. The `wit-bindgen`
+//! version of your app must be the one that `wasip3` uses (0.63 for `wasip3` 0.10). With an older
+//! one, the first request that has a body panics.
 //!
 //! ## Optional Features
 //!
@@ -269,9 +281,19 @@ macro_rules! if_wasm {
     )*}
 }
 
+macro_rules! if_wasi {
+    ($($item:item)*) => {$(
+        #[cfg(all(target_os = "wasi", not(target_env = "p1")))]
+        $item
+    )*}
+}
+
 macro_rules! if_hyper {
     ($($item:item)*) => {$(
-        #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+        #[cfg(not(any(
+            all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+            all(target_os = "wasi", not(target_env = "p1"))
+        )))]
         $item
     )*}
 }
@@ -343,6 +365,11 @@ fn _assert_impls() {
         assert_send::<Response>();
     }
 
+    #[cfg(all(target_os = "wasi", not(target_env = "p1")))]
+    {
+        assert_send::<Response>();
+    }
+
     assert_send::<Error>();
     assert_sync::<Error>();
 
@@ -388,6 +415,15 @@ if_hyper! {
 }
 
 if_wasm! {
+    mod wasm;
+    mod util;
+
+    pub use self::wasm::{Body, Client, ClientBuilder, Request, RequestBuilder, Response};
+    #[cfg(feature = "multipart")]
+    pub use self::wasm::multipart;
+}
+
+if_wasi! {
     mod wasm;
     mod util;
 
