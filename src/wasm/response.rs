@@ -95,7 +95,6 @@ impl Response {
     pub fn version(&self) -> Version {
         self.http.version()
     }
-    */
 
     /// Try to deserialize the response body as JSON.
     #[cfg(feature = "json")]
