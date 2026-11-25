@@ -82,6 +82,7 @@ pub(crate) struct ConnectorBuilder {
     user_agent: Option<HeaderValue>,
     #[cfg(feature = "socks")]
     resolver: Option<DynResolver>,
+    global_ips_only: bool,
     #[cfg(unix)]
     unix_socket: Option<Arc<std::path::Path>>,
     #[cfg(target_os = "windows")]
@@ -105,6 +106,7 @@ where {
             simple_timeout: None,
             #[cfg(feature = "socks")]
             resolver: self.resolver.unwrap_or_else(DynResolver::gai),
+            global_ips_only: self.global_ips_only,
             #[cfg(unix)]
             unix_socket: self.unix_socket,
             #[cfg(target_os = "windows")]
@@ -217,6 +219,7 @@ where {
             timeout: None,
             #[cfg(feature = "socks")]
             resolver: None,
+            global_ips_only: false,
             #[cfg(unix)]
             unix_socket: None,
             #[cfg(target_os = "windows")]
@@ -330,6 +333,7 @@ where {
             timeout: None,
             #[cfg(feature = "socks")]
             resolver: None,
+            global_ips_only: false,
             #[cfg(unix)]
             unix_socket: None,
             #[cfg(target_os = "windows")]
@@ -405,6 +409,7 @@ where {
             timeout: None,
             #[cfg(feature = "socks")]
             resolver: None,
+            global_ips_only: false,
             #[cfg(unix)]
             unix_socket: None,
             #[cfg(target_os = "windows")]
@@ -418,6 +423,10 @@ where {
 
     pub(crate) fn set_verbose(&mut self, enabled: bool) {
         self.verbose.0 = enabled;
+    }
+
+    pub(crate) fn set_global_ips_only(&mut self, enabled: bool) {
+        self.global_ips_only = enabled;
     }
 
     pub(crate) fn set_keepalive(&mut self, dur: Option<Duration>) {
@@ -500,6 +509,8 @@ pub(crate) struct ConnectorService {
     user_agent: Option<HeaderValue>,
     #[cfg(feature = "socks")]
     resolver: DynResolver,
+    /// When true, only connect to IP addresses that are globally reachable.
+    global_ips_only: bool,
     /// If set, this always takes priority over TCP.
     #[cfg(unix)]
     unix_socket: Option<Arc<std::path::Path>>,
@@ -988,6 +999,18 @@ impl Service<Uri> for ConnectorService {
     fn call(&mut self, dst: Uri) -> Self::Future {
         log::debug!("starting new connection '{:?}'", dst.host());
         let timeout = self.simple_timeout;
+
+        // If enabled, only connect to literal global IPs.
+        // Note that hostnames are allowed here and will be later handled by GlobalOnlyResolver, as we need to filter after DNS has resolved the IP.
+        if self.global_ips_only
+            && dst
+                .host()
+                .is_some_and(|h| !crate::dns::is_hostname_or_global_ip_literal(h))
+        {
+            return Box::pin(std::future::ready(Err(
+                "host IP is not globally reachable".into()
+            )));
+        }
 
         // Local transports (UDS, Windows Named Pipes) skip proxies
         #[cfg(any(unix, target_os = "windows"))]
