@@ -1,7 +1,7 @@
 use std::fmt;
 
 use bytes::Bytes;
-use http::{HeaderMap, StatusCode};
+use http::{HeaderMap, StatusCode, Version};
 use js_sys::Uint8Array;
 use url::Url;
 
