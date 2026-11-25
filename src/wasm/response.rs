@@ -90,7 +90,6 @@ impl Response {
         &self.url
     }
 
-    /* It might not be possible to detect this in JS?
     /// Get the HTTP `Version` of this `Response`.
     #[inline]
     pub fn version(&self) -> Version {
