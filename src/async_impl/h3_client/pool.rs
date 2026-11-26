@@ -393,13 +393,14 @@ pub(crate) fn domain_as_uri((scheme, auth): Key) -> Uri {
         .expect("domain is valid Uri")
 }
 
-/// Indicates the remote requested the peer to stop sending data without error.
+/// Indicates the remote requested the peer to stop sending data without an HTTP/3 error.
+///
+/// Transport implementations such as quinn send `STOP_SENDING` with code `0` when
+/// dropping an unread receive stream rather than `H3_NO_ERROR` (`0x100`).
 fn is_stop_sending(e: &h3::error::StreamError) -> bool {
     matches!(
         e,
-        h3::error::StreamError::RemoteTerminate {
-            code: h3::error::Code::H3_NO_ERROR,
-            ..
-        }
+        h3::error::StreamError::RemoteTerminate { code, .. }
+            if *code == h3::error::Code::H3_NO_ERROR || *code == 0
     )
 }
