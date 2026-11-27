@@ -5,11 +5,12 @@ pub(crate) mod dns;
 mod pool;
 
 use crate::async_impl::body::ResponseBody;
-use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
+use crate::async_impl::h3_client::pool::{Key, Pool};
 use crate::error::{BoxError, Error, Kind};
 use crate::{error, Body};
 use connect::H3Connector;
-use http::{Request, Response};
+pub(crate) use pool::PoolClient;
+use http::{Request, Response, Uri};
 use log::trace;
 use std::future::{self, Future};
 use std::pin::Pin;
@@ -57,6 +58,27 @@ impl H3Client {
         let (driver, tx) = self.connector.connect(dest).await?;
         trace!("saving new pooled connection to {key:?}");
         Ok(self.pool.new_connection(lock, driver, tx))
+    }
+
+    /// Establish (or reuse) an H3 connection for `uri` without sending a request.
+    ///
+    /// This lets callers fall back to TCP if connecting fails, before the
+    /// request body has been handed to the H3 stream.
+    pub(crate) async fn connect(&mut self, uri: Uri) -> Result<PoolClient, BoxError> {
+        let mut uri = uri;
+        let key = pool::extract_domain(&mut uri).map_err(|err| Box::new(err) as BoxError)?;
+        self.get_pooled_client(key).await
+    }
+
+    /// Send `req` over an already established H3 connection.
+    pub(crate) async fn send_request_with(
+        mut pooled: PoolClient,
+        req: Request<Body>,
+    ) -> Result<Response<ResponseBody>, Error> {
+        pooled
+            .send_request(req)
+            .await
+            .map_err(|e| Error::new(Kind::Request, Some(e)))
     }
 
     async fn send_request(

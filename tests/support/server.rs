@@ -152,6 +152,128 @@ where
     .unwrap()
 }
 
+/// A TLS-over-TCP test server. Unlike [`http`], this lets HTTPS requests
+/// exercise TCP fallback without a real QUIC listener on the same port.
+#[cfg(feature = "http3")]
+pub fn https<F, Fut>(func: F) -> Server
+where
+    F: Fn(http::Request<hyper::body::Incoming>) -> Fut + Clone + Send + 'static,
+    Fut: Future<Output = http::Response<reqwest::Body>> + Send + 'static,
+{
+    let infall = move |req| {
+        let fut = func(req);
+        async move { Ok::<_, Infallible>(fut.await) }
+    };
+    https_with_config(infall, |_builder| {})
+}
+
+#[cfg(feature = "http3")]
+pub fn https_with_config<F1, Fut, E, F2, Bu>(func: F1, apply_config: F2) -> Server
+where
+    F1: Fn(http::Request<hyper::body::Incoming>) -> Fut + Clone + Send + 'static,
+    Fut: Future<Output = Result<http::Response<reqwest::Body>, E>> + Send + 'static,
+    E: Into<Box<dyn std::error::Error + Send + Sync>>,
+    F2: FnOnce(&mut Builder) -> Bu + Send + 'static,
+{
+    use std::sync::Arc;
+
+    let test_name = thread::current().name().unwrap_or("<unknown>").to_string();
+    thread::spawn(move || {
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("new rt");
+        let listener = rt.block_on(async move {
+            tokio::net::TcpListener::bind(&std::net::SocketAddr::from(([127, 0, 0, 1], 0)))
+                .await
+                .unwrap()
+        });
+        let addr = listener.local_addr().unwrap();
+
+        let cert = std::fs::read("tests/support/server.cert").unwrap().into();
+        let key = std::fs::read("tests/support/server.key")
+            .unwrap()
+            .try_into()
+            .unwrap();
+        CRYPTO_PROVIDER_INSTALLED.get_or_init(install_default_crypto_provider);
+        let tls_config = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert], key)
+            .unwrap();
+        // No ALPN: the HTTP/1.1 fallback path works without negotiation.
+        let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(tls_config));
+
+        let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
+        let (panic_tx, panic_rx) = std_mpsc::channel();
+        let (events_tx, events_rx) = std_mpsc::channel();
+        let tname = format!("test({})-support-https-server", test_name);
+        thread::Builder::new()
+            .name(tname)
+            .spawn(move || {
+                rt.block_on(async move {
+                    let mut builder = hyper_util::server::conn::auto::Builder::new(
+                        hyper_util::rt::TokioExecutor::new(),
+                    );
+                    apply_config(&mut builder);
+                    let mut tasks = tokio::task::JoinSet::new();
+                    let graceful = hyper_util::server::graceful::GracefulShutdown::new();
+
+                    loop {
+                        tokio::select! {
+                            _ = &mut shutdown_rx => {
+                                graceful.shutdown().await;
+                                break;
+                            }
+                            accepted = listener.accept() => {
+                                let (io, _) = accepted.expect("accepted");
+                                let acceptor = acceptor.clone();
+                                let func = func.clone();
+                                let builder = builder.clone();
+                                let events_tx = events_tx.clone();
+                                let watcher = graceful.watcher();
+
+                                tasks.spawn(async move {
+                                    let io = match acceptor.accept(io).await {
+                                        Ok(io) => io,
+                                        Err(err) => {
+                                            eprintln!("tls accept failed: {err}");
+                                            return;
+                                        }
+                                    };
+                                    let svc = hyper::service::service_fn(func);
+                                    let conn = builder.serve_connection_with_upgrades(
+                                        hyper_util::rt::TokioIo::new(io),
+                                        svc,
+                                    );
+                                    let _ = watcher.watch(conn).await;
+                                    let _ = events_tx.send(Event::ConnectionClosed);
+                                });
+                            }
+                        }
+                    }
+
+                    while let Some(result) = tasks.join_next().await {
+                        if let Err(err) = result {
+                            if err.is_panic() {
+                                std::panic::resume_unwind(err.into_panic());
+                            }
+                        }
+                    }
+                    let _ = panic_tx.send(());
+                });
+            })
+            .expect("thread spawn");
+        Server {
+            addr,
+            panic_rx,
+            events_rx,
+            shutdown_tx: Some(shutdown_tx),
+        }
+    })
+    .join()
+    .unwrap()
+}
+
 #[cfg(feature = "http3")]
 #[derive(Debug, Default)]
 pub struct Http3 {
