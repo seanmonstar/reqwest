@@ -113,6 +113,7 @@ pub struct Identity {
     inner: ClientCert,
 }
 
+#[derive(Clone)]
 enum ClientCert {
     #[cfg(feature = "__native-tls")]
     Pkcs12(native_tls_crate::Identity),
