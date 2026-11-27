@@ -3,8 +3,11 @@
 
 mod support;
 
-use http::header::CONTENT_LENGTH;
+use http::header::{ALT_SVC, CONTENT_LENGTH};
 use std::error::Error;
+use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 use support::server;
 
 fn assert_send_sync<T: Send + Sync>(_: &T) {}
@@ -41,6 +44,42 @@ async fn http3_request_full() {
 async fn find_free_tcp_addr() -> std::net::SocketAddr {
     let listener = tokio::net::TcpListener::bind("[::1]:0").await.unwrap();
     listener.local_addr().unwrap()
+}
+
+#[cfg(feature = "http3")]
+#[tokio::test]
+async fn http3_fallback_after_alt_svc() {
+    // Advertise h3 from an HTTPS TCP response, then verify that the next
+    // request survives an H3 connect failure and is answered over TCP.
+    let port = Arc::new(AtomicU16::new(0));
+    let advertised_port = port.clone();
+    let server = server::https(move |_| {
+        let port = advertised_port.load(Ordering::SeqCst);
+        async move {
+            let value = http::HeaderValue::from_str(&format!("h3=\":{port}\"; ma=60")).unwrap();
+            let mut res = http::Response::new(reqwest::Body::from("from tcp"));
+            res.headers_mut().insert(ALT_SVC, value);
+            res
+        }
+    });
+    port.store(server.addr().port(), Ordering::SeqCst);
+
+    let url = format!("https://127.0.0.1:{}/", server.addr().port());
+    let client = reqwest::Client::builder()
+        .http3_fallback()
+        .http3_fallback_timeout(Duration::from_millis(50))
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("client builder");
+
+    let first = client.get(&url).send().await.expect("first request");
+    assert_eq!(first.version(), http::Version::HTTP_11);
+    assert!(first.headers().contains_key(ALT_SVC));
+    assert_eq!(first.text().await.expect("first body"), "from tcp");
+
+    let second = client.get(&url).send().await.expect("fallback request");
+    assert_eq!(second.version(), http::Version::HTTP_11);
+    assert_eq!(second.text().await.expect("fallback body"), "from tcp");
 }
 
 #[cfg(feature = "http3")]

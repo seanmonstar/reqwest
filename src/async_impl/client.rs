@@ -13,9 +13,13 @@ use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
 #[cfg(feature = "http3")]
+use crate::async_impl::alt_svc::AltSvcCache;
+#[cfg(feature = "http3")]
 use crate::async_impl::h3_client::connect::{H3ClientConfig, H3Connector};
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::H3Client;
+#[cfg(feature = "http3")]
+use sync_wrapper::SyncWrapper;
 use crate::config::{RequestConfig, TotalTimeout};
 #[cfg(unix)]
 use crate::connect::uds::UnixSocketProvider;
@@ -265,6 +269,10 @@ struct Config {
     h3_max_field_section_size: Option<u64>,
     #[cfg(feature = "http3")]
     h3_send_grease: Option<bool>,
+    #[cfg(feature = "http3")]
+    http3_fallback: bool,
+    #[cfg(feature = "http3")]
+    http3_fallback_timeout: Duration,
     dns_overrides: HashMap<String, Vec<SocketAddr>>,
     dns_resolver: Option<Arc<dyn Resolve>>,
 
@@ -397,6 +405,10 @@ impl ClientBuilder {
                 h3_max_field_section_size: None,
                 #[cfg(feature = "http3")]
                 h3_send_grease: None,
+                #[cfg(feature = "http3")]
+                http3_fallback: false,
+                #[cfg(feature = "http3")]
+                http3_fallback_timeout: Duration::from_millis(250),
                 dns_resolver: None,
                 #[cfg(unix)]
                 unix_socket: None,
@@ -1069,46 +1081,68 @@ impl ClientBuilder {
         #[cfg(feature = "deflate")]
         let hyper = hyper.deflate(config.accepts.deflate);
 
+        // Use match instead of map since config is partially moved,
+        // and it cannot be used in closure.
+        #[cfg(feature = "http3")]
+        let (h3_client, h3_fallback_client) = match h3_connector {
+            Some(h3_connector) => {
+                let h3_fallback_client = if config.http3_fallback {
+                    Some(H3Client::new(h3_connector.clone(), config.pool_idle_timeout))
+                } else {
+                    None
+                };
+                let h3_service = H3Client::new(h3_connector, config.pool_idle_timeout);
+                let svc = tower::retry::Retry::new(retry_policy, h3_service);
+                #[cfg(feature = "cookies")]
+                let svc = CookieService::new(svc, config.cookie_store);
+                let svc = FollowRedirect::with_policy(svc, redirect_policy);
+                #[cfg(any(
+                    feature = "gzip",
+                    feature = "brotli",
+                    feature = "zstd",
+                    feature = "deflate"
+                ))]
+                let svc = Decompression::new(svc)
+                    // set everything to NO, in case tower-http has it enabled but
+                    // reqwest does not. then set to config value if cfg allows.
+                    .no_gzip()
+                    .no_deflate()
+                    .no_br()
+                    .no_zstd();
+                #[cfg(feature = "gzip")]
+                let svc = svc.gzip(config.accepts.gzip);
+                #[cfg(feature = "brotli")]
+                let svc = svc.br(config.accepts.brotli);
+                #[cfg(feature = "zstd")]
+                let svc = svc.zstd(config.accepts.zstd);
+                #[cfg(feature = "deflate")]
+                let svc = svc.deflate(config.accepts.deflate);
+                (Some(svc), h3_fallback_client)
+            }
+            None => (None, None),
+        };
+        #[cfg(feature = "http3")]
+        let alt_svc = if config.http3_fallback {
+            Some(AltSvcCache::default())
+        } else {
+            None
+        };
+        #[cfg(feature = "http3")]
+        let http3_fallback_timeout = config.http3_fallback_timeout;
+
         Ok(Client {
             inner: Arc::new(ClientRef {
                 accepts: config.accepts,
                 #[cfg(feature = "cookies")]
                 cookie_store: config.cookie_store.clone(),
-                // Use match instead of map since config is partially moved,
-                // and it cannot be used in closure
                 #[cfg(feature = "http3")]
-                h3_client: match h3_connector {
-                    Some(h3_connector) => {
-                        let h3_service = H3Client::new(h3_connector, config.pool_idle_timeout);
-                        let svc = tower::retry::Retry::new(retry_policy, h3_service);
-                        #[cfg(feature = "cookies")]
-                        let svc = CookieService::new(svc, config.cookie_store);
-                        let svc = FollowRedirect::with_policy(svc, redirect_policy);
-                        #[cfg(any(
-                            feature = "gzip",
-                            feature = "brotli",
-                            feature = "zstd",
-                            feature = "deflate"
-                        ))]
-                        let svc = Decompression::new(svc)
-                            // set everything to NO, in case tower-http has it enabled but
-                            // reqwest does not. then set to config value if cfg allows.
-                            .no_gzip()
-                            .no_deflate()
-                            .no_br()
-                            .no_zstd();
-                        #[cfg(feature = "gzip")]
-                        let svc = svc.gzip(config.accepts.gzip);
-                        #[cfg(feature = "brotli")]
-                        let svc = svc.br(config.accepts.brotli);
-                        #[cfg(feature = "zstd")]
-                        let svc = svc.zstd(config.accepts.zstd);
-                        #[cfg(feature = "deflate")]
-                        let svc = svc.deflate(config.accepts.deflate);
-                        Some(svc)
-                    }
-                    None => None,
-                },
+                h3_client,
+                #[cfg(feature = "http3")]
+                h3_fallback_client,
+                #[cfg(feature = "http3")]
+                alt_svc,
+                #[cfg(feature = "http3")]
+                http3_fallback_timeout,
                 headers: config.headers,
                 referer: config.referer,
                 read_timeout: config.read_timeout,
@@ -1601,6 +1635,36 @@ impl ClientBuilder {
     #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
     pub fn http3_prior_knowledge(mut self) -> ClientBuilder {
         self.config.http_version_pref = HttpVersionPref::Http3;
+        self
+    }
+
+    /// Enable RFC 7838 `Alt-Svc` discovery for HTTP/3 with TCP fallback.
+    ///
+    /// When enabled, an `Alt-Svc: h3=":443"` field received from an HTTPS
+    /// origin is remembered. Later requests to that origin try HTTP/3 first;
+    /// if the QUIC connection cannot be established within
+    /// [`http3_fallback_timeout`](Self::http3_fallback_timeout), the request
+    /// is sent through the normal TCP connector instead.
+    ///
+    /// This does not change [`http3_prior_knowledge`](Self::http3_prior_knowledge),
+    /// which always requires HTTP/3 and never falls back. `Alt-Svc` from
+    /// plaintext HTTP responses, from `421` responses, and requests routed
+    /// through a proxy are ignored.
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_fallback(mut self) -> ClientBuilder {
+        self.config.http3_fallback = true;
+        self
+    }
+
+    /// How long to wait for an H3 connection before falling back to TCP.
+    ///
+    /// Default is 250 ms. Only used when [`http3_fallback`](Self::http3_fallback)
+    /// is enabled.
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_fallback_timeout(mut self, value: Duration) -> ClientBuilder {
+        self.config.http3_fallback_timeout = value;
         self
     }
 
@@ -2684,6 +2748,24 @@ impl Client {
         self.proxy_auth(&uri, &mut headers);
         self.proxy_custom_headers(&uri, &mut headers);
 
+        // Alt-Svc upgrades are opt-in, never apply to explicit H3 prior
+        // knowledge, and never bypass a configured proxy (RFC 7838 §2.4).
+        #[cfg(feature = "http3")]
+        let h3_fallback = version != http::Version::HTTP_3
+            && self.inner.h3_fallback_client.is_some()
+            && self
+                .inner
+                .alt_svc
+                .as_ref()
+                .is_some_and(|cache| cache.should_try_h3(&url))
+            && !self
+                .inner
+                .proxies
+                .iter()
+                .any(|proxy| proxy.intercept(&uri).is_some());
+        #[cfg(feature = "http3")]
+        let fallback_uri = if h3_fallback { Some(uri.clone()) } else { None };
+
         let builder = hyper::Request::builder()
             .method(method.clone())
             .uri(uri)
@@ -2696,6 +2778,52 @@ impl Client {
                 *req.headers_mut() = headers;
                 let mut h3 = self.inner.h3_client.as_ref().unwrap().clone();
                 ResponseFuture::H3(h3.call(req))
+            }
+            #[cfg(feature = "http3")]
+            _ if h3_fallback => {
+                let mut req = builder.body(body).expect("valid request parts");
+                *req.headers_mut() = headers;
+                let mut h3 = self.inner.h3_fallback_client.as_ref().unwrap().clone();
+                let mut hyper = self.inner.hyper.clone();
+                let cache = self.inner.alt_svc.clone();
+                let cache_url = url.clone();
+                let timeout = self.inner.http3_fallback_timeout;
+                let h3_uri = fallback_uri.expect("fallback URI computed above");
+                // RFC 7838 §5: identify the alternative that was selected.
+                let alt_used = h3_uri.authority().map(|authority| {
+                    http::HeaderValue::from_str(authority.as_str())
+                        .unwrap_or_else(|_| http::HeaderValue::from_static(""))
+                });
+                ResponseFuture::H3Fallback(H3FallbackFuture(SyncWrapper::new(Box::pin(async move {
+                    if let Some(value) = alt_used {
+                        req.headers_mut()
+                            .insert(http::HeaderName::from_static("alt-used"), value);
+                    }
+                    // Connect before handing the request to H3 so the body is
+                    // untouched if we need to fall back to TCP.
+                    let connect = h3.connect(h3_uri);
+                    match tokio::time::timeout(timeout, connect).await {
+                        Ok(Ok(pooled)) => {
+                            let res = H3Client::send_request_with(pooled, req).await?;
+                            // RFC 7838 §6: a 421 from an alternative invalidates it.
+                            if res.status() == http::StatusCode::MISDIRECTED_REQUEST {
+                                if let Some(cache) = cache {
+                                    cache.invalidate(&cache_url);
+                                }
+                            }
+                            Ok(res)
+                        }
+                        Ok(Err(_)) | Err(_) => {
+                            if let Some(cache) = cache {
+                                cache.invalidate(&cache_url);
+                            }
+                            hyper
+                                .call(req)
+                                .await
+                                .map(|res| res.map(super::body::boxed))
+                        }
+                    }
+                }))))
             }
             _ => {
                 let mut req = builder.body(body).expect("valid request parts");
@@ -2881,6 +3009,11 @@ impl Config {
             f.field("http2_prior_knowledge", &true);
         }
 
+        #[cfg(feature = "http3")]
+        if self.http3_fallback {
+            f.field("http3_fallback", &true);
+        }
+
         if let Some(ref d) = self.connect_timeout {
             f.field("connect_timeout", d);
         }
@@ -3005,6 +3138,12 @@ struct ClientRef {
     hyper: LayeredService<HyperService>,
     #[cfg(feature = "http3")]
     h3_client: Option<LayeredService<H3Client>>,
+    #[cfg(feature = "http3")]
+    h3_fallback_client: Option<H3Client>,
+    #[cfg(feature = "http3")]
+    alt_svc: Option<AltSvcCache>,
+    #[cfg(feature = "http3")]
+    http3_fallback_timeout: Duration,
     referer: bool,
     total_timeout: RequestConfig<TotalTimeout>,
     read_timeout: Option<Duration>,
@@ -3084,6 +3223,30 @@ enum ResponseFuture {
     Default(LayeredFuture<HyperService>),
     #[cfg(feature = "http3")]
     H3(LayeredFuture<H3Client>),
+    #[cfg(feature = "http3")]
+    H3Fallback(H3FallbackFuture),
+}
+
+#[cfg(feature = "http3")]
+type H3FallbackInner = SyncWrapper<
+    Pin<
+        Box<
+            dyn Future<Output = Result<http::Response<super::body::ResponseBody>, crate::Error>>
+                + Send,
+        >,
+    >,
+>;
+
+#[cfg(feature = "http3")]
+struct H3FallbackFuture(H3FallbackInner);
+
+#[cfg(feature = "http3")]
+impl Future for H3FallbackFuture {
+    type Output = Result<http::Response<super::body::ResponseBody>, crate::Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.0.get_mut().as_mut().poll(cx)
+    }
 }
 
 impl PendingRequest {
@@ -3160,6 +3323,13 @@ impl Future for PendingRequest {
                 }
                 Ok(res) => res.map(super::body::boxed),
             },
+            #[cfg(feature = "http3")]
+            ResponseFuture::H3Fallback(r) => match ready!(r.0.get_mut().as_mut().poll(cx)) {
+                Err(e) => {
+                    return Poll::Ready(Err(crate::error::request(e).with_url(self.url.clone())));
+                }
+                Ok(res) => res.map(super::body::boxed),
+            },
         };
 
         if let Some(url) = &res
@@ -3171,6 +3341,13 @@ impl Future for PendingRequest {
                 Err(e) => return Poll::Ready(Err(crate::error::decode(e))),
             }
         };
+
+        // Learn H3 alternatives from the origin that answered. The cache
+        // rejects insecure schemes and 421 responses itself.
+        #[cfg(feature = "http3")]
+        if let Some(cache) = &self.client.alt_svc {
+            cache.observe(&self.url, res.status(), res.headers());
+        }
 
         let res = Response::new(
             res,

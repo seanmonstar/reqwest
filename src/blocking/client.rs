@@ -602,6 +602,26 @@ impl ClientBuilder {
         self.with_inner(|inner| inner.http3_prior_knowledge())
     }
 
+    /// Enable RFC 7838 `Alt-Svc` discovery for HTTP/3 with TCP fallback.
+    ///
+    /// Later requests to an origin that advertised `Alt-Svc: h3=":443"` try
+    /// HTTP/3 first and fall back to TCP if the QUIC connect times out.
+    /// This does not affect `http3_prior_knowledge()`.
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_fallback(self) -> ClientBuilder {
+        self.with_inner(|inner| inner.http3_fallback())
+    }
+
+    /// How long to wait for an H3 connection before falling back to TCP.
+    ///
+    /// Default is 250 ms. Only used when `http3_fallback()` is enabled.
+    #[cfg(feature = "http3")]
+    #[cfg_attr(docsrs, doc(cfg(all(reqwest_unstable, feature = "http3",))))]
+    pub fn http3_fallback_timeout(self, value: Duration) -> ClientBuilder {
+        self.with_inner(|inner| inner.http3_fallback_timeout(value))
+    }
+
     /// Maximum duration of inactivity to accept before timing out the QUIC connection.
     ///
     /// Please see docs in [`TransportConfig`] in [`quinn`].
