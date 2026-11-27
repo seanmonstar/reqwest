@@ -217,6 +217,8 @@ fn test_default_headers() {
     let url = format!("http://{}/1", server.addr());
     let res = client.get(&url).send().unwrap();
 
+    assert_eq!(client.headers()["reqwest-test"], "orly");
+
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
@@ -251,6 +253,8 @@ fn test_override_default_headers() {
         .send()
         .unwrap();
 
+    assert_eq!(client.headers()[&http::header::AUTHORIZATION], "iamatoken");
+
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 }
@@ -276,6 +280,10 @@ fn test_appended_headers_not_overwritten() {
         .send()
         .unwrap();
 
+    let mut accepts = client.headers().get_all("accept").into_iter();
+    assert_eq!(accepts.next().unwrap(), "*/*");
+    assert_eq!(accepts.next(), None);
+
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
 
@@ -298,6 +306,10 @@ fn test_appended_headers_not_overwritten() {
         .header(header::ACCEPT, "application/json+hal")
         .send()
         .unwrap();
+
+    let mut accepts = client.headers().get_all("accept").into_iter();
+    assert_eq!(accepts.next().unwrap(), "text/html");
+    assert_eq!(accepts.next(), None);
 
     assert_eq!(res.url().as_str(), &url);
     assert_eq!(res.status(), reqwest::StatusCode::OK);
